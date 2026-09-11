@@ -137,6 +137,20 @@
 demo 已按此实现真抽屉（`components/Drawer.tsx`），并为每项建了二级页
 （`#/account` `#/verify` `#/privacy` `#/blacklist` `#/about` `#/contact`，扫一扫走 `#/scanner`）。
 
+**重要限制**：抽屉里的菜单项在原版里大多会打开
+`com.xingin.xhsreactnative.ui.XhsReactActivity`（React Native 页面）。
+在本机环境下（未登录、无后端）这些页面渲染为 20KB 左右的空白页，
+**无法取得它们的真实界面**——因此 demo 的六个二级页用的是自拟内容，
+只保证入口与文案一致，不敢声称内部结构还原。
+
+同理，以下页面在本机取不到真实界面，demo 内容为自拟：
+
+| 页面 | 原因 |
+|---|---|
+| 群聊 `campusx://group` | 需要会话参数，deep link 打开是空页 |
+| 群公告 `campusx://announce` | 同上 |
+| 抽屉各二级页（账号与安全/校园认证/隐私设置/黑名单/版本信息/联系我们） | 打开的是 RN 页面，未登录+无网络时渲染空白 |
+
 ## 十三、全路由回归结果（真机）
 
 `tools/checks/full-regression.js` 逐路由断言关键元素是否存在：
