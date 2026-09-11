@@ -126,7 +126,31 @@
 | 输入框提示 | 「**你是...**」 |
 | 按钮 | 「**就这样**」（不是"下一步"） |
 
-## 十二、已实现 vs 待办
+## 十二、个人页左上角抽屉（原版实测）
+
+点个人页左上角「三横线」会从左侧滑出抽屉，**8 项**（顺序即原版顺序）：
+
+```
+账号与安全 / 编辑资料 / 校园认证 / 隐私设置 / 黑名单 / 版本信息 / 联系我们 / 扫一扫
+```
+
+demo 已按此实现真抽屉（`components/Drawer.tsx`），并为每项建了二级页
+（`#/account` `#/verify` `#/privacy` `#/blacklist` `#/about` `#/contact`，扫一扫走 `#/scanner`）。
+
+## 十三、全路由回归结果（真机）
+
+`tools/checks/full-regression.js` 逐路由断言关键元素是否存在：
+
+```
+总数 34 / 通过 34 / 失败 0
+```
+
+覆盖：campus、me、map、feed、comments、message、chat、group、board、daily、poi、
+poidetail、publish、scanner、login、loginselect、onboarding、announce、feedlist、media、
+upgrade、more、user、account、verify、privacy、blacklist、about、contact、interests、
+tags、bio、school、edit-profile。
+
+## 十四、已实现 vs 待办
 
 | 项 | 状态 |
 |---|---|
@@ -146,6 +170,8 @@
 | 新手引导：标题/输入提示/「就这样」 | ✅ 真机验证 |
 | 选点页（poi/search） | ✅ 此前核对一致（确认/搜索地点/不添加地点/学校列表） |
 | 群聊 / 公告 | ⚠️ 两者都需参数，deep link 直接打开是空页；demo 用自拟内容填充 |
-| 侧边抽屉菜单（原版左上角三横线） | ⚠️ demo 用独立「更多」页等价实现 |
+| 扫一扫（抽屉第 8 项） | ⏳ 待实测（vision 服务本轮多次无响应，下一轮补） |
+| 我的兴趣 / 我的标签 / 介绍一下自己 / 我的学校 | ⏳ 待实测（demo 已有对应二级页） |
+| 侧边抽屉菜单（原版左上角三横线） | ✅ 已实现真抽屉，8 项文案与顺序与原版一致 |
 | 腾讯地图实时瓦片 | ❌ 不可离线复刻，用自绘 SVG |
 | 真实相机/录音 | ❌ 用模拟取景与波形 |
