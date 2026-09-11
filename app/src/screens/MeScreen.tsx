@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Screen, TopBar } from '../components/Shell'
+import { Drawer } from '../components/Drawer'
 import {
   IconChatBubble,
   IconChevronRight,
@@ -13,13 +15,19 @@ import './me.css'
 
 /** 个人页：对齐原版 —— 纯白底、无多余模块，中部只有「拍下眼前的风景」+ 提示气泡 */
 export function MeScreen() {
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
   return (
     <Screen
       header={
         <TopBar
           left={
             <>
-              <button className="iconbtn" aria-label="菜单" onClick={() => navigate('more')}>
+              <button
+                className="iconbtn"
+                aria-label="菜单"
+                onClick={() => setDrawerOpen(true)}
+              >
                 <IconMenu size={22} strokeWidth={2.2} />
               </button>
               <button className="iconbtn" aria-label="分享">
@@ -93,6 +101,9 @@ export function MeScreen() {
           <span>拍下眼前的风景</span>
         </button>
       </section>
+
+      {/* 左上角三横线打开的抽屉菜单（原版实测有 8 项） */}
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </Screen>
   )
 }

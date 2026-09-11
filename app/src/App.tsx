@@ -26,6 +26,14 @@ import { LoginSelectScreen } from './screens/LoginSelectScreen'
 import { UpgradeDialog } from './screens/UpgradeDialog'
 import { MoreScreen } from './screens/MoreScreen'
 import { UserProfileScreen } from './screens/UserProfileScreen'
+import {
+  AboutScreen,
+  AccountScreen,
+  BlacklistScreen,
+  ContactScreen,
+  PrivacyScreen,
+  VerifyScreen,
+} from './screens/DrawerPages'
 import './styles/pages.css'
 
 const TAB_TITLES: Record<string, string> = {
@@ -71,6 +79,12 @@ export default function App() {
       {root === 'upgrade' && <UpgradeDialog />}
       {root === 'more' && <MoreScreen />}
       {root === 'user' && <UserProfileScreen id={route.query.id ?? 'u1'} />}
+      {root === 'account' && <AccountScreen />}
+      {root === 'verify' && <VerifyScreen />}
+      {root === 'privacy' && <PrivacyScreen />}
+      {root === 'blacklist' && <BlacklistScreen />}
+      {root === 'about' && <AboutScreen />}
+      {root === 'contact' && <ContactScreen />}
       {root === 'media' && (
         <MediaPreviewScreen
           postId={route.query.post}
