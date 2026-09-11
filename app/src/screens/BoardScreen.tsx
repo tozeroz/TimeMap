@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Screen, TopBar } from '../components/Shell'
 import { IconClose } from '../components/icons'
-import { boardEmojis, boardNotes, me } from '../data/mock'
+import { boardEmojis, me, type BoardNote } from '../data/mock'
 import { goBack } from '../router'
 import './board.css'
 
 export function BoardScreen() {
-  const [notes, setNotes] = useState(boardNotes)
+  // 原版实测：默认是**空态**（中央「可以给同学留言噢」），留言后才出现便签
+  const [notes, setNotes] = useState<BoardNote[]>([])
   const [draft, setDraft] = useState('')
 
   function post() {
@@ -49,7 +50,7 @@ export function BoardScreen() {
           <div className="board__inputrow">
             <input
               className="board__input"
-              placeholder="可以给同学留言噢"
+              placeholder="留言仅双方可见"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -64,19 +65,25 @@ export function BoardScreen() {
       }
       scroll
     >
-      <div className="board__notes">
-        {notes.map((n) => (
-          <div key={n.id} className="note" style={{ background: n.color }}>
-            <p className="note__text">{n.text}</p>
-            <div className="note__foot">
-              <img className="note__avatar" src={n.author.avatar} alt="" />
-              <span className="note__name">{n.author.name}</span>
-              <span className="note__time">{n.time}</span>
+      {notes.length === 0 ? (
+        <div className="board__empty">
+          <p className="board__emptyText">可以给同学留言噢</p>
+        </div>
+      ) : (
+        <div className="board__notes">
+          {notes.map((n) => (
+            <div key={n.id} className="note" style={{ background: n.color }}>
+              <p className="note__text">{n.text}</p>
+              <div className="note__foot">
+                <img className="note__avatar" src={n.author.avatar} alt="" />
+                <span className="note__name">{n.author.name}</span>
+                <span className="note__time">{n.time}</span>
+              </div>
             </div>
-          </div>
-        ))}
-        <p className="board__hint">留言仅双方可见</p>
-      </div>
+          ))}
+          <p className="board__hint">留言仅双方可见</p>
+        </div>
+      )}
     </Screen>
   )
 }

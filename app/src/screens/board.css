@@ -65,6 +65,21 @@
   color: var(--c-text-3);
 }
 
+/* 空态（原版实测：未留言时中央显示这句） */
+.board__empty {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 120px;
+}
+
+.board__emptyText {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--c-text-3);
+}
+
 /* 底部输入区 */
 .board__bar {
   background: var(--c-surface);
