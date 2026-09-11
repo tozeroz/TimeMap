@@ -26,6 +26,7 @@ import { LoginSelectScreen } from './screens/LoginSelectScreen'
 import { UpgradeDialog } from './screens/UpgradeDialog'
 import { MoreScreen } from './screens/MoreScreen'
 import { UserProfileScreen } from './screens/UserProfileScreen'
+import { ProfileEditScreen } from './screens/ProfileEditScreen'
 import {
   AboutScreen,
   AccountScreen,
@@ -85,6 +86,7 @@ export default function App() {
       {root === 'blacklist' && <BlacklistScreen />}
       {root === 'about' && <AboutScreen />}
       {root === 'contact' && <ContactScreen />}
+      {root === 'profile-edit' && <ProfileEditScreen />}
       {root === 'media' && (
         <MediaPreviewScreen
           postId={route.query.post}

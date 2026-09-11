@@ -47,11 +47,11 @@ export function MeScreen() {
     >
       <section className="me__profile">
         <div className="me__side me__side--left">
-          <button className="me__entry" onClick={() => navigate('interests')}>
+          <button className="me__entry" onClick={() => navigate('profile-edit')}>
             <span>我的兴趣</span>
             <IconChevronRight size={14} />
           </button>
-          <button className="me__entry" onClick={() => navigate('tags')}>
+          <button className="me__entry" onClick={() => navigate('profile-edit')}>
             <span>我的标签</span>
             <IconChevronRight size={14} />
           </button>
@@ -60,18 +60,18 @@ export function MeScreen() {
         <div className="me__center">
           <img className="me__avatar" src={me.avatar} alt="" />
           <h2 className="me__name">{me.name}</h2>
-          <button className="me__edit" onClick={() => navigate('edit-profile')}>
+          <button className="me__edit" onClick={() => navigate('profile-edit')}>
             <IconEdit size={14} />
             <span>编辑资料</span>
           </button>
         </div>
 
         <div className="me__side me__side--right">
-          <button className="me__entry" onClick={() => navigate('bio')}>
+          <button className="me__entry" onClick={() => navigate('profile-edit')}>
             <span>介绍一下自己～</span>
             <IconChevronRight size={14} />
           </button>
-          <button className="me__entry" onClick={() => navigate('school')}>
+          <button className="me__entry" onClick={() => navigate('profile-edit')}>
             <span>我的学校</span>
             <IconChevronRight size={14} />
           </button>
