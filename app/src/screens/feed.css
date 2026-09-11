@@ -76,6 +76,16 @@
   font-size: 11px;
 }
 
+/* 带文字的互动按钮（原版的「评论」按钮） */
+.feed__action--text {
+  flex-direction: column;
+  gap: 0;
+}
+
+.feed__action.is-liked {
+  color: var(--c-danger);
+}
+
 /* 评论区 */
 .feed__comments {
   margin-top: 10px;

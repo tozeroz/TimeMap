@@ -1,0 +1,91 @@
+/* 评论详情（原版 CommentDetailActivity） */
+.cd__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cd__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+}
+
+.cd__headText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+}
+
+.cd__name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cd__date {
+  font-size: 10.5px;
+  color: var(--c-text-3);
+}
+
+.cd__body {
+  min-height: calc(100% - 8px);
+  display: flex;
+  flex-direction: column;
+  background: var(--c-bg);
+}
+
+.cd__count {
+  margin: 0;
+  padding: 14px var(--pad-page) 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text-2);
+}
+
+.cd__empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding-bottom: 80px;
+  color: #c9ccd2;
+}
+
+.cd__emptyIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 74px;
+  height: 74px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+}
+
+.cd__emptyText {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--c-text-3);
+}
+
+.cd__list {
+  padding: 0 var(--pad-page);
+}
+
+.cd__send {
+  flex: 0 0 auto;
+  padding: 0 16px;
+  height: 36px;
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cd__send:disabled {
+  opacity: 0.4;
+}

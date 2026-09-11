@@ -158,3 +158,171 @@
 .srow__btn:active {
   background: var(--c-surface-sunken);
 }
+
+/* 已发送申请 */
+.srow__btn.is-done {
+  background: var(--c-surface-sunken);
+  border-color: transparent;
+  color: var(--c-text-3);
+}
+
+/* 移除按钮（原版每个推荐行都有「添加 + 移除」两个按钮） */
+.srow__remove {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-pill);
+  color: var(--c-text-3);
+}
+
+.srow__remove:active {
+  background: var(--c-surface-sunken);
+}
+
+.suggest__empty {
+  margin: 0;
+  padding: 26px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--c-text-3);
+}
+
+/* —— 弹窗与底部面板 —— */
+.dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.34);
+}
+
+.dialog__panel {
+  position: relative;
+  width: calc(100% - 64px);
+  max-width: 320px;
+  padding: 20px 18px 14px;
+  border-radius: var(--r-xl);
+  background: var(--c-surface);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.26);
+}
+
+.dialog__title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.dialog__input {
+  width: 100%;
+  min-height: 66px;
+  resize: none;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--c-surface-sunken);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.dialog__count {
+  margin-top: 6px;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--c-text-3);
+}
+
+.dialog__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.dialog__btn {
+  flex: 1 1 0;
+  height: 40px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  color: var(--c-text-2);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dialog__btn--primary {
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+}
+
+/* 底部分享面板 */
+.dialog__sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 18px 16px 22px;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  background: var(--c-surface);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.2);
+}
+
+.dialog__sheetTitle {
+  margin-bottom: 16px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.dialog__targets {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.dialog__target {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  width: 62px;
+}
+
+.dialog__targetIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--c-text-2);
+}
+
+.dialog__targetLabel {
+  font-size: 11.5px;
+  color: var(--c-text-3);
+  white-space: nowrap;
+}
+
+.dialog__cancel {
+  width: 100%;
+  height: 44px;
+  margin-top: 14px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-text-2);
+}
