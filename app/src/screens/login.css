@@ -103,10 +103,13 @@
   height: 46px;
   border-radius: 12px;
   background: #ffd166;
+  border: 1.5px solid rgba(43, 43, 43, 0.75);
   color: #2b2b2b;
   font-size: 26px;
   font-weight: 800;
   font-style: italic;
+  letter-spacing: -1px;
+  box-shadow: 1px 1px 0 rgba(43, 43, 43, 0.55);
 }
 
 .ls__brandText {
@@ -114,57 +117,74 @@
   font-weight: 800;
   letter-spacing: -0.8px;
   color: #111;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
-/* 角落的拼贴装饰 */
+/* 角落的拼贴装饰：做成「贴纸」质感（白边 + 轻投影 + 各自形状） */
 .ls__deco {
   position: absolute;
   border-radius: 14px;
+  border: 2.5px solid #fff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
 .ls__deco--1 {
-  top: 48px;
-  left: 34px;
-  width: 74px;
-  height: 74px;
-  background: #b7c9a8;
-  transform: rotate(-8deg);
+  top: 44px;
+  left: 30px;
+  width: 78px;
+  height: 78px;
+  border-radius: 22px 14px 26px 16px;
+  background: linear-gradient(140deg, #cfe0c3, #a9c79b);
+  transform: rotate(-9deg);
 }
 
 .ls__deco--2 {
-  top: 40px;
-  right: 40px;
-  width: 86px;
-  height: 54px;
-  background: #ffe08a;
-  transform: rotate(6deg);
+  top: 36px;
+  right: 34px;
+  width: 96px;
+  height: 46px;
+  border-radius: 8px;
+  background: repeating-linear-gradient(45deg, #ffe08a 0 8px, #ffd166 8px 16px);
+  transform: rotate(7deg);
 }
 
 .ls__deco--3 {
-  bottom: 120px;
-  left: 44px;
-  width: 78px;
-  height: 78px;
+  bottom: 132px;
+  left: 38px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
-  background: #f0a58c;
+  background: radial-gradient(circle at 35% 30%, #f7c0a8, #e88f70);
 }
 
 .ls__deco--4 {
-  bottom: 90px;
-  right: 56px;
-  width: 92px;
-  height: 62px;
-  background: #a8c6e8;
-  transform: rotate(-5deg);
+  bottom: 96px;
+  right: 48px;
+  width: 94px;
+  height: 58px;
+  border-radius: 16px 20px 14px 18px;
+  background: linear-gradient(150deg, #bcd8f0, #8fb8dd);
+  transform: rotate(-6deg);
 }
 
 .ls__deco--5 {
-  top: 210px;
-  right: 96px;
-  width: 54px;
-  height: 54px;
-  background: #e8b4c8;
-  border-radius: 50%;
+  top: 206px;
+  right: 88px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50% 50% 52% 48%;
+  background: linear-gradient(160deg, #f0c2d2, #dd9fb6);
+}
+
+/* 左下角再补一块绿色「灌木」贴纸，凑出原版那种拼贴密度 */
+.ls__deco--6 {
+  top: 300px;
+  left: 60px;
+  width: 62px;
+  height: 62px;
+  border-radius: 40% 60% 55% 45%;
+  background: linear-gradient(150deg, #c9e0b4, #93bf7a);
+  transform: rotate(12deg);
 }
 
 .ls__foot {
@@ -218,7 +238,12 @@
 .ls__agreeText {
   font-size: 11.5px;
   line-height: 1.5;
-  color: var(--c-text-3);
+  color: #4a4a4a;
+}
+
+/* 协议里的条款名用标准链接蓝，提高辨识度 */
+.ls__agreeText .login__link {
+  color: #2f6fe0;
 }
 
 .ls__agree.is-warn .ls__agreeText {

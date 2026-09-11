@@ -31,6 +31,7 @@ export function LoginSelectScreen() {
           <span className="ls__deco ls__deco--3" aria-hidden />
           <span className="ls__deco ls__deco--4" aria-hidden />
           <span className="ls__deco ls__deco--5" aria-hidden />
+          <span className="ls__deco ls__deco--6" aria-hidden />
 
           <div className="ls__brand">
             <span className="ls__brandMark" aria-hidden>
@@ -43,9 +44,10 @@ export function LoginSelectScreen() {
         {/* 主操作区 */}
         <div className="ls__foot">
           <button className="ls__login" onClick={login}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <rect x="6" y="2.5" width="12" height="19" rx="2.6" />
-              <rect x="10.4" y="5" width="3.2" height="1.4" rx="0.7" fill="#fff" />
+            {/* 手机图标按原版做成横向圆角矩形（此前画得过窄） */}
+            <svg width="22" height="15" viewBox="0 0 22 15" fill="none" aria-hidden>
+              <rect x="1" y="1" width="20" height="13" rx="3.4" fill="#fff" />
+              <rect x="8.4" y="11" width="5.2" height="1.4" rx="0.7" fill="#111" />
             </svg>
             <span>登录 Campus</span>
           </button>
