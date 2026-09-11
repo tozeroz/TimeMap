@@ -69,6 +69,14 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* 不滚动时不要出现滚动容器：否则内部 flex:1 的绝对定位层
+   （例如地图画布）会因为父级没有确定高度而塌陷成 0 高 */
+.screen__body--fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 /* 顶栏 */
 .topbar {
   display: flex;

@@ -5,18 +5,22 @@ build/
 *.log
 
 # Capacitor / Android 构建产物
-android/.gradle/
-android/app/build/
-android/build/
-android/local.properties
-android/.idea/
-android/captures/
+app/android/.gradle/
+app/android/app/build/
+app/android/build/
+app/android/local.properties
+app/android/.idea/
+app/android/captures/
+app/android/app/src/main/assets/public/
+app/android/app/src/main/assets/capacitor.config.json
 *.apk
 *.aab
 *.keystore
 
-# 勘察原始素材（体积大，且是外部 app 的截图，不进版本库）
+# 勘察与对比的原始截图（体积大，且是外部 app 的截图，不进版本库）
 .mumu-capture/
+.playwright-mcp/
+*.png
 
 # 工具临时
 tools/tmp/

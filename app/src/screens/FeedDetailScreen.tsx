@@ -8,7 +8,7 @@ import './feed.css'
 export function FeedDetailScreen({ id }: { id: string }) {
   const post = posts.find((p) => p.id === id) ?? posts[0]
   const [liked, setLiked] = useState(post.liked)
-  const [likes, setLikes] = useState(post.likes)
+  const [likes] = useState(post.likes)
 
   return (
     <Screen

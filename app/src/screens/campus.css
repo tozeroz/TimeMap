@@ -54,11 +54,13 @@
   column-count: 2;
   column-gap: var(--gap-card);
   padding: var(--gap-card) var(--gap-card) 24px;
+  overflow-x: hidden;
 }
 
 .pcard {
   break-inside: avoid;
   display: block;
+  width: 100%;
   margin-bottom: var(--gap-card);
   background: var(--c-surface);
   border-radius: var(--r-lg);

@@ -51,7 +51,9 @@ export function Screen({
   return (
     <div className={`screen ${className}`}>
       {header}
-      <div className={`screen__body no-scrollbar ${scroll ? 'screen__body--scroll' : ''}`}>
+      <div
+        className={`screen__body no-scrollbar ${scroll ? 'screen__body--scroll' : 'screen__body--fill'}`}
+      >
         {children}
       </div>
       {footer}

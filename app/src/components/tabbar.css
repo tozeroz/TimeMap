@@ -2,9 +2,11 @@
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: space-around;
   height: var(--h-tabbar);
-  padding: 0 46px 0 10px;
+  /* 右侧留出悬浮按钮的位置，避免 FAB 压住「地图」tab */
+  padding: 0 72px 0 8px;
+  padding-bottom: env(safe-area-inset-bottom, 0);
   background: var(--c-surface);
   border-top: 1px solid var(--c-divider);
   flex: 0 0 auto;
@@ -20,6 +22,8 @@
   font-size: 12px;
   font-weight: 500;
   transition: background 0.15s ease, color 0.15s ease;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .tabbar__item.is-active {

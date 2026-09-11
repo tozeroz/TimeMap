@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Screen, TopBar } from '../components/Shell'
+import { Screen } from '../components/Shell'
 import { IconChatBubble, IconChevronDown, IconCompass, IconLocation, IconPlus } from '../components/icons'
 import { users } from '../data/mock'
 import { navigate } from '../router'
