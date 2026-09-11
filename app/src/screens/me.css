@@ -71,8 +71,46 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 22px var(--pad-page) 26px;
+  padding: 6px var(--pad-page) 26px;
   background: var(--c-surface);
+}
+
+/* 语音动态条 + 提示气泡（原版位置：头像区下方） */
+.me__voiceRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px var(--pad-page) 4px;
+  background: var(--c-surface);
+}
+
+.me__voiceCard {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 16px 9px 14px;
+  border-radius: var(--r-pill);
+  background: #f1f2f4;
+}
+
+.me__voiceBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+}
+
+.me__voiceBar i {
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--c-text-2);
+}
+
+.me__voiceLabel {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
 }
 
 .me__capture {

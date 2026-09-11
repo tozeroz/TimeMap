@@ -70,16 +70,28 @@ export function MeScreen() {
         </div>
       </section>
 
-      {/* 记录入口：原版是「拍下眼前的风景」黑色胶囊 + 蓝色气泡提示 */}
-      <section className="me__prompt">
-        <button className="me__capture" onClick={() => navigate('publish')}>
-          <IconImage size={17} />
-          <span>拍下眼前的风景</span>
+      {/* 语音动态条（原版个人页实测存在「我的第一条语音」卡片） */}
+      <section className="me__voiceRow">
+        <button className="me__voiceCard" onClick={() => navigate('publish')}>
+          <span className="me__voiceBar" aria-hidden>
+            {Array.from({ length: 18 }).map((_, i) => (
+              <i key={i} style={{ height: `${7 + ((i * 23) % 15)}px` }} />
+            ))}
+          </span>
+          <span className="me__voiceLabel">我的第一条语音</span>
         </button>
         <div className="me__hint">
           <span className="me__hint-spark">✦</span>
           <span className="me__hint-bubble">快来试试吧～</span>
         </div>
+      </section>
+
+      {/* 记录入口：原版是「拍下眼前的风景」黑色胶囊 */}
+      <section className="me__prompt">
+        <button className="me__capture" onClick={() => navigate('publish')}>
+          <IconImage size={17} />
+          <span>拍下眼前的风景</span>
+        </button>
       </section>
     </Screen>
   )

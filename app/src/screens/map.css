@@ -33,49 +33,86 @@
   right: 8px;
 }
 
+/* 地图舞台：接管指针事件实现拖拽 */
 .map {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
   background: #f2f1ec;
+  touch-action: none; /* 关键：交给 JS 处理拖拽/捏合，禁止浏览器默认手势 */
+  cursor: grab;
+  user-select: none;
+}
+
+.map:active {
+  cursor: grabbing;
+}
+
+/* 世界层：随拖拽/缩放变换 */
+.map__world {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
 }
 
 .map__canvas {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  left: 0;
+  top: 0;
+  width: 1400px;
+  height: 2000px;
 }
 
-/* 动态气泡 */
-.map__bubble {
+/* 标记层 */
+.map__markers {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+
+.map__marker {
   position: absolute;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  padding: 9px 13px;
-  border-radius: var(--r-md);
-  background: rgba(17, 17, 17, 0.92);
-  color: #fff;
-  font-size: 13px;
-  text-align: left;
-  box-shadow: var(--shadow-float);
+  align-items: center;
 }
 
-.map__bubble--a {
-  left: 22px;
-  top: 26%;
+.map__markerCard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 3px 3px 5px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
 }
 
-.map__bubble--b {
-  right: 26px;
-  top: 44%;
+.map__markerImg {
+  width: 66px;
+  height: 66px;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--c-surface-sunken);
 }
 
-.map__bubble-line--strong {
-  font-weight: 600;
+.map__markerName {
+  max-width: 78px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--c-text-2);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map__pin {
+  display: block;
+  margin-top: -3px;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.25));
 }
 
 /* 授权弹窗 */
@@ -132,42 +169,52 @@
   color: var(--c-primary-fg);
 }
 
-/* 悬浮按钮 */
-.map__locate,
-.map__tool {
+/* 悬浮控件：定位 + 指南针（右下角，FAB 上方） */
+.map__controls {
   position: absolute;
+  right: 14px;
+  bottom: 86px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.map__ctrl {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 42px;
+  height: 42px;
   border-radius: var(--r-pill);
   background: var(--c-surface);
   box-shadow: var(--shadow-card);
   color: var(--c-text);
 }
 
-.map__locate {
-  right: 14px;
-  bottom: 22px;
-  width: 40px;
-  height: 40px;
-}
-
-.map__tools {
+.map__fab {
   position: absolute;
-  left: 14px;
-  bottom: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.map__tool {
-  position: static;
-  width: 40px;
-  height: 40px;
-}
-
-.map__tool--primary {
+  right: 14px;
+  bottom: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-pill);
   background: var(--c-primary);
   color: var(--c-primary-fg);
+  box-shadow: var(--shadow-float);
+}
+
+/* 文字占位图（无配图的动态） */
+.map__markerImg--text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: var(--c-text-2);
+  background: var(--c-surface-sunken);
+  text-align: center;
 }

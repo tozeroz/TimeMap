@@ -29,22 +29,21 @@ export function PostCard({ post }: { post: FeedPost }) {
     >
       {hasImage ? (
         <>
-          <img
-            className="pcard__cover"
-            src={post.images[0]}
-            alt=""
-            loading="lazy"
-            style={post.ratio ? { aspectRatio: post.ratio } : undefined}
-          />
-          {/* 作者行悬浮在图片上方（原版：头像昵称在图片顶部） */}
-          <div className="pcard__author-chip">
+          {/* 作者行在图片【上方】（原版实测位置），不是悬浮在图上 */}
+          <div className="pcard__author">
             <img className="pcard__avatar" src={post.author.avatar} alt="" />
             <span className="pcard__author-name">{post.author.name}</span>
           </div>
-          {/* 正文压在底部深色蒙层上 */}
-          <div className="pcard__overlay">
-            <p className="pcard__overlay-text">{post.text}</p>
-            <div className="pcard__overlay-foot">
+          <div className="pcard__mediaWrap">
+            <img
+              className="pcard__cover"
+              src={post.images[0]}
+              alt=""
+              loading="lazy"
+              style={post.ratio ? { aspectRatio: post.ratio } : undefined}
+            />
+            <div className="pcard__overlay">
+              <p className="pcard__overlay-text">{post.text}</p>
               <button
                 className={`pcard__like pcard__like--on-image ${liked ? 'is-liked' : ''}`}
                 onClick={toggleLike}

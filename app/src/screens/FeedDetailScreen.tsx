@@ -28,7 +28,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
       }
       footer={
         <div className="feed__bar">
-          <input className="feed__input" placeholder="说点什么…" />
+          <input className="feed__input" placeholder="留下我的评论" />
           <button className="feed__action" onClick={() => setLiked((v) => !v)}>
             <IconHeart size={22} filled={liked} />
             <span>{likes}</span>

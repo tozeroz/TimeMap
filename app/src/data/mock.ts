@@ -536,3 +536,27 @@ export const upgradeInfo = {
 /** 扫码页的提示文案 */
 export const scannerHints = ['扫描校园卡二维码', '扫描群邀请二维码', '扫描活动签到码']
 
+/**
+ * 地图上的动态标记。
+ * 原版实测样式：一张图片卡片 + 彩色图钉 + 地点名，点击进入该条动态。
+ * x/y 是地图世界坐标（与 MapScreen 里 SVG 的 viewBox 同一坐标系）。
+ */
+export interface MapMarker {
+  id: string
+  place: string
+  color: string
+  userId: string
+  postId: string
+  x: number
+  y: number
+}
+
+export const mapMarkers: MapMarker[] = [
+  { id: 'm1', place: '阳光操场', color: '#f5453b', userId: 'u1', postId: 'p1', x: 430, y: 1030 },
+  { id: 'm2', place: '教育超市', color: '#f2b800', userId: 'u11', postId: 'p7', x: 560, y: 1660 },
+  { id: 'm3', place: '图书馆', color: '#f5453b', userId: 'u5', postId: 'p8', x: 980, y: 640 },
+  { id: 'm4', place: '逸夫教学楼', color: '#2f9e44', userId: 'u2', postId: 'p2', x: 900, y: 1020 },
+  { id: 'm5', place: '思源楼', color: '#f2b800', userId: 'u4', postId: 'p4', x: 1180, y: 1120 },
+  { id: 'm6', place: '学苑公寓', color: '#2f9e44', userId: 'u7', postId: 'p6', x: 340, y: 1220 },
+]
+

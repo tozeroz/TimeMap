@@ -18,12 +18,20 @@
   background: rgba(255, 255, 255, 0.14);
   color: #fff;
   font-size: 13px;
+  max-width: 62vw;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
-.pub__poi-dot {
-  font-size: 12px;
+.pub__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
+/* —— 拍摄模式 —— */
 .pub__viewfinder {
   position: relative;
   flex: 1 1 auto;
@@ -78,12 +86,114 @@
   color: #111;
 }
 
+/* —— 文字模式（图文编辑器）—— */
+.pub__editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px var(--pad-page) 10px;
+  background: #0d0d0d;
+}
+
+.pub__textarea {
+  flex: 1 1 auto;
+  min-height: 120px;
+  resize: none;
+  background: transparent;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.pub__textarea::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.pub__thumbs {
+  display: flex;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.pub__thumbImg {
+  width: 78px;
+  height: 78px;
+  border-radius: var(--r-md);
+  object-fit: cover;
+}
+
+.pub__thumbAdd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 78px;
+  height: 78px;
+  border-radius: var(--r-md);
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.pub__fonts {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pub__font {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+}
+
+.pub__font.is-active {
+  background: #fff;
+  color: #111;
+  font-weight: 600;
+}
+
+/* —— 语音模式 —— */
+.pub__voice {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.pub__wave {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 70px;
+}
+
+.pub__wave span {
+  width: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.pub__voiceTip {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* —— 底部控制条 —— */
 .pub__controls {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 26px 30px;
+  padding: 16px 26px 26px;
   background: #0d0d0d;
   flex: 0 0 auto;
 }
@@ -115,8 +225,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 68px;
-  height: 68px;
+  width: 66px;
+  height: 66px;
   border-radius: var(--r-pill);
   background: #fff;
   color: #111;
@@ -125,4 +235,14 @@
 
 .pub__shutter:active {
   transform: scale(0.94);
+}
+
+.pub__send {
+  padding: 0 22px;
+  height: 40px;
+  border-radius: var(--r-pill);
+  background: #fff;
+  color: #111;
+  font-size: 15px;
+  font-weight: 700;
 }
