@@ -19,7 +19,7 @@ export function MeScreen() {
         <TopBar
           left={
             <>
-              <button className="iconbtn" aria-label="菜单">
+              <button className="iconbtn" aria-label="菜单" onClick={() => navigate('more')}>
                 <IconMenu size={22} strokeWidth={2.2} />
               </button>
               <button className="iconbtn" aria-label="分享">

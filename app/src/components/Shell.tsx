@@ -4,11 +4,12 @@ import './shell.css'
 /**
  * 手机外壳：状态栏 + 内容区。
  * 在浏览器里预览时限制最大宽度模拟手机；打包进 APK 后自适应全屏。
+ * dark=true 时状态栏跟随深色页面（扫码/图片预览），避免白底突兀。
  */
-export function Shell({ children }: { children: ReactNode }) {
+export function Shell({ children, dark = false }: { children: ReactNode; dark?: boolean }) {
   return (
     <div className="shell">
-      <div className="shell__viewport">
+      <div className={`shell__viewport ${dark ? 'shell__viewport--dark' : ''}`}>
         <div className="statusbar">
           <span className="statusbar__time">9:41</span>
           <span className="statusbar__icons">

@@ -22,11 +22,20 @@ $paths = @(
   'publish',
   'login',
   'onboarding',
-  'announce'
+  'announce',
+  'feedlist',
+  'poidetail',
+  'group',
+  'scanner',
+  'loginselect',
+  'upgrade',
+  'more',
+  'media?post=p1&i=0'
 )
 
 foreach ($p in $paths) {
-  $file = ($p -replace '/', '_')
+  # 路由里可能带 query（如 media?post=p1&i=0），文件名要清掉非法字符
+  $file = ($p -replace '[/?&=]', '_')
   $dest = Join-Path $outDir "$file.png"
   $url = "http://127.0.0.1:5174/#/$p"
   $args = @(

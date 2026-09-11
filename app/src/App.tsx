@@ -17,6 +17,14 @@ import { LoginScreen } from './screens/LoginScreen'
 import { OnboardingScreen } from './screens/OnboardingScreen'
 import { AnnounceScreen } from './screens/AnnounceScreen'
 import { SimpleScreen } from './screens/SimpleScreen'
+import { FeedListScreen } from './screens/FeedListScreen'
+import { PoiDetailScreen } from './screens/PoiDetailScreen'
+import { GroupChatScreen } from './screens/GroupChatScreen'
+import { MediaPreviewScreen } from './screens/MediaPreviewScreen'
+import { ScannerScreen } from './screens/ScannerScreen'
+import { LoginSelectScreen } from './screens/LoginSelectScreen'
+import { UpgradeDialog } from './screens/UpgradeDialog'
+import { MoreScreen } from './screens/MoreScreen'
 import './styles/pages.css'
 
 const TAB_TITLES: Record<string, string> = {
@@ -30,13 +38,15 @@ export default function App() {
   const [root, param] = route.path.split('/')
   const tab: TabKey | null =
     root === 'me' || root === 'campus' || root === 'map' ? (root as TabKey) : null
+  // 深色页面：状态栏需要跟着变暗
+  const dark = root === 'scanner' || root === 'media'
 
   useEffect(() => {
     document.title = TAB_TITLES[root] ?? 'Campus'
   }, [root])
 
   return (
-    <Shell>
+    <Shell dark={dark}>
       {tab === 'campus' && <CampusScreen />}
       {tab === 'me' && <MeScreen />}
       {tab === 'map' && <MapScreen />}
@@ -52,6 +62,19 @@ export default function App() {
       {root === 'login' && <LoginScreen />}
       {root === 'onboarding' && <OnboardingScreen />}
       {root === 'announce' && <AnnounceScreen />}
+      {root === 'feedlist' && <FeedListScreen />}
+      {root === 'poidetail' && <PoiDetailScreen />}
+      {root === 'group' && <GroupChatScreen />}
+      {root === 'scanner' && <ScannerScreen />}
+      {root === 'loginselect' && <LoginSelectScreen />}
+      {root === 'upgrade' && <UpgradeDialog />}
+      {root === 'more' && <MoreScreen />}
+      {root === 'media' && (
+        <MediaPreviewScreen
+          postId={route.query.post}
+          startIndex={route.query.i ? Number(route.query.i) : 0}
+        />
+      )}
 
       {root === 'interests' && (
         <SimpleScreen title="我的兴趣" subtitle="选择你感兴趣的内容，我们会为你推荐">

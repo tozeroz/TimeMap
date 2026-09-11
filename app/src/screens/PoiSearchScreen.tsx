@@ -52,7 +52,7 @@ export function PoiSearchScreen() {
           </div>
         </button>
         {list.map((p) => (
-          <button key={p.id} className="row" onClick={() => navigate('map', { poi: p.id })}>
+          <button key={p.id} className="row" onClick={() => navigate('poidetail', { id: p.id })}>
             <div className="row__main">
               <div className="row__title">{p.name}</div>
               <div className="row__sub">{p.address}</div>

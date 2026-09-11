@@ -21,6 +21,8 @@ export interface FeedPost {
   author: User
   text: string
   images: string[]
+  /** 配图宽高比（瀑布流错落感的来源；原版是不同尺寸的真实照片，这里按比例还原） */
+  ratio?: string
   likes: number
   comments: number
   liked: boolean
@@ -96,9 +98,32 @@ function avatar(seed: string, bg: string, fg = '#ffffff'): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 }
 
-/** 帖子配图：本地生成的渐变占位图，保证离线可用 */
+/**
+ * 帖子配图：本地生成的抽象渐变图，保证离线可用。
+ * 注意不要在图上写字——实测视觉模型会把图上的文字误读成「分类标签」，
+ * 而原版配图是真实照片，没有这类文字。
+ */
 function photo(seed: string, from: string, to: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="600" height="800" fill="url(#g)"/><text x="300" y="410" font-size="34" font-family="PingFang SC,sans-serif" fill="rgba(255,255,255,0.85)" text-anchor="middle">${seed}</text></svg>`
+  // 用 seed 派生几个色块/圆弧，做出「照片」的构图感，而不是纯色板
+  const h = [...seed].reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) % 997, 7)
+  const cx = 120 + (h % 360)
+  const cy = 180 + ((h * 7) % 400)
+  const r = 160 + ((h * 13) % 220)
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800">` +
+    `<defs>` +
+    `<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/>` +
+    `</linearGradient>` +
+    `<radialGradient id="s" cx="50%" cy="50%" r="50%">` +
+    `<stop offset="0" stop-color="#ffffff" stop-opacity="0.5"/>` +
+    `<stop offset="1" stop-color="#ffffff" stop-opacity="0"/>` +
+    `</radialGradient>` +
+    `</defs>` +
+    `<rect width="600" height="800" fill="url(#g)"/>` +
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#s)"/>` +
+    `<rect x="0" y="520" width="600" height="280" fill="#000000" fill-opacity="0.12"/>` +
+    `</svg>`
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 }
 
@@ -200,6 +225,7 @@ export const posts: FeedPost[] = [
     author: users.u1,
     text: '草头娃娃，听说浇水能长草，让我来试试~',
     images: [photo('草头娃娃', '#a8e6a1', '#5fbf6a')],
+    ratio: '3 / 5',
     likes: 128,
     comments: 24,
     liked: false,
@@ -211,6 +237,7 @@ export const posts: FeedPost[] = [
     author: users.u2,
     text: '而我不再觉得，孤独是一种遗憾。',
     images: [photo('傍晚', '#f6b26b', '#e06666')],
+    ratio: '1 / 1',
     likes: 342,
     comments: 51,
     liked: true,
@@ -220,7 +247,8 @@ export const posts: FeedPost[] = [
     id: 'p3',
     author: users.u3,
     text: '韩国编剧朴海英：写台词的时候，我会先想这个人今天过得怎么样。',
-    images: [],
+    images: [photo('书摘', '#d9c7a8', '#a8906a')],
+    ratio: '4 / 5',
     likes: 96,
     comments: 12,
     liked: false,
@@ -232,6 +260,7 @@ export const posts: FeedPost[] = [
     author: users.u4,
     text: '在大理淘到了好多漂亮的小物品，已经迫不及待想布置宿舍了。',
     images: [photo('大理', '#89c4f4', '#4a90d9'), photo('小物', '#f7cac9', '#e79ba8')],
+    ratio: '3 / 4',
     likes: 233,
     comments: 37,
     liked: false,
@@ -243,6 +272,7 @@ export const posts: FeedPost[] = [
     author: users.u12,
     text: '永恒八月，汪川。今天单曲循环了一整天。',
     images: [photo('耳机', '#b3c7e6', '#7d97bf')],
+    ratio: '5 / 4',
     likes: 77,
     comments: 8,
     liked: false,
@@ -252,7 +282,8 @@ export const posts: FeedPost[] = [
     id: 'p6',
     author: users.u7,
     text: '词/曲：垚依依 编曲：蛙池。坦白来说，坦白是ok的。',
-    images: [],
+    images: [photo('演出', '#b58fd9', '#6f4fa8')],
+    ratio: '1 / 1',
     likes: 45,
     comments: 5,
     liked: false,
@@ -263,7 +294,8 @@ export const posts: FeedPost[] = [
     id: 'p7',
     author: users.u11,
     text: '教超今晚十点半关门，别跑空了。',
-    images: [],
+    images: [photo('超市', '#a8c9a0', '#6f9c66')],
+    ratio: '4 / 5',
     likes: 312,
     comments: 66,
     liked: true,
@@ -275,6 +307,7 @@ export const posts: FeedPost[] = [
     author: users.u5,
     text: '图书馆四楼靠窗的位置下午三点后基本没光，适合睡觉不适合背书（亲测）。',
     images: [photo('图书馆', '#d5cfc4', '#a89f90')],
+    ratio: '3 / 5',
     likes: 189,
     comments: 28,
     liked: false,
@@ -450,3 +483,56 @@ export const campusInfo = {
   members: '12,486',
   posts: '38,920',
 }
+
+/* ============ 以下为补充页面所需数据 ============ */
+
+export interface GroupChat {
+  id: string
+  name: string
+  memberCount: number
+  notice: string
+  members: User[]
+  messages: ChatMessage[]
+}
+
+export const groups: GroupChat[] = [
+  {
+    id: 'g1',
+    name: '计算机学院 2023 级',
+    memberCount: 128,
+    notice: '期末周自习安排已更新，图书馆四楼开放到 22:30。',
+    members: [users.u5, users.u6, users.u7, users.u8, users.u9, users.u10, users.u11],
+    messages: [
+      { id: 'g1m1', from: 'peer', text: '有人明天去图书馆吗？', time: '09:12' },
+      { id: 'g1m2', from: 'me', text: '我去，四楼靠窗', time: '09:14' },
+      { id: 'g1m3', from: 'peer', text: '@自定义名称6 帮我占个位子可以吗', time: '09:15' },
+      { id: 'g1m4', from: 'peer', text: '群公告更新了，大家看一下', time: '10:02' },
+    ],
+  },
+]
+
+/** 地点详情：某个 POI 下的动态聚合 */
+export const poiDetail = {
+  id: 'poi1',
+  name: '北京交通大学',
+  address: '北京市海淀区西直门外上园村3号',
+  category: '学校',
+  posts: 1284,
+  visitors: 3562,
+  related: ['poi2', 'poi3', 'poi4'],
+}
+
+/** 升级弹窗文案（原版 campusx://upgradeAlert） */
+export const upgradeInfo = {
+  version: '2.11.0',
+  size: '48.6 MB',
+  highlights: [
+    '校园广场支持按标签筛选',
+    '群聊新增 @ 面板与消息引用',
+    '修复地图定位偶发偏移',
+  ],
+}
+
+/** 扫码页的提示文案 */
+export const scannerHints = ['扫描校园卡二维码', '扫描群邀请二维码', '扫描活动签到码']
+

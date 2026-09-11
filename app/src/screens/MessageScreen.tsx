@@ -1,6 +1,6 @@
 import { Screen, TopBar } from '../components/Shell'
-import { IconClose, IconPlus, IconSearch } from '../components/icons'
-import { me, threads, users } from '../data/mock'
+import { IconChatBubble, IconClose, IconPlus, IconSearch } from '../components/icons'
+import { groups, me, threads, users } from '../data/mock'
 import { goBack, navigate } from '../router'
 import './message.css'
 
@@ -45,6 +45,22 @@ export function MessageScreen() {
           </div>
         </div>
         <button className="invite__btn">邀请同学</button>
+      </section>
+
+      {/* 群聊入口（原版 campusx://group） */}
+      <section className="list">
+        {groups.map((g) => (
+          <button key={g.id} className="row" onClick={() => navigate('group', { id: g.id })}>
+            <span className="row__groupIcon" aria-hidden>
+              <IconChatBubble size={22} />
+            </span>
+            <div className="row__main">
+              <div className="row__title">{g.name}</div>
+              <div className="row__sub">{g.notice}</div>
+            </div>
+            <div className="row__time">{g.memberCount} 人</div>
+          </button>
+        ))}
       </section>
 
       {/* 会话列表 */}

@@ -13,18 +13,20 @@
 /* 瀑布流：column 布局最接近原版的双列错落感 */
 .campus__grid {
   column-count: 2;
-  column-gap: 9px;
-  padding: 0 9px 28px;
+  column-gap: 7px;
+  padding: 0 7px 28px;
   overflow-x: hidden;
-  background: var(--c-surface);
+  /* 原版卡片之间是浅灰底，不是纯白 */
+  background: var(--c-bg);
+  min-height: 100%;
 }
 
 .pcard {
   break-inside: avoid;
   display: block;
   width: 100%;
-  margin-bottom: 9px;
-  border-radius: 14px;
+  margin-bottom: 7px;
+  border-radius: 12px;
   overflow: hidden;
   background: var(--c-surface-sunken);
 }
@@ -42,9 +44,42 @@
 .pcard__cover {
   width: 100%;
   height: auto;
+  /* 默认 3:4；每条动态可用 ratio 覆盖，用于还原原版瀑布流的错落高度 */
   aspect-ratio: 3 / 4;
   object-fit: cover;
   display: block;
+  background: var(--c-surface-sunken);
+}
+
+/* 作者行：悬浮在图片顶部 */
+.pcard__author-chip {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: calc(100% - 16px);
+  padding: 3px 9px 3px 3px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(3px);
+}
+
+.pcard__author-name {
+  font-size: 11.5px;
+  color: #fff;
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcard__avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-pill);
+  flex: 0 0 auto;
 }
 
 .pcard__overlay {
@@ -52,8 +87,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 26px 10px 10px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0));
+  padding: 30px 10px 9px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.68), rgba(0, 0, 0, 0));
   line-height: 1.4;
 }
 
@@ -66,28 +101,20 @@
   line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
 }
 
 .pcard__overlay-foot {
   display: flex;
   align-items: center;
-  gap: 5px;
-  margin-top: 8px;
-}
-
-.pcard__overlay-name {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.92);
-  max-width: 74px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  justify-content: flex-end;
+  margin-top: 5px;
 }
 
 .pcard__like--on-image {
   margin-left: auto;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 400;
 }
 
 /* —— 无图：白底卡片 —— */

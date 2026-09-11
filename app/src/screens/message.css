@@ -76,6 +76,19 @@
   transform: scale(0.99);
 }
 
+/* 群聊入口图标 */
+.row__groupIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-md);
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  flex: 0 0 auto;
+}
+
 /* 推荐同学 */
 .suggest {
   margin-top: 10px;

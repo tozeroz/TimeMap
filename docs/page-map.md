@@ -122,20 +122,35 @@ APK 内置 TheRouter 路由表，`campusx://` scheme 可直接用
 | trident（地图 tab） | `#/map` | ✅ 已实现（自绘 SVG 离线地图） |
 | feed/detail | `#/feed/:id` | ✅ 已实现 |
 | feed/comment/detail | `#/comments/:id` | ✅ 已实现 |
-| messageBoard | `#/board` | ✅ 已实现 |
+| feed/list（校园圈） | `#/feedlist` | ✅ 已实现（含原版实测到的「网络错误 + 刷新」态） |
 | feed/daily | `#/daily` | ✅ 已实现 |
+| feed/poi/detail | `#/poidetail` | ✅ 已实现 |
+| messageBoard | `#/board` | ✅ 已实现 |
 | poi/search | `#/poi` | ✅ 已实现 |
 | publish_post | `#/publish` | ✅ 已实现 |
-| message | `#/message` | ✅ 已实现 |
+| message | `#/message` | ✅ 已实现（含群聊入口） |
 | chat | `#/chat/:id` | ✅ 已实现 |
+| group（群聊） | `#/group` | ✅ 已实现（含 @面板） |
+| group/atPanel | 并入 `#/group` | ✅ 用底部抽屉等价实现 |
+| chat/media-preview | `#/media?post=&i=` | ✅ 已实现 |
 | announce | `#/announce` | ✅ 已实现 |
+| scanner | `#/scanner` | ✅ 已实现（无摄像头，用取景框 + 扫描线动画） |
+| login/select | `#/loginselect` | ✅ 已实现 |
 | login/sns | `#/login` | ✅ 已实现 |
 | login/onboarding | `#/onboarding` | ✅ 已实现 |
-| feed/list（校园圈） | —— | ⚠️ 原版强依赖后端，本机只能看到网络错误页，demo 并入 `#/campus` |
+| upgradeAlert | `#/upgrade` | ✅ 已实现（弹窗样式） |
+| webview | —— | ⚠️ 通用容器，无独立 UI 价值，未复刻 |
+| groupchat/invitePage | —— | ⚠️ 入群桥接页，无独立 UI，未复刻 |
+| main（入口） | —— | 入口类，由上述页面覆盖 |
+
+**补充入口**：个人页左上角「三横线」→ `#/more`，集中列出所有二级页面入口
+（对应原版的抽屉菜单）。目的是让每个页面都能从界面里走到，而不是只能靠 URL。
 
 ## 五、未能还原的部分（如实记录）
 
 1. **地图底图**：原版是腾讯地图 SDK 实时瓦片；demo 用自绘 SVG 还原观感，不做真实地理数据。
-2. **相机取景**：原版调用真实摄像头；demo 用本地生成的渐变图模拟取景画面。
-3. **校园圈（feed/list）**：因原版接口不可用，未能取得其真实界面，demo 未单独复刻该页。
-4. **动态的真实图片**：原版图片来自 CDN；demo 全部用本地生成的渐变占位图。
+2. **相机取景**：原版调用真实摄像头（发布页、扫码页）；demo 用本地生成的渐变图 / 取景框动画模拟。
+3. **动态的真实图片**：原版图片来自 CDN；demo 全部用本地生成的渐变占位图。
+4. **校园圈的在线内容**：原版该页在无后端时只显示「网络错误」，demo 如实复刻了这个错误态，
+   点「刷新」后展示本地 mock 内容，把该状态闭环。
+5. **推送类技术页**：`webview` 通用容器、`groupchat/invitePage` 入群桥接页无独立 UI，未复刻。

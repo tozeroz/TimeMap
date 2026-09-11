@@ -81,3 +81,53 @@
 .login__link {
   color: var(--c-accent);
 }
+
+/* 登录方式选择（login/select） */
+.login__lead {
+  margin: -18px 0 24px;
+  font-size: 13.5px;
+  color: var(--c-text-3);
+}
+
+.ls__methods {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ls__method {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  padding: 16px 18px;
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  border: 1px solid var(--c-divider);
+  text-align: left;
+}
+
+.ls__method.is-primary {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+}
+
+.ls__method-label {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--c-text);
+}
+
+.ls__method.is-primary .ls__method-label {
+  color: var(--c-primary-fg);
+}
+
+.ls__method-desc {
+  font-size: 12.5px;
+  color: var(--c-text-3);
+}
+
+.ls__method.is-primary .ls__method-desc {
+  color: rgba(255, 255, 255, 0.72);
+}

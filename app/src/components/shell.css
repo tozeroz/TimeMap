@@ -44,6 +44,16 @@
   gap: 5px;
 }
 
+/* 深色页面（扫码 / 图片预览）：状态栏融进背景 */
+.shell__viewport--dark {
+  background: #0b0b0b;
+}
+
+.shell__viewport--dark .statusbar {
+  background: #0b0b0b;
+  color: #fff;
+}
+
 .shell__body {
   flex: 1 1 auto;
   min-height: 0;

@@ -61,7 +61,13 @@ export function FeedDetailScreen({ id }: { id: string }) {
         {post.topic && <span className="feed__topic">{post.topic}</span>}
 
         {post.images.map((src, i) => (
-          <img key={i} className="feed__image" src={src} alt="" />
+          <img
+            key={i}
+            className="feed__image"
+            src={src}
+            alt=""
+            onClick={() => navigate('media', { post: post.id, i: String(i) })}
+          />
         ))}
       </article>
 
