@@ -162,9 +162,23 @@ export function MapScreen() {
   const drag = useRef<{ id: number; startX: number; startY: number; originX: number; originY: number } | null>(null)
   const pinch = useRef<{ distance: number; scale: number } | null>(null)
   const lastTap = useRef(0)
+  const lastTouch = useRef<{ x: number; y: number; t: number; moved: number } | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
 
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s))
+
+  /** 双击放大/还原。pointer 与 touch 两条路径都调用它——
+   *  实测：CDP 注入的触摸事件不一定产生 pointer 事件，只在 pointer 上做双击检测会漏。 */
+  const registerTap = useCallback((moved: number) => {
+    if (moved > 8) return
+    const now = Date.now()
+    if (now - lastTap.current < 320) {
+      setView((v) => ({ ...v, scale: clampScale(v.scale >= 2 ? 1 : v.scale * 1.6) }))
+      lastTap.current = 0
+      return
+    }
+    lastTap.current = now
+  }, [])
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.pointerType === 'touch' && e.isPrimary === false) return
@@ -178,39 +192,52 @@ export function MapScreen() {
     setView((v) => ({ ...v, x: d.originX + (e.clientX - d.startX), y: d.originY + (e.clientY - d.startY) }))
   }, [])
 
-  const onPointerUp = useCallback((e: React.PointerEvent) => {
-    const d = drag.current
-    if (!d || d.id !== e.pointerId) return
-    drag.current = null
-    // 双击缩放
-    const now = Date.now()
-    const moved = Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY)
-    if (moved < 6) {
-      if (now - lastTap.current < 300) {
-        setView((v) => ({ ...v, scale: clampScale(v.scale >= 2 ? 1 : v.scale * 1.6) }))
-        lastTap.current = 0
-        return
-      }
-      lastTap.current = now
-    }
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      const d = drag.current
+      if (!d || d.id !== e.pointerId) return
+      drag.current = null
+      registerTap(Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY))
+    },
+    [registerTap],
+  )
+
+  // 触摸路径（真机主要走这条）：记录起点位移，抬起时交给同一个双击判定
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    const t = e.touches[0]
+    if (!t) return
+    lastTouch.current = { x: t.clientX, y: t.clientY, t: Date.now(), moved: 0 }
   }, [])
 
-  // 双指捏合（触摸设备）
-  const onTouchMove = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length !== 2) return
-    const [a, b] = [e.touches[0], e.touches[1]]
-    const distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
-    if (pinch.current === null) {
-      pinch.current = { distance, scale: view.scale }
-      return
-    }
-    const ratio = distance / pinch.current.distance
-    setView((v) => ({ ...v, scale: clampScale(pinch.current!.scale * ratio) }))
-  }, [view.scale])
+  const onTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      const start = lastTouch.current
+      const first = e.touches[0]
+      if (start && first) {
+        start.moved = Math.max(
+          start.moved,
+          Math.hypot(first.clientX - start.x, first.clientY - start.y),
+        )
+      }
+      if (e.touches.length !== 2) return
+      const [a, b] = [e.touches[0], e.touches[1]]
+      const distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
+      if (pinch.current === null) {
+        pinch.current = { distance, scale: view.scale }
+        return
+      }
+      const ratio = distance / pinch.current.distance
+      setView((v) => ({ ...v, scale: clampScale(pinch.current!.scale * ratio) }))
+    },
+    [view.scale],
+  )
 
   const onTouchEnd = useCallback(() => {
     pinch.current = null
-  }, [])
+    const t = lastTouch.current
+    if (t) registerTap(t.moved)
+    lastTouch.current = null
+  }, [registerTap])
 
   // 桌面滚轮缩放（浏览器预览用）
   useEffect(() => {
@@ -251,6 +278,7 @@ export function MapScreen() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
