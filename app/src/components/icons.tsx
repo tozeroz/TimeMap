@@ -234,3 +234,11 @@ export function IconRefresh({ size = 20, strokeWidth = 1.8 }: IconProps) {
     </svg>
   )
 }
+
+export function IconCheck({ size = 18, strokeWidth = 2.4 }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth}>
+      <path d="m5 12.5 5 5 9-10" />
+    </svg>
+  )
+}

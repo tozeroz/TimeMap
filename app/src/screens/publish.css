@@ -9,6 +9,13 @@
   color: #fff;
 }
 
+.pub__poiWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 68vw;
+}
+
 .pub__poi {
   display: inline-flex;
   align-items: center;
@@ -18,9 +25,21 @@
   background: rgba(255, 255, 255, 0.14);
   color: #fff;
   font-size: 13px;
-  max-width: 62vw;
+  max-width: 56vw;
   overflow: hidden;
   white-space: nowrap;
+}
+
+.pub__poiClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  flex: 0 0 auto;
 }
 
 .pub__body {

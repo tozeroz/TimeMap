@@ -59,6 +59,11 @@ export function FeedDetailScreen({ id }: { id: string }) {
             <div className="feed__author-name">{post.author.name}</div>
             <div className="feed__author-meta">
               {post.author.school ?? '北京交通大学'} · {post.createdAt}
+              {post.location && (
+                <button className="feed__placeLink" onClick={() => navigate('poidetail')}>
+                  · {post.location}
+                </button>
+              )}
             </div>
           </div>
         </header>

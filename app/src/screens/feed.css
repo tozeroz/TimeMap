@@ -26,6 +26,12 @@
   color: var(--c-text-3);
 }
 
+/* 动态里的地点可点，进入地点详情 */
+.feed__placeLink {
+  font-size: 12px;
+  color: var(--c-accent);
+}
+
 .feed__text {
   margin: 14px 0 0;
   font-size: 16px;

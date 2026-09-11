@@ -64,3 +64,32 @@
   font-size: 12px;
   color: var(--c-text-3);
 }
+
+/* 选中态：原版点列表项是「选中」而不是进新页面 */
+.poi__row.is-selected {
+  background: #f6f8ff;
+}
+
+.poi__row.is-selected .row__title {
+  color: var(--c-accent);
+}
+
+.poi__check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-pill);
+  background: var(--c-accent);
+  color: #fff;
+}
+
+.poi__empty {
+  margin: 0;
+  padding: 28px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--c-text-3);
+}

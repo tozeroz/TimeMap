@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Screen, TopBar } from '../components/Shell'
 import { IconCamera, IconClose, IconEmoji, IconImage, IconLocation } from '../components/icons'
 import { posts } from '../data/mock'
-import { goBack, navigate } from '../router'
+import { goBack, navigate, useRoute } from '../router'
 import './publish.css'
 
 type Mode = '语音' | '拍摄' | '文字'
@@ -20,11 +20,13 @@ const FONTS = ['经典', '黑体', '宋体', '手写体'] as const
  * - 底部：语音 / 拍摄 / 文字 三个模式切换
  */
 export function PublishScreen() {
+  const route = useRoute()
   const [mode, setMode] = useState<Mode>('拍摄')
   const [zoom, setZoom] = useState('1x')
   const [text, setText] = useState('')
   const [font, setFont] = useState<(typeof FONTS)[number]>('经典')
-  const [place, setPlace] = useState('北京交通大学')
+  // 地点可由选点页带回来（原版：选点页点「确认」后返回发布页并带上地点）
+  const [place, setPlace] = useState(route.query.place ?? '北京交通大学')
   const [flash, setFlash] = useState(false)
   const preview = posts[1].images[0]
 
@@ -46,11 +48,23 @@ export function PublishScreen() {
             </button>
           }
           center={
-            <button className="pub__poi" onClick={() => setPlace('')}>
-              <IconLocation size={13} />
-              <span>{place || '添加地点'}</span>
-              {place && <IconClose size={12} />}
-            </button>
+            // 地点标签拆成「主体（打开选点页）」与「清除」两个独立按钮，
+            // 否则点标签中心容易误命中清除图标，把地点直接删掉
+            <span className="pub__poiWrap">
+              <button className="pub__poi" onClick={() => navigate('poi')}>
+                <IconLocation size={13} />
+                <span>{place || '添加地点'}</span>
+              </button>
+              {place && (
+                <button
+                  className="pub__poiClear"
+                  onClick={() => setPlace('')}
+                  aria-label="移除地点"
+                >
+                  <IconClose size={12} />
+                </button>
+              )}
+            </span>
           }
         />
       }
