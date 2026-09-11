@@ -1,0 +1,178 @@
+.campus__head {
+  position: relative;
+  background: var(--c-surface);
+}
+
+.campus__msg {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+}
+
+/* 分类筛选条 */
+.campus__filters {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 2px var(--pad-page) 10px;
+  background: var(--c-surface);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.campus__filter {
+  font-size: 14px;
+  color: var(--c-text-3);
+  padding: 2px 0;
+  position: relative;
+}
+
+.campus__filter.is-active {
+  color: var(--c-text);
+  font-weight: 700;
+}
+
+.campus__filter.is-active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--c-primary);
+}
+
+.campus__filter--more {
+  color: var(--c-text-3);
+}
+
+/* 瀑布流：用 column 布局最接近原 app 的双列错落感 */
+.campus__grid {
+  column-count: 2;
+  column-gap: var(--gap-card);
+  padding: var(--gap-card) var(--gap-card) 24px;
+}
+
+.pcard {
+  break-inside: avoid;
+  display: block;
+  margin-bottom: var(--gap-card);
+  background: var(--c-surface);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+.pcard:active {
+  transform: scale(0.99);
+}
+
+.pcard__media {
+  display: grid;
+  gap: 2px;
+}
+
+.pcard__media--2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.pcard__media img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  background: var(--c-surface-sunken);
+}
+
+.pcard__media--2 img {
+  aspect-ratio: 3 / 4;
+}
+
+.pcard__body {
+  padding: 9px 10px 10px;
+}
+
+.pcard__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.42;
+  color: var(--c-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pcard__topic {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--c-accent);
+}
+
+.pcard__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.pcard__author {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pcard__avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  flex: 0 0 auto;
+}
+
+.pcard__name {
+  font-size: 12px;
+  color: var(--c-text-3);
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcard__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--c-text-3);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.pcard__like,
+.pcard__comment {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: inherit;
+  font-size: 12px;
+}
+
+.pcard__like.is-liked {
+  color: var(--c-danger);
+}
+
+.campus__end {
+  column-span: all;
+  text-align: center;
+  font-size: 12px;
+  color: var(--c-text-3);
+  line-height: 1.7;
+  padding: 18px 0 6px;
+  margin: 0;
+}

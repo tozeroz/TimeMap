@@ -1,0 +1,149 @@
+.feed__post {
+  padding: 4px var(--pad-page) 18px;
+  background: var(--c-surface);
+}
+
+.feed__author {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.feed__avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-pill);
+}
+
+.feed__author-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.feed__author-meta {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+.feed__text {
+  margin: 14px 0 0;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.feed__topic {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--c-accent);
+}
+
+.feed__image {
+  width: 100%;
+  margin-top: 12px;
+  border-radius: var(--r-md);
+  background: var(--c-surface-sunken);
+}
+
+/* 底部互动栏 */
+.feed__bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px var(--pad-page);
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-divider);
+  flex: 0 0 auto;
+}
+
+.feed__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  font-size: 14px;
+}
+
+.feed__action {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  color: var(--c-text-2);
+  font-size: 11px;
+}
+
+/* 评论区 */
+.feed__comments {
+  margin-top: 10px;
+  padding: 16px var(--pad-page) 24px;
+  background: var(--c-surface);
+}
+
+.feed__comments-title {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.cmt {
+  display: flex;
+  gap: 10px;
+  padding-bottom: 18px;
+}
+
+.cmt__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-pill);
+  flex: 0 0 auto;
+}
+
+.cmt__avatar--sm {
+  width: 24px;
+  height: 24px;
+}
+
+.cmt__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cmt__name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cmt__text {
+  margin: 3px 0 5px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.cmt__meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+.cmt__reply {
+  font-weight: 500;
+}
+
+.cmt--reply {
+  margin-top: 10px;
+  padding-bottom: 0;
+}
+
+.cmt__likes {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--c-text-3);
+  flex: 0 0 auto;
+}

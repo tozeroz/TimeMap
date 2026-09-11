@@ -1,0 +1,173 @@
+.map__head {
+  position: relative;
+  padding: 6px var(--pad-page) 10px;
+  background: var(--c-surface);
+  z-index: 4;
+}
+
+.map__titlewrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.map__title {
+  margin: 0;
+  font-size: var(--f-title);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+
+.map__region {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 3px;
+  font-size: var(--f-sub);
+  color: var(--c-text-2);
+}
+
+.map__msg {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+}
+
+.map {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: #f2f1ec;
+}
+
+.map__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 动态气泡 */
+.map__bubble {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 9px 13px;
+  border-radius: var(--r-md);
+  background: rgba(17, 17, 17, 0.92);
+  color: #fff;
+  font-size: 13px;
+  text-align: left;
+  box-shadow: var(--shadow-float);
+}
+
+.map__bubble--a {
+  left: 22px;
+  top: 26%;
+}
+
+.map__bubble--b {
+  right: 26px;
+  top: 44%;
+}
+
+.map__bubble-line--strong {
+  font-weight: 600;
+}
+
+/* 授权弹窗 */
+.map__modal-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 30px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.map__modal {
+  width: 100%;
+  max-width: 300px;
+  padding: 22px 20px 16px;
+  border-radius: var(--r-xl);
+  background: var(--c-surface);
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.26);
+}
+
+.map__modal-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.map__modal-desc {
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: var(--c-text-2);
+  line-height: 1.5;
+}
+
+.map__modal-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.map__modal-btn {
+  flex: 1 1 0;
+  height: 40px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  color: var(--c-text-2);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.map__modal-btn--primary {
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+}
+
+/* 悬浮按钮 */
+.map__locate,
+.map__tool {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-card);
+  color: var(--c-text);
+}
+
+.map__locate {
+  right: 14px;
+  bottom: 22px;
+  width: 40px;
+  height: 40px;
+}
+
+.map__tools {
+  position: absolute;
+  left: 14px;
+  bottom: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.map__tool {
+  position: static;
+  width: 40px;
+  height: 40px;
+}
+
+.map__tool--primary {
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+}

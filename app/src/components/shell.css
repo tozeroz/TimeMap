@@ -1,0 +1,146 @@
+.shell {
+  display: flex;
+  justify-content: center;
+  height: 100%;
+  background: #d9dbe0;
+}
+
+.shell__viewport {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 430px;
+  height: 100%;
+  background: var(--c-bg);
+  overflow: hidden;
+}
+
+@media (min-width: 560px) {
+  .shell__viewport {
+    height: min(100%, 932px);
+    margin: auto;
+    border-radius: 18px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  }
+}
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--h-statusbar);
+  padding: 0 18px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 13px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.statusbar__icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.shell__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--c-bg);
+}
+
+.screen__body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.screen__body--scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 顶栏 */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--h-header);
+  padding: 0 12px;
+  background: var(--c-surface);
+  flex: 0 0 auto;
+  border-bottom: 1px solid transparent;
+}
+
+.topbar--default {
+  border-bottom-color: var(--c-divider);
+}
+
+.topbar__side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 44px;
+}
+
+.topbar__side--right {
+  justify-content: flex-end;
+}
+
+.topbar__center {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-pill);
+  color: var(--c-text);
+}
+
+.iconbtn:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* 大标题 */
+.bigtitle {
+  padding: 6px var(--pad-page) 10px;
+  background: var(--c-surface);
+}
+
+.bigtitle__main {
+  margin: 0;
+  font-size: var(--f-title);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+
+.bigtitle__sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 3px;
+  font-size: var(--f-sub);
+  font-weight: 500;
+  color: var(--c-text-2);
+}

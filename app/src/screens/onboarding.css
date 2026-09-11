@@ -1,0 +1,125 @@
+.ob {
+  background: var(--c-surface);
+}
+
+.ob__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 34px 26px 0;
+}
+
+.ob__dots {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 26px;
+}
+
+.ob__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: #dcdde0;
+}
+
+.ob__dot.is-active {
+  width: 18px;
+  background: var(--c-primary);
+}
+
+.ob__title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.ob__desc {
+  margin: 8px 0 26px;
+  font-size: 14px;
+  color: var(--c-text-3);
+  line-height: 1.6;
+}
+
+.ob__school {
+  position: relative;
+  padding: 16px;
+  border-radius: var(--r-lg);
+  border: 1.5px solid var(--c-primary);
+  background: var(--c-surface);
+}
+
+.ob__school-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ob__school-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+.ob__picked {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  font-size: 11px;
+}
+
+.ob__field {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--c-divider);
+}
+
+.ob__input {
+  width: 100%;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.ob__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ob__chip {
+  padding: 9px 16px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  font-size: 14px;
+  color: var(--c-text-2);
+}
+
+.ob__chip.is-on {
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+}
+
+.ob__foot {
+  padding: 16px 26px 26px;
+  flex: 0 0 auto;
+}
+
+.ob__next {
+  width: 100%;
+  height: 48px;
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ob__skip {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--c-text-3);
+}

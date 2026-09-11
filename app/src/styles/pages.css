@@ -1,0 +1,126 @@
+/* 多个二级页共用的样式 */
+
+/* 通用列表容器与行 */
+.list {
+  background: var(--c-surface);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px var(--pad-page);
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-divider);
+  text-align: left;
+  width: 100%;
+}
+
+.row:active {
+  background: #fafafb;
+}
+
+.row__avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-pill);
+  flex: 0 0 auto;
+  background: var(--c-surface-sunken);
+}
+
+.row__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.row__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.row__sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--c-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__time {
+  font-size: 12px;
+  color: var(--c-text-3);
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding-top: 2px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--c-danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  font-size: 11px;
+  font-weight: 500;
+  flex: 0 0 auto;
+}
+
+.tag--grey {
+  background: var(--c-surface-sunken);
+  color: var(--c-text-3);
+}
+
+/* 通用文字块 */
+.para {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--c-text-2);
+  line-height: 1.6;
+}
+
+.pagepad {
+  padding: 16px var(--pad-page);
+}
+
+/* 标签胶囊组 */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 4px var(--pad-page) 20px;
+}
+
+.chip {
+  padding: 7px 14px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  border: 1px solid var(--c-divider);
+  font-size: 13px;
+  color: var(--c-text-2);
+}
+
+.chip--blue {
+  background: var(--c-accent-soft);
+  border-color: transparent;
+  color: var(--c-accent);
+}

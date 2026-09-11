@@ -1,0 +1,128 @@
+.pub {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0d0d0d;
+}
+
+.pub__close {
+  color: #fff;
+}
+
+.pub__poi {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 13px;
+}
+
+.pub__poi-dot {
+  font-size: 12px;
+}
+
+.pub__viewfinder {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pub__preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pub__gridlines {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+  background-size: 33.33% 33.33%;
+  pointer-events: none;
+}
+
+.pub__flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0.85;
+}
+
+.pub__zooms {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+}
+
+.pub__zoom {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.pub__zoom.is-active {
+  background: #fff;
+  color: #111;
+}
+
+.pub__controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 26px 30px;
+  background: #0d0d0d;
+  flex: 0 0 auto;
+}
+
+.pub__thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.pub__modes {
+  display: flex;
+  gap: 18px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 15px;
+}
+
+.pub__mode.is-active {
+  color: #fff;
+  font-weight: 700;
+}
+
+.pub__shutter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  border-radius: var(--r-pill);
+  background: #fff;
+  color: #111;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.24);
+}
+
+.pub__shutter:active {
+  transform: scale(0.94);
+}
