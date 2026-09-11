@@ -25,6 +25,7 @@ import { ScannerScreen } from './screens/ScannerScreen'
 import { LoginSelectScreen } from './screens/LoginSelectScreen'
 import { UpgradeDialog } from './screens/UpgradeDialog'
 import { MoreScreen } from './screens/MoreScreen'
+import { UserProfileScreen } from './screens/UserProfileScreen'
 import './styles/pages.css'
 
 const TAB_TITLES: Record<string, string> = {
@@ -69,6 +70,7 @@ export default function App() {
       {root === 'loginselect' && <LoginSelectScreen />}
       {root === 'upgrade' && <UpgradeDialog />}
       {root === 'more' && <MoreScreen />}
+      {root === 'user' && <UserProfileScreen id={route.query.id ?? 'u1'} />}
       {root === 'media' && (
         <MediaPreviewScreen
           postId={route.query.post}

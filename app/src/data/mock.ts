@@ -560,3 +560,20 @@ export const mapMarkers: MapMarker[] = [
   { id: 'm6', place: '学苑公寓', color: '#2f9e44', userId: 'u7', postId: 'p6', x: 340, y: 1220 },
 ]
 
+/** 可切换的学校（对应原版点「校园广场 ▼」后的「搜索其他学校」） */
+export const schools = [
+  { id: 's1', name: '北京交通大学', region: '北京市·海淀区', members: '12,486' },
+  { id: 's2', name: '清华大学', region: '北京市·海淀区', members: '38,021' },
+  { id: 's3', name: '北京大学', region: '北京市·海淀区', members: '42,138' },
+  { id: 's4', name: '中国人民大学', region: '北京市·海淀区', members: '28,905' },
+  { id: 's5', name: '北京航空航天大学', region: '北京市·海淀区', members: '31,672' },
+  { id: 's6', name: '北京师范大学', region: '北京市·海淀区', members: '26,410' },
+  { id: 's7', name: '复旦大学', region: '上海市·杨浦区', members: '33,204' },
+  { id: 's8', name: '上海交通大学', region: '上海市·闵行区', members: '40,558' },
+]
+
+/** 按用户取动态（他人主页用） */
+export function postsByUser(userId: string): FeedPost[] {
+  return posts.filter((p) => p.author.id === userId)
+}
+

@@ -1,25 +1,40 @@
 import { useState } from 'react'
 import { BigTitle, Screen } from '../components/Shell'
-import { IconChatBubble, IconHeart, IconComment } from '../components/icons'
-import { campusInfo, posts, type FeedPost } from '../data/mock'
+import { IconChatBubble, IconComment, IconHeart, IconSearch } from '../components/icons'
+import { campusInfo, posts, schools, type FeedPost } from '../data/mock'
 import { navigate } from '../router'
 import './campus.css'
 
 /**
  * 瀑布流卡片。
- * 对齐原版的两个关键点：
- * 1) 无图帖子 = 白底圆角卡片，文案 + 底部作者行
- * 2) 有图帖子 = 图片铺满，文案与作者信息**悬浮在图片上方**（不是图下白条）
+ * 对齐原版：
+ * 1) 有图卡片：作者行在图片**上方**，正文压在图片底部
+ * 2) 无图卡片：白底圆角，正文 + 作者行 + 互动数
+ * 3) 点作者行进入 TA 的主页；点卡片进动态详情；点心形是点赞
  */
-export function PostCard({ post }: { post: FeedPost }) {
-  const [liked, setLiked] = useState(post.liked)
-  const [likes, setLikes] = useState(post.likes)
+export function PostCard({
+  post,
+  liked: likedProp,
+  onLike,
+}: {
+  post: FeedPost
+  liked?: boolean
+  onLike?: (updater: (prev: Record<string, boolean>) => Record<string, boolean>) => void
+}) {
+  const [localLiked, setLocalLiked] = useState(post.liked)
+  const liked = likedProp ?? localLiked
+  const likes = post.likes + (liked ? 1 : 0) - (post.liked ? 1 : 0)
   const hasImage = post.images.length > 0
 
   function toggleLike(e: React.MouseEvent) {
     e.stopPropagation()
-    setLiked((v) => !v)
-    setLikes((n) => (liked ? n - 1 : n + 1))
+    if (onLike) onLike((prev) => ({ ...prev, [post.id]: !liked }))
+    else setLocalLiked((v) => !v)
+  }
+
+  function openAuthor(e: React.MouseEvent) {
+    e.stopPropagation()
+    navigate('user', { id: post.author.id })
   }
 
   return (
@@ -29,11 +44,10 @@ export function PostCard({ post }: { post: FeedPost }) {
     >
       {hasImage ? (
         <>
-          {/* 作者行在图片【上方】（原版实测位置），不是悬浮在图上 */}
-          <div className="pcard__author">
+          <button className="pcard__author" onClick={openAuthor}>
             <img className="pcard__avatar" src={post.author.avatar} alt="" />
             <span className="pcard__author-name">{post.author.name}</span>
-          </div>
+          </button>
           <div className="pcard__mediaWrap">
             <img
               className="pcard__cover"
@@ -59,8 +73,10 @@ export function PostCard({ post }: { post: FeedPost }) {
           <p className="pcard__text">{post.text}</p>
           {post.topic && <span className="pcard__topic">{post.topic}</span>}
           <div className="pcard__foot">
-            <img className="pcard__avatar" src={post.author.avatar} alt="" />
-            <span className="pcard__name">{post.author.name}</span>
+            <button className="pcard__authorBtn" onClick={openAuthor}>
+              <img className="pcard__avatar" src={post.author.avatar} alt="" />
+              <span className="pcard__name">{post.author.name}</span>
+            </button>
             <span className="pcard__meta">
               <button className={`pcard__like ${liked ? 'is-liked' : ''}`} onClick={toggleLike}>
                 <IconHeart size={14} filled={liked} />
@@ -78,12 +94,64 @@ export function PostCard({ post }: { post: FeedPost }) {
   )
 }
 
+/** 学校切换面板（原版：点「校园广场 ▼」后出现「搜索其他学校」） */
+function SchoolSwitcher({
+  current,
+  onPick,
+  onClose,
+}: {
+  current: string
+  onPick: (name: string) => void
+  onClose: () => void
+}) {
+  const [keyword, setKeyword] = useState('')
+  const list = schools.filter((s) => (keyword ? s.name.includes(keyword) || s.region.includes(keyword) : true))
+
+  return (
+    <div className="switcher">
+      <div className="switcher__mask" onClick={onClose} />
+      <div className="switcher__panel">
+        <div className="switcher__search">
+          <IconSearch size={17} />
+          <input
+            className="switcher__input"
+            placeholder="搜索其他学校"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            autoFocus
+          />
+        </div>
+        <ul className="switcher__list no-scrollbar">
+          {list.map((s) => (
+            <li key={s.id}>
+              <button
+                className={`switcher__item ${s.name === current ? 'is-current' : ''}`}
+                onClick={() => onPick(s.name)}
+              >
+                <span className="switcher__name">{s.name}</span>
+                <span className="switcher__meta">
+                  {s.region} · {s.members} 位同学
+                </span>
+              </button>
+            </li>
+          ))}
+          {list.length === 0 && <li className="switcher__empty">没有找到「{keyword}」相关的学校</li>}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 export function CampusScreen() {
+  const [school, setSchool] = useState(campusInfo.name)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [likedIds, setLikedIds] = useState<Record<string, boolean>>({})
+
   return (
     <Screen
       header={
         <header className="campus__head">
-          <BigTitle title="Campus" sub="校园广场" />
+          <BigTitle title="Campus" sub={school} onSubClick={() => setSwitcherOpen(true)} />
           <button className="iconbtn campus__msg" onClick={() => navigate('message')} aria-label="消息">
             <IconChatBubble size={22} />
           </button>
@@ -93,14 +161,25 @@ export function CampusScreen() {
     >
       <div className="campus__grid">
         {posts.map((p) => (
-          <PostCard key={p.id} post={p} />
+          <PostCard key={p.id} post={p} liked={likedIds[p.id]} onLike={setLikedIds} />
         ))}
         <p className="campus__end">
           已加载全部 · {campusInfo.posts} 条动态
           <br />
-          {campusInfo.name} · {campusInfo.members} 位同学
+          {school} · {campusInfo.members} 位同学
         </p>
       </div>
+
+      {switcherOpen && (
+        <SchoolSwitcher
+          current={school}
+          onPick={(name) => {
+            setSchool(name)
+            setSwitcherOpen(false)
+          }}
+          onClose={() => setSwitcherOpen(false)}
+        />
+      )}
     </Screen>
   )
 }
