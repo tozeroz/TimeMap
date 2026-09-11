@@ -61,16 +61,31 @@ APK 信息：
 # 开发预览（桌面浏览器，会自动套手机壳）
 cd 'G:\demo map\app'; pnpm run dev        # http://127.0.0.1:5174
 
-# 一次跑完 web 构建 + cap sync + gradle + 安装
-& 'G:\demo map\tools\build-android.ps1'
+# 一键验收：构建 → 部署 → 路由回归 → 交互闭环 → 地图手势 → 汇总
+& 'G:\demo map\tools\acceptance.ps1'              # 完整跑
+& 'G:\demo map\tools\acceptance.ps1' -SkipBuild   # 只验证已安装的包
 
-# 真机交互走查（CDP 连进 APK 的 WebView，断言路由）
-$adb = 'G:\Program Files\Netease\MuMu\nx_main\adb.exe'
-$appPid = (& $adb -s 127.0.0.1:16384 shell pidof com.campusx.demo | Out-String).Trim()
-& $adb -s 127.0.0.1:16384 forward tcp:9222 "localabstract:webview_devtools_remote_$appPid"
-node 'G:\demo map\tools\device-walkthrough.mjs'
-& 'G:\demo map\tools\device-shots.ps1'
+# 单独跑某一项
+node 'G:\demo map\tools\device-eval.mjs' --file tools/checks/full-regression.js    # 34 路由
+node 'G:\demo map\tools\device-eval.mjs' --file tools/checks/interaction-loops.js  # 19 项交互
+node 'G:\demo map\tools\device-gesture.mjs' pinch 540 900 80 300 12                # 双指捏合
+& 'G:\demo map\tools\device-shots.ps1'                                             # 30 路由截图
 ```
+
+当前验收结果（真机）：
+
+| 项 | 结果 |
+|---|---|
+| 全路由回归 | 34 / 34 |
+| 交互闭环 | 19 / 19 |
+| 地图手势 | 拖拽 ✅、双击 1→2.56 ✅、捏合 →3 ✅ |
+| 汇总 | **ALL CHECKS PASSED** |
+
+> 说明：`acceptance.ps1` 保持纯 ASCII——中文在 PowerShell 编码往返后会被破坏并导致脚本解析失败。
+>
+> 截图脚本带「渲染冻结守卫」：MuMu + WebView 偶发渲染器冻结时，DOM 仍在更新
+> （CDP 断言全绿）但 `screencap` 返回缓存帧，表现为连续多张截图哈希相同；
+> 守卫会在检测到后自动重启应用并重截该页。
 
 ## 五、已知边界（不是 bug，是需求决定的取舍）
 
