@@ -1,34 +1,46 @@
 import type { ReactNode } from 'react'
 import './shell.css'
 
+/** 是否运行在 Capacitor 原生壳（真机/模拟器）里 */
+function isNativeShell(): boolean {
+  const cap = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
+  return typeof cap?.isNativePlatform === 'function' && cap.isNativePlatform() === true
+}
+
 /**
  * 手机外壳：状态栏 + 内容区。
- * 在浏览器里预览时限制最大宽度模拟手机；打包进 APK 后自适应全屏。
- * dark=true 时状态栏跟随深色页面（扫码/图片预览），避免白底突兀。
+ *
+ * 关键差异点：**真机上不画模拟状态栏**。
+ * 系统本身已经有状态栏，再画一条就会出现「双状态栏」（实测被发现）。
+ * 原版 app 也只依赖系统状态栏。浏览器预览时才需要模拟一条，让页面看起来像手机。
+ * 同时把 --h-statusbar 归零，避免扫码/图片预览这类绝对定位的顶栏留出多余空白。
  */
 export function Shell({ children, dark = false }: { children: ReactNode; dark?: boolean }) {
+  const native = isNativeShell()
   return (
-    <div className="shell">
+    <div className={`shell ${native ? 'shell--native' : ''}`}>
       <div className={`shell__viewport ${dark ? 'shell__viewport--dark' : ''}`}>
-        <div className="statusbar">
-          <span className="statusbar__time">9:41</span>
-          <span className="statusbar__icons">
-            <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor" aria-hidden>
-              <rect x="0" y="7" width="3" height="4" rx="1" />
-              <rect x="4.5" y="5" width="3" height="6" rx="1" />
-              <rect x="9" y="2.5" width="3" height="8.5" rx="1" />
-              <rect x="13.5" y="0" width="3" height="11" rx="1" />
-            </svg>
-            <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor" aria-hidden>
-              <path d="M8 10.2 5.6 7.9a3.4 3.4 0 0 1 4.8 0L8 10.2ZM8 5.4a6.6 6.6 0 0 0-4.6 1.9L1.8 5.6A9.2 9.2 0 0 1 8 3a9.2 9.2 0 0 1 6.2 2.6l-1.6 1.7A6.6 6.6 0 0 0 8 5.4Z" />
-            </svg>
-            <svg width="26" height="12" viewBox="0 0 26 12" aria-hidden>
-              <rect x="0.5" y="1" width="21" height="10" rx="3" fill="none" stroke="currentColor" strokeOpacity="0.5" />
-              <rect x="2" y="2.5" width="17" height="7" rx="1.8" fill="currentColor" />
-              <rect x="23" y="4" width="2" height="4" rx="1" fill="currentColor" fillOpacity="0.6" />
-            </svg>
-          </span>
-        </div>
+        {!native && (
+          <div className="statusbar">
+            <span className="statusbar__time">9:41</span>
+            <span className="statusbar__icons">
+              <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor" aria-hidden>
+                <rect x="0" y="7" width="3" height="4" rx="1" />
+                <rect x="4.5" y="5" width="3" height="6" rx="1" />
+                <rect x="9" y="2.5" width="3" height="8.5" rx="1" />
+                <rect x="13.5" y="0" width="3" height="11" rx="1" />
+              </svg>
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor" aria-hidden>
+                <path d="M8 10.2 5.6 7.9a3.4 3.4 0 0 1 4.8 0L8 10.2ZM8 5.4a6.6 6.6 0 0 0-4.6 1.9L1.8 5.6A9.2 9.2 0 0 1 8 3a9.2 9.2 0 0 1 6.2 2.6l-1.6 1.7A6.6 6.6 0 0 0 8 5.4Z" />
+              </svg>
+              <svg width="26" height="12" viewBox="0 0 26 12" aria-hidden>
+                <rect x="0.5" y="1" width="21" height="10" rx="3" fill="none" stroke="currentColor" strokeOpacity="0.5" />
+                <rect x="2" y="2.5" width="17" height="7" rx="1.8" fill="currentColor" />
+                <rect x="23" y="4" width="2" height="4" rx="1" fill="currentColor" fillOpacity="0.6" />
+              </svg>
+            </span>
+          </div>
+        )}
         <div className="shell__body">{children}</div>
       </div>
     </div>

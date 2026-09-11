@@ -111,7 +111,20 @@
 | 服务端 3D 虚拟形象 | 由服务端生成，离线不可复现 |
 | webview 通用容器 / 入群桥接页 | 无独立 UI 价值 |
 
-## 六、复现验证的方法
+## 六、设备端验收（真机，非浏览器）
+
+浏览器截图用于快速迭代；**最终验收在真实 APK 上做**，方法与结果见
+[`docs/device-walkthrough.md`](./device-walkthrough.md)。
+
+- 手段：通过 `adb forward` + Chrome DevTools Protocol 连进 APK 的 WebView，
+  执行真实 DOM 点击并断言路由/DOM，避免模拟器旋转导致的坐标换算误差。
+- 结果：17 项交互步骤全部通过；22 个页面在设备上逐页截图（`.mumu-capture/device/`）。
+- 过程中发现并修复 3 个只在真机上才暴露的问题：
+  1. 应用被渲染成屏幕中间一条竖条（手机壳样式在 1920 宽视口被误触发）→ 竖屏锁定 + `pointer: fine` 约束
+  2. 双状态栏（系统状态栏 + 应用自绘模拟状态栏）→ 原生壳下不渲染模拟状态栏
+  3. PowerShell `$pid` 只读变量导致调试通道建错
+
+## 七、复现验证的方法
 
 ```powershell
 # 1) dev server（后台任务）

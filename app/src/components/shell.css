@@ -5,19 +5,30 @@
   background: #d9dbe0;
 }
 
+/* 真机：不画模拟状态栏，并把顶栏偏移归零（否则扫码/图片预览会多出空白） */
+.shell--native {
+  --h-statusbar: 0px;
+}
+
+/* 默认铺满：真机上就是全屏应用 */
 .shell__viewport {
   position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 430px;
   height: 100%;
   background: var(--c-bg);
   overflow: hidden;
 }
 
-@media (min-width: 560px) {
+/*
+ * 只在「桌面浏览器 + 精细指针」时套手机壳做预览。
+ * 为什么必须加 pointer 条件：MuMu 上 WebView 视口是 1920x1038（横屏大屏），
+ * 只按 min-width 判断会把手机壳样式误用到真机上，应用会缩成中间一条竖条。
+ */
+@media (min-width: 560px) and (pointer: fine) {
   .shell__viewport {
+    max-width: 430px;
     height: min(100%, 932px);
     margin: auto;
     border-radius: 18px;
