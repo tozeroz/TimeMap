@@ -37,6 +37,8 @@ node tools/device-shots.ps1           # 逐页截图
 
 ## 三、交互走查结果（真实 APK，全部通过）
 
+> 以下为**卸载重装（干净安装）后**的最终一次走查结果，17 项全部通过。
+
 | 步骤 | 期望 | 实测 |
 |---|---|---|
 | 起点 | 校园广场 | `#/campus`，标题「校园广场」✅ |
@@ -58,7 +60,6 @@ node tools/device-shots.ps1           # 逐页截图
 | 升级弹窗 | 两个按钮 | 2 ✅ |
 
 ## 四、本轮设备端发现并修复的 3 个真实问题
-
 ### 问题 1：应用在设备上被渲染成「中间一条竖条」
 
 **现象**：设备截图里应用只占屏幕中间约 430px 宽，两侧是灰边。
@@ -90,8 +91,25 @@ PowerShell 里 `$pid` 是只读自动变量，`$pid = ...` 赋值静默失败，
 `adb forward` 就指向了不存在的抽象套接字（表现为 CDP 连接被立即关闭）。
 改用 `$appPid` 即可。这类"赋值失败但不报错"的坑在排查时很费时间。
 
-## 五、逐页截图证据
+## 四之补：权限收敛（顺带做掉）
 
+Capacitor 默认会在合并 Manifest 里带上 `QUERY_ALL_PACKAGES`（用于插件发现）。
+本 demo 不使用任何 Capacitor 插件、不与外部应用交互，因此在 `AndroidManifest.xml`
+里用 `tools:node="remove"` 显式移除。
+
+校验方式与结论：
+
+```
+> apkanalyzer manifest permissions app-debug.apk
+android.permission.INTERNET
+com.campusx.demo.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+```
+
+**APK 二进制 Manifest 只请求 INTERNET**（`apk` 才是交付物，以它为准）。
+注意：模拟器上 `dumpsys package com.campusx.demo` 仍会把 `QUERY_ALL_PACKAGES`
+列在 `requested permissions` 里，那是该 ROM 平台侧的额外条目，并不在 APK 里。
+
+## 五、逐页截图证据
 真实 APK 上的 22 个页面截图位于 `.mumu-capture/device/`：
 
 ```

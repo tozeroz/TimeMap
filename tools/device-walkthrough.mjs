@@ -108,9 +108,10 @@ const WALKTHROUGH = `
   location.hash = '#/campus'; await wait(700)
   document.querySelector('.pcard')?.click(); await wait(700); record('点第一条动态')
 
-  // 详情 → 评论 / 图片预览
-  const cmt = [...document.querySelectorAll('.feed__action')].find((b) => b.innerText.includes('评') || /\\d/.test(b.innerText))
-  cmt?.click(); await wait(600)
+  // 详情 → 评论：底部三个动作依次是「点赞数 / 评论数 / 收藏」，取第 2 个
+  const actions = [...document.querySelectorAll('.feed__action')]
+  actions[1]?.click()
+  await wait(700)
   record('点评论入口')
   location.hash = '#/feed?id=p1'; await wait(600)
   document.querySelector('.feed__image')?.click(); await wait(700); record('点图片进预览')
