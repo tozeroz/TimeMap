@@ -129,6 +129,12 @@
   background: rgba(0, 0, 0, 0.06);
 }
 
+/* 顶栏图标：原版是带阴影的白色圆角底托，悬浮在内容之上 */
+.topbar--plain .iconbtn {
+  background: var(--c-surface);
+  box-shadow: 0 2px 8px rgba(16, 16, 16, 0.1);
+}
+
 /* 大标题 */
 .bigtitle {
   padding: 6px var(--pad-page) 10px;

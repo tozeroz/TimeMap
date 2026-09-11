@@ -1,6 +1,7 @@
 .campus__head {
   position: relative;
   background: var(--c-surface);
+  padding-bottom: 10px;
 }
 
 .campus__msg {
@@ -9,109 +10,111 @@
   right: 8px;
 }
 
-/* 分类筛选条 */
-.campus__filters {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 2px var(--pad-page) 10px;
-  background: var(--c-surface);
-  position: sticky;
-  top: 0;
-  z-index: 3;
-}
-
-.campus__filter {
-  font-size: 14px;
-  color: var(--c-text-3);
-  padding: 2px 0;
-  position: relative;
-}
-
-.campus__filter.is-active {
-  color: var(--c-text);
-  font-weight: 700;
-}
-
-.campus__filter.is-active::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -4px;
-  transform: translateX(-50%);
-  width: 16px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--c-primary);
-}
-
-.campus__filter--more {
-  color: var(--c-text-3);
-}
-
-/* 瀑布流：用 column 布局最接近原 app 的双列错落感 */
+/* 瀑布流：column 布局最接近原版的双列错落感 */
 .campus__grid {
   column-count: 2;
-  column-gap: var(--gap-card);
-  padding: var(--gap-card) var(--gap-card) 24px;
+  column-gap: 9px;
+  padding: 0 9px 28px;
   overflow-x: hidden;
+  background: var(--c-surface);
 }
 
 .pcard {
   break-inside: avoid;
   display: block;
   width: 100%;
-  margin-bottom: var(--gap-card);
-  background: var(--c-surface);
-  border-radius: var(--r-lg);
+  margin-bottom: 9px;
+  border-radius: 14px;
   overflow: hidden;
-  box-shadow: var(--shadow-card);
+  background: var(--c-surface-sunken);
 }
 
 .pcard:active {
-  transform: scale(0.99);
+  opacity: 0.92;
 }
 
-.pcard__media {
-  display: grid;
-  gap: 2px;
+/* —— 有图：图片铺满，文字与作者悬浮在图上 —— */
+.pcard--media {
+  position: relative;
+  line-height: 0;
 }
 
-.pcard__media--2 {
-  grid-template-columns: 1fr 1fr;
-}
-
-.pcard__media img {
+.pcard__cover {
   width: 100%;
   height: auto;
   aspect-ratio: 3 / 4;
   object-fit: cover;
-  background: var(--c-surface-sunken);
+  display: block;
 }
 
-.pcard__media--2 img {
-  aspect-ratio: 3 / 4;
+.pcard__overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 26px 10px 10px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0));
+  line-height: 1.4;
+}
+
+.pcard__overlay-text {
+  margin: 0;
+  font-size: 13px;
+  color: #fff;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.pcard__overlay-foot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.pcard__overlay-name {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.92);
+  max-width: 74px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcard__like--on-image {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+/* —— 无图：白底卡片 —— */
+.pcard--text {
+  background: var(--c-surface);
+  border: 1px solid var(--c-divider);
 }
 
 .pcard__body {
-  padding: 9px 10px 10px;
+  padding: 12px 11px 11px;
 }
 
 .pcard__text {
   margin: 0;
   font-size: 14px;
-  line-height: 1.42;
+  line-height: 1.45;
   color: var(--c-text);
   display: -webkit-box;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 .pcard__topic {
   display: inline-block;
-  margin-top: 6px;
+  margin-top: 7px;
   font-size: 12px;
   color: var(--c-accent);
 }
@@ -119,16 +122,8 @@
 .pcard__foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  margin-top: 9px;
-}
-
-.pcard__author {
-  display: inline-flex;
-  align-items: center;
   gap: 5px;
-  min-width: 0;
+  margin-top: 11px;
 }
 
 .pcard__avatar {
@@ -141,16 +136,17 @@
 .pcard__name {
   font-size: 12px;
   color: var(--c-text-3);
-  max-width: 72px;
+  max-width: 70px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .pcard__meta {
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   color: var(--c-text-3);
   font-size: 12px;
   flex: 0 0 auto;

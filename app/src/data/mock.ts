@@ -71,9 +71,28 @@ export interface BoardNote {
   color: string
 }
 
-/** 头像：用本地生成的几何头像，不依赖网络 */
+/** 头像：用本地生成的形象头像，不依赖网络（渐变底 + 高光，接近原版 3D 头像的质感） */
 function avatar(seed: string, bg: string, fg = '#ffffff'): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" rx="48" fill="${bg}"/><text x="48" y="62" font-size="42" font-family="PingFang SC,sans-serif" fill="${fg}" text-anchor="middle">${seed}</text></svg>`
+  const light = bg
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160">` +
+    `<defs>` +
+    `<radialGradient id="bg" cx="35%" cy="28%" r="78%">` +
+    `<stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/>` +
+    `<stop offset="45%" stop-color="${light}"/>` +
+    `<stop offset="100%" stop-color="#000000" stop-opacity="0.18"/>` +
+    `</radialGradient>` +
+    `<linearGradient id="face" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>` +
+    `<stop offset="100%" stop-color="#ffffff" stop-opacity="0.55"/>` +
+    `</linearGradient>` +
+    `</defs>` +
+    `<rect width="160" height="160" rx="80" fill="url(#bg)"/>` +
+    `<circle cx="80" cy="62" r="34" fill="url(#face)"/>` +
+    `<ellipse cx="80" cy="132" rx="52" ry="42" fill="url(#face)"/>` +
+    `<text x="80" y="76" font-size="34" font-weight="700" font-family="PingFang SC,sans-serif" ` +
+    `fill="${fg}" fill-opacity="0.92" text-anchor="middle">${seed}</text>` +
+    `</svg>`
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 }
 

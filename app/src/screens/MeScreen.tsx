@@ -1,21 +1,18 @@
 import { Screen, TopBar } from '../components/Shell'
 import {
-  IconCamera,
   IconChatBubble,
   IconChevronRight,
   IconEdit,
-  IconHeart,
+  IconImage,
   IconMenu,
   IconShare,
-  IconStar,
 } from '../components/icons'
-import { me, posts } from '../data/mock'
+import { me } from '../data/mock'
 import { navigate } from '../router'
 import './me.css'
 
+/** 个人页：对齐原版 —— 纯白底、无多余模块，中部只有「拍下眼前的风景」+ 提示气泡 */
 export function MeScreen() {
-  const mine = posts.slice(0, 4)
-
   return (
     <Screen
       header={
@@ -23,18 +20,19 @@ export function MeScreen() {
           left={
             <>
               <button className="iconbtn" aria-label="菜单">
-                <IconMenu size={22} />
+                <IconMenu size={22} strokeWidth={2.2} />
               </button>
               <button className="iconbtn" aria-label="分享">
-                <IconShare size={20} />
+                <IconShare size={20} strokeWidth={2.2} />
               </button>
             </>
           }
           right={
             <button className="iconbtn" onClick={() => navigate('message')} aria-label="消息">
-              <IconChatBubble size={22} />
+              <IconChatBubble size={22} strokeWidth={2.2} />
             </button>
           }
+          variant="plain"
         />
       }
       scroll
@@ -55,7 +53,7 @@ export function MeScreen() {
           <img className="me__avatar" src={me.avatar} alt="" />
           <h2 className="me__name">{me.name}</h2>
           <button className="me__edit" onClick={() => navigate('edit-profile')}>
-            <IconEdit size={15} />
+            <IconEdit size={14} />
             <span>编辑资料</span>
           </button>
         </div>
@@ -72,34 +70,15 @@ export function MeScreen() {
         </div>
       </section>
 
+      {/* 记录入口：原版是「拍下眼前的风景」黑色胶囊 + 蓝色气泡提示 */}
       <section className="me__prompt">
         <button className="me__capture" onClick={() => navigate('publish')}>
-          <IconCamera size={18} />
+          <IconImage size={17} />
           <span>拍下眼前的风景</span>
-          <IconStar size={16} />
         </button>
         <div className="me__hint">
-          <span className="me__hint-spark">✨</span>
+          <span className="me__hint-spark">✦</span>
           <span className="me__hint-bubble">快来试试吧～</span>
-        </div>
-      </section>
-
-      <section className="me__mine">
-        <h3 className="me__section-title">我的动态</h3>
-        <div className="me__grid">
-          {mine.map((p) => (
-            <button key={p.id} className="me__tile" onClick={() => navigate('feed', { id: p.id })}>
-              {p.images.length > 0 ? (
-                <img src={p.images[0]} alt="" />
-              ) : (
-                <span className="me__tile-text">{p.text}</span>
-              )}
-              <span className="me__tile-likes">
-                <IconHeart size={13} />
-                {p.likes}
-              </span>
-            </button>
-          ))}
         </div>
       </section>
     </Screen>

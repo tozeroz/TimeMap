@@ -7,7 +7,14 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="false"
         android:theme="@style/AppTheme">
+        <!--
+            hardwareAccelerated 显式开启；wasCleartextTraffic 关闭（纯本地 demo，不需要网络）。
+            模拟器上曾出现 WebView 渲染线程卡死（Chromium EGLImage 释放报错），
+            表现为界面冻结、点击无响应；force-stop 后重新启动可恢复。
+        -->
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
