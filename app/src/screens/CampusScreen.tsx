@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BigTitle, Screen } from '../components/Shell'
 import { IconChatBubble, IconComment, IconHeart, IconSearch } from '../components/icons'
 import { campusInfo, posts, schools, type FeedPost } from '../data/mock'
+import { feedWithMine, subscribeMyPosts } from '../data/store'
 import { navigate } from '../router'
 import './campus.css'
 
@@ -146,6 +147,10 @@ export function CampusScreen() {
   const [school, setSchool] = useState(campusInfo.name)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [likedIds, setLikedIds] = useState<Record<string, boolean>>({})
+  // 真实发帖走本地存储：新发的帖子排在信息流最前面
+  const [feed, setFeed] = useState<FeedPost[]>(() => feedWithMine(posts))
+
+  useEffect(() => subscribeMyPosts(() => setFeed(feedWithMine(posts))), [])
 
   return (
     <Screen
@@ -160,7 +165,7 @@ export function CampusScreen() {
       scroll
     >
       <div className="campus__grid">
-        {posts.map((p) => (
+        {feed.map((p) => (
           <PostCard key={p.id} post={p} liked={likedIds[p.id]} onLike={setLikedIds} />
         ))}
         <p className="campus__end">

@@ -42,6 +42,81 @@
   flex: 0 0 auto;
 }
 
+/* 顶栏「发布」 */
+.pub__publish {
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pub__publish.is-on {
+  background: #fff;
+  color: #111;
+}
+
+.pub__nativeHint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 70px;
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* 草稿条：已拍/已选的照片 */
+.pub__draftBar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 96px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(3px);
+}
+
+.pub__draftItem {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.pub__draftItem img {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.pub__draftRemove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+}
+
+.pub__draftCount {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+}
+
 .pub__body {
   flex: 1 1 auto;
   min-height: 0;

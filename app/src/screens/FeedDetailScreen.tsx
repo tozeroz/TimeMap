@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack, IconComment, IconHeart, IconShare } from '../components/icons'
 import { comments, posts } from '../data/mock'
+import { findPost } from '../data/store'
 import { goBack, navigate } from '../router'
 import './feed.css'
 
@@ -14,7 +15,8 @@ import './feed.css'
  * - 底部互动条：输入框「留下我的评论...」+ 点赞（心形+数字）+「评论」按钮
  */
 export function FeedDetailScreen({ id }: { id: string }) {
-  const post = posts.find((p) => p.id === id) ?? posts[0]
+  // 本地发的帖子也能打开详情
+  const post = findPost(id, posts) ?? posts[0]
   const [liked, setLiked] = useState(post.liked)
   const likes = post.likes + (liked ? 1 : 0) - (post.liked ? 1 : 0)
 

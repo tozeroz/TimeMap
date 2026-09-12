@@ -47,6 +47,17 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 真实拍照 / 相册选图（@capacitor/camera） -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <!--
         Capacitor 默认声明 QUERY_ALL_PACKAGES（用于插件发现）。
         本 demo 不使用任何 Capacitor 插件，也没有任何网络/外部应用交互，
