@@ -115,6 +115,15 @@ if (-not $rects.modalPresent) {
   if ($ctl -notmatch '"changed": true') { Fail 'floating zoom control cannot be tapped (covered by a map SDK layer?)' }
 }
 
+Step '5e/6 publish page: real in-app camera (not the system camera app)'
+$cam = & node tools/device-eval.mjs --file tools/checks/publish-camera.js 40000 2>&1 | Out-String
+Write-Output "  $(($cam -split "`n" | Where-Object { $_ -match 'camState|controlOrder|fallbackText|videoSize|poi' }) -join ' ')"
+if ($cam -notmatch '"hasVideoEl": true') { Fail 'publish capture mode has no <video> viewfinder element' }
+if ($cam -notmatch '"threeKeysOk": true') { Fail 'bottom bar first two keys are not [gallery][shutter]' }
+if ($cam -notmatch '"lastKeyIsFlip": true') { Fail 'bottom bar third key is not the camera flip key' }
+if ($cam -notmatch '"tabsOk": true') { Fail 'mode tabs are not [voice][capture][text]' }
+if ($cam -notmatch '"camHandled": true') { Fail 'camera state neither live nor gracefully degraded with a readable message' }
+
 Step '6/6 map gestures (online, Tencent GL SDK)'
 & node tools/device-eval.mjs "localStorage.setItem('probe.mapHash', '#/map')" 15000 | Out-Null
 $open = & node tools/device-eval.mjs --file tools/checks/map-open.js 40000 2>&1 | Out-String
@@ -181,6 +190,27 @@ if ($dtr -notmatch '"changed": true') { Fail 'offline map double-tap zoom had no
 $pzr = & node tools/device-eval.mjs --file tools/checks/map-compare.js 20000 2>&1 | Out-String
 Write-Output "  pinch -> $(($pzr -split "`n" | Where-Object { $_ -match 'spreadRatio|changed' }) -join ' ')"
 if ($pzr -notmatch '"changed": true') { Fail 'offline map pinch zoom had no effect' }
+
+Step '7/6 publish: the gallery key must open the real system picker'
+# Last stage on purpose: it launches a system UI, so keep it away from the other checks.
+& node tools/device-eval.mjs "location.hash='#/publish'" 15000 | Out-Null
+Start-Sleep -Milliseconds 2500
+$galleryRaw = & node tools/device-eval.mjs --file tools/checks/publish-gallery-rect.js 20000 2>&1 | Out-String
+$gallery = $galleryRaw | ConvertFrom-Json
+if (-not $gallery.center) {
+  Fail 'gallery key not found on the publish page'
+} else {
+  Write-Output "  real tap on gallery key at $($gallery.center -join ',')"
+  & node tools/device-gesture.mjs tap $gallery.center[0] $gallery.center[1] | Out-Null
+  Start-Sleep -Milliseconds 2500
+  $focus = & $adb -s $serial shell dumpsys window 2>&1 | Select-String 'mCurrentFocus' | Out-String
+  Write-Output "  focus -> $($focus.Trim())"
+  if ($focus -notmatch 'documentsui|picker|gallery|photos') {
+    Fail 'gallery key did not open a system photo picker'
+  }
+  & $adb -s $serial shell input keyevent KEYCODE_BACK | Out-Null
+  Start-Sleep -Milliseconds 1200
+}
 
 Step 'summary'
 if ($script:failed) {

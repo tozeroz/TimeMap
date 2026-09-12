@@ -208,6 +208,29 @@ export function IconImage({ size = 20, strokeWidth = 1.8 }: IconProps) {
   )
 }
 
+/** 前后置摄像头切换（相机 + 回旋箭头） */
+export function IconFlip({ size = 20, strokeWidth = 1.8 }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth}>
+      <path d="M4 8.5h3l1.5-2h7L17 8.5h3v10H4Z" />
+      <circle cx="12" cy="13" r="2.6" />
+      <path d="M20 5.5a8 8 0 0 0-6.5-2.2" />
+      <path d="M20 3v3h-3" />
+    </svg>
+  )
+}
+
+/** 麦克风 */
+export function IconMic({ size = 20, strokeWidth = 1.8 }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth}>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" />
+      <path d="M12 18v3" />
+    </svg>
+  )
+}
+
 export function IconEmoji({ size = 20, strokeWidth = 1.8 }: IconProps) {
   return (
     <svg {...base(size)} strokeWidth={strokeWidth}>

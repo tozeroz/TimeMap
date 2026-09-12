@@ -2,25 +2,44 @@
 
 > 2026-09-12 起，demo 从「静态复刻」推进到「功能可用」。
 
-## 一、摄像头与相册（已完成）
+## 一、拍摄模式：页内实时取景（已完成，2026-09-12 重做）
 
-- 插件：`@capacitor/camera`
-- 封装：`app/src/native/camera.ts`
-  - 原生（APK）走 Capacitor Camera，真正调用系统相机与相册；
-  - 浏览器预览退回 `<input type="file">`，行为等价；
-  - 拍/选之后用 canvas 压到最长边 1280、JPEG 0.72（避免本地存储被大图撑爆）。
-- 权限（`AndroidManifest.xml`）：`CAMERA`、`READ_MEDIA_IMAGES`、
-  `READ_EXTERNAL_STORAGE`（限 SDK ≤ 32）。
+最初的实现是「点快门 → 拉起系统相机 App」，形态和原版不一样。
+原版拍摄页是**页内实时取景**：画面就是摄像头预览，底排三个键依次是
+**相册选图 / 快门拍摄 / 前后置切换**。现在按这个形态重做：
 
-**真机验证**：设备上点快门确实拉起系统相机
-（前台 Activity 变为 `com.android.camera2/CaptureActivity`）；
-点「添加图片」拉起系统相册选择器（`com.android.documentsui.picker.PickActivity`）。
+- 实现：`app/src/native/liveCamera.ts`（`getUserMedia`）+ `screens/PublishScreen.tsx`
+  - 实时预览 `<video playsInline muted autoPlay>`；
+  - 快门用 canvas 抓当前帧 → JPEG dataURL 进草稿（1280 长边、0.72 质量）；
+  - 前后置切换：`facingMode` environment/user，前置预览做镜像（存下来的照片**不**镜像，
+    与原生相机一致），只有检测到 ≥2 个摄像头时该键才可用；
+  - 变焦 1x/2x/5x 走 `track.applyConstraints({ zoom })`，设备不支持时就不生效（不假装）；
+  - 没有摄像头/权限被拒时给可读的降级文案 + 「重试」，不是黑屏。
+- 相册键仍然用 `@capacitor/camera`（`pickPhoto`）——选图本来就应该走系统相册。
 
-> 注意：MuMu 模拟器**没有真实摄像头画面**（虚拟摄像头需要在 MuMu 设置里手动指定图片），
-> 所以模拟器上能拉起相机界面但拍不出照片。想在模拟器里跑通拍照，
-> 需要你在 MuMu 的「设置 → 摄像头」里选择虚拟摄像头图片。
+**为什么不用 `@capacitor/camera` 拍**：那个插件走的是「拉起系统相机 App、拍完回传」，
+是另一套交互；页内取景只能用 WebRTC，Capacitor 的 WebView 支持它
+（需要宿主 App 持有 CAMERA 权限 + WebChromeClient 放行 `RESOURCE_VIDEO_CAPTURE`，
+Capacitor 已实现前者由我们申请、后者自带）。
 
-## 二、真实发帖（已完成，本地持久化）
+### 验证方式（两条链路都跑）
+
+| 环境 | 结果 |
+|---|---|
+| 桌面浏览器 + 本机真实摄像头 | ✅ 1280×720 实时流、快门拍到真实 JPEG、切换前后置后重新拿到流并镜像 |
+| 桌面浏览器 + Chromium 合成摄像头 | ✅ 1920×1080 流、取景画面非纯黑（亮度 45~116） |
+| MuMu 模拟器（真机链路） | ✅ `camState=live`、1080×1920 流、**真实触摸**点快门拍到 JPEG、点切换键 facing 变 user 且镜像 |
+
+> 关键点：模拟器上那一路走的是**和真机完全相同**的代码（WebView + getUserMedia + CAMERA 权限），
+> 不是替身。合成摄像头只在桌面浏览器里作为「没有可用摄像头时」的替代。
+> MuMu 的虚拟摄像头画面本身是空白的（要在 MuMu 设置里给它指定图片），所以取景区是深灰底 + 九宫格，
+> 但快门拍到的确实是这一路流的真实帧 —— 换成真机就是真画面。
+
+**顺手修掉的坑**：`getUserMedia` 在某些环境下（例如 Windows 上摄像头被别的进程占着）
+既不 resolve 也不 reject，界面会永远停在「正在打开摄像头…」。
+现在加了总时长封顶（12 秒，三次降级尝试共享预算），超时后走降级文案 + 重试。
+
+## 二、相册与本地发帖（已完成）
 
 - 存储层：`app/src/data/store.ts`（localStorage，键 `campus.demo.myPosts.v1`）
   - 帖子持久化，重启 app 后仍在；
@@ -121,6 +140,15 @@
 
 ### 实现要点（踩过的坑）
 
+- **地图 SDK 的透明高层会吃掉所有点击（真机反馈的头号 bug）**：
+  腾讯 GL SDK 内部会插入一层 `z-index:1000` 的透明 div；`.realmaps` 自己没有创建层叠上下文时，
+  这一层就和页面其它绝对定位元素挤在同一个上下文里，把「授权地理位置」弹窗和悬浮控件压在下面。
+  表现极具迷惑性：**弹窗看得见，但点哪儿都没反应；连带的后果是系统权限框永远不弹**，
+  看起来就像「权限弹窗是个壳子」。
+  修法：`.realmaps` 加 `z-index:1 + isolation:isolate` 把 SDK 关进地图区域内，
+  弹窗/悬浮控件再显式给 `z-index`。
+  教训：验收脚本一直用程序化 `element.click()`，它**绕过命中测试**，所以永远发现不了这类问题。
+  现在 `tools/device-gesture.mjs` 有 `tap` 模式（走真实命中测试），acceptance 的 5d 阶段专门守这个回归。
 - **腾讯 `DOMOverlay` 不给元素定位**：实测它不会写 `inline style`，所有标记会堆在左上角。
   改成用官方的 `map.projectToContainer(LatLng)` 自己把经纬度投影成容器像素，
   再 `translate3d` 定位（`app/src/native/TencentMap.tsx`），并在 `moving / zooming / moveend /
@@ -135,6 +163,8 @@
 - **`acceptance.ps1` 必须纯 ASCII**（脚本头部早有注释）：本次又踩了一次 ——
   一行中文注释被 PowerShell 按 ANSI 读取后**吞掉了下一行代码**，
   导致「切到栅格底图」那步没执行，表现为莫名其妙的验收失败。
+- **深色页面上文字颜色不会自动继承**：发布页重排后，「语音 / 文字」两个模式标签继承了浅色主题的
+  近黑色文字，在深色底上等于隐形（截图里只剩高亮的「拍摄」）。深色区域的文字颜色必须显式写。
 
 ## 五、尚未接入的真实能力
 

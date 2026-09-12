@@ -83,8 +83,14 @@ node 'G:\demo map\tools\device-gesture.mjs' pinch 540 900 80 300 12             
 | 全路由回归 | 34 / 34 |
 | 交互闭环 | 19 / 19 |
 | 真实定位 | 蓝点落在设备上报坐标 ✅、精度圈 ✅、「回到定位」飞到真实位置 ✅ |
+| 弹窗可点性（真实触摸，非程序化 click） | 定位弹窗能关 ✅、悬浮放大键有反应 ✅ |
+| 发布页页内取景 | 实时流 ✅、底排 `相册｜快门｜前后置切换` 顺序 ✅、真实触摸点快门拍到 JPEG ✅、切换键 facing 变 user ✅ |
+| 相册键 | 真实触摸后前台切到系统相册选择器 ✅ |
 | 地图底图（四套，逐套验证） | 腾讯 GL SDK：出图 ✅ 拖拽 ✅ 缩放 ✅<br>高德 JSAPI 1.4：出图 ✅ 拖拽 ✅<br>栅格瓦片 Leaflet：20/20 瓦片 ✅ 拖拽 ✅<br>离线自绘：拖拽 ✅ 双击 ✅ 捏合 ✅ |
 | 汇总 | **ALL CHECKS PASSED** |
+
+> 浏览器侧另有 `node tools/web-camera-verify.mjs`（真实电脑摄像头）
+> 与 `node tools/web-camera-verify.mjs --fake`（Chromium 合成摄像头）两条摄像头链路验证。
 
 > 说明：`acceptance.ps1` 保持纯 ASCII——中文在 PowerShell 编码往返后会被破坏并导致脚本解析失败。
 >
@@ -100,7 +106,8 @@ node 'G:\demo map\tools\device-gesture.mjs' pinch 540 900 80 300 12             
 2. **地图底图**：原版是腾讯地图 SDK 实时瓦片；demo 已接入**腾讯地图 GL JS SDK**
    （官方 Key，与原版同款服务），后面依次是高德官方 JSAPI → 栅格瓦片 → 离线自绘兜底 ——
    见 `docs/real-map-and-posting.md`。
-3. **相机 / 扫码**：相机/相册/定位已接真实 Capacitor 插件；扫码仍是扫描线动画模拟。
+3. **相机 / 扫码**：拍摄页是**页内实时取景**（WebView + getUserMedia），与原版形态一致；
+   相册走系统选择器。扫码仍是扫描线动画模拟。
 4. **校园圈**：原版在无后端时就是「网络错误」页，demo 如实复刻该错误态，
    点「刷新」后展示本地内容把这个状态闭环。
 
