@@ -19,8 +19,8 @@
     可点击: badge?.tagName === 'BUTTON',
     蓝点是校园兜底: document.querySelector('.rm__here')?.dataset.real === '0',
     弹窗已关闭: !document.querySelector('.map__modal'),
-    在线地图仍在: !!document.querySelector('.leaflet-container'),
-    瓦片已加载: document.querySelectorAll('.leaflet-tile-loaded').length,
+    在线地图仍在: !!document.querySelector('.realmaps'),
+    底图来源: document.querySelector('.realmaps')?.dataset.provider ?? null,
   }
 
   // 2) 点提示条：应把说明弹窗找回来
