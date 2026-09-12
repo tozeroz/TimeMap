@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { MapMarker } from '../data/mock'
 import { posts } from '../data/mock'
+import type { GeoFix } from './geo'
 import { activeTileConfig, CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
@@ -14,20 +15,27 @@ import './realmaps.css'
  *
  * 标记沿用原版形态：照片卡片 + 彩色图钉 + 地点名（用 divIcon 自绘）。
  * 瓦片连续加载失败时回调 onTilesFailed，让上层退回离线自绘地图。
+ * 蓝点用真实定位坐标（here），拿不到时退回校园中心，绝不留空白。
  */
 export function RealMap({
   markers,
+  here,
   onMarkerClick,
   onTilesFailed,
   mapRef,
 }: {
   markers: MapMarker[]
+  /** 真实定位结果；null = 尚未拿到，蓝点先停在校园中心 */
+  here?: GeoFix | null
   onMarkerClick: (postId: string) => void
   onTilesFailed: () => void
   mapRef?: (map: L.Map | null) => void
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const failedRef = useRef(0)
+  const mapObjRef = useRef<L.Map | null>(null)
+  const hereLayerRef = useRef<{ marker: L.Marker; circle: L.Circle | null } | null>(null)
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     const host = hostRef.current
@@ -79,22 +87,53 @@ export function RealMap({
       marker.addTo(map)
     }
 
-    // 当前位置：蓝点 + 方向扇形
-    const hereIcon = L.divIcon({
-      html: `<div class="rm__here"><span class="rm__hereCone"></span><span class="rm__hereDot"></span></div>`,
-      className: 'rm__wrap',
-      iconSize: [80, 80],
-      iconAnchor: [40, 40],
-    })
-    L.marker(CAMPUS_CENTER, { icon: hereIcon, interactive: false }).addTo(map)
-
+    mapObjRef.current = map
+    setReady(true)
     mapRef?.(map)
 
     return () => {
+      mapObjRef.current = null
+      hereLayerRef.current = null
       mapRef?.(null)
       map.remove()
     }
   }, [markers, onMarkerClick, onTilesFailed, mapRef])
 
+  // 蓝点：跟随真实定位。坐标写进 data-* ，便于验收脚本读取实际落点。
+  useEffect(() => {
+    const map = mapObjRef.current
+    if (!map || !ready) return
+
+    if (hereLayerRef.current) {
+      hereLayerRef.current.marker.remove()
+      hereLayerRef.current.circle?.remove()
+      hereLayerRef.current = null
+    }
+
+    const lat = here?.lat ?? CAMPUS_CENTER[0]
+    const lng = here?.lng ?? CAMPUS_CENTER[1]
+    const acc = here?.accuracy ?? 0
+    const hereIcon = L.divIcon({
+      html: `<div class="rm__here" data-lat="${lat}" data-lng="${lng}" data-acc="${acc}" data-real="${here ? 1 : 0}"><span class="rm__hereCone"></span><span class="rm__hereDot"></span></div>`,
+      className: 'rm__wrap',
+      iconSize: [80, 80],
+      iconAnchor: [40, 40],
+    })
+    const marker = L.marker([lat, lng], { icon: hereIcon, interactive: false }).addTo(map)
+    // 精度圈：让“这个点有多可信”看得见
+    const circle =
+      here && acc > 0 && acc < 20000
+        ? L.circle([lat, lng], {
+            radius: acc,
+            color: '#2f7cf6',
+            weight: 1,
+            fillColor: '#2f7cf6',
+            fillOpacity: 0.12,
+          }).addTo(map)
+        : null
+    hereLayerRef.current = { marker, circle }
+  }, [here, ready])
+
   return <div className="realmaps" ref={hostRef} />
 }
+

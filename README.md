@@ -61,16 +61,20 @@ APK 信息：
 # 开发预览（桌面浏览器，会自动套手机壳）
 cd 'G:\demo map\app'; pnpm run dev        # http://127.0.0.1:5174
 
-# 一键验收：构建 → 部署 → 路由回归 → 交互闭环 → 地图手势 → 汇总
+# 一键验收：构建 → 部署 → 路由回归 → 交互闭环 → 真实定位 → 地图手势（在线+离线）→ 汇总
 & 'G:\demo map\tools\acceptance.ps1'              # 完整跑
 & 'G:\demo map\tools\acceptance.ps1' -SkipBuild   # 只验证已安装的包
 
 # 单独跑某一项
 node 'G:\demo map\tools\device-eval.mjs' --file tools/checks/full-regression.js    # 34 路由
 node 'G:\demo map\tools\device-eval.mjs' --file tools/checks/interaction-loops.js  # 19 项交互
+node 'G:\demo map\tools\device-eval.mjs' --file tools/checks/geo-location.js       # 真实定位（需先授权）
+node 'G:\demo map\tools\device-eval.mjs' --file tools/checks/geo-denied.js         # 未授权时的降级
 node 'G:\demo map\tools\device-gesture.mjs' pinch 540 900 80 300 12                # 双指捏合
 & 'G:\demo map\tools\device-shots.ps1'                                             # 30 路由截图
 ```
+
+想看无网络时的降级底图：`#/map?offline=1`（强制自绘地图，用于演示与手势验收）。
 
 当前验收结果（真机）：
 
@@ -78,7 +82,9 @@ node 'G:\demo map\tools\device-gesture.mjs' pinch 540 900 80 300 12             
 |---|---|
 | 全路由回归 | 34 / 34 |
 | 交互闭环 | 19 / 19 |
-| 地图手势 | 拖拽 ✅、双击 1→2.56 ✅、捏合 →3 ✅ |
+| 真实定位 | 蓝点落在设备上报坐标 ✅、精度圈 ✅、「回到定位」飞到真实位置 ✅ |
+| 地图手势（在线 Leaflet） | 拖拽 ✅、放大按钮 ✅ |
+| 地图手势（离线降级） | 拖拽 ✅、双击 ✅、捏合 ✅ |
 | 汇总 | **ALL CHECKS PASSED** |
 
 > 说明：`acceptance.ps1` 保持纯 ASCII——中文在 PowerShell 编码往返后会被破坏并导致脚本解析失败。
@@ -92,8 +98,10 @@ node 'G:\demo map\tools\device-gesture.mjs' pinch 540 900 80 300 12             
 1. **配图与头像**：全部是本地生成的抽象渐变图 / SVG 头像。
    需求要求「数据完全 mock、纯本地不联网」，且原版图片与头像属于他人内容，故一律不复用。
    这也是与原版一致性评分停在 7/10 的主要原因。
-2. **地图底图**：原版是腾讯地图 SDK 实时瓦片；demo 用自绘 SVG 街区块还原观感。
-3. **相机 / 扫码**：原版调用真实摄像头；demo 用取景画面与扫描线动画模拟。
+2. **地图底图**：原版是腾讯地图 SDK 实时瓦片；demo 现用 Leaflet + 在线瓦片（真实路网），
+   且有 key 后可一处切换到腾讯/高德官方 SDK —— 见 `docs/real-map-and-posting.md`。
+   未拿 key 前先用未授权的高德栅格瓦片兜底，仅限本地演示；瓦片不可达时自动退回自绘地图。
+3. **相机 / 扫码**：相机/相册/定位已接真实 Capacitor 插件；扫码仍是扫描线动画模拟。
 4. **校园圈**：原版在无后端时就是「网络错误」页，demo 如实复刻该错误态，
    点「刷新」后展示本地内容把这个状态闭环。
 

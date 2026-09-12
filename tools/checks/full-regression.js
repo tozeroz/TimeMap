@@ -4,7 +4,7 @@
   const routes = [
     ['campus', '#/campus', '.pcard'],
     ['me', '#/me', '.me__avatar'],
-    ['map', '#/map', '.map__marker'],
+    ['map', '#/map', '.leaflet-container, .map__world'],
     ['feed', '#/feed?id=p1', '.feed__text'],
     ['comments', '#/comments?id=p1', '.cd__count'],
     ['message', '#/message', '.srow'],

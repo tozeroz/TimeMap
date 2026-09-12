@@ -11,7 +11,18 @@ import {
 import { mapMarkers } from '../data/mock'
 import { RealMap } from '../native/RealMap'
 import { CAMPUS_CENTER } from '../native/mapTiles'
-import { navigate } from '../router'
+import {
+  distanceMeters,
+  ensureLocationPermission,
+  formatAccuracy,
+  formatDistance,
+  getCurrentFix,
+  hasLocationPermission,
+  watchFix,
+  type GeoFix,
+  type GeoStatus,
+} from '../native/geo'
+import { navigate, useRoute } from '../router'
 import './map.css'
 
 interface ViewState {
@@ -93,11 +104,51 @@ function OfflineMap({ view, onTilesMeta }: { view: ViewState; onTilesMeta?: (el:
   )
 }
 
+/** 定位状态徽标：把“是否真的拿到定位”显式显示出来，避免蓝点静默不动 */
+function GeoBadge({
+  status,
+  fix,
+  onRetry,
+}: {
+  status: GeoStatus
+  fix: GeoFix | null
+  onRetry: () => void
+}) {
+  if (status === 'idle') return null
+  if (status === 'asking') return <span className="map__geoBadge">正在获取真实定位…</span>
+  if (status === 'ok' && fix) {
+    const source = fix.source === 'gps' ? 'GPS' : '网络定位'
+    return (
+      <span
+        className="map__geoBadge"
+        data-lat={fix.lat}
+        data-lng={fix.lng}
+        data-acc={fix.accuracy}
+      >
+        {`已定位 · ${source} ±${formatAccuracy(fix.accuracy)}`}
+      </span>
+    )
+  }
+  return (
+    <button className="map__geoBadge map__geoBadge--action" onClick={onRetry}>
+      {status === 'denied' ? '未授权定位 · 点击授权' : '定位超时 · 点击重试'}
+    </button>
+  )
+}
+
 export function MapScreen() {
+  const route = useRoute()
+  // #/map?offline=1 → 强制走离线自绘底图（用来演示/验收无网降级）
+  const forceOffline = route.query.offline === '1'
+
   const [view, setView] = useState<ViewState>({ x: -260, y: -700, scale: 1 })
   const [tipOpen, setTipOpen] = useState(true)
-  const [offline, setOffline] = useState(false)
+  const [tileFailed, setTileFailed] = useState(false)
   const [tilesOk, setTilesOk] = useState<boolean | null>(null)
+  const offline = forceOffline || tileFailed
+  // ---- 真实定位 ----
+  const [fix, setFix] = useState<GeoFix | null>(null)
+  const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
 
   const drag = useRef<{ id: number; startX: number; startY: number; originX: number; originY: number } | null>(null)
   const pinch = useRef<{ distance: number; scale: number } | null>(null)
@@ -105,8 +156,60 @@ export function MapScreen() {
   const lastTouch = useRef<{ x: number; y: number; moved: number } | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
   const leafletRef = useRef<L.Map | null>(null)
+  const stopWatchRef = useRef<(() => void) | null>(null)
 
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s))
+
+  const startTracking = useCallback(async () => {
+    stopWatchRef.current?.()
+    stopWatchRef.current = await watchFix((next) => {
+      setFix(next)
+      setGeoStatus('ok')
+    })
+  }, [])
+
+  /** 走完整的“请求权限 → 取一次坐标 → 持续跟踪”流程 */
+  const requestGeo = useCallback(async () => {
+    setGeoStatus('asking')
+    const granted = await ensureLocationPermission()
+    if (!granted) {
+      setGeoStatus('denied')
+      return
+    }
+    const first = await getCurrentFix()
+    if (first) {
+      setFix(first)
+      setGeoStatus('ok')
+    } else {
+      setGeoStatus('timeout')
+    }
+    await startTracking()
+  }, [startTracking])
+
+  // 进地图时静默尝试：已授权就直接显示真实位置，未授权不弹系统框，等用户点“授权”
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      if (!(await hasLocationPermission())) return
+      const first = await getCurrentFix()
+      if (cancelled) return
+      if (first) {
+        setFix(first)
+        setGeoStatus('ok')
+      }
+      if (cancelled) return
+      await startTracking()
+    })()
+    return () => {
+      cancelled = true
+      stopWatchRef.current?.()
+      stopWatchRef.current = null
+    }
+  }, [startTracking])
+
+  /** 我离校园有多远 —— 模拟器/异地定位时提示，避免蓝点“凭空消失” */
+  const farFromCampus = fix ? distanceMeters(fix.lat, fix.lng, CAMPUS_CENTER[0], CAMPUS_CENTER[1]) : 0
+  const showFar = Boolean(fix) && farFromCampus > 20000
 
   // ---- 离线地图手势（在线时由 Leaflet 接管）----
   const registerTap = useCallback((moved: number) => {
@@ -201,14 +304,20 @@ export function MapScreen() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [offline])
 
+  /** 回到“我的位置”：有真实坐标就去真实坐标，否则回校园中心 */
   const recenter = useCallback(() => {
     const map = leafletRef.current
+    const target: [number, number] = fix ? [fix.lat, fix.lng] : CAMPUS_CENTER
     if (!offline && map) {
-      map.setView(CAMPUS_CENTER, 16)
+      map.flyTo(target, 16, { duration: 0.6 })
       return
     }
     setView({ x: -260, y: -700, scale: 1 })
-  }, [offline])
+  }, [offline, fix])
+
+  const backToCampus = useCallback(() => {
+    leafletRef.current?.flyTo(CAMPUS_CENTER, 16, { duration: 0.6 })
+  }, [])
 
   const zoomIn = useCallback(() => {
     const map = leafletRef.current
@@ -221,7 +330,17 @@ export function MapScreen() {
 
   const handleTilesFailed = useCallback(() => {
     setTilesOk(false)
-    setOffline(true)
+    setTileFailed(true)
+  }, [])
+
+  // 注意：这两个回调必须保持稳定引用，否则 RealMap 的建图 effect 会每次渲染都销毁重建地图
+  const handleMarkerClick = useCallback((postId: string) => {
+    navigate('feed', { id: postId })
+  }, [])
+
+  const handleMapRef = useCallback((m: L.Map | null) => {
+    leafletRef.current = m
+    if (m) setTilesOk(true)
   }, [])
 
   return (
@@ -258,17 +377,39 @@ export function MapScreen() {
         ) : (
           <RealMap
             markers={mapMarkers}
-            onMarkerClick={(postId) => navigate('feed', { id: postId })}
+            here={fix}
+            onMarkerClick={handleMarkerClick}
             onTilesFailed={handleTilesFailed}
-            mapRef={(m) => {
-              leafletRef.current = m
-              if (m) setTilesOk(true)
-            }}
+            mapRef={handleMapRef}
           />
         )}
 
-        {offline && <span className="map__offlineBadge">离线自绘底图（在线瓦片不可用）</span>}
+        {offline && (
+          <span className="map__offlineBadge">
+            {forceOffline ? '离线自绘底图（演示模式）' : '离线自绘底图（在线瓦片不可用）'}
+          </span>
+        )}
         {tilesOk === true && !offline && <span className="map__onlineBadge">在线地图</span>}
+
+        <GeoBadge
+          status={geoStatus}
+          fix={fix}
+          onRetry={() => {
+            // 未授权：先把“为什么要定位”的说明弹回来，再让用户点授权；
+            // 定位超时：直接重试，不用再解释一遍。
+            if (geoStatus === 'denied') setTipOpen(true)
+            else void requestGeo()
+          }}
+        />
+
+        {showFar && (
+          <div className="map__geoFar">
+            <span>当前位置距校园 {formatDistance(farFromCampus)}</span>
+            <button className="map__geoFarBtn" onClick={backToCampus}>
+              回校园
+            </button>
+          </div>
+        )}
 
         <div className="map__controls">
           <button className="map__ctrl" onClick={recenter} aria-label="回到定位">
@@ -289,12 +430,21 @@ export function MapScreen() {
               <h3 className="map__modal-title">授权地理位置</h3>
               <p className="map__modal-desc">在地图上，标记属于你的校园生活</p>
               <div className="map__modal-actions">
-                <button className="map__modal-btn" onClick={() => setTipOpen(false)}>
-                  暂时不要
-                </button>
                 <button
+                  className="map__modal-btn"
+                  onClick={() => {
+                    setTipOpen(false)
+                    // 明确拒绝过就给出提示条，避免蓝点静默停在校门口
+                    setGeoStatus((s) => (s === 'ok' ? s : 'denied'))
+                  }}
+                >
+                  暂时不要
+                </button>                <button
                   className="map__modal-btn map__modal-btn--primary"
-                  onClick={() => setTipOpen(false)}
+                  onClick={() => {
+                    setTipOpen(false)
+                    void requestGeo()
+                  }}
                 >
                   授权
                 </button>

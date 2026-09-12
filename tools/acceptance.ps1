@@ -74,21 +74,63 @@ Write-Output "  $($loopLines[1].Trim())"
 Write-Output "  $($loopLines[2].Trim())"
 if ($loop -match 'FAIL') { Fail 'interaction loop failures present' }
 
-Step '6/6 map gestures'
+Step '5c/6 real geolocation'
+$geo = & node tools/device-eval.mjs --file tools/checks/geo-location.js 45000 2>&1 | Out-String
+Write-Output "  $(($geo -split "`n" | Where-Object { $_ -match 'badge|"lat"|realFix|recenterOk' }) -join ' ')"
+if ($geo -notmatch '"realFix": true') {
+  Write-Output '  [SKIP] location not granted - run: adb shell pm grant com.campusx.demo android.permission.ACCESS_FINE_LOCATION'
+} elseif ($geo -notmatch '"recenterOk": true') {
+  Fail 'recenter button did not fly to the real fix'
+} elseif ($geo -notmatch '"notCampusFallback": true') {
+  Fail 'blue dot is still the campus fallback while a real fix exists'
+}
+
+Step '6/6 map gestures (online Leaflet)'
 & node tools/device-nav.mjs '#/map' 1300 | Out-Null
-$open = & node tools/device-eval.mjs --file tools/checks/map-open.js 30000 2>&1 | Out-String
-Write-Output "  $($open.Trim().Split("`n") | Where-Object { $_ -match 'markers|transform' })"
+$open = & node tools/device-eval.mjs --file tools/checks/map-open.js 40000 2>&1 | Out-String
+Write-Output "  open -> $(($open -split "`n" | Where-Object { $_ -match 'mode|markers|tilesLoaded' }) -join ' ')"
+if ($open -notmatch '"mode": "online"') { Fail 'online map did not render' }
+if ($open -match '"markers": 0') { Fail 'no map markers rendered' }
 
+& node tools/device-eval.mjs --file tools/checks/map-snapshot.js 20000 | Out-Null
 & $adb -s $serial shell input swipe 800 1300 300 800 700
-Start-Sleep -Milliseconds 1500
-$after = & node tools/device-eval.mjs --file tools/checks/map-transform.js 30000 2>&1 | Out-String
-Write-Output "  drag -> $(($after -split "`n" | Where-Object { $_ -match 'transform' }) -join '')"
+Start-Sleep -Milliseconds 600
+$drag = & node tools/device-eval.mjs --file tools/checks/map-compare.js 20000 2>&1 | Out-String
+Write-Output "  drag -> $(($drag -split "`n" | Where-Object { $_ -match 'moved|changed' }) -join ' ')"
+if ($drag -notmatch '"changed": true') { Fail 'online map drag did not pan' }
 
-$dt = & node tools/device-gesture.mjs double-tap 540 900 2>&1 | Out-String
-Write-Output "  double-tap -> $(($dt -split "`n" | Where-Object { $_ -match 'before|after' }) -join ' ')"
+# 放大按钮（罗盘图标）= 用户真实可点的路径；map-compare 会轮询等动画结束
+$zoomClick = & node tools/device-eval.mjs --file tools/checks/map-zoom-click.js 15000 2>&1 | Out-String
+Write-Output "  zoomBtn -> $(($zoomClick -split "`n" | Where-Object { $_ -match 'aria' }) -join ' ')"
+$zoom = & node tools/device-eval.mjs --file tools/checks/map-compare.js 25000 2>&1 | Out-String
+Write-Output "  zoom -> $(($zoom -split "`n" | Where-Object { $_ -match 'spreadRatio|changed' }) -join ' ')"
+if ($zoom -notmatch '"changed": true') { Fail 'online map zoom button had no effect' }
 
-$pz = & node tools/device-gesture.mjs pinch 540 900 80 300 12 2>&1 | Out-String
-Write-Output "  pinch -> $(($pz -split "`n" | Where-Object { $_ -match 'after' }) -join '')"
+& node tools/device-eval.mjs --file tools/checks/map-ctrl-recenter.js 15000 | Out-Null
+Start-Sleep -Milliseconds 1200
+
+Step '6b/6 map gestures (offline fallback, #/map?offline=1)'
+& node tools/device-nav.mjs '#/map?offline=1' 1500 | Out-Null
+$off = & node tools/device-eval.mjs --file tools/checks/map-open.js 40000 2>&1 | Out-String
+Write-Output "  open -> $(($off -split "`n" | Where-Object { $_ -match 'mode|markers' }) -join ' ')"
+if ($off -notmatch '"mode": "offline"') { Fail 'offline fallback map did not render' }
+
+& node tools/device-eval.mjs --file tools/checks/map-snapshot.js 20000 | Out-Null
+& $adb -s $serial shell input swipe 800 1300 300 800 700
+Start-Sleep -Milliseconds 600
+$odrag = & node tools/device-eval.mjs --file tools/checks/map-compare.js 20000 2>&1 | Out-String
+Write-Output "  drag -> $(($odrag -split "`n" | Where-Object { $_ -match 'moved|changed' }) -join ' ')"
+if ($odrag -notmatch '"changed": true') { Fail 'offline map drag did not pan' }
+
+& node tools/device-gesture.mjs double-tap 540 900 2>&1 | Out-Null
+$dtr = & node tools/device-eval.mjs --file tools/checks/map-compare.js 20000 2>&1 | Out-String
+Write-Output "  double-tap -> $(($dtr -split "`n" | Where-Object { $_ -match 'spreadRatio|changed' }) -join ' ')"
+if ($dtr -notmatch '"changed": true') { Fail 'offline map double-tap zoom had no effect' }
+
+& node tools/device-gesture.mjs pinch 540 900 80 300 12 2>&1 | Out-Null
+$pzr = & node tools/device-eval.mjs --file tools/checks/map-compare.js 20000 2>&1 | Out-String
+Write-Output "  pinch -> $(($pzr -split "`n" | Where-Object { $_ -match 'spreadRatio|changed' }) -join ' ')"
+if ($pzr -notmatch '"changed": true') { Fail 'offline map pinch zoom had no effect' }
 
 Step 'summary'
 if ($script:failed) {

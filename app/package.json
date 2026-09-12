@@ -13,6 +13,7 @@
     "@capacitor/android": "^8.5.1",
     "@capacitor/camera": "^8.2.4",
     "@capacitor/core": "^8.5.1",
+    "@capacitor/geolocation": "^8.2.2",
     "leaflet": "^1.9.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
