@@ -103,6 +103,17 @@ if (mode === 'double-tap') {
   await wait(700)
   const after = await readTransform()
   console.log(JSON.stringify({ 手势: `pinch ${from}->${to}`, before, after, 变化: before !== after }, null, 2))
+} else if (mode === 'tap') {
+  // 单击：坐标是 CSS 视口像素（不是设备像素）。
+  // 用它做验收很重要 —— 它会走浏览器的真实命中测试，
+  // 而 element.click() 会绕过命中测试，被别的层盖住也照样“成功”。
+  const x = Number(process.argv[3])
+  const y = Number(process.argv[4])
+  await touch('touchStart', [[x, y]])
+  await wait(60)
+  await touch('touchEnd', [])
+  await wait(400)
+  console.log(JSON.stringify({ 手势: `tap ${x},${y}` }, null, 2))
 } else if (mode === 'drag') {
   // 单指拖拽：分步派发 touchMove。比 `adb shell input swipe` 更接近真实手指，
   // 有些地图 SDK 只在收到连续的 move 流时才认拖拽。
@@ -123,7 +134,7 @@ if (mode === 'double-tap') {
   await wait(800)
   console.log(JSON.stringify({ 手势: `drag ${x1},${y1} -> ${x2},${y2}` }, null, 2))
 } else {
-  console.error('usage: device-gesture.mjs double-tap <x> <y> | pinch <cx> <cy> <fromGap> <toGap> [steps] | drag <x1> <y1> <x2> <y2> [steps] [delayMs]')
+  console.error('usage: device-gesture.mjs double-tap <x> <y> | pinch <cx> <cy> <fromGap> <toGap> [steps] | drag <x1> <y1> <x2> <y2> [steps] [delayMs] | tap <x> <y>')
   process.exit(2)
 }
 

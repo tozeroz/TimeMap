@@ -144,9 +144,11 @@ export function MapScreen() {
   const forceOffline = route.query.offline === '1'
   // #/map?raster=1 / ?amap=1 → 强制走指定兜底底图（用来验收各条降级路径）
   const forced = route.query.raster === '1' ? 'raster' : route.query.amap === '1' ? 'amap' : null
+  // #/map?ask=1 → 强制弹出定位授权说明（验收真实触摸用；正常只在未授权时弹）
+  const forceAsk = route.query.ask === '1'
 
   const [view, setView] = useState<ViewState>({ x: -260, y: -700, scale: 1 })
-  const [tipOpen, setTipOpen] = useState(true)
+  const [tipOpen, setTipOpen] = useState(false)
   const [tileFailed, setTileFailed] = useState(false)
   const [tilesOk, setTilesOk] = useState<boolean | null>(null)
   /** 在线底图来源：腾讯官方 SDK → 高德官方 SDK → 栅格瓦片 */
@@ -156,6 +158,8 @@ export function MapScreen() {
   // ---- 真实定位 ----
   const [fix, setFix] = useState<GeoFix | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
+  /** 被系统拒绝过至少一次 —— 此时再点“授权”不会弹框，需要引导去系统设置 */
+  const [deniedOnce, setDeniedOnce] = useState(false)
 
   const drag = useRef<{ id: number; startX: number; startY: number; originX: number; originY: number } | null>(null)
   const pinch = useRef<{ distance: number; scale: number } | null>(null)
@@ -180,9 +184,13 @@ export function MapScreen() {
     setGeoStatus('asking')
     const granted = await ensureLocationPermission()
     if (!granted) {
+      // 系统已经拒绝过（或用户勾了“不再询问”）时，requestPermissions 不会再弹框，
+      // 这时只能明确告诉用户去哪里手动开，不要让人对着一个没反应的按钮反复点。
       setGeoStatus('denied')
+      setDeniedOnce(true)
       return
     }
+    setDeniedOnce(false)
     const first = await getCurrentFix()
     if (first) {
       setFix(first)
@@ -193,11 +201,14 @@ export function MapScreen() {
     await startTracking()
   }, [startTracking])
 
-  // 进地图时静默尝试：已授权就直接显示真实位置，未授权不弹系统框，等用户点“授权”
+  // 进地图时静默判断：已授权就直接显示真实位置且不打扰；未授权才弹说明。
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      if (!(await hasLocationPermission())) return
+      const granted = await hasLocationPermission()
+      if (cancelled) return
+      if (!granted || forceAsk) setTipOpen(true)
+      if (!granted) return
       const first = await getCurrentFix()
       if (cancelled) return
       if (first) {
@@ -212,7 +223,7 @@ export function MapScreen() {
       stopWatchRef.current?.()
       stopWatchRef.current = null
     }
-  }, [startTracking])
+  }, [startTracking, forceAsk])
 
   /** 我离校园有多远 —— 模拟器/异地定位时提示，避免蓝点“凭空消失” */
   const farFromCampus = fix ? distanceMeters(fix.lat, fix.lng, CAMPUS_CENTER[0], CAMPUS_CENTER[1]) : 0
@@ -468,6 +479,12 @@ export function MapScreen() {
             <div className="map__modal">
               <h3 className="map__modal-title">授权地理位置</h3>
               <p className="map__modal-desc">在地图上，标记属于你的校园生活</p>
+              {deniedOnce && (
+                <p className="map__modal-desc map__modal-desc--warn">
+                  系统已拒绝定位权限，再点授权不会弹框。
+                  请到「设置 → 应用 → 校园 → 权限」里手动打开定位，然后回到本页。
+                </p>
+              )}
               <div className="map__modal-actions">
                 <button
                   className="map__modal-btn"
@@ -478,7 +495,8 @@ export function MapScreen() {
                   }}
                 >
                   暂时不要
-                </button>                <button
+                </button>
+                <button
                   className="map__modal-btn map__modal-btn--primary"
                   onClick={() => {
                     setTipOpen(false)

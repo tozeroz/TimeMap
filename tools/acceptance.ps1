@@ -85,6 +85,36 @@ if ($geo -notmatch '"realFix": true') {
   Fail 'blue dot is still the campus fallback while a real fix exists'
 }
 
+Step '5d/6 map dialog must be really tappable'
+# Regression guard for a real-device bug: the location dialog was visible but every tap
+# was swallowed by a transparent z-index:1000 layer inside the map SDK. Programmatic
+# element.click() bypasses hit testing, so the old checks never caught it - tap for real.
+& node tools/device-eval.mjs "localStorage.setItem('probe.mapHash', '#/map?ask=1')" 15000 | Out-Null
+& node tools/device-eval.mjs --file tools/checks/map-reopen-modal.js 30000 | Out-Null
+$rectsRaw = & node tools/device-eval.mjs --file tools/checks/map-modal-rects.js 20000 2>&1 | Out-String
+$rects = $rectsRaw | ConvertFrom-Json
+Write-Output "  dialog present: $($rects.modalPresent)  buttons: $($rects.buttonCount)"
+if (-not $rects.modalPresent) {
+  Fail 'location dialog did not appear when entering the map'
+} else {
+  Write-Output "  real tap on '$($rects.skipText)' at $($rects.skipCenter -join ',')"
+  & node tools/device-gesture.mjs tap $rects.skipCenter[0] $rects.skipCenter[1] | Out-Null
+  Start-Sleep -Milliseconds 600
+  $st = (& node tools/device-eval.mjs --file tools/checks/map-modal-state.js 20000 2>&1 | Out-String) | ConvertFrom-Json
+  Write-Output "  after tap: modalPresent=$($st.modalPresent)"
+  if ($st.modalPresent) { Fail 'location dialog cannot be dismissed by a real tap (covered by a map SDK layer?)' }
+  # and the floating map controls must be tappable too (same class of bug)
+  $ctrlRaw = & node tools/device-eval.mjs --file tools/checks/map-ctrl-rects.js 20000 2>&1 | Out-String
+  $ctrl = $ctrlRaw | ConvertFrom-Json
+  & node tools/device-eval.mjs --file tools/checks/map-snapshot.js 20000 | Out-Null
+  Write-Output "  real tap on zoom control at $($ctrl.zoomCenter -join ',')"
+  & node tools/device-gesture.mjs tap $ctrl.zoomCenter[0] $ctrl.zoomCenter[1] | Out-Null
+  Start-Sleep -Milliseconds 500
+  $ctl = & node tools/device-eval.mjs --file tools/checks/map-compare.js 25000 2>&1 | Out-String
+  Write-Output "  zoom control -> $(($ctl -split "`n" | Where-Object { $_ -match 'zoomDelta|changed' }) -join ' ')"
+  if ($ctl -notmatch '"changed": true') { Fail 'floating zoom control cannot be tapped (covered by a map SDK layer?)' }
+}
+
 Step '6/6 map gestures (online, Tencent GL SDK)'
 & node tools/device-eval.mjs "localStorage.setItem('probe.mapHash', '#/map')" 15000 | Out-Null
 $open = & node tools/device-eval.mjs --file tools/checks/map-open.js 40000 2>&1 | Out-String

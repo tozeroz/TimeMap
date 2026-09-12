@@ -195,6 +195,14 @@
   justify-content: center;
   padding: 0 30px;
   background: rgba(0, 0, 0, 0.28);
+  /*
+   * 必须显式抬到地图 SDK 之上。
+   * 起因：腾讯 GL SDK 内部会插入一个 z-index:1000 的透明层；如果地图容器自己
+   * 不创建层叠上下文，这一层就会和页面其它绝对定位元素挤在同一个上下文里，
+   * 把弹窗（z-index:auto）压下去 —— 表现是「弹窗看得见，但点哪儿都没反应」。
+   * 现在 .realmaps 已经 isolation:isolate，这里再显式给一个值，双保险。
+   */
+  z-index: 600;
 }
 
 .map__modal {
@@ -218,6 +226,16 @@
   font-size: 13px;
   color: var(--c-text-2);
   line-height: 1.5;
+}
+
+/* 系统已拒绝过定位时的额外说明（告诉用户去系统设置里开） */
+.map__modal-desc--warn {
+  margin-top: -10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 149, 0, 0.12);
+  color: #b25f00;
+  text-align: left;
 }
 
 .map__modal-actions {
@@ -248,6 +266,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  z-index: 500; /* 必须高于地图 SDK 的内部层级，否则按钮看得见点不动 */
 }
 
 .map__ctrl {
@@ -266,6 +285,7 @@
   position: absolute;
   right: 14px;
   bottom: 24px;
+  z-index: 500; /* 同上：要盖在地图 SDK 之上才点得到 */
   display: inline-flex;
   align-items: center;
   justify-content: center;
