@@ -4,17 +4,17 @@ import 'leaflet/dist/leaflet.css'
 import type { MapMarker } from '../data/mock'
 import { posts } from '../data/mock'
 import type { GeoFix } from './geo'
+import type { MapHandle } from './mapApi'
 import { activeTileConfig, CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
 /**
- * 真实在线地图（Leaflet + 可配置瓦片源）。
+ * 栅格瓦片地图（Leaflet + 可配置瓦片源）—— 官方 SDK 不可用时的兜底。
  *
- * 为什么用 Leaflet：拖拽/缩放/惯性由它原生实现，跨 WebView 稳定；
- * 瓦片源在 mapTiles.ts 里配置，拿到官方 key 后可一处切换。
+ * 为什么保留它：不需要 key、不依赖任何厂商 SDK 域名，只要瓦片能下就能出图；
+ * 瓦片连续加载失败时回调 onTilesFailed，让上层退回离线自绘地图。
  *
  * 标记沿用原版形态：照片卡片 + 彩色图钉 + 地点名（用 divIcon 自绘）。
- * 瓦片连续加载失败时回调 onTilesFailed，让上层退回离线自绘地图。
  * 蓝点用真实定位坐标（here），拿不到时退回校园中心，绝不留空白。
  */
 export function RealMap({
@@ -29,7 +29,7 @@ export function RealMap({
   here?: GeoFix | null
   onMarkerClick: (postId: string) => void
   onTilesFailed: () => void
-  mapRef?: (map: L.Map | null) => void
+  mapRef?: (handle: MapHandle | null) => void
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const failedRef = useRef(0)
@@ -89,7 +89,27 @@ export function RealMap({
 
     mapObjRef.current = map
     setReady(true)
-    mapRef?.(map)
+    mapRef?.({
+      provider: 'raster',
+      flyTo: (lat, lng, zoom = 16) => {
+        map.flyTo([lat, lng], zoom, { duration: 0.6 })
+      },
+      zoomIn: () => map.zoomIn(),
+      getCenter: () => {
+        const c = map.getCenter()
+        return { lat: c.lat, lng: c.lng }
+      },
+      getZoom: () => map.getZoom(),
+    })
+
+    // 把地图真实状态写到 data-*，验收脚本据此判断拖拽/缩放（provider 无关）
+    const sync = () => {
+      const c = map.getCenter()
+      host.dataset.center = `${c.lat.toFixed(6)},${c.lng.toFixed(6)}`
+      host.dataset.zoom = String(map.getZoom())
+    }
+    map.on('move zoom moveend zoomend', sync)
+    sync()
 
     return () => {
       mapObjRef.current = null
@@ -134,6 +154,6 @@ export function RealMap({
     hereLayerRef.current = { marker, circle }
   }, [here, ready])
 
-  return <div className="realmaps" ref={hostRef} />
+  return <div className="realmaps" data-provider="raster" ref={hostRef} />
 }
 

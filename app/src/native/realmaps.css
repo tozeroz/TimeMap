@@ -19,6 +19,25 @@
   border: none;
 }
 
+/*
+ * 腾讯 GL SDK 的 DOMOverlay：SDK 把元素的左上角定位到锚点坐标，
+ * 所以这里按「图钉尖端 / 蓝点中心」做偏移对齐（Leaflet 版用 iconAnchor 干同一件事）。
+ */
+.rm__wrap--tmap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.rm__wrap--tmap .rm {
+  transform: translate(-50%, -100%);
+}
+
+.rm__wrap--tmap .rm__here {
+  transform: translate(-50%, -50%);
+}
+
 .rm {
   display: flex;
   flex-direction: column;

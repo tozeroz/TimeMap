@@ -85,11 +85,11 @@ if ($geo -notmatch '"realFix": true') {
   Fail 'blue dot is still the campus fallback while a real fix exists'
 }
 
-Step '6/6 map gestures (online Leaflet)'
-& node tools/device-nav.mjs '#/map' 1300 | Out-Null
+Step '6/6 map gestures (online, Tencent GL SDK)'
+& node tools/device-eval.mjs "localStorage.setItem('probe.mapHash', '#/map')" 15000 | Out-Null
 $open = & node tools/device-eval.mjs --file tools/checks/map-open.js 40000 2>&1 | Out-String
-Write-Output "  open -> $(($open -split "`n" | Where-Object { $_ -match 'mode|markers|tilesLoaded' }) -join ' ')"
-if ($open -notmatch '"mode": "online"') { Fail 'online map did not render' }
+Write-Output "  open -> $(($open -split "`n" | Where-Object { $_ -match 'hash|mode|badge|markers|center|zoom' }) -join ' ')"
+if ($open -notmatch '"mode": "tencent"') { Fail 'Tencent GL SDK map did not render' }
 if ($open -match '"markers": 0') { Fail 'no map markers rendered' }
 
 & node tools/device-eval.mjs --file tools/checks/map-snapshot.js 20000 | Out-Null
@@ -99,18 +99,38 @@ $drag = & node tools/device-eval.mjs --file tools/checks/map-compare.js 20000 2>
 Write-Output "  drag -> $(($drag -split "`n" | Where-Object { $_ -match 'moved|changed' }) -join ' ')"
 if ($drag -notmatch '"changed": true') { Fail 'online map drag did not pan' }
 
-# 放大按钮（罗盘图标）= 用户真实可点的路径；map-compare 会轮询等动画结束
+# zoom-in button (the compass icon): a real user-reachable path. map-compare polls until the animation settles.
 $zoomClick = & node tools/device-eval.mjs --file tools/checks/map-zoom-click.js 15000 2>&1 | Out-String
 Write-Output "  zoomBtn -> $(($zoomClick -split "`n" | Where-Object { $_ -match 'aria' }) -join ' ')"
 $zoom = & node tools/device-eval.mjs --file tools/checks/map-compare.js 25000 2>&1 | Out-String
 Write-Output "  zoom -> $(($zoom -split "`n" | Where-Object { $_ -match 'spreadRatio|changed' }) -join ' ')"
 if ($zoom -notmatch '"changed": true') { Fail 'online map zoom button had no effect' }
 
+# raster tile fallback (Leaflet) must still render: force it via the URL param
+& node tools/device-eval.mjs "localStorage.setItem('probe.mapHash', '#/map?raster=1')" 15000 | Out-Null
+$raster = & node tools/device-eval.mjs --file tools/checks/map-open.js 40000 2>&1 | Out-String
+Write-Output "  raster -> $(($raster -split "`n" | Where-Object { $_ -match 'hash|mode|markers|tilesLoaded' }) -join ' ')"
+if ($raster -notmatch '"mode": "raster"') { Fail 'raster tile fallback did not render' }
+
+# Amap official JSAPI (second in the chain): force it and confirm key + security code work
+& node tools/device-eval.mjs "localStorage.setItem('probe.mapHash', '#/map?amap=1')" 15000 | Out-Null
+$amap = & node tools/device-eval.mjs --file tools/checks/map-open.js 40000 2>&1 | Out-String
+Write-Output "  amap -> $(($amap -split "`n" | Where-Object { $_ -match 'hash|mode|badge|markers|canvases' }) -join ' ')"
+if ($amap -notmatch '"mode": "amap"') { Fail 'Amap JSAPI did not render' }
+if ($amap -match '"markers": 0') { Fail 'no map markers on Amap' }
+
+& node tools/device-eval.mjs --file tools/checks/map-snapshot.js 20000 | Out-Null
+& $adb -s $serial shell input swipe 800 1300 300 800 700
+Start-Sleep -Milliseconds 600
+$adrag = & node tools/device-eval.mjs --file tools/checks/map-compare.js 20000 2>&1 | Out-String
+Write-Output "  amap-drag -> $(($adrag -split "`n" | Where-Object { $_ -match 'centerMovedM|moved|changed' }) -join ' ')"
+if ($adrag -notmatch '"changed": true') { Fail 'Amap map drag did not pan' }
+
 & node tools/device-eval.mjs --file tools/checks/map-ctrl-recenter.js 15000 | Out-Null
 Start-Sleep -Milliseconds 1200
 
 Step '6b/6 map gestures (offline fallback, #/map?offline=1)'
-& node tools/device-nav.mjs '#/map?offline=1' 1500 | Out-Null
+& node tools/device-eval.mjs "localStorage.setItem('probe.mapHash', '#/map?offline=1')" 15000 | Out-Null
 $off = & node tools/device-eval.mjs --file tools/checks/map-open.js 40000 2>&1 | Out-String
 Write-Output "  open -> $(($off -split "`n" | Where-Object { $_ -match 'mode|markers' }) -join ' ')"
 if ($off -notmatch '"mode": "offline"') { Fail 'offline fallback map did not render' }

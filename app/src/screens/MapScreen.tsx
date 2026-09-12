@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type L from 'leaflet'
 import { Screen } from '../components/Shell'
 import {
   IconChatBubble,
@@ -9,7 +8,10 @@ import {
   IconPlus,
 } from '../components/icons'
 import { mapMarkers } from '../data/mock'
+import { AmapMap } from '../native/AmapMap'
 import { RealMap } from '../native/RealMap'
+import { TencentMap } from '../native/TencentMap'
+import type { MapHandle } from '../native/mapApi'
 import { CAMPUS_CENTER } from '../native/mapTiles'
 import {
   distanceMeters,
@@ -140,11 +142,16 @@ export function MapScreen() {
   const route = useRoute()
   // #/map?offline=1 → 强制走离线自绘底图（用来演示/验收无网降级）
   const forceOffline = route.query.offline === '1'
+  // #/map?raster=1 / ?amap=1 → 强制走指定兜底底图（用来验收各条降级路径）
+  const forced = route.query.raster === '1' ? 'raster' : route.query.amap === '1' ? 'amap' : null
 
   const [view, setView] = useState<ViewState>({ x: -260, y: -700, scale: 1 })
   const [tipOpen, setTipOpen] = useState(true)
   const [tileFailed, setTileFailed] = useState(false)
   const [tilesOk, setTilesOk] = useState<boolean | null>(null)
+  /** 在线底图来源：腾讯官方 SDK → 高德官方 SDK → 栅格瓦片 */
+  const [providerState, setProviderState] = useState<'tencent' | 'amap' | 'raster'>('tencent')
+  const provider = forced ?? providerState
   const offline = forceOffline || tileFailed
   // ---- 真实定位 ----
   const [fix, setFix] = useState<GeoFix | null>(null)
@@ -155,7 +162,7 @@ export function MapScreen() {
   const lastTap = useRef(0)
   const lastTouch = useRef<{ x: number; y: number; moved: number } | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
-  const leafletRef = useRef<L.Map | null>(null)
+  const mapHandleRef = useRef<MapHandle | null>(null)
   const stopWatchRef = useRef<(() => void) | null>(null)
 
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s))
@@ -306,23 +313,23 @@ export function MapScreen() {
 
   /** 回到“我的位置”：有真实坐标就去真实坐标，否则回校园中心 */
   const recenter = useCallback(() => {
-    const map = leafletRef.current
+    const handle = mapHandleRef.current
     const target: [number, number] = fix ? [fix.lat, fix.lng] : CAMPUS_CENTER
-    if (!offline && map) {
-      map.flyTo(target, 16, { duration: 0.6 })
+    if (!offline && handle) {
+      handle.flyTo(target[0], target[1], 16)
       return
     }
     setView({ x: -260, y: -700, scale: 1 })
   }, [offline, fix])
 
   const backToCampus = useCallback(() => {
-    leafletRef.current?.flyTo(CAMPUS_CENTER, 16, { duration: 0.6 })
+    mapHandleRef.current?.flyTo(CAMPUS_CENTER[0], CAMPUS_CENTER[1], 16)
   }, [])
 
   const zoomIn = useCallback(() => {
-    const map = leafletRef.current
-    if (!offline && map) {
-      map.zoomIn()
+    const handle = mapHandleRef.current
+    if (!offline && handle) {
+      handle.zoomIn()
       return
     }
     setView((v) => ({ ...v, scale: clampScale(v.scale * 1.25) }))
@@ -333,14 +340,26 @@ export function MapScreen() {
     setTileFailed(true)
   }, [])
 
-  // 注意：这两个回调必须保持稳定引用，否则 RealMap 的建图 effect 会每次渲染都销毁重建地图
+  /** 腾讯 SDK 加载失败 → 退回高德官方 SDK */
+  const handleTencentFailed = useCallback(() => {
+    console.warn('Tencent GL SDK unavailable, falling back to Amap JSAPI')
+    setProviderState('amap')
+  }, [])
+
+  /** 高德 SDK 也失败 → 退回无 key 的栅格瓦片 */
+  const handleAmapFailed = useCallback(() => {
+    console.warn('Amap JSAPI unavailable, falling back to raster tiles')
+    setProviderState('raster')
+  }, [])
+
+  // 注意：这两个回调必须保持稳定引用，否则地图组件的建图 effect 会每次渲染都销毁重建地图
   const handleMarkerClick = useCallback((postId: string) => {
     navigate('feed', { id: postId })
   }, [])
 
-  const handleMapRef = useCallback((m: L.Map | null) => {
-    leafletRef.current = m
-    if (m) setTilesOk(true)
+  const handleMapRef = useCallback((handle: MapHandle | null) => {
+    mapHandleRef.current = handle
+    if (handle) setTilesOk(true)
   }, [])
 
   return (
@@ -374,6 +393,22 @@ export function MapScreen() {
       >
         {offline ? (
           <OfflineMap view={view} />
+        ) : provider === 'tencent' ? (
+          <TencentMap
+            markers={mapMarkers}
+            here={fix}
+            onMarkerClick={handleMarkerClick}
+            onSdkFailed={handleTencentFailed}
+            mapRef={handleMapRef}
+          />
+        ) : provider === 'amap' ? (
+          <AmapMap
+            markers={mapMarkers}
+            here={fix}
+            onMarkerClick={handleMarkerClick}
+            onSdkFailed={handleAmapFailed}
+            mapRef={handleMapRef}
+          />
         ) : (
           <RealMap
             markers={mapMarkers}
@@ -389,7 +424,11 @@ export function MapScreen() {
             {forceOffline ? '离线自绘底图（演示模式）' : '离线自绘底图（在线瓦片不可用）'}
           </span>
         )}
-        {tilesOk === true && !offline && <span className="map__onlineBadge">在线地图</span>}
+        {tilesOk === true && !offline && (
+          <span className="map__onlineBadge" data-provider={provider}>
+            {provider === 'tencent' ? '腾讯地图' : provider === 'amap' ? '高德地图' : '在线地图'}
+          </span>
+        )}
 
         <GeoBadge
           status={geoStatus}

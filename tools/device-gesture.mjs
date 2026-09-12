@@ -103,8 +103,27 @@ if (mode === 'double-tap') {
   await wait(700)
   const after = await readTransform()
   console.log(JSON.stringify({ 手势: `pinch ${from}->${to}`, before, after, 变化: before !== after }, null, 2))
+} else if (mode === 'drag') {
+  // 单指拖拽：分步派发 touchMove。比 `adb shell input swipe` 更接近真实手指，
+  // 有些地图 SDK 只在收到连续的 move 流时才认拖拽。
+  const x1 = Number(process.argv[3])
+  const y1 = Number(process.argv[4])
+  const x2 = Number(process.argv[5])
+  const y2 = Number(process.argv[6])
+  const steps = Number(process.argv[7] ?? 12)
+  const delay = Number(process.argv[8] ?? 40)
+  await touch('touchStart', [[x1, y1]])
+  for (let i = 1; i <= steps; i++) {
+    await touch('touchMove', [
+      [x1 + ((x2 - x1) * i) / steps, y1 + ((y2 - y1) * i) / steps],
+    ])
+    await wait(delay)
+  }
+  await touch('touchEnd', [])
+  await wait(800)
+  console.log(JSON.stringify({ 手势: `drag ${x1},${y1} -> ${x2},${y2}` }, null, 2))
 } else {
-  console.error('usage: device-gesture.mjs double-tap <x> <y> | pinch <cx> <cy> <fromGap> <toGap> [steps]')
+  console.error('usage: device-gesture.mjs double-tap <x> <y> | pinch <cx> <cy> <fromGap> <toGap> [steps] | drag <x1> <y1> <x2> <y2> [steps] [delayMs]')
   process.exit(2)
 }
 

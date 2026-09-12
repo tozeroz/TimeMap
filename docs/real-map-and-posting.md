@@ -76,34 +76,65 @@
   - 当前位置：蓝点 + 方向扇形。
 - 瓦片源：`app/src/native/mapTiles.ts` —— **换 provider 只改这一个文件**。
 
-### 各服务实测可达性（2026-09-12，本机网络）
+### 底图优先级（2026-09-12 起：已接入官方 Key）
 
-| 服务 | 结果 | 说明 |
-|---|---|---|
-| 高德栅格瓦片 `webrd0X.is.autonavi.com` | ✅ 可达（无 key） | 当前默认，**未授权调用，仅限本地演示** |
-| 天地图 WMTS `tX.tianditu.gov.cn` | ⚠️ 服务可达，无 key 返回 418 | 免费注册送 key，官方合规 |
-| 腾讯 `rtX.map.gtimg.com` | ❌ 直连 404 | 需走官方 JS SDK（key + 域名白名单） |
-| OpenStreetMap `tile.openstreetmap.org` | ❌ 本机超时 | 国内网络不可达 |
+```
+腾讯地图 GL JS SDK  →  高德地图 JSAPI 1.4  →  栅格瓦片(Leaflet)  →  离线自绘底图
+   （首选，与原版一致）      （官方合规备份）        （无 key 兜底）        （无网兜底）
+```
 
-**真机验证**：瓦片 20/20 加载成功，显示真实路网与地名
-（北京交通大学、学院南路、交大东路、西直门、南长河等）。
+- Key 统一放在 `app/src/native/keys.ts`（两家都是前端 SDK，Key 必然随包下发，
+  这是它们的产品设计；换 key 只需改这一个文件后重新打包）。
+- 强制切到某一层来演示 / 验收：
+  - `#/map?amap=1` → 高德官方 JSAPI
+  - `#/map?raster=1` → 栅格瓦片（Leaflet）
+  - `#/map?offline=1` → 离线自绘底图
+- 自动降级：腾讯 SDK 脚本加载失败 → 高德；高德也失败 → 栅格瓦片；
+  瓦片连续失败 3 次 → 离线自绘。每一步都会切徽标文字
+  （`腾讯地图` / `高德地图` / `在线地图` / `离线自绘底图`）。
 
-**离线降级怎么看**：`#/map?offline=1` 强制使用自绘底图（徽标显示「离线自绘底图（演示模式）」），
-用来演示 / 验收无网时的降级表现；真实无网时瓦片连续失败 3 次也会自动切到同一张地图。
+### 各服务实测（2026-09-12，模拟器 WebView，页面源 `https://localhost`）
 
-### 如何切换到官方 key（合规路径）
+| 服务 | 出图 | 拖拽/缩放 | 说明 |
+|---|---|---|---|
+| 腾讯地图 GL JS SDK（key） | ✅ 矢量路网 | ✅ 拖拽 + 放大按钮 | 与原版 app 同款服务；key 无需配域名白名单 |
+| 高德地图 JSAPI **1.4**（key） | ✅ canvas 出图 | ✅ 拖拽 | 见下方「为什么锁 1.4」 |
+| 高德地图 JSAPI **2.0**（key） | ✅ canvas 出图 | ❌ 完全不响应触摸 | 已弃用，原因见下 |
+| 高德栅格瓦片（无 key） | ✅ 20/20 瓦片 | ✅ 拖拽/双击/捏合 | 仅作最后兜底，**未授权调用，限本地演示** |
+| 天地图 WMTS | ⚠️ 无 key 返回 418 | — | 免费注册送 key，官方合规 |
+| OpenStreetMap | ❌ 本机超时 | — | 国内网络不可达 |
 
-1. 打开控制台（已在你浏览器中打开）：
-   - 高德开放平台：https://console.amap.com/dev/key/app
-   - 腾讯位置服务：https://lbs.qq.com/dev/console/key/manage
-2. 登录/注册 → **完成实名认证**（两家都要求）→ 创建应用 → 添加 Key。
-3. Key 类型选择与白名单：
-   - 高德：选「Web端(JS API)」，白名单填 `localhost`（WebView 里的页面源是 `https://localhost`）；
-   - 腾讯：选「Web端(JavaScript API)」，授权域名同样填 `localhost`。
-4. 把 Key 发给我即可，我会：
-   - 高德：改用官方 JS SDK（矢量地图，比现在的栅格瓦片更好），或把 key 用于官方瓦片；
-   - 腾讯：改用腾讯地图 JS SDK —— **与原版 app 用的地图服务一致**；
-   - 并删除现在的未授权瓦片源。
+### 为什么高德锁 1.4 而不是 2.0（实测结论，别再改回去）
+
+在 MuMu 的 Android WebView（Chrome 110）里，**高德 JSAPI 2.0 的 WebGL 渲染器完全不响应触摸**：
+单指拖拽时连 `touchstart` / `mapmove` 都不产生，`getStatus().dragEnable` 却是 `true`。
+
+排查方式（避免误判成自己代码的问题）：在页面里另建一张**独立探针地图** ——
+自己的容器、`position:fixed; z-index:9999` 画在最上层、不经过任何 demo 代码与 CSS，
+结果同样拖不动。同一份 key 换成 JSAPI 1.4 后立刻正常：
+`touchstart → touchmove → mapmove → moveend` 全部触发，中心点真实改变
+（39.9503,116.3396 → 39.9540,116.3348）。
+
+结论：**问题在 SDK 的 WebGL 渲染器与这个 WebView 的组合，不在 demo**。
+1.4 是官方仍在提供的经典渲染器，功能满足需求，因此锁定 1.4。
+（`_AMapSecurityConfig` 安全密钥仍然保留挂载，以后 2.0 修好可以直接切回去。）
+
+### 实现要点（踩过的坑）
+
+- **腾讯 `DOMOverlay` 不给元素定位**：实测它不会写 `inline style`，所有标记会堆在左上角。
+  改成用官方的 `map.projectToContainer(LatLng)` 自己把经纬度投影成容器像素，
+  再 `translate3d` 定位（`app/src/native/TencentMap.tsx`），并在 `moving / zooming / moveend /
+  zoomend / idle` 事件里重投影。
+- **自己 append 的 DOM 要自己摘**：SDK 不管这些节点，cleanup 里必须 `wrap.remove()`，
+  否则每次定位更新都会漏一个节点（验收脚本会数标记数量，漏了立刻能看出来）。
+- **四套底图共用一个句柄**：`app/src/native/mapApi.ts` 定义 `MapHandle`（flyTo / zoomIn /
+  getCenter / getZoom），MapScreen 只依赖它，不关心底下是谁。
+- **验收脚本不认 provider**：地图容器上写 `data-provider` / `data-center` / `data-zoom`
+  （容器在动就在更新），验收读这几个属性判断「拖拽有没有生效、缩放有没有生效」。
+  高德的移动事件名各家不一，额外挂了 500ms 低频轮询兜底。
+- **`acceptance.ps1` 必须纯 ASCII**（脚本头部早有注释）：本次又踩了一次 ——
+  一行中文注释被 PowerShell 按 ANSI 读取后**吞掉了下一行代码**，
+  导致「切到栅格底图」那步没执行，表现为莫名其妙的验收失败。
 
 ## 五、尚未接入的真实能力
 
@@ -113,7 +144,6 @@
 | 消息/评论真实送达 | 本地状态 | 需要后端 |
 | 帖子分享给别人 | 仅本机 | 需要后端 |
 | 扫码识别真实二维码 | 动画模拟 | 加 `@capacitor-mlkit/barcode-scanning` |
-| 官方地图 SDK（腾讯/高德） | 用未授权栅格瓦片兜底 | 你的 API Key，见上 |
 
 ## 六、如果要"真后端"
 
