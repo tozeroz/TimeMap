@@ -1,0 +1,319 @@
+.login {
+  padding: 18px 28px 30px;
+  background: var(--c-bg);
+}
+
+.login__title {
+  margin: 0 0 26px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+}
+
+.login__field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--c-divider);
+}
+
+.login__field--code {
+  margin-top: 4px;
+}
+
+.login__prefix {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--c-text);
+  flex: 0 0 auto;
+}
+
+.login__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--c-text);
+}
+
+.login__input::placeholder {
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--c-text-3);
+}
+
+.login__clear {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  color: var(--c-text-3);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.login__submit {
+  width: 100%;
+  height: 48px;
+  margin-top: 30px;
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.login__submit:active {
+  transform: scale(0.99);
+}
+
+/* 登录入口（原版 CampusLoginActivity）：品牌拼贴 + 单按钮 + 协议勾选 */
+.ls {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #fdfbf6;
+}
+
+.ls__hero {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ls__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ls__brandMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: #ffd166;
+  border: 1.5px solid rgba(43, 43, 43, 0.75);
+  color: #2b2b2b;
+  font-size: 26px;
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: -1px;
+  box-shadow: 1px 1px 0 rgba(43, 43, 43, 0.55);
+}
+
+.ls__brandText {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  color: #111;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* 角落的拼贴装饰：做成「贴纸」质感（白边 + 轻投影 + 各自形状） */
+.ls__deco {
+  position: absolute;
+  border-radius: 14px;
+  border: 2.5px solid #fff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.ls__deco--1 {
+  top: 44px;
+  left: 30px;
+  width: 78px;
+  height: 78px;
+  border-radius: 22px 14px 26px 16px;
+  background: linear-gradient(140deg, #cfe0c3, #a9c79b);
+  transform: rotate(-9deg);
+}
+
+.ls__deco--2 {
+  top: 36px;
+  right: 34px;
+  width: 96px;
+  height: 46px;
+  border-radius: 8px;
+  background: repeating-linear-gradient(45deg, #ffe08a 0 8px, #ffd166 8px 16px);
+  transform: rotate(7deg);
+}
+
+.ls__deco--3 {
+  bottom: 132px;
+  left: 38px;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f7c0a8, #e88f70);
+}
+
+.ls__deco--4 {
+  bottom: 96px;
+  right: 48px;
+  width: 94px;
+  height: 58px;
+  border-radius: 16px 20px 14px 18px;
+  background: linear-gradient(150deg, #bcd8f0, #8fb8dd);
+  transform: rotate(-6deg);
+}
+
+.ls__deco--5 {
+  top: 206px;
+  right: 88px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50% 50% 52% 48%;
+  background: linear-gradient(160deg, #f0c2d2, #dd9fb6);
+}
+
+/* 左下角再补一块绿色「灌木」贴纸，凑出原版那种拼贴密度 */
+.ls__deco--6 {
+  top: 300px;
+  left: 60px;
+  width: 62px;
+  height: 62px;
+  border-radius: 40% 60% 55% 45%;
+  background: linear-gradient(150deg, #c9e0b4, #93bf7a);
+  transform: rotate(12deg);
+}
+
+.ls__foot {
+  flex: 0 0 auto;
+  padding: 0 28px 34px;
+}
+
+.ls__login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 52px;
+  border-radius: var(--r-pill);
+  background: #111;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ls__login:active {
+  transform: scale(0.99);
+}
+
+.ls__agree {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.ls__check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 1.5px solid #c2c5cb;
+  color: #fff;
+}
+
+.ls__check.is-on {
+  background: #111;
+  border-color: #111;
+}
+
+.ls__agreeText {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #4a4a4a;
+}
+
+/* 协议里的条款名用标准链接蓝，提高辨识度 */
+.ls__agreeText .login__link {
+  color: #2f6fe0;
+}
+
+.ls__agree.is-warn .ls__agreeText {
+  color: var(--c-danger);
+}
+
+.ls__warn {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--c-danger);
+  text-align: center;
+}
+
+.login__agree {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--c-text-3);
+  text-align: center;
+}
+
+.login__link {
+  color: var(--c-accent);
+}
+
+/* 登录方式选择（login/select） */
+.login__lead {
+  margin: -18px 0 24px;
+  font-size: 13.5px;
+  color: var(--c-text-3);
+}
+
+.ls__methods {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ls__method {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  padding: 16px 18px;
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  border: 1px solid var(--c-divider);
+  text-align: left;
+}
+
+.ls__method.is-primary {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+}
+
+.ls__method-label {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--c-text);
+}
+
+.ls__method.is-primary .ls__method-label {
+  color: var(--c-primary-fg);
+}
+
+.ls__method-desc {
+  font-size: 12.5px;
+  color: var(--c-text-3);
+}
+
+.ls__method.is-primary .ls__method-desc {
+  color: rgba(255, 255, 255, 0.72);
+}

@@ -1,0 +1,128 @@
+/* 真实在线地图（Leaflet / 腾讯 / 高德）与其自绘标记 */
+.realmaps {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: #e8e6e0;
+  touch-action: none;
+  /*
+   * 关键：给地图容器建立独立的层叠上下文。
+   * 各家地图 SDK 内部都有很高的 z-index（腾讯 GL 内部有一层 z-index:1000，
+   * Leaflet 的 pane/control 到 800）。若不隔离，这些内部层会跑出来盖住页面自己的
+   * 悬浮控件与弹窗 —— 视觉上没问题（那层是透明的），但所有点击都会被它吃掉，
+   * 表现为「按钮看得见但点不动」。隔离后，SDK 的一切都被关在这块区域里。
+   */
+  z-index: 1;
+  isolation: isolate;
+}
+
+/* 关掉 Leaflet 默认的图片背景噪点，避免与主题冲突 */
+.realmaps .leaflet-container {
+  background: #e8e6e0;
+  font: inherit;
+}
+
+.rm__wrap {
+  background: transparent;
+  border: none;
+}
+
+/*
+ * 腾讯 GL SDK 的 DOMOverlay：SDK 把元素的左上角定位到锚点坐标，
+ * 所以这里按「图钉尖端 / 蓝点中心」做偏移对齐（Leaflet 版用 iconAnchor 干同一件事）。
+ */
+.rm__wrap--tmap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.rm__wrap--tmap .rm {
+  transform: translate(-50%, -100%);
+}
+
+.rm__wrap--tmap .rm__here {
+  transform: translate(-50%, -50%);
+}
+
+.rm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.22));
+}
+
+.rm__card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 3px 3px 5px;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.rm__img {
+  width: 66px;
+  height: 66px;
+  border-radius: 7px;
+  object-fit: cover;
+  display: block;
+}
+
+.rm__img--text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: #4a4a4a;
+  background: #f2f3f5;
+  text-align: center;
+}
+
+.rm__name {
+  max-width: 78px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: #4a4a4a;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm__pin {
+  display: block;
+  margin-top: -3px;
+}
+
+/* 当前位置：蓝点 + 方向扇形 */
+.rm__here {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rm__hereCone {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(74, 140, 247, 0.28) 0%, rgba(74, 140, 247, 0) 70%);
+}
+
+.rm__hereDot {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #2f6fe0;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}

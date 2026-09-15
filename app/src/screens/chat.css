@@ -1,0 +1,74 @@
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px var(--pad-page) 20px;
+}
+
+.chat__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.chat__row--me {
+  flex-direction: row-reverse;
+}
+
+.chat__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-pill);
+  flex: 0 0 auto;
+}
+
+.bubble {
+  position: relative;
+  max-width: 70%;
+  padding: 9px 13px 6px;
+  border-radius: var(--r-lg);
+  font-size: 15px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.bubble--peer {
+  background: var(--c-surface);
+  border-top-left-radius: 5px;
+}
+
+.bubble--me {
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  border-top-right-radius: 5px;
+}
+
+.bubble__time {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  opacity: 0.55;
+  text-align: right;
+}
+
+/* 底部输入栏 */
+.chatbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-divider);
+  flex: 0 0 auto;
+}
+
+.chatbar__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--r-lg);
+  background: var(--c-surface-sunken);
+  font-size: 15px;
+}

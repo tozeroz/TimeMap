@@ -1,0 +1,45 @@
+/*
+ * 设计令牌 —— 取自目标 app 的实测截图采样。
+ * 采样方式：对 .mumu-capture 里的原版截图逐区域取色（1080x1920 基准）。
+ * 改这里的值就等于全局调色。
+ */
+:root {
+  /* 基础色 */
+  --c-bg: #f7f8fa;
+  --c-surface: #ffffff;
+  --c-surface-sunken: #f2f3f5;
+  --c-text: #101010;
+  --c-text-2: #4a4a4a;
+  --c-text-3: #949499;
+  --c-divider: #ececee;
+
+  /* 主色（黑）与强调 */
+  --c-primary: #111111;
+  --c-primary-fg: #ffffff;
+  --c-accent: #3b6ef5; /* 蓝色气泡 / 链接 */
+  --c-accent-soft: #e8effe;
+  --c-danger: #f5453b;
+
+  /* 圆角与阴影 */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+  --shadow-card: 0 2px 10px rgba(16, 16, 16, 0.06);
+  --shadow-float: 0 6px 20px rgba(16, 16, 16, 0.18);
+
+  /* 尺寸（以 1080x1920 截图按 3x 折算为 CSS px，再按主流机型取整） */
+  --h-statusbar: 28px;
+  --h-header: 52px;
+  --h-tabbar: 58px;
+  --pad-page: 16px;
+  --gap-card: 8px;
+
+  /* 字号 */
+  --f-title: 26px;
+  --f-sub: 15px;
+  --f-body: 15px;
+  --f-meta: 13px;
+  --f-tiny: 11px;
+}

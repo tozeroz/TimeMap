@@ -1,0 +1,60 @@
+.tabbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: var(--h-tabbar);
+  /* 右侧留出悬浮按钮的位置，避免 FAB 压住「地图」tab */
+  padding: 0 72px 0 8px;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-divider);
+  flex: 0 0 auto;
+}
+
+.tabbar__item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: var(--r-pill);
+  color: var(--c-text-3);
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.tabbar__item.is-active {
+  background: #f1f2f4;
+  color: var(--c-text);
+  font-weight: 700;
+}
+
+.tabbar__label {
+  max-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabbar__fab {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  box-shadow: var(--shadow-float);
+}
+
+.tabbar__fab:active {
+  transform: translateY(-50%) scale(0.94);
+}

@@ -1,0 +1,438 @@
+.pub {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0d0d0d;
+}
+
+.pub__close {
+  color: #fff;
+}
+
+.pub__poiWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 68vw;
+}
+
+/* 顶部地点胶囊：原版是「深色胶囊 + 定位图标 + 地点名 + 小叉」，
+   深色底 + 细描边在取景画面上更清楚（原来用 14% 白底，在深色页面上几乎看不见） */
+.pub__poi {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-size: 13px;
+  max-width: 56vw;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.pub__poiClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #fff;
+  flex: 0 0 auto;
+}
+
+/* 顶栏「发布」 */
+.pub__publish {
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pub__publish.is-on {
+  background: #fff;
+  color: #111;
+}
+
+/* 草稿条：已拍/已选的照片 */
+.pub__draftBar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 96px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(3px);
+}
+
+.pub__draftItem {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.pub__draftItem img {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.pub__draftRemove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+}
+
+.pub__draftCount {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+}
+
+.pub__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* —— 拍摄模式 —— */
+.pub__viewfinder {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pub__preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 页内实时取景画面（getUserMedia） */
+.pub__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+  display: block;
+}
+
+/* 前置摄像头预览做镜像，符合照镜子的直觉；
+   注意存下来的照片不做镜像（原生相机通行做法），见 liveCamera.ts */
+.pub__video.is-mirrored {
+  transform: scaleX(-1);
+}
+
+/* 没有摄像头 / 打开中 / 打开失败时的占位 */
+.pub__camFallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 32px;
+  background: #111;
+  text-align: center;
+}
+
+.pub__camFallbackIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pub__camFallbackText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.pub__camRetry {
+  padding: 8px 20px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 14px;
+}
+
+.pub__gridlines {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+  background-size: 33.33% 33.33%;
+  pointer-events: none;
+}
+
+.pub__flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0.85;
+}
+
+.pub__zooms {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+}
+
+.pub__zoom {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.pub__zoom.is-active {
+  background: #fff;
+  color: #111;
+}
+
+/* —— 文字模式（图文编辑器）—— */
+.pub__editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px var(--pad-page) 10px;
+  background: #0d0d0d;
+}
+
+.pub__textarea {
+  flex: 1 1 auto;
+  min-height: 120px;
+  resize: none;
+  background: transparent;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.pub__textarea::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.pub__thumbs {
+  display: flex;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.pub__thumbImg {
+  width: 78px;
+  height: 78px;
+  border-radius: var(--r-md);
+  object-fit: cover;
+}
+
+.pub__thumbAdd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 78px;
+  height: 78px;
+  border-radius: var(--r-md);
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.pub__fonts {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pub__font {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+}
+
+.pub__font.is-active {
+  background: #fff;
+  color: #111;
+  font-weight: 600;
+}
+
+/* —— 语音模式 —— */
+.pub__voice {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.pub__wave {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 70px;
+}
+
+.pub__wave span {
+  width: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.pub__voiceTip {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* —— 底部控制条 —— */
+.pub__controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 26px 8px;
+  background: #0d0d0d;
+  flex: 0 0 auto;
+}
+
+/* 两侧的圆形键：左=相册，右=前后置切换 */
+.pub__side {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.pub__side:disabled {
+  opacity: 0.45;
+}
+
+.pub__side.is-off {
+  opacity: 0.35;
+}
+
+.pub__side--ghost {
+  background: transparent;
+}
+
+/* 模式切换单独一行，不跟三个主键抢位置。
+   注意：这里必须显式写颜色 —— 深色页面不会自动继承白色文字，
+   之前漏了这句，结果「语音 / 文字」两个标签是接近黑色的，在深色底上根本看不见。 */
+.pub__modesRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 4px 0 18px;
+  background: #0d0d0d;
+  color: rgba(255, 255, 255, 0.6);
+  flex: 0 0 auto;
+}
+
+.pub__mode {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 15px;
+}
+
+.pub__mode.is-active {
+  color: #fff;
+  font-weight: 700;
+}
+
+.pub__shutter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--r-pill);
+  background: transparent;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.18);
+}
+
+/* 快门内圈：更像原生相机 */
+.pub__shutterInner {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-pill);
+  background: #fff;
+}
+
+.pub__shutter:disabled {
+  opacity: 0.4;
+}
+
+.pub__shutter--voice {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  box-shadow: none;
+}
+
+.pub__shutter:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.pub__send {
+  padding: 0 22px;
+  height: 44px;
+  border-radius: var(--r-pill);
+  background: #fff;
+  color: #111;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pub__send:disabled {
+  opacity: 0.45;
+}

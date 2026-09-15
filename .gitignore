@@ -1,0 +1,31 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+*.log
+
+# Capacitor / Android 构建产物
+app/android/.gradle/
+app/android/app/build/
+app/android/build/
+app/android/local.properties
+app/android/.idea/
+app/android/captures/
+app/android/app/src/main/assets/public/
+app/android/app/src/main/assets/capacitor.config.json
+*.apk
+*.aab
+*.keystore
+
+# 勘察与对比的原始截图（体积大，且是外部 app 的截图，不进版本库）
+.mumu-capture/
+.playwright-mcp/
+*.png
+
+# 工具临时
+tools/tmp/
+
+# 系统
+Thumbs.db
+desktop.ini
+.DS_Store
