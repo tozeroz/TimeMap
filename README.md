@@ -7,17 +7,27 @@
 
 | 交付物 | 位置 |
 |---|---|
-| **可安装 APK** | `app/android/app/build/outputs/apk/debug/app-debug.apk`（约 4.3 MB） |
-| 源码 | `app/src/`（23 个页面组件 + 数据层 + 组件层） |
+| **可安装 APK** | `app/android/app/build/outputs/apk/debug/app-debug.apk`（约 11 MB，见下方说明） |
+| 源码 | `app/src/`（页面组件 + 数据层 + 组件层 + 原生能力封装） |
 | mock 数据 | `app/src/data/mock.ts`（唯一数据源） |
+| 地图 Key 配置 | `app/.env.example` → 复制为 `app/.env.local`（仓库不含真 Key） |
 | 页面地图 | `docs/page-map.md` |
 | 一致性对比报告 | `docs/comparison.md` |
 | 设备端验收报告 | `docs/device-walkthrough.md` |
+| 真实能力接入记录 | `docs/real-map-and-posting.md` |
 | 事故报告（对话异常停止） | `docs/incident-2026-09-12-turn-abort.md` |
 | 原版截图 | `.mumu-capture/sweep/`（18 张） |
 | demo 截图（浏览器） | `.mumu-capture/demo/`（22 张） |
 | demo 截图（真机） | `.mumu-capture/device/`（22 张） |
 | 勘察与构建脚本 | `tools/` |
+
+> **关于 APK 体积（4 MB → 11 MB 是正常的）**：仓库里**不含 APK**，只有源码
+> （`*.apk` 与构建产物都在 `.gitignore` 里，从未进过 git）。
+> 体积增长全部来自原生插件的 Java 依赖，不是我们的代码：当前 dex 合计 7.06 MB（未压缩），
+> 其中 `androidx` 3.55 MB、`com.google.android.material` 1.03 MB、
+> `com.google.android.gms`（Play Services，定位用）0.44 MB、
+> `androidx.camera`（相册/相机用）0.39 MB；而我们自己的 Web 产物只有 **208 KB**。
+> 最初 4.3 MB 是还没接任何原生插件时的裸 Capacitor 包。
 
 ## 二、安装与运行
 
@@ -33,12 +43,14 @@ APK 信息：
 |---|---|
 | applicationId | `com.campusx.demo`（**故意与目标 app 区分**，不会覆盖原版） |
 | 应用名 | 校园 |
-| minSdk / targetSdk | 28 / 34（由 Capacitor 决定，与目标 app 的 28/34 一致） |
+| minSdk / targetSdk | 24 / 36（由 Capacitor 8 决定） |
 | 屏幕方向 | 竖屏锁定 |
-| 权限 | 仅 `INTERNET`（`apkanalyzer manifest permissions` 校验） |
+| 权限 | `INTERNET`、`CAMERA`、`READ_MEDIA_IMAGES`、`READ_EXTERNAL_STORAGE`(≤32)、`ACCESS_FINE_LOCATION`、`ACCESS_COARSE_LOCATION`（`ACCESS_NETWORK_STATE` 由定位依赖带入） |
 
-> 注：模拟器 `dumpsys package` 里还会列出 `QUERY_ALL_PACKAGES`，
-> 那是平台侧的额外条目；APK 二进制 Manifest 里并没有它（已用 `apkanalyzer` 核对）。
+> 这些是接完真实能力之后**实际**需要的最小集合，可用
+> `apkanalyzer manifest permissions <apk>` 复核。
+> 另：模拟器 `dumpsys package` 里会列出 `QUERY_ALL_PACKAGES`（平台侧条目），
+> APK 二进制 Manifest 里没有它 —— Manifest 里显式加了 `tools:node="remove"`。
 
 ## 二·五、配置地图 Key（可选，不配也能跑）
 
@@ -139,11 +151,22 @@ app/
     App.tsx                # 路由分发
     router.ts              # 极简 hash 路由（无第三方依赖）
     data/mock.ts           # 全部 mock 数据（唯一数据源）
+    data/store.ts          # 本地帖子库（localStorage 持久化）
     components/            # Shell（手机外壳/状态栏）、TabBar、icons
-    screens/               # 23 个页面组件，每个配同名 css
+    screens/               # 26 个页面组件，每个配同名 css
+    native/                # 原生能力封装（10 个模块）
+      camera.ts            #   系统相机 / 相册（@capacitor/camera）
+      liveCamera.ts        #   发布页页内实时取景（getUserMedia）
+      geo.ts               #   真实定位（@capacitor/geolocation）
+      keys.ts              #   地图 Key 读取（占位符 + Vite 环境变量）
+      mapApi.ts            #   四套底图的统一句柄
+      TencentMap.tsx       #   腾讯 GL SDK（首选）
+      AmapMap.tsx          #   高德 JSAPI 1.4（第二顺位）
+      RealMap.tsx          #   栅格瓦片 Leaflet（无 Key 兜底）
+      mapTiles.ts          #   瓦片源配置
     styles/                # tokens.css（设计令牌）、global.css、pages.css
   android/                 # Capacitor 生成的安卓工程（已锁定竖屏、移除多余权限）
-docs/                      # 页面地图 / 对比报告 / 设备验收 / 事故报告
+docs/                      # 页面地图 / 对比报告 / 设备验收 / 实现记录 / 事故报告
 patches/                   # DeepSeekEyes 插件补丁（与本 demo 无关，见事故报告）
-tools/                     # 勘察、截图、构建、设备走查脚本
+tools/                     # 勘察、截图、构建、设备走查、一键验收脚本
 ```
