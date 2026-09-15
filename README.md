@@ -40,6 +40,26 @@ APK 信息：
 > 注：模拟器 `dumpsys package` 里还会列出 `QUERY_ALL_PACKAGES`，
 > 那是平台侧的额外条目；APK 二进制 Manifest 里并没有它（已用 `apkanalyzer` 核对）。
 
+## 二·五、配置地图 Key（可选，不配也能跑）
+
+仓库里**不含任何真实 Key**。地图 Key 走 Vite 环境变量：
+
+```powershell
+cd 'G:\demo map\app'
+Copy-Item .env.example .env.local     # .env.local 已被 .gitignore 忽略
+# 编辑 .env.local，填上自己的 Key：
+#   VITE_TENCENT_MAP_KEY=        ← https://lbs.qq.com/dev/console/key/manage
+#   VITE_AMAP_JS_KEY=            ← https://console.amap.com/dev/key/app
+#   VITE_AMAP_SECURITY_CODE=
+pnpm build; npx cap sync android      # 重新打包才会生效
+```
+
+没填 Key 会怎样（已验证）：地图**不会**去请求官方 SDK（省掉一次注定失败的等待），
+直接降级到不需要 Key 的栅格瓦片；瓦片也不可达时再退到离线自绘底图。功能不中断。
+
+> 为什么 Key 不写进仓库：这两家都是前端 JS SDK，Key 最终必然随包下发到客户端，
+> 但「随包下发」不等于「该公开在 GitHub 上」—— 公开仓库里的 Key 会被爬虫扫走，直接消耗配额。
+
 ## 三、页面覆盖（对照 APK 内的 TheRouter 路由表）
 
 原版共 25 条路由，其中 22 条是有界面的页面，**全部复刻**；

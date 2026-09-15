@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { MapMarker } from '../data/mock'
 import { posts } from '../data/mock'
 import type { GeoFix } from './geo'
-import { TENCENT_MAP_KEY } from './keys'
+import { hasTencentKey, TENCENT_MAP_KEY } from './keys'
 import type { MapHandle } from './mapApi'
 import { CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
@@ -73,6 +73,11 @@ export function loadTencentSdk(): Promise<TencentSdk | null> {
     }
     if (window.TMap) {
       resolve(window.TMap)
+      return
+    }
+    // 没配 Key 就别去请求了：注定失败，还会白等一次网络超时
+    if (!hasTencentKey()) {
+      resolve(null)
       return
     }
     const script = document.createElement('script')

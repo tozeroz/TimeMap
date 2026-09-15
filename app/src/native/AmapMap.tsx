@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { MapMarker } from '../data/mock'
 import { posts } from '../data/mock'
 import type { GeoFix } from './geo'
-import { AMAP_JS_KEY, AMAP_SECURITY_CODE } from './keys'
+import { AMAP_JS_KEY, AMAP_SECURITY_CODE, hasAmapKey } from './keys'
 import type { MapHandle } from './mapApi'
 import { CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
@@ -72,6 +72,11 @@ export function loadAmapSdk(): Promise<AMapSdk | null> {
     }
     if (window.AMap) {
       resolve(window.AMap)
+      return
+    }
+    // 没配 Key 就别去请求了：注定失败，还会白等一次网络超时
+    if (!hasAmapKey()) {
+      resolve(null)
       return
     }
     window._AMapSecurityConfig = { securityJsCode: AMAP_SECURITY_CODE }
