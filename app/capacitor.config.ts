@@ -12,15 +12,16 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   android: {
     /**
-     * 必须开：WebView 的页面来源是 https://localhost（见下面的 androidScheme），
-     * 而 M1 的后端只有公网 IP、没有证书，接口是 http://8.148.156.146。
-     * 「https 页面请求 http 资源」就是混合内容，WebView 默认直接拦掉，
-     * 表现为 fetch 立刻失败（TypeError: Failed to fetch），界面上看起来像"发不出去"。
+     * M2 起改为 false。
      *
-     * 明文本身仍然只对后端那一个 IP 放行，见 android/app/src/main/res/xml/network_security_config.xml。
-     * M6 上了 HTTPS 之后，这项应该改回 false。
+     * M1 时期之所以必须开：页面来源是 https://localhost，而后端只有公网 IP、没有证书，
+     * 接口是 http://8.148.156.146 —— 「HTTPS 页面请求 HTTP 资源」属于混合内容，默认被拦。
+     *
+     * M2 之后后端已经是 https://8.148.156.146（临时私有 CA + IP SAN 叶子证书，
+     * 由 Network Security Config 内置该 CA），页面与接口同为 https，混合内容不复存在，
+     * 于是这项临时债与明文例外**同时收回**。
      */
-    allowMixedContent: true,
+    allowMixedContent: false,
   },
   server: {
     /**

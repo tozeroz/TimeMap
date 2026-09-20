@@ -1,22 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Network Security Config（M1 引入）。
+  Network Security Config。
 
-  背景：后端目前只有公网 IP、没有域名，也还没有 HTTPS 证书，
-  客户端必须走 http://8.148.156.146。而 Android 9(API 28) 起默认禁止明文流量，
-  所以必须在这里显式开口子。
+  M2 起后端已经是 HTTPS（临时私有 CA 签发、叶子证书带 IP SAN），
+  于是 M1 时期留下的**两项临时债同时收回**：
 
-  **只对这一个 IP 开口子**，而不是用 android:usesCleartextTraffic="true" 全校放开：
-  全局放开等于允许这个 App 对任意域名发明文请求，属于不必要的攻击面。
-  以后接了域名 + HTTPS，直接删掉这个 domain-config 即可。
+    1) 明文例外（cleartextTrafficPermitted）——不再需要，全局与后端域名都禁止明文；
+    2) allowMixedContent ——不再需要，因为页面 https://localhost 请求的也是 https://<IP>，
+       不再是"HTTPS 页面加载 HTTP 资源"的混合内容。
 
-  M6 硬化阶段的任务：上 HTTPS（Let's Encrypt），然后把这里的明文例外去掉。
+  这里用 trust-anchors 内置临时私有 CA 的公钥证书（@raw/campus_demo_ca）。
+  要点：
+    - **信任链与主机身份校验是两道独立检查**。内置 CA 只解决"这张证书是不是我信任的 CA 签的"；
+      HTTPS 仍会校验证书里的地址是否与请求地址一致。所以叶子证书必须有
+      `subjectAltName = IP:8.148.156.146`（iPAddress 类型）—— 见 ops/tls/gen-certs.sh。
+    - 绝不实现 always-true 的 HostnameVerifier 去绕过校验（等于自废 MITM 防护）。
+    - 采用"私有 CA 签叶子"而不是"直接钉自签叶子"：叶子轮换/到期时不必重新发 APK。
+
+  M6 计划：换成真实域名 + 公共 CA + 自动续期，并删除本文件里的临时 CA 与 @raw/campus_demo_ca。
 -->
 <network-security-config>
-    <!-- 默认策略保持严格：未列出的域名一律禁止明文 -->
+    <!-- 默认策略从严：未列出的域名一律禁止明文 -->
     <base-config cleartextTrafficPermitted="false" />
 
-    <domain-config cleartextTrafficPermitted="true">
+    <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="false">8.148.156.146</domain>
+        <trust-anchors>
+            <!-- 临时私有 Root CA（只信任我们自己签发的叶子） -->
+            <certificates src="@raw/campus_demo_ca" />
+            <!-- 保留系统 CA：将来切到真实域名时无需再改这一处 -->
+            <certificates src="system" />
+        </trust-anchors>
     </domain-config>
 </network-security-config>
