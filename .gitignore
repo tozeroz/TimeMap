@@ -4,6 +4,15 @@ dist/
 build/
 *.log
 
+# 服务器私钥 / 凭据 —— 绝不入库
+*.pem
+*.ppk
+*.key
+TimeMap.pem
+.env
+.env.*
+!.env.example
+
 # Capacitor / Android 构建产物
 app/android/.gradle/
 app/android/app/build/
