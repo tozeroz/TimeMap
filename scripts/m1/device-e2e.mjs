@@ -12,11 +12,27 @@
  * element.click() 绕过浏览器命中测试 —— 按钮被别的透明层盖住时它照样"成功"，
  * 这个坑在 Map 的 Tencent GL 图层上已经踩过一次（弹窗看得见点不动）。
  *
- * 用法：node scripts/m1/device-e2e.mjs [标记文本]
+ * 用法：node scripts/m1/device-e2e.mjs [标记文本] [--session-file <json 文件>]
+ *
+ * M2 起发帖需要会话，所以 Gate 用 --session-file 把一个真实登录得到的会话
+ * 注入到 App 的 localStorage（登录界面属于 M3，这里由测试夹具提供会话）。
+ * 会话文件里含 bearer token，**不要提交进仓库、也不要打印到证据里**。
  * 前置：adb forward tcp:9222 localabstract:webview_devtools_remote_<pid>
  */
+import { readFileSync } from 'node:fs'
 
-const marker = process.argv[2] || `M1-真机 DEV-${Date.now()}`
+const argv = process.argv.slice(2)
+let sessionFile = null
+const positional = []
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === '--session-file') {
+    sessionFile = argv[++i]
+  } else {
+    positional.push(argv[i])
+  }
+}
+
+const marker = positional[0] || `M1-真机 DEV-${Date.now()}`
 const BODY = `${marker} 设备端发布页真实触摸写入`
 
 const targets = await (await fetch('http://127.0.0.1:9222/json')).json()
@@ -116,6 +132,22 @@ function record(name, detail) {
 
 // ---------------------------------------------------------------------------
 console.log(`标记: ${marker}`)
+
+// 0a. 注入会话（M2 起发帖必须带 token）。注入后必须 reload ——
+//     session.ts 会把首次读到的值缓存住，不 reload 的话本次运行读到的仍是旧状态。
+if (sessionFile) {
+  const session = JSON.parse(readFileSync(sessionFile, 'utf8'))
+  await evaluate(
+    `localStorage.setItem('campus.demo.session.v1', ${JSON.stringify(JSON.stringify(session))})`,
+  )
+  await evaluate(`location.href = '#/campus'; location.reload()`)
+  await wait(3000)
+  const injected = await evaluate(
+    `(() => { const raw = localStorage.getItem('campus.demo.session.v1'); if (!raw) return 'missing'; const s = JSON.parse(raw); return 'ok:' + s.user.handle })()`,
+  )
+  if (!String(injected).startsWith('ok:')) throw new Error(`会话注入失败: ${injected}`)
+  record('注入会话', String(injected))
+}
 
 // 0. 回到校园页
 await evaluate(`location.hash = '#/campus'`)

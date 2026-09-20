@@ -87,6 +87,18 @@ export function buildServer(deps: ServerDeps) {
     deps.loginWindowSeconds * 1000,
   )
 
+  /**
+   * 预热 dummy 哈希。
+   *
+   * 不预热的话，进程启动后**第一次**"用户不存在"的登录要多跑一次 scrypt
+   * （一次是生成 dummy 哈希，一次是拿它校验），耗时约 3 倍于普通失败 ——
+   * 实测就是这么看到的：0.238s vs 0.074s。
+   * 这一发差异虽然只是首调用，但它本身就是一个可观测的时间信号，
+   * 而且会让"两条分支耗时接近"这条 Gate 断言变得不稳定。
+   * 启动时先算好，之后两条分支的开销就一致了。
+   */
+  void getDummyHash()
+
   app.addHook('onRequest', async (req, reply) => {
     const origin = req.headers.origin
     if (typeof origin === 'string' && allowed.has(origin)) {

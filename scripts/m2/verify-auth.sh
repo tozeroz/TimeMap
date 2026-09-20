@@ -15,12 +15,29 @@ SEED_USER=anmoss
 SEED_PASS=seed-password-1
 WRONG_PASS=definitely-wrong-password
 
-# 只保留前 8 位用于日志定位；完整 token 只存在变量里
-redact() { local t="$1"; printf '%s…(len=%s)' "${t:0:8}" "${#t}"; }
+# 只打印长度，连前缀都不打 —— 审核记录 05 要求 bearer 绝不进入 Gate 证据，
+# 而"前 8 位"虽然不足以还原 token，仍属于不必要的暴露。长度足够用于排查。
+redact() { printf 'len=%s' "${#1}"; }
 
 json_get() { # json_get <json> <key>
   printf '%s' "$1" | sed -n "s/.*\"$2\":\"\([^\"]*\)\".*/\1/p" | head -1
 }
+
+echo "=== 0. 重置进程内限流状态（保证本次判定可复现）==="
+# 限流计数在**进程内存**里，反复跑 Gate 会把计数越攒越高，
+# 于是同一份代码时而过、时而"样本不足"——这种不可复现的 Gate 等于没有 Gate。
+# 重启一次服务是最简单且可验证的重置方式（同时也顺带验证了服务能正常重启）。
+systemctl restart campus-backend.service
+READY_S=0
+for i in $(seq 1 60); do
+  if curl -sf -m 2 http://127.0.0.1:3001/api/health >/dev/null 2>&1; then READY_S=$i; break; fi
+  sleep 1
+done
+if curl -sf -m 5 "$BASE/health" >/dev/null 2>&1; then
+  ok "后端已重启并就绪（${READY_S}s），限流计数归零"
+else
+  bad "后端重启后经 Nginx 不可用"
+fi
 
 echo "=== A. 登录成功 ==="
 LOGIN_BODY="{\"handle\":\"$SEED_USER\",\"password\":\"$SEED_PASS\"}"
@@ -50,21 +67,39 @@ echo "  用户不存在  : $CODE2 $BODY2"
 echo
 echo "=== C. 计时：用户不存在也必须跑一次同参数 scrypt（dummy verify）==="
 # 如果只在"密码错"分支做 scrypt，那么"用户不存在"会快一个数量级 —— 依然能枚举用户。
-# 取 3 次最小值（min 比平均值更稳，不受偶发抖动影响）
-t_wrong=99; t_missing=99
-for _ in 1 2 3; do
-  d=$(curl -s -o /dev/null -m 15 -w '%{time_total}' -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
-    -d "{\"handle\":\"$SEED_USER\",\"password\":\"$WRONG_PASS\"}")
-  t_wrong=$(awk -v a="$t_wrong" -v b="$d" 'BEGIN{print (b<a)?b:a}')
-  d=$(curl -s -o /dev/null -m 15 -w '%{time_total}' -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
-    -d '{"handle":"no-such-handle-zzz","password":"whatever-pass"}')
-  t_missing=$(awk -v a="$t_missing" -v b="$d" 'BEGIN{print (b<a)?b:a}')
+#
+# 这里有两个坑，都踩过：
+#  1) 探测用的 handle **必须每次都不同**。用一个固定名字，多次运行后累计失败次数会触发限流，
+#     限流在 scrypt 之前就返回 429（约 2ms），计时样本直接失真 —— 会出现"假失败"。
+#  2) 因此计时循环里要**校验状态码确实是 401**，把 429/网络异常等样本剔除，
+#     并断言至少采到 3 个有效样本，否则这条断言本身就不成立。
+# 取 3 个有效样本的最小值（min 比平均值更稳，不受偶发抖动影响）。
+t_wrong=99; t_missing=99; n_wrong=0; n_missing=0
+PROBE_MISSING="no-such-handle-$$-$RANDOM$RANDOM"
+for _ in 1 2 3 4 5 6; do
+  read -r code d < <(curl -s -o /dev/null -m 15 -w '%{http_code} %{time_total}' -X POST "$BASE/auth/login" \
+    -H 'Content-Type: application/json' -d "{\"handle\":\"$SEED_USER\",\"password\":\"$WRONG_PASS\"}")
+  if [ "$code" = "401" ]; then
+    n_wrong=$((n_wrong + 1))
+    t_wrong=$(awk -v a="$t_wrong" -v b="$d" 'BEGIN{print (b<a)?b:a}')
+  fi
+  read -r code d < <(curl -s -o /dev/null -m 15 -w '%{http_code} %{time_total}' -X POST "$BASE/auth/login" \
+    -H 'Content-Type: application/json' -d "{\"handle\":\"$PROBE_MISSING\",\"password\":\"whatever-pass\"}")
+  if [ "$code" = "401" ]; then
+    n_missing=$((n_missing + 1))
+    t_missing=$(awk -v a="$t_missing" -v b="$d" 'BEGIN{print (b<a)?b:a}')
+  fi
+  [ "$n_wrong" -ge 3 ] && [ "$n_missing" -ge 3 ] && break
 done
-echo "  密码错最短耗时     : ${t_wrong}s"
-echo "  用户不存在最短耗时 : ${t_missing}s"
-awk -v w="$t_wrong" -v m="$t_missing" 'BEGIN{ exit !(m >= 0.5*w) }' \
-  && ok "不存在分支耗时 ≥ 密码错分支的 50%（dummy scrypt 生效）" \
-  || bad "不存在分支明显更快，说明没有跑 dummy scrypt（可枚举用户）"
+echo "  密码错最短耗时     : ${t_wrong}s  (有效样本 $n_wrong)"
+echo "  用户不存在最短耗时 : ${t_missing}s  (有效样本 $n_missing)"
+if [ "$n_wrong" -lt 3 ] || [ "$n_missing" -lt 3 ]; then
+  bad "计时样本不足（401 样本 密码错=$n_wrong 不存在=$n_missing），无法判定"
+else
+  awk -v w="$t_wrong" -v m="$t_missing" 'BEGIN{ exit !(m >= 0.5*w) }' \
+    && ok "不存在分支耗时 ≥ 密码错分支的 50%（dummy scrypt 生效）" \
+    || bad "不存在分支明显更快，说明没有跑 dummy scrypt（可枚举用户）"
+fi
 
 echo
 echo "=== D. /api/auth/me 与会话状态 ==="

@@ -154,6 +154,10 @@ export function PublishScreen() {
       if (result.ok) {
         markPostSynced(local.id, result.value.id)
         addServerPost(toFeedPost(result.value))
+      } else if (result.status === 401) {
+        // M2 起发帖需要会话；登录界面在 M3 接。这里如实区分"没登录"与"网络不通"，
+        // 免得线上排障时把两种情况混成一句"同步失败"。
+        console.warn('[publish] 未登录（401），帖子只存在本地；登录功能将在 M3 接入')
       } else {
         console.warn('[publish] 同步到服务器失败，帖子已存在本地：', result.reason)
       }

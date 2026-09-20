@@ -1,4 +1,5 @@
 import type { FeedPost, User } from '../data/mock'
+import { authHeaders, clearSession, setSession, type SessionUser } from './session'
 
 /**
  * 后端 API 客户端（M1）。
@@ -33,6 +34,8 @@ const TIMEOUT_MS = 8000
 export interface ApiPost {
   id: string
   author: string
+  /** M2 起由服务端会话决定；M1 历史帖子为 null（当时没有可信身份） */
+  authorId: string | null
   body: string
   place: string | null
   createdAt: string
@@ -40,7 +43,7 @@ export interface ApiPost {
 
 export type ApiResult<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: string }
+  | { ok: false; reason: string; status?: number }
 
 async function request<T>(
   path: string,
@@ -53,13 +56,22 @@ async function request<T>(
   try {
     const res = await fetch(url, {
       method: init?.method ?? 'GET',
-      headers: init?.body ? { 'content-type': 'application/json' } : undefined,
+      headers: {
+        // 有会话就带上；M3 接登录页后这里会自然生效
+        ...authHeaders(),
+        ...(init?.body ? { 'content-type': 'application/json' } : {}),
+      },
       body: init?.body ? JSON.stringify(init.body) : undefined,
       signal: controller.signal,
     })
     const text = await res.text()
     if (!res.ok) {
-      return { ok: false, reason: `HTTP ${res.status}: ${text.slice(0, 200)}` }
+      // 401 单独标出来：上层可以据此提示"需要登录"，而不是当成网络故障
+      return { ok: false, reason: `HTTP ${res.status}: ${text.slice(0, 200)}`, status: res.status }
+    }
+    if (!text) {
+      // 204（logout）没有响应体
+      return { ok: true, value: undefined as T }
     }
     try {
       return { ok: true, value: JSON.parse(text) as T }
@@ -76,20 +88,50 @@ async function request<T>(
   }
 }
 
-/** 取帖子列表（最新的在最前） */
+/** 取帖子列表（最新的在最前）；匿名可读 */
 export function listPosts(): Promise<ApiResult<ApiPost[]>> {
   return request<{ items: ApiPost[] }>('/api/posts').then((r) =>
     r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
   )
 }
 
-/** 发一条文本帖子 */
+/**
+ * 发一条文本帖子。
+ * **注意输入里没有 author**：M2 起作者只能由服务端会话决定，
+ * 客户端一旦提交 author/authorId 会被服务端 strict 400 拒绝（见 server/src/index.ts）。
+ * 这里把字段从类型里去掉，让"想传也传不了"。
+ */
 export function createPost(input: {
   body: string
   place?: string
-  author?: string
 }): Promise<ApiResult<ApiPost>> {
   return request<ApiPost>('/api/posts', { method: 'POST', body: input })
+}
+
+/** 登录：成功后把会话写进本地 */
+export async function login(handle: string, password: string): Promise<ApiResult<SessionUser>> {
+  const r = await request<{ token: string; expiresAt: string; user: SessionUser }>('/api/auth/login', {
+    method: 'POST',
+    body: { handle, password },
+  })
+  if (!r.ok) return r
+  setSession({ token: r.value.token, expiresAt: r.value.expiresAt, user: r.value.user })
+  return { ok: true, value: r.value.user }
+}
+
+/** 退出登录：先让服务端撤销会话，再清本地（服务端失败也要清，否则本地会一直"看起来已登录"） */
+export async function logout(): Promise<void> {
+  try {
+    await request<null>('/api/auth/logout', { method: 'POST', body: {} })
+  } finally {
+    clearSession()
+  }
+}
+
+/** 当前用户（未登录时返回 null，不抛异常） */
+export async function me(): Promise<SessionUser | null> {
+  const r = await request<SessionUser>('/api/auth/me')
+  return r.ok ? r.value : null
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +187,9 @@ export function relativeTime(iso: string): string {
 
 export function toFeedPost(p: ApiPost): FeedPost {
   const author: User = {
-    id: `api:${p.author}`,
+    // 有 authorId 就用它（同一用户在不同设备上会得到同一个 id），
+    // M1 历史帖子没有 id，退化成按名字生成，只影响本地渲染不影响数据
+    id: p.authorId ? `u:${p.authorId}` : `api:${p.author}`,
     name: p.author,
     avatar: avatarFor(p.author),
   }
