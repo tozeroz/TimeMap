@@ -134,7 +134,8 @@ autovacuum_max_workers = 2
 - [x] 三项准备检查（ChatGPT 可对话 / MuMu 可控 / 服务器 SSH 可达）
 - [x] 计划 v2 成文（本文件）
 - [x] **M0 基线冻结 + 环境准备 —— PASS / CLOSED**（锚点见 `docs/m0/ANCHOR.md`）
-- [ ] M1 后端最小闭环（**GO**，规格见第九节）
+- [x] **M1 后端最小闭环 + 文本发帖垂直切片 —— 实现与 Gate 全绿，待审核**（结果见 `docs/m1/REPORT.md`）
+- [ ] M2 数据模型 V0.1 + 认证/鉴权定稿（**NEXT**）
 
 ---
 

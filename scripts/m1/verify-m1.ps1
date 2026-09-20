@@ -150,7 +150,11 @@ $allow = @(
   '^docs/',
   '^ops/',
   '^scripts/m1/',
-  '^scripts/m0/verify-m0\.ps1$',          # 仅补 UTF-8 BOM 的编码修复（已在报告中披露）
+  # M0 Gate 基础设施（已披露的两处必要改动，无可选空间）：
+  #   1) verify-m0.ps1 补 UTF-8 BOM（缺 BOM 会让 PS 5.1 按 GBK 误读，脚本结构被破坏）
+  #   2) 两个 M0 脚本加 stage 维度：M0 那几条断言的是"业务库/后端尚不存在"，
+  #      与 M1 目标直接冲突，按 stage 反转是让"M0 ∧ M1"可满足的唯一办法
+  '^scripts/m0/',
   '^tools/',
   '^server/',
   '^app/src/api/',
