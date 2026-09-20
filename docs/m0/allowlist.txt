@@ -1,0 +1,6 @@
+PLAN.md
+.gitignore
+docs/**
+ops/**
+scripts/m0/**
+tools/**

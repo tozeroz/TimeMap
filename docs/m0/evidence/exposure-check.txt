@@ -1,0 +1,17 @@
+﻿M0 暴露面验证记录（外部 vantage point）
+时间: 2026-09-21 02:51:28
+
+方法: check-host.net 多节点拨测（独立于本机与模拟器网络）
+
+HTTP http://8.148.156.146/health
+  节点 in2 (India Rajpura)   : Connection timed out
+  节点 ir2 (Iran Isfahan)    : Connection timed out
+  节点 kz1 (Kazakhstan)      : Connection timed out
+  永久链接: https://check-host.net/check-report/4c825447k601
+
+TCP  8.148.156.146:22 (对照)
+  见下方输出
+
+结论: 80 端口从公网不可达 → 阿里云安全组尚未开放 80（需在控制台放行）
+      服务器内部验证已通过: curl http://127.0.0.1/health -> 200
+      {"status":"ok","service":"campus-gateway","stage":"M0"}

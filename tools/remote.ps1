@@ -32,24 +32,22 @@ if (-not (Test-Path -LiteralPath $Key)) {
   exit 2
 }
 
-# 组装要执行的脚本正文
-$script = $null
+# 组装要执行的脚本正文（按**字节**处理，避免 PS 5.1 默认 ANSI 解码把 UTF-8 中文读坏，
+# 那会连带破坏脚本结构 —— 已经踩过一次：中文 log 串被截断，后面几行代码被当成文本打印而不是执行）
 if ($Stdin) {
-  $script = [Console]::In.ReadToEnd()
+  $bytes = [Text.Encoding]::UTF8.GetBytes([Console]::In.ReadToEnd())
 } elseif ($ScriptFile) {
   if (-not (Test-Path -LiteralPath $ScriptFile)) { Write-Error "脚本不存在: $ScriptFile"; exit 2 }
-  $script = Get-Content -LiteralPath $ScriptFile -Raw
+  $bytes = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $ScriptFile).Path)
 } elseif ($Command) {
-  # 不加 set -e：探测类命令希望「跑完所有检查再报告」，而不是第一个失败就退出。
-  # 需要严格模式就在 -Command 内容里自己写 set -e。
-  $script = $Command
+  $bytes = [Text.Encoding]::UTF8.GetBytes("$Command")
 } else {
   Write-Error '需要 -Command / -ScriptFile / -Stdin 之一'
   exit 2
 }
 
-# base64 传输：远端解码后交给 bash，stdin 直通，便于交互式/流式输出
-$b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($script))
+# base64 传输：远端正则解码后交给 bash
+$b64 = [Convert]::ToBase64String($bytes)
 $remote = "echo '$b64' | base64 -d | bash"
 
 & ssh -i $Key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=$TimeoutSec -o BatchMode=yes $Target $remote
