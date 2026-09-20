@@ -1,8 +1,22 @@
 #!/usr/bin/env bash
 # M1 后端侧验证（对应 docs/m1/SPEC.md 第六节 Gate 的第 1/2/3/5/6/7 组）
 # 不用 set -e：每步独立报告，失败继续，最后汇总退出码。
+#
+# 用法: verify-backend.sh [M1|M2]      ← 注意是 $1：脚本经 stdin 交给 bash 时，
+#   想传参必须用 `bash -s -- M2` 或先落盘再 `bash /tmp/x.sh M2`（Gate 用的是后者）。
+#   M1（默认）：按 M1 的验收语义跑（写路径不需要鉴权）
+#   M2        ：M2 起写路径必须带会话，脚本会先登录取得 token
+#
+# 为什么要有 stage 维度：M1 有几条断言是"M1 阶段的事实"
+#   （例如"posts 恰好 5 个字段""schema_migrations 恰好 1 个版本""无 token 也能写"）。
+#   把它们当永久不变量用，到 M2 必然假失败 —— 这正是审核记录 04 指出的那类错误。
+#   这里已改成两种处理：
+#     - 能改成"真正的不变量"的（必需列都在、applied==expected）就改成不变量；
+#     - 确实只属于某阶段的（无 token 写入）就按 stage 分支。
+#
 # 说明：第 0 组（M0 regression）和第 8 组（SCOPE）在 PowerShell 侧做，
 #       第 4 组（设备 UI 路径）在 scripts/m1/verify-device.ps1 做。
+stage="${1:-M1}"
 FAILED=0
 ok()   { printf 'PASS %s\n' "$1"; }
 bad()  { printf 'FAIL %s\n' "$1"; FAILED=1; }
@@ -41,10 +55,17 @@ echo "  首次日志: $(cat /tmp/m1-tmp1.log | tr '\n' ' ')"
 printf '%s' "$R1" | grep -q '"status":"ready"' && ok "空库启动后 readiness=ready（schema 已建）" || bad "空库启动后未就绪"
 
 # 表与索引真的建出来了吗
-# posts 的字段就是 5 个：id / author_name / body / place / created_at
-SCHEMA="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -U campus -d "$TMPDB" -Atc \
-  "select count(*) from information_schema.columns where table_name='posts'")"
-[ "$SCHEMA" = "5" ] && ok "posts 表 5 个字段（id/author_name/body/place/created_at）" || bad "posts 表字段数异常: $SCHEMA（期望 5）"
+# 注意：**不要断言"字段数恰好等于 5"**。那是 M1 阶段的事实，M2 加 author_id/place_id 后就变了，
+# 这种"阶段事实"当永久不变量用，必然产生假失败（M2 Gate 上实际踩到过）。
+# 正确做法是断言"M1 需要的列都在"——这才是不随阶段失效的不变量。
+REQ_COLS="id author_name body place created_at"
+MISSING=""
+for c in $REQ_COLS; do
+  n="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -U campus -d "$TMPDB" -Atc \
+    "select count(*) from information_schema.columns where table_name='posts' and column_name='$c'")"
+  [ "$n" = "1" ] || MISSING="$MISSING $c"
+done
+[ -z "$MISSING" ] && ok "posts 表包含全部必需列（$REQ_COLS）" || bad "posts 表缺少列:$MISSING"
 IDX="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -U campus -d "$TMPDB" -Atc \
   "select count(*) from pg_indexes where tablename='posts' and indexname like '%created_at%'")"
 [ "$IDX" -ge 1 ] && ok "created_at 索引存在" || bad "created_at 索引缺失"
@@ -73,7 +94,11 @@ echo "  二次日志: $LOG2"
 if [ "$APPLIED_AT_1" = "$APPLIED_AT_2" ]; then ok "重复执行迁移幂等（applied_at 未变）"; else bad "迁移被重复应用"; fi
 printf '%s' "$LOG2" | grep -q 'applied=001_init' && bad "二次启动又重新应用了 001_init" || ok "二次启动未重复应用"
 VER_CNT="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -U campus -d "$TMPDB" -Atc "select count(*) from schema_migrations")"
-[ "$VER_CNT" = "1" ] && ok "schema_migrations 恰有 1 个版本" || bad "版本数异常: $VER_CNT"
+# 同样不断言"恰好 1 个版本"（M2 起会变成 3 个）。
+# 有意义的不变量是：至少应用了 001_init，且与代码里的迁移数一致（后者由 /api/ready 保证）。
+HAS_INIT="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -U campus -d "$TMPDB" -Atc \
+  "select count(*) from schema_migrations where version='001_init'")"
+[ "$HAS_INIT" = "1" ] && ok "schema_migrations 记录了 001_init（共 $VER_CNT 个版本）" || bad "schema_migrations 未记录 001_init"
 
 kill "$TMP2" 2>/dev/null
 sleep 1
@@ -83,9 +108,31 @@ rm -f /tmp/m1-tmp1.log /tmp/m1-tmp2.log
 # ===========================================================================
 echo
 echo "=== A. [API] 经 Nginx 写一条 ==="
-RESP="$(curl -s -m 10 -X POST http://127.0.0.1/api/posts \
-  -H 'Content-Type: application/json' \
-  -d "{\"body\":\"$MARK 这是一条 M1 垂直切片验证帖\",\"place\":\"北京交通大学\",\"author\":\"M1验证\"}")"
+# M2 起写路径需要会话：先登录（用 seed 用户），后续写请求带上 Authorization。
+# M1 阶段没有认证，这里是空数组。
+AUTH_HDR=()
+if [ "$stage" = "M2" ]; then
+  LOGIN_JSON="$(curl -s -m 15 -X POST http://127.0.0.1/api/auth/login \
+    -H 'Content-Type: application/json' \
+    -d '{"handle":"anmoss","password":"seed-password-1"}')"
+  TOKEN="$(printf '%s' "$LOGIN_JSON" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+  if [ -n "$TOKEN" ]; then
+    AUTH_HDR=(-H "Authorization: Bearer $TOKEN")
+    ok "已取得会话（M2 写路径需要鉴权；token 长度 ${#TOKEN}，不打印内容）"
+  else
+    bad "M2 需要会话但登录失败：$(printf '%s' "$LOGIN_JSON" | head -c 120)"
+  fi
+fi
+
+# M2 起 author 字段属于**禁止字段**（strict schema 会 400），所以按 stage 决定是否带上。
+# M1 阶段没有认证，作者就是客户端给的占位名 —— 这正说明 M1 的写法不能带到 M2。
+if [ "$stage" = "M2" ]; then
+  POST_PAYLOAD="{\"body\":\"$MARK 这是一条垂直切片验证帖\",\"place\":\"北京交通大学\"}"
+else
+  POST_PAYLOAD="{\"body\":\"$MARK 这是一条垂直切片验证帖\",\"place\":\"北京交通大学\",\"author\":\"M1验证\"}"
+fi
+RESP="$(curl -s -m 10 "${AUTH_HDR[@]}" -X POST http://127.0.0.1/api/posts \
+  -H 'Content-Type: application/json' -d "$POST_PAYLOAD")"
 echo "  响应: $RESP"
 POST_ID="$(printf '%s' "$RESP" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 if [ -n "$POST_ID" ]; then ok "POST /api/posts 返回 id"; else bad "POST /api/posts 未返回 id"; fi
@@ -107,10 +154,12 @@ if [ -n "$ROW" ]; then ok "PG 中确有该行（不是内存缓存）"; else bad
 
 echo
 echo "=== D. [API] 校验：空 body 与超长 body ==="
-C1="$(curl -s -m 10 -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1/api/posts -H 'Content-Type: application/json' -d '{"body":"   "}')"
+# 注意顺序：M2 起鉴权在参数校验之前，所以不带 token 的请求会先 401 而不是 400。
+# 要测"校验本身"，就必须带上会话；否则测到的是鉴权，结论会张冠李戴。
+C1="$(curl -s -m 10 "${AUTH_HDR[@]}" -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1/api/posts -H 'Content-Type: application/json' -d '{"body":"   "}')"
 [ "$C1" = "400" ] && ok "空 body → 400" || bad "空 body 期望 400，实际 $C1"
 LONG="$(printf 'x%.0s' $(seq 1 600))"
-C2="$(curl -s -m 10 -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1/api/posts -H 'Content-Type: application/json' -d "{\"body\":\"$LONG\"}")"
+C2="$(curl -s -m 10 "${AUTH_HDR[@]}" -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1/api/posts -H 'Content-Type: application/json' -d "{\"body\":\"$LONG\"}")"
 [ "$C2" = "400" ] && ok "超长 body → 400" || bad "超长 body 期望 400，实际 $C2"
 
 echo

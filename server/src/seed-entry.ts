@@ -45,7 +45,7 @@ async function main() {
       }
       const result = await runSeed(client)
       await client.query('commit')
-      console.log(`[seed] users=${result.users} posts=${result.posts}`)
+      console.log(`[seed] rows=${result.rows} tables=${result.tables.join(',')}`)
     } catch (err) {
       await client.query('rollback').catch(() => undefined)
       throw err

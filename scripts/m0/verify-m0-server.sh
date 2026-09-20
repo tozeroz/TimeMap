@@ -125,7 +125,11 @@ if [ "$mode" = "assert" ]; then
   expect_eq NGINX "local /health == HTTP 200" "$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1/health)" "200"
   expect_eq NGINX "local /health body == expected" "$(curl -s -m 5 http://127.0.0.1/health)" "$HEALTH_BODY"
   chk NGINX ":80 listening" bash -c "ss -lnt | grep -q ':80 '"
-  chk NGINX "/api proxy configuration exists" grep -q 'location /api/' /etc/nginx/sites-available/campus.conf
+  # 检查**生效配置**而不是某个文件：
+  # M2 起 location 被抽到 snippets/campus-locations.inc（80 与 443 共用，避免两处漂移），
+  # 于是"grep sites-available/campus.conf"这种写法会假失败。
+  # nginx -T 打印的是展开 include 之后的完整配置，断言它才与"实际生效"等价。
+  chk NGINX "/api proxy configuration exists (effective config)" bash -c "nginx -T 2>/dev/null | grep -q 'location /api/'"
 
   # ---------- [BACKEND_SYSTEMD] ----------
   # 【阶段相关】M0 要求后端"不存在/未启用"，M1 起要求它 enabled + active
