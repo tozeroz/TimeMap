@@ -2,6 +2,12 @@
 *.sh text eol=lf
 scripts/**/*.sh text eol=lf
 *.mjs text eol=lf
+# 证书/明文密钥材料也必须 LF：
+# PEM 其实是「文本」，被转成 CRLF 后 OpenSSL 与 Android 通常仍能解析，
+# 但为了「任何一台机器 clone 下来构建出的 APK 完全一致」，这里显式固定为 LF。
+*.crt text eol=lf
+*.pem text eol=lf
+*.key text eol=lf
 
 # Windows 侧的 PowerShell 脚本保持自动处理（本仓库主要在 Windows 开发机上执行）
 *.ps1 text
