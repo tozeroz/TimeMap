@@ -135,9 +135,9 @@ autovacuum_max_workers = 2
 - [x] 计划 v2 成文（本文件）
 - [x] **M0 基线冻结 + 环境准备 —— PASS / CLOSED**（锚点见 `docs/m0/ANCHOR.md`）
 - [x] **M1 后端最小闭环 + 文本发帖垂直切片 —— PASS / CLOSED**（审核记录 04；结果见 `docs/m1/REPORT.md`）
-- [x] **M2 认证 + 数据模型 V0.1 + seed + 备份演练 —— 实现完成，Gate 已跑，待审核**
-      （规格 `docs/m2/SPEC.md`、数据模型追溯 `docs/m2/DATA-MODEL.md`、结果 `docs/m2/REPORT.md`）
-- [ ] M3 垂直切片迁移（把 mock 逐页换成真实 API，**NEXT**）
+- [x] **M2 认证 + 数据模型 V0.1 + seed + 备份演练 —— PASS / CLOSED**（审核记录 06）
+      （规格 `docs/m2/SPEC.md`、模型追溯 `docs/m2/DATA-MODEL.md`、结果 `docs/m2/REPORT.md`）
+- [ ] M3 垂直切片迁移（逐页恢复真实行为语义 + 反推/验证数据模型，**NEXT**）
 
 ---
 
@@ -237,11 +237,27 @@ scripts/gates/
 
 ### 10.4 证据纪律
 
-- 缺陷必须分类：`PRODUCT_DEFECT` / `GATE_DEFECT` / `ENVIRONMENT_DEFECT`。
+- 缺陷必须分类（依据审核记录 06 补充第 4 类）：
+
+```
+Gate failure
+├─ PRODUCT_DEFECT        # 产品代码缺陷
+├─ GATE_DEFECT           # 测试/门禁自身缺陷
+├─ ENVIRONMENT_DEFECT    # 执行环境（如脚本编码、权限）
+└─ EXTERNAL_BLOCKER      # 云安全组未开放 / DNS 未配置 / 第三方不可用 / 用户控制台动作未完成
+```
+  补 `EXTERNAL_BLOCKER` 的原因：不能让「443 没开放」被错误归到 environment 或 product defect。
 - 最终 PASS 必须来自**修正后的 Gate + 修正后的实现 + 干净重跑**，不允许用一次成功覆盖掉第一次失败。
 - Gate **只检查、只 FAIL**；自动修复（如补 BOM）必须是显式动作，绝不能成为 Gate 的一步
   —— 否则 Gate 会改变被测试对象。
 - 任何轮询都必须：明确 timeout、不无限等待、失败时打印最后状态并输出 `systemctl` / `journalctl` 诊断。
+- **Gate 要验证 externally meaningful state，而不是 implementation location**
+  （审核记录 06）：例如检查 `nginx -T` 展开后的生效配置，而不是 grep 某个具体文件路径 ——
+  除非那个 location 本身就是 contract。
+- 断言命名要诚实：只证明「不存在分支也跑了 KDF」的断言应叫 `DUMMY_SCRYPT_EXECUTION`，
+  不能叫 `TIMING_ATTACK_SAFE`（后者是过度声明）。
+- **Observed fact ≠ forward-compatible guess**：未被观察到的能力（如 `comments.parent_id`）
+  必须显式标注为待证假设，并限期在后续里程碑给出 `SUPPORTED` / `NOT_SUPPORTED`（后者即删除）。
 
 ---
 

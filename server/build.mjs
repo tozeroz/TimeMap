@@ -52,6 +52,11 @@ const TARGETS = [
     outfile: 'dist/seed.mjs',
     bannerNote: '// Campus seed CLI —— 由 server/build.mjs 生成，请勿手改',
   },
+  {
+    entryPoints: ['src/admin-entry.ts'],
+    outfile: 'dist/admin.mjs',
+    bannerNote: '// Campus 运维 CLI（造账号等）—— 由 server/build.mjs 生成，请勿手改',
+  },
 ]
 
 const built = []
@@ -99,4 +104,18 @@ if (smokeSeed.status !== 2 || !seedOut.includes('缺少 DATABASE_URL')) {
   process.exit(1)
 }
 
-console.log('[build] 冒烟通过：API 产物可被 Node 加载；seed CLI 在无 DATABASE_URL 时按预期拒绝执行')
+// 3) admin 产物：同样是 CLI，无 DATABASE_URL 时应自行拒绝（退出码 2）
+const smokeAdmin = spawnSync(process.execPath, ['dist/admin.mjs', 'list-users'], {
+  encoding: 'utf8',
+  env: { ...process.env, DATABASE_URL: '' },
+})
+const adminOut = `${smokeAdmin.stdout ?? ''}${smokeAdmin.stderr ?? ''}`
+if (smokeAdmin.status !== 2 || !adminOut.includes('缺少 DATABASE_URL')) {
+  console.error('[build] 冒烟失败：admin 产物行为不符合预期')
+  console.error(adminOut.slice(0, 2000))
+  process.exit(1)
+}
+
+console.log(
+  '[build] 冒烟通过：API 产物可被 Node 加载；seed/admin CLI 在无 DATABASE_URL 时按预期拒绝执行',
+)

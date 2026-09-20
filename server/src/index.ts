@@ -3,7 +3,6 @@ import Fastify from 'fastify'
 import {
   createRateLimiter,
   getDummyHash,
-  hashPassword,
   hashToken,
   newSessionToken,
   normalizeHandle,
@@ -33,8 +32,6 @@ const BODY_MAX = 500
 const PLACE_MAX = 60
 const HANDLE_MAX = 40
 const DISPLAY_MAX = 40
-const PASSWORD_MIN = 8
-const PASSWORD_MAX = 200
 const LIST_LIMIT = 50
 
 /** POST /api/posts 只接受这两个字段，多一个就 400 */
@@ -382,47 +379,13 @@ export function buildServer(deps: ServerDeps) {
     }
   })
 
-  // 仅用于本地/演练环境造账号；生产形态下由 seed 或运维显式创建
-  app.post('/api/auth/dev-register', async (req, reply) => {
-    if (process.env.ENABLE_DEV_REGISTER !== '1') {
-      reply.code(404)
-      return { error: 'not_found' }
-    }
-    const payload = (req.body ?? {}) as Record<string, unknown>
-    const handleRaw = typeof payload.handle === 'string' ? payload.handle : ''
-    const displayName = typeof payload.displayName === 'string' ? payload.displayName.trim() : ''
-    const password = typeof payload.password === 'string' ? payload.password : ''
-    const errors: string[] = []
-    if (!handleRaw.trim()) errors.push('handle 必填')
-    if (handleRaw.length > HANDLE_MAX) errors.push(`handle 不能超过 ${HANDLE_MAX} 字`)
-    if (!displayName) errors.push('displayName 必填')
-    if (displayName.length > DISPLAY_MAX) errors.push(`displayName 不能超过 ${DISPLAY_MAX} 字`)
-    if (password.length < PASSWORD_MIN) errors.push(`password 至少 ${PASSWORD_MIN} 位`)
-    if (password.length > PASSWORD_MAX) errors.push(`password 不能超过 ${PASSWORD_MAX} 位`)
-    if (errors.length) {
-      reply.code(400)
-      return { error: 'invalid_payload', details: errors }
-    }
-    const handle = normalizeHandle(handleRaw)
-    try {
-      const exists = await db.pool.query('select 1 from users where lower(handle) = $1', [handle])
-      if (exists.rowCount) {
-        reply.code(409)
-        return { error: 'handle_taken' }
-      }
-      const id = randomUUID()
-      const hash = await hashPassword(password)
-      await db.pool.query(
-        `insert into users (id, handle, display_name, password_hash) values ($1, $2, $3, $4)`,
-        [id, handleRaw.trim(), displayName, hash],
-      )
-      reply.code(201)
-      return { id, handle: handleRaw.trim(), displayName }
-    } catch (err) {
-      reply.code(500)
-      return { error: 'db_error', message: (err as Error).message }
-    }
-  })
+  // 注意：这里**故意没有**注册接口。
+  //
+  // 曾经有一个默认关闭的 POST /api/auth/dev-register（ENABLE_DEV_REGISTER=1 时存在），
+  // 审核记录 06 指出它的长期风险：生产二进制里永久带着一个"条件开启的注册能力"，
+  // 一旦环境变量配错就可能把本来不存在的产品能力暴露出去；而本项目当前并没有注册需求。
+  // 结论：**测试夹具能力不要伪装成业务 API** —— 造账号改走运维 CLI
+  // （server/src/admin-entry.ts → dist/admin.mjs create-user），或直接用 seed 的固定用户。
 
   return app
 }

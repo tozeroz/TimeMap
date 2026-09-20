@@ -1,9 +1,32 @@
 # M2 结果报告：认证 + 数据模型 V0.1 + seed + 备份恢复演练
 
+> **审核结论（记录 06）：M2 ACCEPTED / CLOSED。**
+> ```
+> M2: ACCEPTED
+> AUTH_FUNCTIONAL: PASS
+> TRANSPORT_SECURITY: PASS
+> DATA_MODEL_V0.1: ACCEPTED WITH TWO DEFERRED VALIDATION POINTS
+>   - comments.parent_id
+>   - schools entity
+> BACKUP_RESTORE: PASS
+> SEED_CONVERGENCE: PASS
+> M2_GATE_RESULT: PASS
+> ```
 > 工作单：`docs/m2/SPEC.md`（经审核记录 05 修订，7 项 P0 已并入）
-> 设计审核：审核记录 05 —— **M2 DESIGN CONDITIONAL APPROVAL**
 > 数据模型追溯：`docs/m2/DATA-MODEL.md`
 > 阶段报告口径：**total 22 / observed 19 / evidence-blocked 3**（poi-detail、media-preview、at-panel）
+
+## 零、审核后的收尾（记录 06）
+
+1. **已删除 `POST /api/auth/dev-register`。** 造账号改走运维 CLI：
+   `node /srv/campus/server/dist/admin.mjs create-user <handle> <displayName> <password>`（另有 `list-users`）。
+   原则：**测试夹具能力不要伪装成业务 API**。Gate 新增 L 组，逐一断言
+   `/api/auth/{dev-register,register,signup,password,refresh,reset-password}` 全部 **404**，
+   防止将来被悄悄加回来。
+2. **计时断言改名为 `DUMMY_SCRYPT_EXECUTION`**（原来叫"计时"，容易被读成"常量时间证明"）。
+   它只证明「用户不存在的分支也执行了主要 KDF 成本」，不声明 timing-attack safety。
+3. `comments.parent_id` 与 `schools` 登记为**待证假设**，M3 必须给出
+   `SUPPORTED` 或 `NOT_SUPPORTED`（后者即删除），不允许长期悬空。
 
 ## 一、结论（按审核要求分成两条，不合并）
 
@@ -47,11 +70,12 @@ TRANSPORT_SECURITY: PASS（临时私有 CA + IP SAN，TLSv1.3；明文例外与 
 
 ## 四、必须披露的偏差
 
-### 1) 保留了一个默认关闭的 `dev-register` 接口
+### 1) `dev-register` 已按审核要求删除（记录 06）
 
-`POST /api/auth/dev-register` 只在 `ENABLE_DEV_REGISTER=1` 时存在，否则返回 404。
-用途是本地/演练环境造账号。**审核要求"不要顺手增加注册接口"，这里属于灰色地带**，
-所以写进报告请审核裁量：如果认为连默认关闭也不该有，我会删掉它（生产路径本来就不用它）。
+初版保留了 `POST /api/auth/dev-register`（`ENABLE_DEV_REGISTER=1` 时才存在），
+提交时我把它标为"灰色地带请裁量"。审核裁定：**删除**，理由是一条长期风险 ——
+生产二进制里永久存在一个"条件开启的注册能力"，环境变量配错就可能暴露本不存在的产品能力。
+现已删除，造账号走运维 CLI（`dist/admin.mjs`），并用 Gate L 组锁死。
 
 ### 2) `VITE_API_ORIGIN` 的默认值在 M2 从 http 改成 https
 

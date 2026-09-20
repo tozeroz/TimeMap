@@ -65,8 +65,10 @@ echo "  用户不存在  : $CODE2 $BODY2"
 [ "$BODY1" = "$BODY2" ] && ok "两种失败的响应体完全一致（不可区分）" || bad "两种失败响应体不一致，可用于枚举用户"
 
 echo
-echo "=== C. 计时：用户不存在也必须跑一次同参数 scrypt（dummy verify）==="
-# 如果只在"密码错"分支做 scrypt，那么"用户不存在"会快一个数量级 —— 依然能枚举用户。
+echo "=== C. [DUMMY_SCRYPT_EXECUTION] 用户不存在的分支也必须真的跑一次同参数 scrypt ==="
+# 命名说明（审核记录 06）：这条断言的名字必须诚实 ——
+# 它证明的是「用户不存在时也执行了主要 KDF 成本」，**不是**"认证是常量时间的"。
+# 所以叫 DUMMY_SCRYPT_EXECUTION，不叫 TIMING_ATTACK_SAFE。
 #
 # 这条断言是**粗粒度**的，不是"常量时间证明"：它只区分"跑了一次 scrypt"与"根本没跑"。
 # 实测物理信号很干净：没跑 scrypt ≈ 2ms；跑了一次 ≈ 60~75ms（约 30 倍差距）。
@@ -250,6 +252,22 @@ NEWLY="$(psql -h 127.0.0.1 -U campus -d campus -Atc \
 echo "  M1 遗留 author_id IS NULL: $LEGACY 行；M2 已认证帖: $NEWLY 行"
 [ "$LEGACY" -ge 1 ] && ok "M1 历史帖子 author_id 仍为 NULL（保留了'未知身份'语义）" || bad "M1 历史帖子被赋予了伪造归属"
 [ "$NEWLY" -ge 1 ] && ok "M2 已认证帖 author_id 非空" || bad "M2 帖子归属缺失"
+
+echo
+echo "=== L. 业务 API 里不得存在注册/改密类接口（审核记录 06）==="
+# 曾经有个默认关闭的 POST /api/auth/dev-register。审核指出：即使是默认关闭，
+# 也意味着生产二进制里永久带着一个"条件开启的注册能力"，配错环境变量就可能暴露。
+# 现在造账号走运维 CLI（dist/admin.mjs create-user），业务 API 只保留 login/logout/me。
+for path in /api/auth/dev-register /api/auth/register /api/auth/signup /api/auth/password \
+            /api/auth/refresh /api/auth/reset-password; do
+  code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1$path" \
+    -H 'Content-Type: application/json' -d '{"handle":"x","password":"yyyyyyyy"}')"
+  if [ "$code" = "404" ]; then
+    ok "POST $path → 404（该接口不存在）"
+  else
+    bad "POST $path 返回 $code，期望 404 —— 业务 API 里出现了不该有的能力"
+  fi
+done
 
 echo
 unset PGPASSWORD
