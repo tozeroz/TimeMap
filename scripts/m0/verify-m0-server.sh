@@ -111,7 +111,7 @@ if [ "$mode" = "assert" ]; then
       echo "concurrency=${conc}"
       echo "mem_available_mb=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)"
       echo "swap_used_mb=$(free -m | awk '/Swap/{print $3}')"
-      echo "load_avg=$(awk '{print $1\",\"$2\",\"$3}' /proc/loadavg)"
+      echo "load_avg=$(cut -d' ' -f1-3 /proc/loadavg)"
       echo "nginx_rss_kb=$(ps -o rss= -C nginx 2>/dev/null | awk '{s+=$1} END{print s+0}')"
       echo "postgres_rss_kb=$(ps -o rss= -C postgres 2>/dev/null | awk '{s+=$1} END{print s+0}')"
       echo "oom_kill_delta=$((oom_after - oom_before))"
@@ -135,9 +135,9 @@ fi
 case "$mode" in
   save-boot)
     mkdir -p "$STATE_DIR"
-    cat > "$STATE_FILE" <<EOF
-{"boot_id":"$(cat /proc/sys/kernel/random/boot_id)","saved_at":"$(date -Is)"}
-EOF
+    # 用 printf 而不是 heredoc：heredoc 里的双引号在经过多层传递时容易被吃掉（踩过）
+    printf '{"boot_id":"%s","saved_at":"%s"}\n' \
+      "$(cat /proc/sys/kernel/random/boot_id)" "$(date -Is)" > "$STATE_FILE"
     echo "saved: $STATE_FILE -> $(cat /proc/sys/kernel/random/boot_id)"
     ;;
   check-boot)
