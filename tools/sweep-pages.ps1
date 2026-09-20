@@ -1,4 +1,4 @@
-<#
+﻿<#
   批量勘察目标 app 的核心页面（用 deep link 逐页打开并截图）。
   输出：.mumu-capture/sweep/<序号>-<标签>.png + sweep-report.txt
   注意：变量名不要用 $routes —— 那是 PowerShell 的自动变量。

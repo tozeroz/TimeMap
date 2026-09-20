@@ -1,0 +1,48 @@
+{
+  "screen_id": "group",
+  "title": "群聊",
+  "target_route": "campusx://group",
+  "activity": "com.kairuotu.chat.conversation.GroupChatActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched",
+      "需要群参数"
+    ],
+    "steps": [
+      "deep link campusx://group（未带参数）"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "normal": {
+      "status": "unknown",
+      "evidence": []
+    },
+    "error": {
+      "status": "not_reproducible",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "顶部昵称 + 返回 + 更多",
+    "底部输入框 + 表情 + 加号"
+  ],
+  "navigation": [
+    "返回 → 上一页"
+  ],
+  "persistence": [
+    "消息应持久化（未验证）"
+  ],
+  "known_unknowns": [
+    "群成员列表、@面板入口、群公告入口的位置"
+  ]
+}

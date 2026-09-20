@@ -1,0 +1,48 @@
+{
+  "screen_id": "feed-list",
+  "title": "校园圈",
+  "target_route": "campusx://feed/list",
+  "activity": "com.kairuotu.feed.list.FeedActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://feed/list"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "normal": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "error": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    }
+  },
+  "interactions": [
+    "顶部「校园圈」+「北京交通大学 ▼」+ 左上关闭",
+    "中央：网络错误图标 + 「网络不给力，点击刷新试试」+ 刷新按钮"
+  ],
+  "navigation": [
+    "关闭 → 返回上一页",
+    "刷新 → 重新请求"
+  ],
+  "persistence": [
+    "无"
+  ],
+  "known_unknowns": [
+    "有后端且已登录时的正常列表长什么样（本机无法进入）"
+  ]
+}

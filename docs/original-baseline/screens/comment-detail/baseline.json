@@ -1,0 +1,47 @@
+{
+  "screen_id": "comment-detail",
+  "title": "评论详情",
+  "target_route": "campusx://feed/comment/detail",
+  "activity": "com.kairuotu.feed.detail.CommentDetailActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://feed/comment/detail（未带参数）"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "normal": {
+      "status": "unknown",
+      "evidence": []
+    },
+    "error": {
+      "status": "not_reproducible",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "左上返回 + 右上更多",
+    "页面全白，无列表内容"
+  ],
+  "navigation": [
+    "返回 → 上一页"
+  ],
+  "persistence": [
+    "无"
+  ],
+  "known_unknowns": [
+    "page-map.md 记为「需带参数，直接打开为空态」；带参数时的结构未知"
+  ]
+}

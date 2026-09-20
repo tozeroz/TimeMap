@@ -1,4 +1,4 @@
-<#
+﻿<#
   重新应用 DeepSeekEyes 的 automation-context 补丁。
   用途：@dttxorg/deepseekeyes 重新安装/升级后，node_modules 里的补丁会丢失，
         运行本脚本即可重新打上。

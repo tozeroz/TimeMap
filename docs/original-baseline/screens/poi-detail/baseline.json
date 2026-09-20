@@ -1,0 +1,41 @@
+{
+  "screen_id": "poi-detail",
+  "title": "地点详情",
+  "target_route": "campusx://feed/poi/detail（实测回落到 trident，deep link 不生效）",
+  "activity": "（未落到目标 Activity）",
+  "entry": {
+    "preconditions": [
+      "app_launched",
+      "需要一个有效地点参数"
+    ],
+    "steps": [
+      "尝试 deep link campusx://feed/poi/detail → 前台仍是 TridentActivity（校园广场）"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "normal": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "error": {
+      "status": "not_reproducible",
+      "evidence": []
+    }
+  },
+  "interactions": [],
+  "navigation": [],
+  "persistence": [],
+  "known_unknowns": [
+    "该 deep link 不带参数时不路由；真实入口应是地图/动态里的地点点击",
+    "地点详情页的真实结构需要在有内容时才能观察（见 blocked 原因）"
+  ],
+  "blocked_reason": "deep link 无法直达，且需要登录态下的真实地点数据才能进入"
+}

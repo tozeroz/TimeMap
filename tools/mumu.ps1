@@ -1,4 +1,4 @@
-<#
+﻿<#
   MuMu 勘察辅助脚本
   用法:
     .\tools\mumu.ps1 capture 标签                 # 只截图

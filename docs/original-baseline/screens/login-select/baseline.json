@@ -1,0 +1,47 @@
+{
+  "screen_id": "login-select",
+  "title": "登录（选择方式）",
+  "target_route": "campusx://login/select",
+  "activity": "com.kairuotu.account.login.activity.CampusLoginActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://login/select"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_applicable",
+      "evidence": []
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "unknown",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "Campus logo + 装饰元素",
+    "底部「登录 Campus」按钮 + 协议勾选"
+  ],
+  "navigation": [
+    "登录 Campus → 手机号登录页"
+  ],
+  "persistence": [
+    "登录态应持久化（未验证）"
+  ],
+  "known_unknowns": [
+    "协议未勾选时按钮是否禁用"
+  ]
+}

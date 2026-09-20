@@ -1,0 +1,23 @@
+# M0：只冻结 unit 形态，不启动任何进程。
+# 真正的 Fastify 常驻服务由 M1 接入 —— M0 绝不为「让 is-active 变绿」而塞假进程。
+[Unit]
+Description=Campus API (M0 skeleton - intentionally inactive)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+# M1 会替换为真实实现；此处不留假进程
+ExecStart=/opt/node-v24.21.0-linux-x64/bin/node /srv/campus/server/dist/index.js
+WorkingDirectory=/srv/campus/server
+User=campus
+Group=campus
+Restart=on-failure
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=PORT=3001
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

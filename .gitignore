@@ -30,6 +30,8 @@ app/android/app/src/main/assets/capacitor.config.json
 .mumu-capture/
 .playwright-mcp/
 *.png
+# 例外：M0 冻结的原版行为基线截图必须入库（半分辨率，见 docs/original-baseline/）
+!docs/original-baseline/**/*.png
 
 # 工具临时
 tools/tmp/

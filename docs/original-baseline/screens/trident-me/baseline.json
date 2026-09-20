@@ -1,0 +1,52 @@
+{
+  "screen_id": "trident-me",
+  "title": "个人主页（底部 tab 1）",
+  "target_route": "bottom-tab:135,1810（无 deep link）",
+  "activity": "com.kairuotu.trident.TridentActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched",
+      "已在主容器"
+    ],
+    "steps": [
+      "deep link campusx://trident",
+      "点击底部第一个 tab（x=135,y=1810）"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "not_applicable",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "顶栏：菜单图标 / 分享图标 / 右侧消息图标",
+    "用户区：左「我的兴趣 ›」「我的标签 ›」；中间头像+昵称+「编辑资料」；右「介绍一下自己～ ›」「我的学校 ›」",
+    "中部：黑色胶囊按钮 + 蓝色气泡提示"
+  ],
+  "navigation": [
+    "「编辑资料」→ 资料编辑页",
+    "「我的兴趣/标签/学校」→ 二级编辑页"
+  ],
+  "persistence": [
+    "资料修改应持久化（未登录态下未验证）"
+  ],
+  "known_unknowns": [
+    "未登录时资料区显示的是本地缓存还是默认值",
+    "tab 名称来自用户昵称（本机显示「自定义名称6」）"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "screen_id": "publish",
+  "title": "发布（相机）",
+  "target_route": "campusx://publish_post",
+  "activity": "com.kairuotu.post.activity.PostActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://publish_post；或主容器右下 + 按钮"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_applicable",
+      "evidence": []
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "unknown",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "顶部：左上关闭 + 地点胶囊「📍<地点名> ×」",
+    "取景框（真实相机预览）",
+    "底部：变焦 1x / 2 / 5；模式 语音 / 拍摄 / 文字；快门按钮；相册与前后置切换"
+  ],
+  "navigation": [
+    "关闭 → 上一页",
+    "地点胶囊 → 选点页",
+    "快门 → 拍摄并入草稿"
+  ],
+  "persistence": [
+    "草稿在会话内保留"
+  ],
+  "known_unknowns": [
+    "无相机权限时的降级界面",
+    "语音模式的真实录音交互"
+  ]
+}

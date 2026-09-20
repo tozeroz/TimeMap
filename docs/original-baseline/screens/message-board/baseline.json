@@ -1,0 +1,49 @@
+{
+  "screen_id": "message-board",
+  "title": "留言板",
+  "target_route": "campusx://messageBoard",
+  "activity": "com.kairuotu.feed.messageboard.MessageBoardActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://messageBoard"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "unknown",
+      "evidence": []
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "not_reproducible",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "顶部「留言」+ 副标题「仅双方可见」",
+    "彩色便签式留言列表",
+    "底部：表情行 + 输入框「可以给同学留言噢」+ 按钮「留言」"
+  ],
+  "navigation": [
+    "返回 → 上一页"
+  ],
+  "persistence": [
+    "留言应持久化（未验证）"
+  ],
+  "known_unknowns": [
+    "无留言时的空态样式",
+    "表情行的完整表情集合"
+  ]
+}
