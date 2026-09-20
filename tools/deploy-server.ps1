@@ -53,17 +53,23 @@ systemd-analyze verify /etc/systemd/system/campus-backend.service && echo "  ver
 echo "== 启用并启动 =="
 systemctl enable campus-backend.service
 systemctl restart campus-backend.service
-# 固定 sleep 是不可靠的：实测这台机器上从 restart 到 listen 需要约 4-7 秒，
+# 固定 sleep 是不可靠的：实测这台机器上从 restart 到 listen 需要约 4-8 秒，
 # sleep 3 会让后面的 curl 打到还没监听的端口，set -e 直接把脚本打断。
 # 所以改成轮询等待，最长 60 秒。
+# 审核记录 04 对轮询的要求：明确 timeout、非无限等待、失败时打印最后状态并输出 journal/systemctl 诊断。
 for i in $(seq 1 60); do
   if curl -sf -m 2 http://127.0.0.1:3001/api/health >/dev/null 2>&1; then
     echo "  就绪耗时: ${i}s"
     break
   fi
   if [ "$i" = 60 ]; then
-    echo "  等待 60s 仍未就绪，下面是日志："
-    journalctl -u campus-backend.service -n 40 --no-pager
+    echo "  等待 60s 仍未就绪 —— 现场信息如下"
+    echo "  is-enabled: $(systemctl is-enabled campus-backend.service 2>&1)"
+    echo "  is-active:  $(systemctl is-active campus-backend.service 2>&1)"
+    echo "  --- systemctl status ---"
+    systemctl status campus-backend.service --no-pager -n 15 2>&1 || true
+    echo "  --- journalctl (last 40) ---"
+    journalctl -u campus-backend.service -n 40 --no-pager 2>&1 || true
     exit 1
   fi
   sleep 1

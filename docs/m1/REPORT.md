@@ -1,5 +1,6 @@
 # M1 结果报告：后端最小闭环 + 文本发帖垂直切片
 
+> **审核结论（记录 04）：M1 ACCEPTED / CLOSED。**
 > 工作单：`docs/m1/SPEC.md`（依据审核记录 03 冻结）
 > 提交审核时请对照本文与 `docs/m1/evidence/` 下的 Gate 证据。
 > 阶段报告口径：**total 22 / observed 19 / evidence-blocked 3**（poi-detail、media-preview、at-panel，M3 从真实入口恢复）。
@@ -115,23 +116,39 @@ PowerShell 5.1 读无 BOM 的 .ps1 会按 ANSI(GBK) 解码；中文注释变乱�
 
 实测这台机器从 `systemctl restart` 到真正 listen 需要 4–8 秒，原来的 `sleep 3` 会让随后的 curl 打到未监听的端口并在 `set -e` 下**静默截断整个脚本**（表现为"冒烟测试只输出一行"）。已改为最长 60 秒轮询。
 
-### 5) `VITE_API_BASE` 的语义与工作单措辞略有不同
+### 5) `VITE_API_ORIGIN` 命名已冻结（审核记录 04 要求收口）
 
-工作单写默认 `http://8.148.156.146/api`（含 `/api`），实现里 base 是 `http://8.148.156.146`，路径写成 `/api/posts`。功能等价，但如果 M2 之后有多条路径前缀，建议以实现为准并更新工作单措辞。
+工作单写默认 `http://8.148.156.146/api`（含 `/api`），实现里 base 是 host、路径写成 `/api/posts`。
+功能等价，但审核指出这是典型的 contract drift 来源（迟早有人写出 `/api/api/posts`）。
+已按审核建议冻结为 **`VITE_API_ORIGIN`（只放 origin）**，`/api/...` 一律由 `app/src/api/client.ts` 负责拼。
 
-### 6) Android 明文流量的两个条件
+### 6) Android 明文流量：**temporary transport-security exception**
 
 - `usesCleartextTraffic` 保持 **false**（全局禁止），例外只给后端 IP：`network_security_config.xml`。
-- 另需 `allowMixedContent: true`：WebView 页面来源是 `https://localhost`，请求 `http://<IP>` 属于混合内容，默认会被直接拦掉。**这是过渡态**，M6 上 HTTPS 后两项都要收回。
+- 另需 `allowMixedContent: true`：WebView 页面来源是 `https://localhost`，请求 `http://<IP>` 属于混合内容，
+  默认会被直接拦掉。
+- 这两项是**临时传输安全例外**（不是"配置细节"）。M6 上 HTTPS 后必须**同时收回两项**：
+  明文例外与 `allowMixedContent`。只改 API URL 不等于这笔债消失了。
 
-## 五、Gate 自己抓到的三个测试代码 bug（记录在案）
+## 五、Gate 自己抓到的三个测试代码 bug（记录在案，按审核要求分类）
 
-1. `posts` 表字段数我写成 6，实际是 5（`id/author_name/body/place/created_at`）→ 断言错误，已改正。
-2. 用 PowerShell 拼 `ssh + psql` 命令行时引号被吃了两层，psql 收到一堆被拆散的参数（`extra command-line argument ... ignored`）→ 改为把 SQL 放进独立脚本经 base64 下发。
-3. **重启后立刻断言服务状态**：第一次重启 Gate 报「postgresql / campus-backend 重启后 inactive」，但 40 秒后的下一组断言里两者都正常。实测定位：这台机器 PostgreSQL 起来要 **29 秒**，而 `campus-backend` 又在等 PG —— 是断言时机问题，不是产品问题。已改为 `wait_active`（最长 120s）并把实际耗时打进 PASS 行；超时仍是 FAIL，所以不会把"真的起不来"掩盖过去。
-   这与第四节第 4 条（部署脚本 `sleep 3`）是同一类错误：**断言状态前必须先等状态稳定**。
+审核记录 04 要求区分缺陷类型：`PRODUCT_DEFECT` / `GATE_DEFECT` / `ENVIRONMENT_DEFECT`。
+本期三类都出现过，且最终 PASS 来自**修正后的 Gate + 修正后的实现 + 干净重跑**，不是覆盖第一次失败。
 
-另外 Gate 确实抓到一处真实的越界改动（`scripts/m0/verify-m0-server.sh` 未在允许清单内），说明 SCOPE 组不是摆设。
+| # | 现象 | 分类 | 处置 |
+|---|---|---|---|
+| 1 | `posts` 字段数我写成 6，实际 5（`id/author_name/body/place/created_at`） | GATE_DEFECT | 改正断言 |
+| 2 | PowerShell 拼 `ssh + psql` 引号被吃两层，psql 收到被拆散的参数 | GATE_DEFECT | SQL 移入独立脚本经 base64 下发 |
+| 3 | 重启后立刻断言服务状态报「inactive」，40 秒后同一批服务全部正常 | GATE_DEFECT | 改 `wait_active` 轮询（实测 PG 需 **29 秒**），超时仍是 FAIL，并打印最后状态 + `systemctl`/`journalctl` 诊断 |
+| 4 | `deploy-server.ps1` 固定 `sleep 3` 而在 4–8 秒才 listen 时静默截断脚本 | GATE_DEFECT | 改 readiness 轮询 + 失败诊断 |
+| 5 | 部署脚本丢 BOM 后静默跳过逻辑，把服务器 unit 写成字面量 `__UNIT__`（旧进程掩盖故障，重启才会暴露） | ENVIRONMENT_DEFECT | 补 BOM；新增 `tools/fix-ps1-bom.ps1` 与 Gate 的 ENC 组 |
+| 6 | `scripts/m0/verify-m0-server.sh` 越界未列入允许清单 | GATE_DEFECT | 允许清单放开 `scripts/m0/` 并披露 |
+| — | 上述均为**测试/工具缺陷**，产品代码本身未发现缺陷 | — | — |
+
+另外 Gate 确实抓到一处真实的越界改动（第 6 条），说明 SCOPE 组不是摆设。
+
+> Gate **只检查、只 FAIL**：`tools/fix-ps1-bom.ps1` 是显式动作，绝不会被 Gate 自动调用
+> —— 否则 Gate 就改变了被测试对象（审核记录 04 的明确要求）。
 
 ## 六、结转项（M2 及以后必须处理）
 

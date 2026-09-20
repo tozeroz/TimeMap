@@ -134,8 +134,8 @@ autovacuum_max_workers = 2
 - [x] 三项准备检查（ChatGPT 可对话 / MuMu 可控 / 服务器 SSH 可达）
 - [x] 计划 v2 成文（本文件）
 - [x] **M0 基线冻结 + 环境准备 —— PASS / CLOSED**（锚点见 `docs/m0/ANCHOR.md`）
-- [x] **M1 后端最小闭环 + 文本发帖垂直切片 —— 实现与 Gate 全绿，待审核**（结果见 `docs/m1/REPORT.md`）
-- [ ] M2 数据模型 V0.1 + 认证/鉴权定稿（**NEXT**）
+- [x] **M1 后端最小闭环 + 文本发帖垂直切片 —— PASS / CLOSED**（审核记录 04；结果见 `docs/m1/REPORT.md`）
+- [ ] M2 数据模型 V0.1 + 认证（**NEXT**，规格见第十一节）
 
 ---
 
@@ -180,6 +180,11 @@ User action → React → Nginx /api → Fastify → PostgreSQL INSERT/UPDATE
 
 即：`M1 PASS = M0 invariants PASS + M1 new invariants PASS`（M2/M3 沿用同一模式）
 
+> **审核记录 04 修正了这条公式**：把上一阶段**全部**断言无差别当成"invariants"过于粗糙。
+> M0 里有多条断言其实只是"M0 这一阶段的验收条件"（例如"业务库尚不存在""后端 disabled/inactive"），
+> 它们在 M1 理应被取代，照字面执行会导致 Gate 永远不可能通过。
+> 修订后的模型见第十节，M1 已按修订模型执行并 PASS。
+
 ### M1 交付边界
 
 - 必须做：Fastify + PG pool + migration + health/ready + systemd(enabled) + Nginx 反代 + 一个真实 vertical slice
@@ -190,4 +195,114 @@ User action → React → Nginx /api → Fastify → PostgreSQL INSERT/UPDATE
 
 - 期望公网入向契约：`22/tcp` + `80/tcp`；禁止 `5432/tcp` 与后端内部端口
 - 脱敏区域（`login-sns`）在做 pixel diff 时必须按 `evidence_mask` 跳过
+
+---
+
+## 十、Gate 方法论（依据审核记录 04 修订，冻结）
+
+### 10.1 通过条件（取代旧公式）
+
+```
+Milestone PASS
+  = Persistent invariants            # 跨阶段永久不变量，任何阶段都必须 PASS
+  + Current-stage invariants         # 本阶段新增的验收条件
+  + Regression checks               # 对"本应保持不变"的行为的回归检查
+```
+
+**不再**使用「上一阶段全部断言 + 本阶段断言」这种写法。上一阶段中那些**只用于证明"当时处于某阶段"**的断言
+（典型：M0 的「业务库不存在」「后端 disabled/inactive」）视为该阶段的 acceptance conditions，
+在新阶段由「本阶段断言」正面取代，而不是继续要求它们成立。
+
+实现方式：M0 Gate 提供 `-Stage M0|M1`（默认 `M0`，保证历史验收语义可复现）；M1 阶段反转上述阶段相关断言。
+
+### 10.2 冻结的是语义，不是字节
+
+- 冻结对象：**历史里程碑的验收语义必须可复现**（`verify-m0.ps1 -Stage M0` 仍能复现原 M0 验收）。
+- 不冻结：`scripts/m0/*.ps1` 的每个字节。执行环境修复（例如补 UTF-8 BOM）不算违规。
+- 约束：不得把 `if Stage M0 / elseif Stage M1 / elseif Stage M2 …` 无限堆在 `scripts/m0/`。
+
+### 10.3 Gate 结构演进目标（自 M2 起收束）
+
+```
+scripts/gates/
+├── common/          # 永久不变量：environment / security / baseline / network / encoding
+├── m0/milestone.ps1
+├── m1/milestone.ps1
+└── m2/milestone.ps1
+```
+
+`scripts/m0/verify-m0.ps1` 保留为历史入口 wrapper。
+
+### 10.4 证据纪律
+
+- 缺陷必须分类：`PRODUCT_DEFECT` / `GATE_DEFECT` / `ENVIRONMENT_DEFECT`。
+- 最终 PASS 必须来自**修正后的 Gate + 修正后的实现 + 干净重跑**，不允许用一次成功覆盖掉第一次失败。
+- Gate **只检查、只 FAIL**；自动修复（如补 BOM）必须是显式动作，绝不能成为 Gate 的一步
+  —— 否则 Gate 会改变被测试对象。
+- 任何轮询都必须：明确 timeout、不无限等待、失败时打印最后状态并输出 `systemctl` / `journalctl` 诊断。
+
+---
+
+## 十一、M2 规格与认证契约（依据审核记录 04，冻结）
+
+### 11.1 执行顺序（审核确认）
+
+```
+M2.1 冻结 Authentication / Authorization contract
+M2.2 定最小 identity / session schema
+M2.3 实现 auth，并彻底取消 client-author trust
+M2.4 完成其余 Data Model V0.1
+M2.5 deterministic / repeatable seed
+M2.6 pg_dump → fresh DB restore
+M2 Gate
+```
+
+要点：auth 语义先于完整数据模型设计；但最小 user/session schema 必须先于 auth 实现。
+
+### 11.2 认证机制（审核选定）
+
+**服务器签发不透明 session token**（不采用设备绑定 + 请求签名）。
+
+- 登录成功 → 服务器生成 256-bit 随机 token
+- 客户端：`Authorization: Bearer <token>`
+- 数据库：**只存 token hash**，不存明文 token
+- 退出登录 → revoke session
+- **不用 JWT**（当前规模下没有收益，反而引入签名密钥、claim 版本、撤销等问题）
+
+最小 schema：
+
+```
+users    (id, display_name, ...credential fields)
+sessions (id, user_id, token_hash, created_at, expires_at, revoked_at)
+```
+
+### 11.3 最关键的行为变更：作者身份只能来自服务端
+
+```
+POST /api/posts
+  Authorization: Bearer <session token>
+  { "body": "...", "place": "..." }
+
+服务端：session token → session → user_id → posts.author_id
+```
+
+- Gate **必须新增 forged author 测试**：客户端提交 `{"body":"...","author":"管理员"}` 时必须被
+  **strict schema 400 拒绝**（审核倾向 strict reject 而不是静默忽略），以此机械证明
+  `client cannot choose post ownership`。
+- 现有 `posts.author_name` **不 destructive drop**：M2 migration 增加 `posts.author_id → FK users.id`，
+  `author_name` 暂时保留为快照/历史展示字段，去留留到数据模型 V0.1 再定。
+
+### 11.4 传输安全（必须在报告里分开记）
+
+Bearer token 一旦开始真实发送，公网 HTTP 就没有机密性保障。因此：
+
+- 若条件允许：把**最小 TLS 前置条件**提到 M2（先有受保护传输，再出现真实 bearer 凭证）。
+  注意：`https://localhost` 页面 + HTTPS API 反而可以同时收回 `allowMixedContent` 与明文例外两项临时债。
+- 若暂时做不到（当前无域名）：报告与 Gate 必须分成两条独立结论：
+  `AUTH_FUNCTIONAL_PASS` 与 `TRANSPORT_SECURITY_DEFERRED_TO_M6`，**不得合并成一个 AUTH PASS**。
+
+### 11.5 命名冻结
+
+`VITE_API_ORIGIN=http://host`（只放 origin，`/api/...` 一律由 `app/src/api/client.ts` 拼），
+避免同一变量既可能带 `/api` 又可能不带，最终写出 `/api/api/posts`。
 

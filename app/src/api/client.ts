@@ -11,16 +11,21 @@ import type { FeedPost, User } from '../data/mock'
  */
 
 /**
- * 服务器地址。
- * 现在没有域名，先用「公网 IP + HTTP」；配了 `VITE_API_BASE` 就以环境变量为准。
+ * 服务器**来源（origin）**，不含路径。
+ * 现在没有域名，先用「公网 IP + HTTP」；配了 `VITE_API_ORIGIN` 就以环境变量为准。
  * - APK：WebView 里走 http://8.148.156.146（需要 allowMixedContent，见 capacitor.config.ts）
  * - 本地浏览器预览：同样可用（后端 CORS 白名单里有 127.0.0.1:517x）
+ *
+ * 命名是**冻结的**：变量只放 origin，`/api/...` 一律由本文件拼。
+ * 原因是审核记录 04 点出的 contract drift：如果变量里既可能带 /api 又可能不带，
+ * 迟早会有人写出 /api/api/posts。要带路径前缀就应该换名字（比如 VITE_API_BASE），
+ * 而不是让同一个变量有两种含义。
  */
-const DEFAULT_API_BASE = 'http://8.148.156.146'
+const DEFAULT_API_ORIGIN = 'http://8.148.156.146'
 
 const env = import.meta.env as unknown as Record<string, string | undefined>
 
-export const API_BASE = (env.VITE_API_BASE?.trim() || DEFAULT_API_BASE).replace(/\/+$/, '')
+export const API_ORIGIN = (env.VITE_API_ORIGIN?.trim() || DEFAULT_API_ORIGIN).replace(/\/+$/, '')
 
 const TIMEOUT_MS = 8000
 
@@ -41,7 +46,7 @@ async function request<T>(
   path: string,
   init?: { method?: string; body?: unknown },
 ): Promise<ApiResult<T>> {
-  const url = `${API_BASE}${path}`
+  const url = `${API_ORIGIN}${path}`
   const controller = new AbortController()
   // fetch 默认没有超时：服务器半死不活时页面会一直卡住，必须自己兜一个
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
