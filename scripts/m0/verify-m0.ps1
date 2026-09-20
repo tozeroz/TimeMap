@@ -49,7 +49,7 @@ Chk GIT "private key is NOT present in git history" { $historyPem.Count -eq 0 }
 
 # M0 diff allowlist
 if ($base) {
-  $allow = @('PLAN.md','.gitignore')
+  $allow = @('PLAN.md','.gitignore','.gitattributes')
   $allowPrefix = @('docs/','ops/','scripts/m0/','tools/')
   $changed = @(git diff --name-only "$base..HEAD") + @(git diff --name-only) + @(git ls-files --others --exclude-standard)
   $changed = @($changed | Where-Object { $_ } | Sort-Object -Unique)
@@ -151,10 +151,10 @@ function Run-Remote([string]$remoteCmd) {
 
 if ($Phase -eq 'pre') {
   Write-Output "--- Phase pre: 记录 boot_id ---"
-  Run-Remote 'mkdir -p /srv/campus && cat > /srv/campus/m0-reboot-state.json <<EOF
-{"boot_id":"$(cat /proc/sys/kernel/random/boot_id)","saved_at":"$(date -Is)"}
-EOF
-cat /srv/campus/m0-reboot-state.json'
+  # 走 base64 下发（PowerShell 直传 ssh 参数会把内嵌双引号吃掉，导致 JSON 写坏）
+  $preScript = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $root 'scripts\m0\verify-m0-server.sh')))
+  Run-Remote "echo '$preScript' | base64 -d > /tmp/verify-m0-server.sh && bash /tmp/verify-m0-server.sh save-boot" |
+    ForEach-Object { Write-Output "     $_" }
 }
 
 $serverScript = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $root 'scripts\m0\verify-m0-server.sh')))

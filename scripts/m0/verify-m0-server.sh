@@ -54,10 +54,14 @@ if [ "$mode" = "assert" ]; then
   q() { sudo -u postgres psql -Atc "$1" 2>/dev/null; }
   expect_eq POSTGRESQL "listen_addresses" "$(q "show listen_addresses")" "localhost"
   expect_eq POSTGRESQL "max_connections" "$(q "show max_connections")" "15"
-  expect_eq POSTGRESQL "shared_buffers" "$(q "show shared_buffers")" "8192"           # 8KB 页 → 64MB
-  expect_eq POSTGRESQL "work_mem" "$(q "show work_mem")" "1024"                        # 1MB
-  expect_eq POSTGRESQL "effective_cache_size" "$(q "show effective_cache_size")" "24576" # 192MB
+  # 注意：SHOW 返回的是人类可读值（64MB），不是页数（8192）
+  expect_eq POSTGRESQL "shared_buffers" "$(q "show shared_buffers")" "64MB"
+  expect_eq POSTGRESQL "work_mem" "$(q "show work_mem")" "1MB"
+  expect_eq POSTGRESQL "maintenance_work_mem" "$(q "show maintenance_work_mem")" "16MB"
+  expect_eq POSTGRESQL "effective_cache_size" "$(q "show effective_cache_size")" "192MB"
   expect_eq POSTGRESQL "max_parallel_workers" "$(q "show max_parallel_workers")" "0"
+  expect_eq POSTGRESQL "max_parallel_workers_per_gather" "$(q "show max_parallel_workers_per_gather")" "0"
+  expect_eq POSTGRESQL "autovacuum_max_workers" "$(q "show autovacuum_max_workers")" "2"
 
   if ss -lnt 2>/dev/null | grep -qE '0\.0\.0\.0:5432|\[::\]:5432'; then
     f POSTGRESQL "5432 bound only to loopback"

@@ -1,5 +1,6 @@
 PLAN.md
 .gitignore
+.gitattributes
 docs/**
 ops/**
 scripts/m0/**
