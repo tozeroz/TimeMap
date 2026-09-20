@@ -1,0 +1,10 @@
+# 这些脚本要在 Linux 上执行，必须是 LF —— 绝不能让 Git 转成 CRLF
+*.sh text eol=lf
+scripts/**/*.sh text eol=lf
+*.mjs text eol=lf
+
+# Windows 侧的 PowerShell 脚本保持自动处理（本仓库主要在 Windows 开发机上执行）
+*.ps1 text
+
+# 基线截图是二进制
+*.png binary
