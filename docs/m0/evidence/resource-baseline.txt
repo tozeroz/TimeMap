@@ -1,38 +1,38 @@
 ﻿@@@RESOURCE:idle@@@
 label=idle
 concurrency=1
-mem_available_mb=212
-swap_used_mb=122
-load_avg=
-nginx_rss_kb=12572
-postgres_rss_kb=35744
+mem_available_mb=225
+swap_used_mb=113
+load_avg=0.67 0.51 0.55
+nginx_rss_kb=11476
+postgres_rss_kb=35716
 oom_kill_delta=0
 @@@RESOURCE:conc5@@@
 label=conc5
 concurrency=5
-mem_available_mb=214
-swap_used_mb=122
-load_avg=
-nginx_rss_kb=12572
-postgres_rss_kb=35744
+mem_available_mb=225
+swap_used_mb=113
+load_avg=0.67 0.51 0.55
+nginx_rss_kb=11476
+postgres_rss_kb=35716
 oom_kill_delta=0
 @@@RESOURCE:conc20@@@
 label=conc20
 concurrency=20
-mem_available_mb=213
-swap_used_mb=122
-load_avg=
-nginx_rss_kb=12580
-postgres_rss_kb=35744
+mem_available_mb=225
+swap_used_mb=113
+load_avg=0.67 0.51 0.55
+nginx_rss_kb=11480
+postgres_rss_kb=35716
 oom_kill_delta=0
 @@@SOCKETS@@@
-LISTEN 0      30         127.0.1.1:5432       0.0.0.0:*    users:(("postgres",pid=7070,fd=7))                                             
-LISTEN 0      511          0.0.0.0:80         0.0.0.0:*    users:(("nginx",pid=7103,fd=5),("nginx",pid=7102,fd=5),("nginx",pid=7101,fd=5))
-LISTEN 0      30         127.0.0.1:5432       0.0.0.0:*    users:(("postgres",pid=7070,fd=6))                                             
-LISTEN 0      511             [::]:80            [::]:*    users:(("nginx",pid=7103,fd=6),("nginx",pid=7102,fd=6),("nginx",pid=7101,fd=6))
+LISTEN 0      30         127.0.1.1:5432       0.0.0.0:*    users:(("postgres",pid=1274,fd=7))                                             
+LISTEN 0      30         127.0.0.1:5432       0.0.0.0:*    users:(("postgres",pid=1274,fd=6))                                             
+LISTEN 0      511          0.0.0.0:80         0.0.0.0:*    users:(("nginx",pid=1188,fd=5),("nginx",pid=1187,fd=5),("nginx",pid=1186,fd=5))
+LISTEN 0      511             [::]:80            [::]:*    users:(("nginx",pid=1188,fd=6),("nginx",pid=1187,fd=6),("nginx",pid=1186,fd=6))
 @@@SERVICES@@@
 nginx: active=active enabled=enabled
 postgresql: active=active enabled=enabled
 campus-backend.service: active=inactive enabled=disabled
 @@@REBOOT_STATE@@@
-{boot_id:c8401851-f115-43ed-8af5-c1d1aedc5000,saved_at:2026-09-21T03:06:11+08:00}
+{"boot_id":"c8401851-f115-43ed-8af5-c1d1aedc5000","saved_at":"2026-09-21T03:14:22+08:00"}

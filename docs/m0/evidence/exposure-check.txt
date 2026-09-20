@@ -1,17 +1,21 @@
-﻿M0 暴露面验证记录（外部 vantage point）
-时间: 2026-09-21 02:51:28
+﻿M0 暴露面验证记录（外部 vantage point：check-host.net 多节点）
+时间: 2026-09-21 03:17:30
 
-方法: check-host.net 多节点拨测（独立于本机与模拟器网络）
+【结论】80 端口已开放，外部可达。
 
-HTTP http://8.148.156.146/health
-  节点 in2 (India Rajpura)   : Connection timed out
-  节点 ir2 (Iran Isfahan)    : Connection timed out
-  节点 kz1 (Kazakhstan)      : Connection timed out
-  永久链接: https://check-host.net/check-report/4c825447k601
+1) 开放前（2026-09-21 02:51）
+   http://8.148.156.146/health  印度/伊朗/哈萨克斯坦 3 节点 → Connection timed out (3/3)
+   对照组 8.148.156.146:22       爱沙尼亚/伊朗/乌克兰 3 节点 → 连通 (0.2-0.3s)
+   判定：安全组未开放 80（已在阿里云控制台放行）
 
-TCP  8.148.156.146:22 (对照)
-  见下方输出
+2) 开放后（2026-09-21 02:57）
+   http://8.148.156.146/health  奥地利/伊朗/摩尔多瓦/塞尔维亚 4 节点 → HTTP 200 (0.41-0.52s)
+   永久报告: https://check-host.net/check-report/4c827e54k5c7
 
-结论: 80 端口从公网不可达 → 阿里云安全组尚未开放 80（需在控制台放行）
-      服务器内部验证已通过: curl http://127.0.0.1/health -> 200
-      {"status":"ok","service":"campus-gateway","stage":"M0"}
+3) 服务器内部
+   curl http://127.0.0.1/health → {"status":"ok","service":"campus-gateway","stage":"M0"}
+   ss -lntp → 0.0.0.0:80 (nginx) / 127.0.0.1:5432 + 127.0.1.1:5432 (postgres)
+   PostgreSQL 无 0.0.0.0:5432 与 [::]:5432 监听
+
+补充说明：本机与模拟器访问公网 IP 时看到的 "empty reply"/502 是本机 TUN 代理造成的假象，
+不能作为证据，因此采用第三方多节点拨测。
