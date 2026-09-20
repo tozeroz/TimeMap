@@ -40,7 +40,9 @@ if ($Stdin) {
   if (-not (Test-Path -LiteralPath $ScriptFile)) { Write-Error "脚本不存在: $ScriptFile"; exit 2 }
   $script = Get-Content -LiteralPath $ScriptFile -Raw
 } elseif ($Command) {
-  $script = "set -e`n$Command"
+  # 不加 set -e：探测类命令希望「跑完所有检查再报告」，而不是第一个失败就退出。
+  # 需要严格模式就在 -Command 内容里自己写 set -e。
+  $script = $Command
 } else {
   Write-Error '需要 -Command / -ScriptFile / -Stdin 之一'
   exit 2
