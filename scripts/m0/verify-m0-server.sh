@@ -92,7 +92,10 @@ if [ "$mode" = "assert" ]; then
     local out="/srv/campus/m0-resource-${label}.txt"
     mkdir -p /srv/campus
     local oom_before oom_after
-    oom_before="$(dmesg 2>/dev/null | grep -c 'Out of memory' || echo 0)"
+    # 注意：grep -c 无匹配时也会输出 "0" 但返回非 0 —— 不能再 `|| echo 0`，
+    # 否则变量会变成两行 "0\n0"，$(( )) 直接算错并把整个采样块打断（踩过）。
+    oom_before="$(dmesg 2>/dev/null | grep -c 'Out of memory' || true)"
+    [ -z "$oom_before" ] && oom_before=0
     if [ "$conc" -gt 1 ]; then
       if command -v ab >/dev/null 2>&1; then
         ab -n $((conc * 20)) -c "$conc" -q http://127.0.0.1/health >/dev/null 2>&1 || true
@@ -101,7 +104,8 @@ if [ "$mode" = "assert" ]; then
         wait
       fi
     fi
-    oom_after="$(dmesg 2>/dev/null | grep -c 'Out of memory' || echo 0)"
+    oom_after="$(dmesg 2>/dev/null | grep -c 'Out of memory' || true)"
+    [ -z "$oom_after" ] && oom_after=0
     {
       echo "label=${label}"
       echo "concurrency=${conc}"
