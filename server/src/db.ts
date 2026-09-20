@@ -1,5 +1,6 @@
 import pg from 'pg'
 import initSql from './migrations/001_init.sql'
+import identitySql from './migrations/002_identity.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -12,6 +13,7 @@ import type { AppConfig } from './config.ts'
  */
 export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '001_init', sql: initSql },
+  { version: '002_identity', sql: identitySql },
 ]
 
 export interface Db {

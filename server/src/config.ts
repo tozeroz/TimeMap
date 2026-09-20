@@ -12,10 +12,15 @@ export interface AppConfig {
   poolMax: number
   poolIdleTimeoutMs: number
   poolConnectionTimeoutMs: number
-  /** M1 没有认证体系，写入时用一个固定占位身份（M2 定稿、M4 实现） */
+  /** M1 遗留：无认证时代的占位作者名。M2 起新帖作者一律来自 session，这个字段只留着做兼容/回退 */
   defaultAuthorName: string
   /** CORS 白名单；空数组表示不放开任何跨域来源 */
   corsOrigins: string[]
+  /** session 有效期（天）。审核要求：不允许永不过期的会话 */
+  sessionTtlDays: number
+  /** 登录失败限流：窗口内最多失败几次、窗口多长（秒） */
+  loginMaxFailures: number
+  loginWindowSeconds: number
 }
 
 /**
@@ -23,6 +28,9 @@ export interface AppConfig {
  *   - Capacitor APK 里的 WebView：https://localhost
  *   - 本地浏览器预览：http://127.0.0.1:517x
  * 用白名单而不是 `*`，避免以后接上真实域名时留下过宽策略。
+ *
+ * 注意：M2 之后即使上 HTTPS，这里也**不能**删 —— https://localhost 与 https://<IP>
+ * 仍然是不同 origin，跨源策略照旧生效。
  */
 export const DEFAULT_CORS_ORIGINS = [
   'https://localhost',
@@ -60,5 +68,8 @@ export function loadConfig(): AppConfig {
     poolConnectionTimeoutMs: readInt('PG_CONNECT_TIMEOUT_MS', 5_000),
     defaultAuthorName: process.env.DEFAULT_AUTHOR ?? '我',
     corsOrigins: readList('CORS_ORIGINS', DEFAULT_CORS_ORIGINS),
+    sessionTtlDays: readInt('SESSION_TTL_DAYS', 30),
+    loginMaxFailures: readInt('LOGIN_MAX_FAILURES', 10),
+    loginWindowSeconds: readInt('LOGIN_WINDOW_SECONDS', 300),
   }
 }
