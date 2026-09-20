@@ -135,7 +135,9 @@ autovacuum_max_workers = 2
 - [x] 计划 v2 成文（本文件）
 - [x] **M0 基线冻结 + 环境准备 —— PASS / CLOSED**（锚点见 `docs/m0/ANCHOR.md`）
 - [x] **M1 后端最小闭环 + 文本发帖垂直切片 —— PASS / CLOSED**（审核记录 04；结果见 `docs/m1/REPORT.md`）
-- [ ] M2 数据模型 V0.1 + 认证（**NEXT**，规格见第十一节）
+- [x] **M2 认证 + 数据模型 V0.1 + seed + 备份演练 —— 实现完成，Gate 已跑，待审核**
+      （规格 `docs/m2/SPEC.md`、数据模型追溯 `docs/m2/DATA-MODEL.md`、结果 `docs/m2/REPORT.md`）
+- [ ] M3 垂直切片迁移（把 mock 逐页换成真实 API，**NEXT**）
 
 ---
 

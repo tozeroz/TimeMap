@@ -109,55 +109,28 @@ else { Bad "发现可能绕过 TLS 校验的代码：$($hv.Count) 处" }
 
 # ---------------------------------------------------------------------------
 if (-not $SkipServer) {
-  Head 'MIGRATION/API/VERTICAL_SLICE/SYSTEMD/NGINX/RESOURCE) 后端现场断言（stage=M2）'
-  $out = Run-RemoteArgs (Join-Path $repo 'scripts\m1\verify-backend.sh') 'M2'
-  $out | ForEach-Object {
-    $line = "$_".Trim()
-    if ($line -match '^(PASS|FAIL) ') { Say "  $line" }
-    elseif ($line -match '^(BACKEND_RESULT|=== )') { Say "  $line" }
+  # 统一的证据采集：把子脚本的**全部非空行**都写进证据。
+  # 早期版本按正则只留 PASS/FAIL/=== 行，结果失败时证据里没有诊断信息
+  # （例如计时段的耗时数字），等于把排障线索丢掉了 —— 证据应当足以独立复现判断。
+  function Emit-Section([string]$title, [string]$marker, [string[]]$out) {
+    Head $title
+    $out | ForEach-Object {
+      if ("$_".Trim()) { Say "  $_" }
+    }
+    if ($out | Select-String -Pattern "$marker PASS" -Quiet) { Ok "$title → PASS" }
+    else { Bad "$title → FAIL" }
   }
-  if ($out | Select-String -Pattern 'BACKEND_RESULT PASS' -Quiet) { Ok '后端现场断言 PASS' }
-  else { Bad '后端现场断言 FAIL' }
 
-  Head 'AUTH_CONTRACT / AUTHOR_TRUST / CONSTRAINTS'
-  $out = Run-Remote (Join-Path $repo 'scripts\m2\verify-auth.sh')
-  $out | ForEach-Object {
-    $line = "$_".Trim()
-    if ($line -match '^(PASS|FAIL) ') { Say "  $line" }
-    elseif ($line -match '^(AUTH_RESULT|=== )') { Say "  $line" }
-  }
-  if ($out | Select-String -Pattern 'AUTH_RESULT PASS' -Quiet) { Ok '认证契约与归属信任 PASS' }
-  else { Bad '认证契约或归属信任 FAIL' }
-
-  Head 'SEED) convergent + canonical'
-  $out = Run-Remote (Join-Path $repo 'scripts\m2\verify-seed.sh')
-  $out | ForEach-Object {
-    $line = "$_".Trim()
-    if ($line -match '^(PASS|FAIL) ') { Say "  $line" }
-    elseif ($line -match '^(SEED_RESULT|=== |  hash|  canonical|  改坏|  重跑)') { Say "  $line" }
-  }
-  if ($out | Select-String -Pattern 'SEED_RESULT PASS' -Quiet) { Ok 'seed 幂等且与 canonical 一致' }
-  else { Bad 'seed 断言 FAIL' }
-
-  Head 'BACKUP) pg_dump -Fc + pg_restore 到全新库（四项对比）'
-  $out = Run-Remote (Join-Path $repo 'scripts\m2\backup-restore-drill.sh')
-  $out | ForEach-Object {
-    $line = "$_".Trim()
-    if ($line -match '^(PASS|FAIL) ') { Say "  $line" }
-    elseif ($line -match '^(BACKUP_DRILL_RESULT|=== )') { Say "  $line" }
-  }
-  if ($out | Select-String -Pattern 'BACKUP_DRILL_RESULT PASS' -Quiet) { Ok '备份恢复演练 PASS（版本集/行数/PK 集合/行内容 四项一致）' }
-  else { Bad '备份恢复演练 FAIL' }
-
-  Head 'TLS) 九条中的服务器侧部分'
-  $out = Run-Remote (Join-Path $repo 'scripts\m2\verify-tls-server.sh')
-  $out | ForEach-Object {
-    $line = "$_".Trim()
-    if ($line -match '^(PASS|FAIL) ') { Say "  $line" }
-    elseif ($line -match '^(TLS_SERVER_RESULT|=== )') { Say "  $line" }
-  }
-  if ($out | Select-String -Pattern 'TLS_SERVER_RESULT PASS' -Quiet) { Ok 'TLS 服务器侧断言 PASS' }
-  else { Bad 'TLS 服务器侧断言 FAIL' }
+  Emit-Section 'MIGRATION/API/VERTICAL_SLICE/SYSTEMD/NGINX/RESOURCE（stage=M2）' 'BACKEND_RESULT' `
+    (Run-RemoteArgs (Join-Path $repo 'scripts\m1\verify-backend.sh') 'M2')
+  Emit-Section 'AUTH_CONTRACT / AUTHOR_TRUST / CONSTRAINTS' 'AUTH_RESULT' `
+    (Run-Remote (Join-Path $repo 'scripts\m2\verify-auth.sh'))
+  Emit-Section 'SEED) convergent + canonical' 'SEED_RESULT' `
+    (Run-Remote (Join-Path $repo 'scripts\m2\verify-seed.sh'))
+  Emit-Section 'BACKUP) pg_dump -Fc + pg_restore 到全新库（四项对比）' 'BACKUP_DRILL_RESULT' `
+    (Run-Remote (Join-Path $repo 'scripts\m2\backup-restore-drill.sh'))
+  Emit-Section 'TLS) 九条中的服务器侧部分' 'TLS_SERVER_RESULT' `
+    (Run-Remote (Join-Path $repo 'scripts\m2\verify-tls-server.sh'))
 
   Head 'SCOPE) 库里不得有超出数据模型的表'
   $tbl = Run-Remote (Join-Path $repo 'scripts\m1\check-tables.sh')

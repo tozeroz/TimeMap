@@ -68,15 +68,21 @@ echo
 echo "=== C. 计时：用户不存在也必须跑一次同参数 scrypt（dummy verify）==="
 # 如果只在"密码错"分支做 scrypt，那么"用户不存在"会快一个数量级 —— 依然能枚举用户。
 #
-# 这里有两个坑，都踩过：
-#  1) 探测用的 handle **必须每次都不同**。用一个固定名字，多次运行后累计失败次数会触发限流，
-#     限流在 scrypt 之前就返回 429（约 2ms），计时样本直接失真 —— 会出现"假失败"。
-#  2) 因此计时循环里要**校验状态码确实是 401**，把 429/网络异常等样本剔除，
-#     并断言至少采到 3 个有效样本，否则这条断言本身就不成立。
-# 取 3 个有效样本的最小值（min 比平均值更稳，不受偶发抖动影响）。
+# 这条断言是**粗粒度**的，不是"常量时间证明"：它只区分"跑了一次 scrypt"与"根本没跑"。
+# 实测物理信号很干净：没跑 scrypt ≈ 2ms；跑了一次 ≈ 60~75ms（约 30 倍差距）。
+#
+# 阈值取 0.3 而不是 0.5：这台机器只有 2 vCPU，紧接着后端压测段跑时噪声可达 2 倍以上，
+# 0.5 的阈值会假失败（实测在 Gate 里失败、单独跑却通过）。
+# 0.3 仍然能干净地抓住"没跑 scrypt"（那会是 0.03 量级），但对噪声不再敏感。
+#
+# 另外两个坑（都踩过）：
+#  1) 探测用的 handle **必须每次都不同**：固定名字在多次运行后累计失败会触发限流，
+#     限流在 scrypt 之前就返回 429（约 2ms），样本直接失真。
+#  2) 因此要**校验状态码确实是 401**，把 429/网络异常剔除，并断言拿到至少 3 个有效样本 ——
+#     否则一条"样本不足"的断言会被误读成"通过了"。
 t_wrong=99; t_missing=99; n_wrong=0; n_missing=0
 PROBE_MISSING="no-such-handle-$$-$RANDOM$RANDOM"
-for _ in 1 2 3 4 5 6; do
+for _ in 1 2 3 4 5 6 7 8; do
   read -r code d < <(curl -s -o /dev/null -m 15 -w '%{http_code} %{time_total}' -X POST "$BASE/auth/login" \
     -H 'Content-Type: application/json' -d "{\"handle\":\"$SEED_USER\",\"password\":\"$WRONG_PASS\"}")
   if [ "$code" = "401" ]; then
@@ -96,9 +102,9 @@ echo "  用户不存在最短耗时 : ${t_missing}s  (有效样本 $n_missing)"
 if [ "$n_wrong" -lt 3 ] || [ "$n_missing" -lt 3 ]; then
   bad "计时样本不足（401 样本 密码错=$n_wrong 不存在=$n_missing），无法判定"
 else
-  awk -v w="$t_wrong" -v m="$t_missing" 'BEGIN{ exit !(m >= 0.5*w) }' \
-    && ok "不存在分支耗时 ≥ 密码错分支的 50%（dummy scrypt 生效）" \
-    || bad "不存在分支明显更快，说明没有跑 dummy scrypt（可枚举用户）"
+  awk -v w="$t_wrong" -v m="$t_missing" 'BEGIN{ exit !(m >= 0.3*w) }' \
+    && ok "不存在分支耗时 ≥ 密码错分支的 30%（dummy scrypt 生效；实测比值 $(awk -v w="$t_wrong" -v m="$t_missing" 'BEGIN{printf "%.2f", m/w}')）" \
+    || bad "不存在分支明显更快（比值 $(awk -v w="$t_wrong" -v m="$t_missing" 'BEGIN{printf "%.2f", m/w}')），说明没有跑 dummy scrypt（可枚举用户）"
 fi
 
 echo
