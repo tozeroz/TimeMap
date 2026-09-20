@@ -133,4 +133,60 @@ autovacuum_max_workers = 2
 
 - [x] 三项准备检查（ChatGPT 可对话 / MuMu 可控 / 服务器 SSH 可达）
 - [x] 计划 v2 成文（本文件）
-- [ ] M0 基线冻结 + 环境准备
+- [x] **M0 基线冻结 + 环境准备 —— PASS / CLOSED**（锚点见 `docs/m0/ANCHOR.md`）
+- [ ] M1 后端最小闭环（**GO**，规格见第九节）
+
+---
+
+## 九、M1 规格（依据审核记录 03，冻结）
+
+> 审核原文：`docs/review-log/03-m0-verdict-and-m1-go.md`
+
+### 语义隔离（不可用一个大 /health 假装证明三件事）
+
+| 检查 | 证明什么 |
+|---|---|
+| `/health`（Nginx 直接返回） | **Edge health** —— 网关活着 |
+| `/api/health` | **Backend liveness** —— Node/Fastify 进程活着 |
+| `/api/ready` | **Backend readiness** —— 能连 PG 且 migration 状态满足；**PG 不可用时必须失败** |
+
+### vertical slice 的定义（M1 最重要的 Gate）
+
+不是「Fastify 能启动」，也不是「/api/health 返回 200」，而是
+**真实 UI → HTTP → Fastify → PG → 再读出来 → 真实 UI**，且至少发生一次真实持久化：
+
+```
+User action → React → Nginx /api → Fastify → PostgreSQL INSERT/UPDATE
+           → GET → React 渲染出持久化的值
+→ 重启 backend → 数据仍在
+```
+
+### M1 Gate 核心断言（审核点名）
+
+1. fresh DB 能从 migration 创建 schema
+2. migration 可重复执行且版本可识别
+3. Fastify 使用受限 PG pool（不是无限连接）
+4. backend systemd **enabled + active**
+5. **reboot 后自动恢复**
+6. `/health` 与 `/ready` 语义明确
+7. readiness 在 PG 不可用时必须失败
+8. 至少一个真实业务 E2E write/read
+9. 该 slice **不再依赖 localStorage 作为业务真源**
+10. backend restart 后数据仍然存在
+11. Nginx 是客户端唯一 HTTP 入口，**不暴露 Node 监听端口**
+12. M1 完成后重新测 396MB 机器的内存 / swap activity / OOM
+13. **M1 Gate 必须包含 M0 regression Gate**（M0 invariants 仍 PASS）
+
+即：`M1 PASS = M0 invariants PASS + M1 new invariants PASS`（M2/M3 沿用同一模式）
+
+### M1 交付边界
+
+- 必须做：Fastify + PG pool + migration + health/ready + systemd(enabled) + Nginx 反代 + 一个真实 vertical slice
+- 不得做：为 3 个 evidence-blocked 页面补证据（留给 M3 从真实入口恢复）
+- 报告口径：始终 `total 22 / observed 19 / evidence-blocked 3`，不得写 `19/19`
+
+### 治理结转项（non-blocking）
+
+- 期望公网入向契约：`22/tcp` + `80/tcp`；禁止 `5432/tcp` 与后端内部端口
+- 脱敏区域（`login-sns`）在做 pixel diff 时必须按 `evidence_mask` 跳过
+
