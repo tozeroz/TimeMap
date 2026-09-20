@@ -62,12 +62,34 @@
 5. **备份不要全部推迟到 M6**：M2 之后就必须有 `pg_dump` + restore 测试。
 
 ### M3 推荐的切片顺序
-
 ```
 Slice 1  帖子列表 → 帖子详情 → 评论列表
 Slice 2  点赞 → 点赞状态 → 点赞计数
 Slice 3  发帖 → 图片上传 → 帖子列表刷新
 ```
+
+### 里程碑范围迁移记录（Milestone scope reallocation）
+
+依据审核记录 07 的 P0 要求，**显式登记**一次范围调整 —— 不许悄悄发生：
+
+```
+Moved M4 → M3:
+- text comment read/integration        （评论读取与页面集成）
+- like write/state/count               （点赞写入、状态与计数）
+
+Remains M4:
+- media upload / storage / delivery    （图片上传、存储、分发）
+- media-specific behavior              （媒体相关行为）
+- 其他仍属于媒体链路的能力
+```
+
+**原因**：M3 的核心是 Data Model V0.1 的验证。若不把评论与点赞的**真实读写**提前，
+M3 就只能验证空 schema，`comments` / `likes` 的模型是否正确根本无从证伪
+（审核记录 07 原文：否则你没法真正验证 comments / likes 模型，也无法完成这轮行为恢复）。
+
+**影响边界**：M2 当时冻结的边界仍然正确（那时确实属于 M4）；本次是 M3/M4 之间的一次显式再分配，
+两份里程碑记录因此不互相矛盾。M3 的冻结顺序见 `docs/m3/SPEC.md` 第三节。
+
 
 ## 五、PostgreSQL 与运行时参数（审核 PASS）
 
@@ -137,7 +159,8 @@ autovacuum_max_workers = 2
 - [x] **M1 后端最小闭环 + 文本发帖垂直切片 —— PASS / CLOSED**（审核记录 04；结果见 `docs/m1/REPORT.md`）
 - [x] **M2 认证 + 数据模型 V0.1 + seed + 备份演练 —— PASS / CLOSED**（审核记录 06）
       （规格 `docs/m2/SPEC.md`、模型追溯 `docs/m2/DATA-MODEL.md`、结果 `docs/m2/REPORT.md`）
-- [ ] M3 垂直切片迁移（逐页恢复真实行为语义 + 反推/验证数据模型，**NEXT**）
+- [ ] M3 垂直切片迁移（行为恢复 + UI/API 集成 + 数据模型验证，**IN PROGRESS**）
+      规格：`docs/m3/SPEC.md`（审核记录 07 有条件批准，5 点已并入）
 
 ---
 
