@@ -150,11 +150,17 @@ function Run-Remote([string]$remoteCmd) {
 }
 
 if ($Phase -eq 'pre') {
-  Write-Output "--- Phase pre: 记录 boot_id ---"
-  # 走 base64 下发（PowerShell 直传 ssh 参数会把内嵌双引号吃掉，导致 JSON 写坏）
-  $preScript = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $root 'scripts\m0\verify-m0-server.sh')))
-  Run-Remote "echo '$preScript' | base64 -d > /tmp/verify-m0-server.sh && bash /tmp/verify-m0-server.sh save-boot" |
-    ForEach-Object { Write-Output "     $_" }
+  Write-Output "--- Phase pre: record boot_id ---"
+  # 直接内联一段 bash（base64 传递，避开 PowerShell → ssh 的引号问题；这条路径已验证可行）
+  $bootSh = @'
+mkdir -p /srv/campus
+printf '{"boot_id":"%s","saved_at":"%s"}\n' "$(cat /proc/sys/kernel/random/boot_id)" "$(date -Is)" > /srv/campus/m0-reboot-state.json
+cat /srv/campus/m0-reboot-state.json
+'@
+  $encBoot = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($bootSh))
+  $saved = Run-Remote "echo '$encBoot' | base64 -d | bash"
+  $saved | ForEach-Object { Write-Output "     $_" }
+  if (-not ($saved -match 'boot_id')) { Fail REBOOT "boot_id_before recorded" } else { Pass REBOOT "boot_id_before recorded" }
 }
 
 $serverScript = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $root 'scripts\m0\verify-m0-server.sh')))
