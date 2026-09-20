@@ -325,6 +325,15 @@ const SCREENS = [
     persistence: ['无'],
     known_unknowns: ['验证码倒计时、错误提示、协议勾选的强制时机'],
     evidence_note: '截图中的手机号已打码为 [redacted]',
+    // 脱敏区域（归一化坐标）：未来做 pixel diff 时必须忽略，否则会把 [redacted] 误当成原版 UI
+    evidence_mask: [
+      {
+        file: 'normal.png',
+        reason: 'redacted phone number',
+        region_normalized: { x: 0.1815, y: 0.2333, width: 0.3889, height: 0.0323 },
+        pixel_box_1080x1920: { x: 196, y: 448, width: 420, height: 62 },
+      },
+    ],
   },
   {
     id: 'onboarding',
@@ -421,6 +430,7 @@ for (const s of SCREENS) {
     persistence: s.persistence,
     known_unknowns: s.known_unknowns,
     ...(s.evidence_note ? { evidence_note: s.evidence_note } : {}),
+    ...(s.evidence_mask ? { evidence_mask: s.evidence_mask } : {}),
     ...(s.blocked_reason ? { blocked_reason: s.blocked_reason } : {}),
   }
   writeFileSync(path.join(dir, 'baseline.json'), JSON.stringify(doc, null, 2) + '\n', 'utf8')
