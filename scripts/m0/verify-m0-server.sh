@@ -24,6 +24,23 @@ expect_eq() { # expect_eq <section> <desc> <actual> <expected>
   if [ "$3" = "$4" ]; then p "$1" "$2 (=$3)"; else f "$1" "$2 (got='$3' want='$4')"; fi
 }
 
+# 等服务变成 active（带超时），耗时写入全局 WAIT_ELAPSED。
+# 为什么需要：重启后各服务启动有先后 —— 这台机器只有 2 vCPU / 396MB，
+# PostgreSQL 起来要几十秒，紧接着就断言会把"还在启动中"误判成"没起来"。
+# M1 的重启 Gate 上实测踩到过：断言时 PG 和 backend 都还是 inactive，
+# 而 40 秒后的下一组断言里它们全正常。
+# 带超时轮询既不会把慢启动报成失败，也不会把"真的起不来"掩盖过去（超时就是 FAIL）。
+wait_active() { # wait_active <unit> <timeout_s>
+  local unit="$1" tmo="${2:-120}" i=0
+  WAIT_ELAPSED="$tmo"
+  while [ "$i" -lt "$tmo" ]; do
+    if [ "$(systemctl is-active "$unit" 2>&1)" = "active" ]; then WAIT_ELAPSED="$i"; return 0; fi
+    sleep 1
+    i=$((i + 1))
+  done
+  return 1
+}
+
 FROZEN_NODE_VERSION="v24.21.0"
 FROZEN_NODE_PATH="/opt/node-v24.21.0-linux-x64/bin/node"
 FROZEN_NODE_SHA="fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6"
@@ -172,14 +189,18 @@ case "$mode" in
     else
       f REBOOT "boot_id_after != boot_id_before (未重启)"
     fi
-    expect_eq REBOOT "nginx active after reboot" "$(systemctl is-active nginx)" "active"
-    expect_eq REBOOT "postgresql active after reboot" "$(systemctl is-active postgresql)" "active"
+    if wait_active nginx 60; then p REBOOT "nginx active after reboot (${WAIT_ELAPSED}s)"; else f REBOOT "nginx active after reboot (超时 60s)"; fi
+    if wait_active postgresql 120; then p REBOOT "postgresql active after reboot (${WAIT_ELAPSED}s)"; else f REBOOT "postgresql active after reboot (超时 120s)"; fi
     # 【阶段相关】M0 时后端还不存在，重启后自然是 inactive；
     # M1 起它必须开机自启，所以这里必须反转成 active —— 这正是 M1 Gate 第 5 组要证明的事。
     if [ "$stage" = "M0" ]; then
       expect_eq REBOOT "campus-backend inactive after reboot" "$(systemctl is-active campus-backend.service 2>&1)" "inactive"
     else
-      expect_eq REBOOT "campus-backend active after reboot（开机自启生效）" "$(systemctl is-active campus-backend.service 2>&1)" "active"
+      if wait_active campus-backend.service 120; then
+        p REBOOT "campus-backend active after reboot（开机自启生效，${WAIT_ELAPSED}s）"
+      else
+        f REBOOT "campus-backend active after reboot（超时 120s 仍未起来）"
+      fi
     fi
     expect_eq REBOOT "/health works after reboot" "$(curl -s -m 5 http://127.0.0.1/health)" "$HEALTH_BODY"
     if ss -lnt 2>/dev/null | grep -qE '0\.0\.0\.0:5432|\[::\]:5432'; then
