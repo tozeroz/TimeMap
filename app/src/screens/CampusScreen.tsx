@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { listPosts, toFeedPost } from '../api/client'
 import { BigTitle, Screen } from '../components/Shell'
 import { IconChatBubble, IconComment, IconHeart, IconSearch } from '../components/icons'
 import { campusInfo, posts, schools, type FeedPost } from '../data/mock'
-import { feedWithMine, subscribeMyPosts } from '../data/store'
+import { feedWithMine, setServerPosts, subscribeMyPosts } from '../data/store'
 import { navigate } from '../router'
 import './campus.css'
 
@@ -147,10 +148,31 @@ export function CampusScreen() {
   const [school, setSchool] = useState(campusInfo.name)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [likedIds, setLikedIds] = useState<Record<string, boolean>>({})
-  // 真实发帖走本地存储：新发的帖子排在信息流最前面
+  // 真实数据：服务器帖子（权威副本）+ 本地未同步的帖子 + 预置 mock 内容
   const [feed, setFeed] = useState<FeedPost[]>(() => feedWithMine(posts))
 
   useEffect(() => subscribeMyPosts(() => setFeed(feedWithMine(posts))), [])
+
+  /**
+   * 拉服务器帖子。
+   * 为什么失败时只 warn 不出错：真机上网络随时可能断，这时候应该继续显示本地和预置内容，
+   * 而不是把校园页变成一片空白（原版在这里是「网络错误 + 刷新」，但那是它自己没做离线兜底）。
+   */
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const result = await listPosts()
+      if (!alive) return
+      if (result.ok) {
+        setServerPosts(result.value.map(toFeedPost))
+      } else {
+        console.warn('[campus] 获取帖子失败，降级显示本地内容：', result.reason)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
 
   return (
     <Screen

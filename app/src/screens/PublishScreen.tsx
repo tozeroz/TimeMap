@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPost, toFeedPost } from '../api/client'
 import { Screen, TopBar } from '../components/Shell'
 import { IconCamera, IconClose, IconFlip, IconImage, IconLocation, IconMic } from '../components/icons'
-import { addMyPost } from '../data/store'
+import { addMyPost, addServerPost, markPostSynced } from '../data/store'
 import { ensureCameraPermission, pickPhoto } from '../native/camera'
 import {
   applyZoom,
@@ -31,8 +32,8 @@ const ZOOM_STEPS = ['1x', '2x', '5x'] as const
  * - 文字：图文编辑器，「说点什么...」+ 从相册选图 + 字体选择
  * - 语音：录音波形（占位，未接真实录音）
  *
- * 点「发布」会把草稿写进本地帖子库（localStorage 持久化），
- * 返回校园页后能在信息流最前面看到自己发的帖子。
+ * 点「发布」：先把草稿写进本地帖子库（离线也能立刻看到），
+ * 再 POST 到后端落库（M1 的垂直切片）；返回校园页后帖子在信息流最前面。
  */
 export function PublishScreen() {
   const route = useRoute()
@@ -43,6 +44,7 @@ export function PublishScreen() {
   const [place, setPlace] = useState(route.query.place ?? '北京交通大学')
   const [images, setImages] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const [flash, setFlash] = useState(false)
 
   // ---- 实时取景 ----
@@ -129,9 +131,36 @@ export function PublishScreen() {
   }, [])
 
   function publish() {
-    if (!text.trim() && images.length === 0) return
-    addMyPost({ text, images, place })
-    navigate('campus')
+    if (publishing || (!text.trim() && images.length === 0)) return
+    void doPublish()
+  }
+
+  /**
+   * 发布：**先写本地，再同步服务器**。
+   *
+   * 顺序不能反：网络慢或不通时，用户点完发布应该立刻在信息流看到自己的帖子，
+   * 而不是对着转圈等 8 秒超时。本地这份是"即时反馈"，服务器那份是"权威副本"；
+   * 同步成功后用服务器返回的 id 把两者关联起来，避免同一条帖子显示两张卡。
+   *
+   * M1 只同步文本（图片上传是 M4）。带图的帖子：图片留在本地，
+   * 文字部分同样会进服务器。
+   */
+  async function doPublish() {
+    setPublishing(true)
+    const draft = text.trim() || '分享了图片'
+    const local = addMyPost({ text, images, place })
+    try {
+      const result = await createPost({ body: draft, place: place || undefined })
+      if (result.ok) {
+        markPostSynced(local.id, result.value.id)
+        addServerPost(toFeedPost(result.value))
+      } else {
+        console.warn('[publish] 同步到服务器失败，帖子已存在本地：', result.reason)
+      }
+    } finally {
+      setPublishing(false)
+      navigate('campus')
+    }
   }
 
   const canPublish = text.trim().length > 0 || images.length > 0
@@ -166,9 +195,10 @@ export function PublishScreen() {
             <button
               className={`pub__publish ${canPublish ? 'is-on' : ''}`}
               onClick={publish}
-              disabled={!canPublish}
+              disabled={!canPublish || publishing}
+              data-publishing={publishing ? '1' : '0'}
             >
-              发布
+              {publishing ? '发布中' : '发布'}
             </button>
           }
         />
@@ -289,8 +319,8 @@ export function PublishScreen() {
         )}
 
         {mode === '文字' && (
-          <button className="pub__send" onClick={publish} disabled={!canPublish}>
-            发布
+          <button className="pub__send" onClick={publish} disabled={!canPublish || publishing}>
+            {publishing ? '发布中' : '发布'}
           </button>
         )}
 

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network Security Config（M1 引入）。
+
+  背景：后端目前只有公网 IP、没有域名，也还没有 HTTPS 证书，
+  客户端必须走 http://8.148.156.146。而 Android 9(API 28) 起默认禁止明文流量，
+  所以必须在这里显式开口子。
+
+  **只对这一个 IP 开口子**，而不是用 android:usesCleartextTraffic="true" 全校放开：
+  全局放开等于允许这个 App 对任意域名发明文请求，属于不必要的攻击面。
+  以后接了域名 + HTTPS，直接删掉这个 domain-config 即可。
+
+  M6 硬化阶段的任务：上 HTTPS（Let's Encrypt），然后把这里的明文例外去掉。
+-->
+<network-security-config>
+    <!-- 默认策略保持严格：未列出的域名一律禁止明文 -->
+    <base-config cleartextTrafficPermitted="false" />
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">8.148.156.146</domain>
+    </domain-config>
+</network-security-config>

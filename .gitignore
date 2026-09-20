@@ -3,6 +3,7 @@ node_modules/
 dist/
 build/
 *.log
+*.tsbuildinfo
 
 # 服务器私钥 / 凭据 —— 绝不入库
 *.pem

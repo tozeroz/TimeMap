@@ -10,11 +10,16 @@
         android:supportsRtl="true"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/AppTheme">
         <!--
-            hardwareAccelerated 显式开启；wasCleartextTraffic 关闭（纯本地 demo，不需要网络）。
+            hardwareAccelerated 显式开启。
             模拟器上曾出现 WebView 渲染线程卡死（Chromium EGLImage 释放报错），
             表现为界面冻结、点击无响应；force-stop 后重新启动可恢复。
+
+            明文流量：usesCleartextTraffic 保持 false（全局禁止），
+            例外只给后端 IP，写在 res/xml/network_security_config.xml 里。
+            M1 起 App 会请求 http://8.148.156.146 的 /api/*（暂无域名与证书）。
         -->
 
         <activity

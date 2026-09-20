@@ -1,4 +1,4 @@
-<#
+﻿<#
   M0 Exit Gate —— 总编排（在开发机执行）
   用法：
     .\scripts\m0\verify-m0.ps1                # 本地断言 + 服务器断言 + 外部可达性
@@ -9,7 +9,10 @@
 #>
 param(
   [ValidateSet('none','pre','post')][string]$Phase = 'none',
-  [switch]$LocalOnly
+  [switch]$LocalOnly,
+  # M0|M1：M0 是"冻结基线"阶段（要求业务库/后端**尚不存在**），
+  # M1 起这些东西必须存在。阶段相关的断言按 Stage 反转，而不是删掉 —— 见 verify-m0-server.sh 顶部说明。
+  [ValidateSet('M0','M1')][string]$Stage = 'M0'
 )
 $ErrorActionPreference = 'Continue'
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent   # scripts/m0 -> repo root
@@ -26,6 +29,7 @@ function Expect([string]$sec, [string]$msg, $actual, $expected) {
 }
 
 Write-Output "M0_GATE_VERSION=1"
+Write-Output "M0_GATE_STAGE=$Stage"
 Write-Output ""
 
 # ---------------- [GIT] ----------------
@@ -39,7 +43,15 @@ if ($base) {
   git merge-base --is-ancestor $base HEAD 2>$null
   Chk GIT "recorded M0 base commit is ancestor of HEAD" { $LASTEXITCODE -eq 0 }
 }
-Chk GIT "git status --porcelain == empty" { -not (git status --porcelain) }
+# 工作区干净：M1 阶段允许存在"证据产物"（gate 跑完会往 docs/m1/evidence/ 写文件），
+# 否则会出现"跑 Gate 生成证据 → 证据把工作区弄脏 → 下次跑 Gate 报脏"的死循环。
+if ($Stage -eq 'M0') {
+  Chk GIT "git status --porcelain == empty" { -not (git status --porcelain) }
+} else {
+  $dirty = @(git status --porcelain | Where-Object { $_ -and ($_ -replace '\\','/') -notmatch 'docs/m1/evidence/' })
+  Chk GIT "git status --porcelain 仅允许证据产物" { $dirty.Count -eq 0 }
+  if ($dirty.Count -gt 0) { Write-Output ("     dirty: " + ($dirty -join ' | ')) }
+}
 Chk GIT "PLAN.md exists" { Test-Path -LiteralPath 'PLAN.md' }
 $reviews = @(Get-ChildItem -Path 'docs/review-log' -Filter '*.md' -ErrorAction SilentlyContinue)
 Chk GIT "docs/review-log contains >= 1 review" { $reviews.Count -ge 1 }
@@ -47,28 +59,36 @@ Chk GIT "private key is NOT tracked by git" { -not (@(git ls-files | Select-Stri
 $historyPem = @(git log --all --name-only --pretty=format: | Select-String '\.pem$')
 Chk GIT "private key is NOT present in git history" { $historyPem.Count -eq 0 }
 
-# M0 diff allowlist
+# M0 diff allowlist / SCOPE
+# 这三条断言的是"M0 阶段**不得**改动前端、不得新增后端代码与迁移"。
+# M1 的整个目标就是新增这些东西，所以 M1 阶段它们必然为假；
+# M1 阶段由 scripts/m1/verify-m1.ps1 的 SCOPE 组用 M1 允许清单来正面约束。
 if ($base) {
-  $allow = @('PLAN.md','.gitignore','.gitattributes')
-  $allowPrefix = @('docs/','ops/','scripts/m0/','tools/')
-  $changed = @(git diff --name-only "$base..HEAD") + @(git diff --name-only) + @(git ls-files --others --exclude-standard)
-  $changed = @($changed | Where-Object { $_ } | Sort-Object -Unique)
-  $disallowed = @($changed | Where-Object {
-      $f = $_ -replace '\\','/'
-      -not (($allow -contains $f) -or (@($allowPrefix | Where-Object { $f.StartsWith($_) }).Count -gt 0))
-    })
-  Chk GIT "M0 diff touches only allowed paths" { $disallowed.Count -eq 0 }
-  if ($disallowed.Count -gt 0) { Write-Output ("     disallowed: " + ($disallowed -join ', ')) }
+  if ($Stage -eq 'M0') {
+    $allow = @('PLAN.md','.gitignore','.gitattributes')
+    $allowPrefix = @('docs/','ops/','scripts/m0/','tools/')
+    $changed = @(git diff --name-only "$base..HEAD") + @(git diff --name-only) + @(git ls-files --others --exclude-standard)
+    $changed = @($changed | Where-Object { $_ } | Sort-Object -Unique)
+    $disallowed = @($changed | Where-Object {
+        $f = $_ -replace '\\','/'
+        -not (($allow -contains $f) -or (@($allowPrefix | Where-Object { $f.StartsWith($_) }).Count -gt 0))
+      })
+    Chk GIT "M0 diff touches only allowed paths" { $disallowed.Count -eq 0 }
+    if ($disallowed.Count -gt 0) { Write-Output ("     disallowed: " + ($disallowed -join ', ')) }
 
-  # ---------------- [SCOPE] ----------------
-  Chk SCOPE "no frontend source file changed since M0 base" {
-    -not (@($changed | Where-Object { ($_ -replace '\\','/') -like 'app/src/*' }).Count -gt 0)
-  }
-  Chk SCOPE "no business API source added" {
-    -not (@($changed | Where-Object { ($_ -replace '\\','/') -like 'server/src/*' }).Count -gt 0)
-  }
-  Chk SCOPE "no business migration/schema added" {
-    -not (@($changed | Where-Object { ($_ -replace '\\','/') -match '(^|/)(migrations|schema)(/|$)' }).Count -gt 0)
+    # ---------------- [SCOPE] ----------------
+    Chk SCOPE "no frontend source file changed since M0 base" {
+      -not (@($changed | Where-Object { ($_ -replace '\\','/') -like 'app/src/*' }).Count -gt 0)
+    }
+    Chk SCOPE "no business API source added" {
+      -not (@($changed | Where-Object { ($_ -replace '\\','/') -like 'server/src/*' }).Count -gt 0)
+    }
+    Chk SCOPE "no business migration/schema added" {
+      -not (@($changed | Where-Object { ($_ -replace '\\','/') -match '(^|/)(migrations|schema)(/|$)' }).Count -gt 0)
+    }
+  } else {
+    Write-Output "NOTE GIT M0-diff-allowlist / SCOPE 3 条为 M0 阶段专用断言（要求前端与后端源码不得改动），"
+    Write-Output "NOTE M1 阶段必然不成立，改由 scripts/m1/verify-m1.ps1 的 SCOPE 组按 M1 允许清单正面约束。"
   }
 }
 
@@ -165,7 +185,7 @@ cat /srv/campus/m0-reboot-state.json
 
 $serverScript = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $root 'scripts\m0\verify-m0-server.sh')))
 $mode = if ($Phase -eq 'post') { 'check-boot' } else { 'assert' }
-$out = Run-Remote "echo '$serverScript' | base64 -d > /tmp/verify-m0-server.sh && bash /tmp/verify-m0-server.sh $mode"
+$out = Run-Remote "echo '$serverScript' | base64 -d > /tmp/verify-m0-server.sh && bash /tmp/verify-m0-server.sh $mode $Stage"
 $out | ForEach-Object {
   $line = "$_".Trim()
   if ($line -match '^PASS ') { Write-Output $line }

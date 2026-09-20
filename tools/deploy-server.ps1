@@ -1,0 +1,104 @@
+﻿<#
+  M1 部署：把本地打好的后端单文件包推上服务器并切换 systemd。
+  用法： & '.\tools\deploy-server.ps1'
+
+  步骤：构建 → 传单文件 → 生成 server.env（用服务器上的口令） → 下发 ops → 启服务 → 冒烟测试
+  幂等：重复执行只是替换文件并 restart。
+#>
+param(
+  [switch]$SkipBuild,
+  [string]$Key = '',
+  [string]$Target = 'root@8.148.156.146'
+)
+$ErrorActionPreference = 'Continue'
+$root = Split-Path $PSScriptRoot -Parent
+if (-not $Key) { $Key = Join-Path $root 'TimeMap.pem' }
+
+if (-not $SkipBuild) {
+  Write-Output '=== 1. 本地构建后端单文件包 ==='
+  Push-Location (Join-Path $root 'server')
+  pnpm build 2>&1 | Select-Object -Last 2
+  Pop-Location
+}
+
+$bundle = Join-Path $root 'server\dist\index.mjs'
+if (-not (Test-Path -LiteralPath $bundle)) { Write-Error "缺少构建产物: $bundle"; exit 2 }
+Write-Output ("=== 2. 上传后端包 {0:N1} KB ===" -f ((Get-Item $bundle).Length / 1KB))
+Write-Output '    用 scp 传文件而不是命令行 base64：1.6MB 包编码后约 2MB，超过 Windows 32767 字符的命令行上限'
+& scp -i $Key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes $bundle "${Target}:/tmp/campus-backend-index.mjs"
+if ($LASTEXITCODE -ne 0) { Write-Error 'scp 失败'; exit 1 }
+
+$sh = @'
+set -euo pipefail
+echo "== 安装后端包 =="
+install -o campus -g campus -m 0750 /tmp/campus-backend-index.mjs /srv/campus/server/dist/index.mjs
+rm -f /tmp/campus-backend-index.mjs
+ls -l /srv/campus/server/dist/index.mjs
+
+echo "== 生成 server.env（口令来自服务器本地文件，不进 git）=="
+DB_PASS="$(cat /srv/campus/.db_password)"
+umask 077
+printf 'DATABASE_URL=postgresql://campus:%s@127.0.0.1:5432/campus\n' "$DB_PASS" > /srv/campus/server.env
+chown campus:campus /srv/campus/server.env
+chmod 600 /srv/campus/server.env
+echo "  server.env 已写入（内容不外显）"
+
+echo "== 下发 systemd unit =="
+cat > /etc/systemd/system/campus-backend.service <<'UNIT'
+__UNIT__
+UNIT
+systemctl daemon-reload
+systemd-analyze verify /etc/systemd/system/campus-backend.service && echo "  verify PASS"
+
+echo "== 启用并启动 =="
+systemctl enable campus-backend.service
+systemctl restart campus-backend.service
+# 固定 sleep 是不可靠的：实测这台机器上从 restart 到 listen 需要约 4-7 秒，
+# sleep 3 会让后面的 curl 打到还没监听的端口，set -e 直接把脚本打断。
+# 所以改成轮询等待，最长 60 秒。
+for i in $(seq 1 60); do
+  if curl -sf -m 2 http://127.0.0.1:3001/api/health >/dev/null 2>&1; then
+    echo "  就绪耗时: ${i}s"
+    break
+  fi
+  if [ "$i" = 60 ]; then
+    echo "  等待 60s 仍未就绪，下面是日志："
+    journalctl -u campus-backend.service -n 40 --no-pager
+    exit 1
+  fi
+  sleep 1
+done
+echo "  is-enabled: $(systemctl is-enabled campus-backend.service)"
+echo "  is-active:  $(systemctl is-active campus-backend.service)"
+
+echo "== 冒烟测试 =="
+# 每行都带 || 兜底：set -e 下任何一次 curl 非零退出都会静默中断整个脚本，
+# 之前就是这样把冒烟测试截断成只剩一行输出的。
+printf 'liveness  /api/health : '; curl -s -m 5 http://127.0.0.1:3001/api/health || echo -n '(失败)'; echo
+printf 'readiness /api/ready  : '; curl -s -m 5 -w ' [%{http_code}]' http://127.0.0.1:3001/api/ready || echo -n '(失败)'; echo
+printf 'edge      /health     : '; curl -s -m 5 -w ' [%{http_code}]' http://127.0.0.1/health || echo -n '(失败)'; echo
+printf 'via nginx /api/health : '; curl -s -m 5 -w ' [%{http_code}]' http://127.0.0.1/api/health || echo -n '(失败)'; echo
+printf 'list      /api/posts  : '; curl -s -m 5 http://127.0.0.1/api/posts || echo -n '(失败)'; echo
+echo "== CORS（APK WebView 来源 https://localhost）=="
+curl -s -m 5 -D - -o /dev/null -H 'Origin: https://localhost' http://127.0.0.1/api/health 2>/dev/null | grep -iE 'access-control|vary' || echo '  (未返回 CORS 头)'
+echo "== CORS 负例（非白名单来源不应回显 allow-origin）=="
+if curl -s -m 5 -D - -o /dev/null -H 'Origin: https://evil.example' http://127.0.0.1/api/health 2>/dev/null | grep -qi 'access-control-allow-origin'; then
+  echo '  FAIL: 非白名单来源拿到了 allow-origin'
+else
+  echo '  PASS: 非白名单来源没有 allow-origin'
+fi
+echo "== 监听端口 =="
+ss -lntp | grep -E ':80|:3001' || true
+echo "== 最近日志 =="
+journalctl -u campus-backend.service -n 15 --no-pager
+'@
+
+# 必须按 UTF-8 读：PS 5.1 的 Get-Content 默认按 ANSI 解码，中文注释会被读坏并可能吃掉换行，
+# 把 "[Unit]" 并进上一行注释，导致整个 section 头消失（线上表现为 systemd 报
+# "Assignment outside of section"）。这个坑已经踩过一次。
+$unit = [IO.File]::ReadAllText((Join-Path $root 'ops\systemd\campus-backend.service'), [Text.Encoding]::UTF8)
+$sh = $sh.Replace('__UNIT__', $unit.TrimEnd())
+
+$enc = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($sh))
+& ssh -i $Key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes $Target "echo '$enc' | base64 -d | bash"
+exit $LASTEXITCODE

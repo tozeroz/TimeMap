@@ -29,7 +29,17 @@ FROZEN_NODE_PATH="/opt/node-v24.21.0-linux-x64/bin/node"
 FROZEN_NODE_SHA="fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6"
 HEALTH_BODY='{"status":"ok","service":"campus-gateway","stage":"M0"}'
 
+# 用法: verify-m0-server.sh [assert|save-boot|check-boot] [M0|M1]
+#
+# 为什么要分 stage：
+#   M0 里有几条断言是"**还没有**业务库 / 后端服务是 disabled+inactive"——
+#   它们断言的是 M0 阶段"不该存在什么"。M1 恰恰要把这些东西做出来，
+#   所以"M1 PASS = M0 invariants PASS + M1 新断言 PASS"这句话如果照字面执行，
+#   永远不可能成立。正确做法不是删掉这几条，而是把它们标注为**阶段相关**：
+#   M1 阶段把它们反转成"现在必须存在且状态正确"。
+#   永久性断言（Node 冻结、PG 参数、私钥治理、端口、nginx、基线完整性）不加 stage 判断，任何阶段都必须 PASS。
 mode="${1:-assert}"
+stage="${2:-M0}"
 
 # ---------- [NODE] ----------
 if [ "$mode" = "assert" ]; then
@@ -68,7 +78,13 @@ if [ "$mode" = "assert" ]; then
   else
     p POSTGRESQL "5432 bound only to loopback"
   fi
-  expect_eq POSTGRESQL "no business database" "$(q "select count(*) from pg_database where datname not in ('postgres','template0','template1')")" "0"
+  # 【阶段相关】M0 要求"没有业务库"，M1 起要求"恰好有一个 campus 业务库"
+  if [ "$stage" = "M0" ]; then
+    expect_eq POSTGRESQL "no business database" "$(q "select count(*) from pg_database where datname not in ('postgres','template0','template1')")" "0"
+  else
+    expect_eq POSTGRESQL "business database count" "$(q "select count(*) from pg_database where datname not in ('postgres','template0','template1')")" "1"
+    expect_eq POSTGRESQL "business database name" "$(q "select datname from pg_database where datname not in ('postgres','template0','template1')")" "campus"
+  fi
   expect_eq POSTGRESQL "no business tables in postgres db" "$(sudo -u postgres psql -Atc "select count(*) from information_schema.tables where table_schema='public'" 2>/dev/null)" "0"
 
   # ---------- [NGINX] ----------
@@ -81,9 +97,15 @@ if [ "$mode" = "assert" ]; then
   chk NGINX "/api proxy configuration exists" grep -q 'location /api/' /etc/nginx/sites-available/campus.conf
 
   # ---------- [BACKEND_SYSTEMD] ----------
+  # 【阶段相关】M0 要求后端"不存在/未启用"，M1 起要求它 enabled + active
   chk BACKEND_SYSTEMD "systemd-analyze verify" systemd-analyze verify /etc/systemd/system/campus-backend.service
-  expect_eq BACKEND_SYSTEMD "service disabled" "$(systemctl is-enabled campus-backend.service 2>&1)" "disabled"
-  expect_eq BACKEND_SYSTEMD "service inactive" "$(systemctl is-active campus-backend.service 2>&1)" "inactive"
+  if [ "$stage" = "M0" ]; then
+    expect_eq BACKEND_SYSTEMD "service disabled" "$(systemctl is-enabled campus-backend.service 2>&1)" "disabled"
+    expect_eq BACKEND_SYSTEMD "service inactive" "$(systemctl is-active campus-backend.service 2>&1)" "inactive"
+  else
+    expect_eq BACKEND_SYSTEMD "service enabled" "$(systemctl is-enabled campus-backend.service 2>&1)" "enabled"
+    expect_eq BACKEND_SYSTEMD "service active" "$(systemctl is-active campus-backend.service 2>&1)" "active"
+  fi
 
   # ---------- [RESOURCE_BASELINE] ----------
   # 采样：idle + nginx /health 并发 5/20（Node 并发资源测试按审核意见留到 M1）
@@ -152,7 +174,13 @@ case "$mode" in
     fi
     expect_eq REBOOT "nginx active after reboot" "$(systemctl is-active nginx)" "active"
     expect_eq REBOOT "postgresql active after reboot" "$(systemctl is-active postgresql)" "active"
-    expect_eq REBOOT "campus-backend inactive after reboot" "$(systemctl is-active campus-backend.service 2>&1)" "inactive"
+    # 【阶段相关】M0 时后端还不存在，重启后自然是 inactive；
+    # M1 起它必须开机自启，所以这里必须反转成 active —— 这正是 M1 Gate 第 5 组要证明的事。
+    if [ "$stage" = "M0" ]; then
+      expect_eq REBOOT "campus-backend inactive after reboot" "$(systemctl is-active campus-backend.service 2>&1)" "inactive"
+    else
+      expect_eq REBOOT "campus-backend active after reboot（开机自启生效）" "$(systemctl is-active campus-backend.service 2>&1)" "active"
+    fi
     expect_eq REBOOT "/health works after reboot" "$(curl -s -m 5 http://127.0.0.1/health)" "$HEALTH_BODY"
     if ss -lnt 2>/dev/null | grep -qE '0\.0\.0\.0:5432|\[::\]:5432'; then
       f REBOOT "PostgreSQL still loopback-only after reboot"
