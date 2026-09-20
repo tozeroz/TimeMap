@@ -43,12 +43,13 @@ if ($base) {
   git merge-base --is-ancestor $base HEAD 2>$null
   Chk GIT "recorded M0 base commit is ancestor of HEAD" { $LASTEXITCODE -eq 0 }
 }
-# 工作区干净：M1 阶段允许存在"证据产物"（gate 跑完会往 docs/m1/evidence/ 写文件），
+# 工作区干净：允许存在"证据产物"（每个里程碑的 Gate 都会往 docs/m<N>/evidence/ 写文件），
 # 否则会出现"跑 Gate 生成证据 → 证据把工作区弄脏 → 下次跑 Gate 报脏"的死循环。
+# 例外按 m<数字>/evidence 通配，M2 起不必再改这一行。
 if ($Stage -eq 'M0') {
   Chk GIT "git status --porcelain == empty" { -not (git status --porcelain) }
 } else {
-  $dirty = @(git status --porcelain | Where-Object { $_ -and ($_ -replace '\\','/') -notmatch 'docs/m1/evidence/' })
+  $dirty = @(git status --porcelain | Where-Object { $_ -and ($_ -replace '\\','/') -notmatch '^..\s*docs/m[0-9]+/evidence/' })
   Chk GIT "git status --porcelain 仅允许证据产物" { $dirty.Count -eq 0 }
   if ($dirty.Count -gt 0) { Write-Output ("     dirty: " + ($dirty -join ' | ')) }
 }
