@@ -63,6 +63,20 @@ DEVICE_PERSIST PASS
 | 7 | 真实打 `/api/posts` 5/20 并发：无 OOM kill、readiness 仍 200、MemAvailable 仍有 209–216MB | PASS |
 | 8 | 改动全部落在 M1 允许清单；库里只有 `posts`/`schema_migrations` | PASS |
 | — | CORS：预检 OPTIONS→204、白名单回显、非白名单不回显 | PASS |
+| — | **重启 Gate（两阶段）**：`-Phase pre` 记录 boot_id → `systemctl reboot` → `-Phase post` 断言 boot_id 已变 + nginx/PG/后端自恢复 + 垂直切片仍可用 | PASS |
+
+重启 Gate 实测（第二阶段原文）：
+
+```
+PASS REBOOT boot_id_after != boot_id_before
+PASS REBOOT nginx active after reboot (0s)
+PASS REBOOT postgresql active after reboot (0s)
+PASS REBOOT campus-backend active after reboot（开机自启生效，0s）
+PASS REBOOT /health works after reboot
+PASS REBOOT PostgreSQL still loopback-only after reboot
+BACKEND_RESULT PASS
+M1_GATE_RESULT PASS
+```
 
 资源快照（20 并发后）：MemAvailable 209–216MB / 396MB，无 OOM kill，后端 service RSS 约 74–78MB。
 
@@ -110,10 +124,12 @@ PowerShell 5.1 读无 BOM 的 .ps1 会按 ANSI(GBK) 解码；中文注释变乱�
 - `usesCleartextTraffic` 保持 **false**（全局禁止），例外只给后端 IP：`network_security_config.xml`。
 - 另需 `allowMixedContent: true`：WebView 页面来源是 `https://localhost`，请求 `http://<IP>` 属于混合内容，默认会被直接拦掉。**这是过渡态**，M6 上 HTTPS 后两项都要收回。
 
-## 五、Gate 自己抓到的两个测试代码 bug（记录在案）
+## 五、Gate 自己抓到的三个测试代码 bug（记录在案）
 
 1. `posts` 表字段数我写成 6，实际是 5（`id/author_name/body/place/created_at`）→ 断言错误，已改正。
 2. 用 PowerShell 拼 `ssh + psql` 命令行时引号被吃了两层，psql 收到一堆被拆散的参数（`extra command-line argument ... ignored`）→ 改为把 SQL 放进独立脚本经 base64 下发。
+3. **重启后立刻断言服务状态**：第一次重启 Gate 报「postgresql / campus-backend 重启后 inactive」，但 40 秒后的下一组断言里两者都正常。实测定位：这台机器 PostgreSQL 起来要 **29 秒**，而 `campus-backend` 又在等 PG —— 是断言时机问题，不是产品问题。已改为 `wait_active`（最长 120s）并把实际耗时打进 PASS 行；超时仍是 FAIL，所以不会把"真的起不来"掩盖过去。
+   这与第四节第 4 条（部署脚本 `sleep 3`）是同一类错误：**断言状态前必须先等状态稳定**。
 
 另外 Gate 确实抓到一处真实的越界改动（`scripts/m0/verify-m0-server.sh` 未在允许清单内），说明 SCOPE 组不是摆设。
 
