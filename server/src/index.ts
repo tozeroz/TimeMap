@@ -488,7 +488,7 @@ export function buildServer(deps: ServerDeps) {
     const meId = sess.kind === 'ok' ? sess.user.userId : null
     try {
       const r = await db.pool.query<
-        PostRow & { like_count: string; comment_count: string; liked_by_me: boolean }
+        PostRow & { like_count: string; comment_count: string; liked_by_me: boolean; images: unknown }
       >(
         `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at,
                 (select count(*) from likes l where l.post_id = p.id)::text as like_count,
@@ -496,7 +496,18 @@ export function buildServer(deps: ServerDeps) {
                 exists (
                   select 1 from likes l2
                    where l2.post_id = p.id and l2.user_id = $2::uuid
-                ) as liked_by_me
+                ) as liked_by_me,
+                -- M4：帖子的**公**图片（public scope）。
+                -- 只取 public：private 是聊天媒体，结构上不可能通过 post_media 关联
+                -- （迁移 006 的复合外键钉死了 scope），这里再显式过滤一次是防御性写法。
+                -- 只返回 id/尺寸，不返回 storage_key —— 客户端统一用 /api/media/:id 取图，
+                -- 不把存储路径暴露给前端（以后换对象存储也不用改客户端）。
+                coalesce((
+                  select json_agg(json_build_object('id', m.id, 'width', m.width, 'height', m.height) order by pm.position)
+                    from post_media pm
+                    join media m on m.id = pm.media_id
+                   where pm.post_id = p.id and m.scope = 'public'
+                ), '[]'::json) as images
            from posts p
           order by p.created_at desc, p.id desc
           limit $1`,
@@ -515,6 +526,8 @@ export function buildServer(deps: ServerDeps) {
           likeCount: Number.parseInt(row.like_count ?? '0', 10),
           commentCount: Number.parseInt(row.comment_count ?? '0', 10),
           likedByMe: row.liked_by_me,
+          // M4：帖子图片（只给 id 与尺寸；客户端用 /api/media/:id 取图）
+          images: row.images ?? [],
         })),
       }
     } catch (err) {
