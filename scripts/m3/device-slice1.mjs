@@ -86,14 +86,33 @@ async function tapAt(x, y) {
   await wait(250)
 }
 
+/**
+ * 取元素中心点（**先把目标滚进视口**）。
+ *
+ * 为什么必须滚动（M4 Final regression 抓到的 GATE_DEFECT）：
+ *   原来直接读 getBoundingClientRect()，若元素在视口之外，
+ *   返回的 y 会超出屏幕，合成触摸点落空 —— 点击无效、后续断言连锁失败。
+ *   M4 给详情页加了图片区后评论列表整体下移，就触发了这个问题
+ *   （页面变长 → 第一个「回复」按钮落到视口外）。
+ *
+ * 同时校验中心点**确实落在视口内**：不在就返回 null，
+ * 让调用方报"找不到/点不到"，而不是静默点空后给出误导性的失败信息。
+ */
 async function centerOf(selector, textMatch) {
-  return evaluate(`(() => {
+  return evaluate(`(async () => {
     const nodes = [...document.querySelectorAll(${JSON.stringify(selector)})]
     const el = ${textMatch ? `nodes.find((n) => n.textContent.trim() === ${JSON.stringify(textMatch)}) ?? nodes[0]` : 'nodes[0]'}
     if (!el) return null
+    // 先滚进视口（block:center 让目标尽量居中，减少被固定头尾遮挡的概率）
+    el.scrollIntoView({ block: 'center', inline: 'nearest' })
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
     const r = el.getBoundingClientRect()
     if (r.width === 0 || r.height === 0) return null
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    const x = r.left + r.width / 2
+    const y = r.top + r.height / 2
+    // 中心点必须在视口内：否则合成触摸一定落空
+    if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null
+    return { x, y }
   })()`)
 }
 
