@@ -186,5 +186,5 @@ echo "# M5_SERVER_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
 #      NATIVE_FILE_PICKER_INTERACTION  （真实点击入口 → 系统 picker → 选图 → WebView 收到 File）
 #    → 所以这里**不再**笼统写"前端用户路径未完成"（那会让人误以为前端没做完），
 #      而是点名唯一未决的那一格。
-echo "# M5_OVERALL: OPEN（WO2_IMPLEMENTATION ACCEPTED；唯一未决 = NATIVE_FILE_PICKER_INTERACTION）"
+echo "# M5_OVERALL: PENDING_REVIEW（WO2 后端 ACCEPTED；FILE_INPUT_POST_SELECTION_E2E PASS；NATIVE_FILE_PICKER_INTERACTION PASS（2026-09-21 19:25，证据 docs/m5/G3-NATIVE-PICKER-E2E-RESULT.md）；待审核确认 WO2_FINAL_CLOSE）"
 exit "$([ "$FAILED" -eq 0 ] && echo 0 || echo 1)"
