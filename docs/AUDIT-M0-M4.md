@@ -110,3 +110,50 @@ M5 若按"逐页与原版比对"推进，需要的正是第三节这张表：
 - 本轮同时更新 `TabBar.tsx` 的注释：把"原版三个 tab"更正为
   "原版四个 tab（含校园广场），我们目前 3 个，已登记 deviation"，
   避免注释继续传播被 supersede 的旧结论。
+---
+
+## 附二：校园广场页的呈现模型（只读观察，2026-09-21）
+
+### raw_evidence
+
+`docs/original-baseline/raw-dumps/board-observation-1.xml`（拉起原版后直接 dump，纯只读，已入库）
+
+### observation（从 dump 读出的控件结构）
+
+```
+com.kairuotu.campus:id/collageView                 ← 拼贴容器
+com.kairuotu.campus:id/view_image_container        ← 图片卡片
+com.kairuotu.campus:id/view_image_bg
+com.kairuotu.campus:id/view_image_stroke
+com.kairuotu.campus:id/view_user_tag               ← 图片上的用户标签
+com.kairuotu.campus:id/iv_user_tag_avatar
+com.kairuotu.campus:id/ll_user_tag_capsule
+com.kairuotu.campus:id/ll_user_tag_name_row
+com.kairuotu.campus:id/tv_user_tag_name            ← 标签里的用户名
+```
+
+可见文字里的「他只是经过 / yiyiyi / 一颗石榴 / Yuty / 破霜」**出现在
+`tv_user_tag_name` 这一族节点上**，即它们是**贴在图片上的作者标签**，
+而不是列表条目里的标题/正文。
+
+### conclusion（谨慎表述）
+
+- 「校园广场」页的呈现模型是 **拼贴 / 照片墙（collage）**，每张图带**作者标签**；
+- **不是**我们所实现的**列表式 feed**；
+- 因此 tab deviation 的性质比"少一个 tab"更深：
+  **该 tab 指向的呈现模型本身就不同**（collage vs list）。
+
+**强度与边界（重要）**：
+- 以上是**控件结构级**观察，属可复核范围；
+- **交互模型尚未确证**（例如点击单张图会进哪里、标签是否可点、是否分页/瀑布流）——
+  这些需要新的只读观察（导航 + dump），**本轮不做，也不推断**；
+- 我**不声称**"原版校园广场 = 我们 feed 的拼贴版"这一等价关系：
+  它需要比对两边的**内容来源**（是否同一批 posts）才能成立。
+
+### implementation impact
+
+- 该 deviation 的描述从"缺一个 tab"**修正为**"缺一个 tab，且该 tab 的呈现模型
+  （collage/照片墙带作者标签）与我们现有列表式 feed 不同"。
+- 实现该 tab 前需要先只读观察其**交互模型与内容来源**，
+  否则会做出一个"看起来有 4 个 tab、但第一个 tab 语义不对"的实现 ——
+  那属于**用存在性掩盖语义差异**，正是本项目一直在防的。
