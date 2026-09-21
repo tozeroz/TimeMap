@@ -237,6 +237,29 @@ autovacuum_max_workers = 2
       ```
       **M4_STATUS: ACCEPTED / CLOSED（审核记录 20 正式关账）**
 
+      ### Gate 原则（审核记录 21 正式确立，适用于 M5 及以后）
+
+      > **任何用于驱动 conformance 产品改动的事实，必须能追溯到可复核原始产物；
+      > 只有摘要、没有原始产物的内容只能作为线索，不能单独触发实现变更。**
+
+      每个 conformance finding 必须带这条链：
+      `raw_evidence → extraction/observation → conclusion → implementation impact`
+
+      范本见 `docs/conformance/FINDING-board-emojis.md`。
+
+      **为什么需要这条**（真实教训）：`supplements/message-board.json` 曾记
+      "表情行恰好 7 个"，该记录**引用了截图**（看似有产物）但其**声明不可复算**。
+      我据此把实现从 6 改成 7 —— 一次**真实的一致性回归**。
+      后来用可复核的控件树 dump 复算，**原版是 6**。
+      结论：**"引用了产物" ≠ "声明可复算"**；驱动改动的必须是后者。
+
+      配套：`docs/original-baseline/raw-dumps/` 用于存放**原始产物**（此前只有摘要，
+      导致任何结论都无法被复核 —— 这是结构性缺陷，已修复）。
+
+      **M5 已登记的 deviation**（详见 `docs/AUDIT-M0-M4.md` 附录）：
+      原版底部 tab 是 **4 项**（校园广场 / <账号昵称> / 校园 / 地图），
+      我们只有 **3 项** —— 缺「校园广场」。补它需先只读观察该页内容与入口，另立一单。
+
       M4 关账时补齐的最后一个 P0 —— 真正的备份 mutation barrier —— 有**两层**证据，
       审核明确要求**永久保留、不要合并**：
       - Layer 1 LOCK_PRIMITIVE：同 key 的 shared/exclusive 互斥关系正确
