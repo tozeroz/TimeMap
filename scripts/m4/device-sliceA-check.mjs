@@ -111,6 +111,40 @@ else bad(`有 ${parsed.tokenInUrl} 个 img.src 含凭据字样`)
 //  真正的撤回断言由后端脚本负责 —— 这里不重复造场景）
 console.log(`  撤回文案可见: ${parsed.revokedShown}`)
 
+// ---------------------------------------------------------------------------
+// A5 前端侧：清掉会话后（等价于 logout / 非成员）重新加载，**必须取不到私图**
+//
+// 审审核要求原话："logout 后重新加载不能取得私图"。
+// 这里用"清 localStorage 会话 + reload"模拟登出；服务端对匿名请求一律 404，
+// 所以预期：图片元素为 0、页面进入错误态（提示不存在或没有权限）。
+// ---------------------------------------------------------------------------
+await ev(`localStorage.clear()`)
+await ev(`location.reload()`)
+await wait(3000)
+await ev(`location.hash = '#/chat/${threadId}'`)
+await wait(4000)
+const anon = await ev(`(() => {
+  const imgs = [...document.querySelectorAll('.bubble__media')]
+  const txt = (document.body.innerText || '').replace(/\\s+/g,' ')
+  return JSON.stringify({
+    bubbleImgs: imgs.length,
+    hasErrorText: txt.includes('没有权限') || txt.includes('不存在'),
+    text: txt.slice(0, 80)
+  })
+})()`)
+let a
+try {
+  a = JSON.parse(anon)
+} catch {
+  console.log('  无法解析匿名态页面:', String(anon).slice(0, 150))
+  process.exit(1)
+}
+console.log(`  匿名态页面: ${a.text}`)
+if (a.bubbleImgs === 0) ok('**登出后（匿名）取不到私有图**：页面上没有图片元素')
+else bad(`登出后仍有 ${a.bubbleImgs} 张私有图！`)
+if (a.hasErrorText) ok('匿名态显示"不存在或没有权限"（服务端 404 被前端正确呈现）')
+else bad('匿名态没有给出权限相关提示')
+
 console.log('')
 console.log(failed === 0 ? 'SLICE_A_DEVICE_RESULT PASS' : 'SLICE_A_DEVICE_RESULT FAIL')
 try {
