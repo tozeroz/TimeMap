@@ -268,3 +268,18 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
 ASSET_ORIGIN:        COPIED_FROM_THIRD_PARTY_APK
 PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 ```
+
+---
+
+## J. ⚠️ Round 258 重大发现：**主路径「消息」整段是 mock**
+
+- [ ] J1 **WO#8（修订版）待批准**：`docs/m5/WO8-PLAN-message-list-real-backend.md`
+      —— 「消息」列表接真实后端 + 修 `App.tsx` 的 chat 路由 id 取法 bug（与 M3 修过的 feed 同类）
+      证据：26 屏幕中 **11 个纯 mock**（含 MessageScreen / GroupChatScreen / FeedListScreen / MapScreen）；
+      设备实测 `#/message` 渲染 23 行全 mock；点群聊项 → `#/group?id=g1` 且 **0 网络请求**；
+      对照 `#/chat/<真实UUID>` → API **200**（证明 ChatScreen 本身是好的）
+- [ ] J2 WO#9（顺延）：群聊接真实后端（**后端无 group 会话**，需先定语义与种子）→ 之后才做 AT 面板/@所有人
+- [ ] J3 前端**是否也以网页形式部署**到服务器（nginx 当前 `location / { return 404; }`）—— 待裁定
+- [ ] J4 建议把 **"入口可达性 entry reachability"** 写成 Gate 方法论的常规断言类别
+      （WO#7 的 Gate 用"直接设 hash"进页面，恰好跳过"用户怎么走到那里" → 正是本次缺陷躲过所有 Gate 的原因）
+- [ ] J5 逐项登记其余 mock 区块为 `MOCK_NOT_WIRED`（先登记，不假装它们是真实的）
