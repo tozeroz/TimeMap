@@ -209,12 +209,11 @@ autovacuum_max_workers = 2
             `AT_PANEL_VISUAL_CONFORMANCE` / `MEDIA_PREVIEW_VISUAL: NOT_EVALUATED
             reason=CONFORMANCE_EVIDENCE_INADMISSIBLE`；`MEDIA_UPLOAD_AND_SEND_TRANSITION: BLOCKED_BY_POLICY`
             **口径**：baseline coverage remains 22/0；本切片只增加 integration coverage
-      - [ ] **M3 Final Gate**（下一个可交付成果）
-            待办（本轮记录的缺口）：
-            - 再补一条**非校内**地点种子（让「距我N公里」不再是退化的 0 公里，
-              更接近原版那条广州地点的内容）
-            - 清理库里早期测试残留帖子（当前 60 条里大部分是 M1/TLS 等测试帖）
-            - M3 Final Gate：把六个 key 汇总 + 收口 PERSISTENT / STAGE / REGRESSION 三层
+      - [x] **M3 Final Gate 完成**：`docs/m3/FINAL-GATE-REPORT.md`
+            → `M3_FINAL_GATE_RESULT: PASS`（PERSISTENT / STAGE / REGRESSION 三层全 PASS）
+            六个 slice key 全 PASS；前置两件事（非零距离 canonical seed、定向清理测试残留）已完成
+            Final Gate 前无遗留缺陷；已知限制如实列在报告第五节
+      - [ ] **M4**（媒体：上传/存储/下发 + 消息类型与媒体引用 + 群聊 @ 提及关系）
 
 ---
 
