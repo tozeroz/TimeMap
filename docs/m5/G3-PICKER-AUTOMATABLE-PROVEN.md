@@ -130,3 +130,46 @@ docs/original-baseline/raw-dumps/picker-documentsui-probe.xml   101503 字节
 ⚠ 同时保留一条纪律：**若实测发现该规则不成立**（例如 documentsui 版本不同导致
 content-desc 格式不同），**必须如实报出实际格式并修正本文件** ——
 **不要把"我按这个规则点不动"当成"不可自动化"**（可自动化性已由 §一 的 dump 证明）。
+
+---
+
+## 八、环境事实：设备**支持** `uiautomator runtest`（否决了我自己的一个担心）
+
+> 时间：2026-09-21 19:06｜方式：只读（`getprop` / `ls` / `uiautomator` 无参打印用法）
+
+### 实测
+
+```
+ro.build.version.release = 12      ro.build.version.sdk = 32
+/system/bin/uiautomator 存在
+Available subcommands:
+  help: displays help message
+  runtest: executes UI automation tests
+      runtest <class spec> [options]
+        <JARS>: ... 相对路径默认假定在 /data/local/tmp 下
+```
+
+### 为什么值得记
+
+在飞的子代理选择的是**写一个 Java uiautomator 测试**（`scripts/m5/uiautomator/NativePickerClickTest.java`，
+用旧的 `com.android.uiautomator.core.UiDevice` API），执行方式为
+`adb shell uiautomator runtest native-picker-click.jar -c ...`。
+
+我当时的**担心**是："新版 Android（10+）移除了 `uiautomator runtest`，这条路会失败"。
+**实测否决了这个担心**：本设备 Android 12 / SDK 32 **仍然支持 runtest**。
+
+→ 因此**不需要**让它改用我给的 shell 配方（`dump` + `input tap`）。
+两条路都可走，它的选择不是错误。
+
+### 一条附带的环境知识（对两者都有用）
+
+`uiautomator runtest` 的 jar **相对路径默认在 `/data/local/tmp` 下**
+（绝对路径可放别处）—— 实现时少一次试错。
+
+### 自我记录的教训（第四次同类）
+
+我的"担心"本身也是一个**未经验证的断言**。
+若我凭它去打断子代理并给建议，**给出的会是错误建议**。
+
+这已经是同一模式的第四次：**先有判断、后补证据**（前三次：pitch/gap、坐标基准、样本来源）。
+**差别是这次我在"采取行动（打断+建议）"之前先做了检查** —— 这正是我希望自己稳定下来的行为。
