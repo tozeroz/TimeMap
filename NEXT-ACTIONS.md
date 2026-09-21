@@ -163,3 +163,46 @@ sessions 总数 130，其中 **94 条是 active 合法会话**。
   （依据：grace=1d 时候选为 0 → 现有数据都在近 24h 内；设 24h 既不误删活跃数据、又能约束长期膨胀）
   ⚠ 且 **expired sessions 目前为 0**（会话 TTL ≥7 天）→ 本工具短期只会清 challenges
 - E3 前提已查明：**没有任何表引用 sessions / login_challenges** → 删除不破坏引用完整性
+---
+
+## G. 下一批（2026-09-22 01:49 更新）—— **按当前账本选，不按类别名硬排**
+
+> 审核记录 40："以后应按当前账本选，而不是按类别名字硬排。"
+
+### 现状账本（本轮结束时的真实状态）
+```
+WO#1 board_notes        CLOSED
+WO#2 chat image         CLOSED
+WO#3 sender direction    CLOSED
+WO#5 voice Phase 1       CLOSED（审核 39）
+WO#6 tab 竖排            IMPLEMENTED，**已提交审核 41 申请关账**
+E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
+(B) 格                   **已清空**（语音已完成 / @所有人 是设计决定 / 图片压缩+配额 移入 (D)）
+(D) 格                   图片压缩、per-user 配额 —— **前提证据不在手**
+(C) 格                   若干"证据缺口"项（写代码不解决）
+
+### G1. 待审核裁定后立即做（等审核 41 回复）
+- [ ] G1.1 若 WO6 判 CLOSED → 更新 gate 的 M5_OVERALL、docs/m5/A-D-LIST.md、AUDIT 账本
+- [ ] G1.2 把"截图前确认前台 App"纪律正式命名（若审核同意）
+
+### G2. (C) 类：找**可只读获得**的原版证据（不动产品代码，先取证）
+本轮**意外获得的半张证据**：误拍时拍到原版**群聊输入栏**（`GroupChatActivity`，
+文本样本 `GroupForEvidence(1)` / `@` / `发消息…`），说明原版群聊 composer 右侧有一个
+**黑色圆形 + 按钮**。这是真实观察，但**答非所问**，需正式取证。
+- [ ] G2.1 **原版群聊 composer 呈现**（只读：进群聊页 → dump + 截图）
+      目标：确认 composer 的结构（输入框 / @ / 表情 / 圆形+ 按钮）与几何
+      注意：**只用只读导航**进入（点开群聊不产生写入）；绝不发消息
+- [ ] G2.2 `AT_PANEL_VISUAL`：原版 @ 面板视觉（此前证据 INADMISSIBLE，需新来源）
+- [ ] G2.3 `MEDIA_PREVIEW_VISUAL`：原版媒体预览视觉（同上）
+
+### G3. (D) 类：明确记为 KNOWN LIMITATION，不猜着实现
+- [ ] G3.1 图片压缩：`IMAGE_UPLOAD_COMPRESSION_CONFORMANCE = EVIDENCE_NOT_OBTAINABLE_BY_CURRENT_METHODS`
+      （已取证：dex 扫描无第三方压缩库；降采样 API 命中但那是显示用 → 不能证明上传前压缩）
+      → 在 AUDIT 与对外对比报告里写成"当前范围不可获得或无证据"，**不得写成"原版不压缩"**
+- [ ] G3.2 per-user 配额：先只做**前提取证尝试**（只读），取不到就同样记 KNOWN LIMITATION
+
+### G4. 纪律与工程（低风险、可随时做）
+- [ ] G4.1 每次改 `.ps1` 后**检查前 3 字节是否 EF BB BF**（本轮踩过"编辑工具丢 BOM"）
+      → 可加为一句话检查脚本或写进提交前自查
+- [ ] G4.2 `scripts/m5/` 下脚本的**可复用性**：本轮的 gate-wo6 依赖 CDP；
+      把"设备健康 + 前台确认 + CDP 就绪"抽成一个共用前置函数，避免每个脚本各写一遍
