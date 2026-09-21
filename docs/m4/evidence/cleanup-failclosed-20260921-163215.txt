@@ -1,0 +1,17 @@
+﻿=== 前置：确认正常路径可用（连得上库）===
+  当前盘上文件数: 6
+
+=== ④-1：DATABASE_URL 指向**不可达端口** → 必须非 0 退出 ===
+  退出码: 1
+  输出（截断）: [cleanup] 失败: connect ECONNREFUSED 127.0.0.1:59999
+PASS 连不上库时非 0 退出
+  盘上文件数: 6 → 6
+PASS **文件数未变（fail-closed：什么都没删）**
+
+=== ④-2：对照 —— 连得上库时 dry-run 不应删任何东西 ===
+PASS dry-run 未删除任何文件（6 保持不变）
+
+=== ④-3：缺 DATABASE_URL → 也必须拒绝（已有冒烟，这里复验一次）===
+PASS 缺 DATABASE_URL → 退出码 2（拒绝执行）
+
+CLEANUP_FAILCLOSED_RESULT PASS
