@@ -1293,6 +1293,134 @@ export function buildServer(deps: ServerDeps) {
     }
   })
 
+  // -------------------------------------------------------------------------
+  // M4 Slice A：消息消费端（A2）
+  //
+  // 为什么要新做：后端此前只有 messages 表结构，**没有任何消息接口** ——
+  // 于是 message_media / 私有媒体虽然做完了，用户侧完全没有消费路径（审核记录 16 点名的缺口）。
+  //
+  // 两个只读接口：
+  //   GET /api/threads            —— 我参与的会话（只列自己的，成员关系由 thread_members 决定）
+  //   GET /api/threads/:id/messages —— 会话消息（**非成员一律 404**，复用同一套成员判定）
+  //
+  // 关键纪律（审核记录 15 的 P0-A）：可见性判定只有一处权威定义。
+  // 这里不重写"我是不是成员"，而是用与 can_read_message 完全相同的 SQL 条件
+  // （exists thread_members ...），并在返回消息时按 deleted_at 标注是否撤回。
+  // -------------------------------------------------------------------------
+  app.get('/api/threads', async (req, reply) => {
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') return unauthorized(reply)
+    try {
+      const r = await db.pool.query<{
+        id: string
+        kind: string
+        title: string | null
+        member_count: string
+        last_body: string | null
+        last_kind: string | null
+        last_at: Date | null
+      }>(
+        `select t.id, t.kind, t.title,
+                (select count(*) from thread_members tm2 where tm2.thread_id = t.id)::text as member_count,
+                lm.body as last_body, lm.kind as last_kind, lm.created_at as last_at
+           from message_threads t
+           join thread_members me on me.thread_id = t.id and me.user_id = $1
+           left join lateral (
+             select m.body, m.kind, m.created_at
+               from messages m
+              where m.thread_id = t.id and m.deleted_at is null
+              order by m.created_at desc, m.id desc
+              limit 1
+           ) lm on true
+          order by coalesce(lm.created_at, t.created_at) desc
+          limit 50`,
+        [s.user.userId],
+      )
+      return {
+        items: r.rows.map((row) => ({
+          id: row.id,
+          kind: row.kind,
+          title: row.title,
+          memberCount: Number.parseInt(row.member_count, 10),
+          lastMessage: row.last_body === null ? null : { body: row.last_body, kind: row.last_kind, createdAt: row.last_at?.toISOString() ?? null },
+        })),
+      }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  app.get('/api/threads/:id/messages', async (req, reply) => {
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(404)
+      return { error: 'not_found' }
+    }
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') {
+      // 未登录 → 404（与私有媒体同口径：不区分"不存在"与"没权限"）
+      reply.code(404)
+      return { error: 'not_found' }
+    }
+    try {
+      const member = await db.pool.query(
+        'select 1 from thread_members where thread_id = $1 and user_id = $2',
+        [id, s.user.userId],
+      )
+      if (!member.rowCount) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      const r = await db.pool.query<{
+        id: string
+        sender_id: string | null
+        sender_name: string | null
+        body: string
+        kind: string
+        created_at: Date
+        deleted_at: Date | null
+        media: unknown
+      }>(
+        `select m.id, m.sender_id, u.display_name as sender_name, m.body, m.kind, m.created_at, m.deleted_at,
+                -- 图片消息的媒体引用（只给 id 与尺寸；客户端用 /api/media/:id 取图）
+                coalesce((
+                  select json_agg(json_build_object('id', md.id, 'width', md.width, 'height', md.height) order by mm.position)
+                    from message_media mm join media md on md.id = mm.media_id
+                   where mm.message_id = m.id
+                ), '[]'::json) as media
+           from messages m
+           left join users u on u.id = m.sender_id
+          where m.thread_id = $1
+          order by m.created_at asc, m.id asc
+          limit $2`,
+        [id, LIST_LIMIT],
+      )
+      return {
+        threadId: id,
+        items: r.rows.map((row) => ({
+          id: row.id,
+          senderId: row.sender_id,
+          sender: row.sender_name,
+          body: row.body,
+          kind: row.kind,
+          createdAt: row.created_at.toISOString(),
+          // 撤回：**保留 kind 与行**，只标记状态 —— 界面显示"消息已撤回"，
+          // 而媒体授权也已经因为 deleted_at 变成不可读（服务端强制执行，不是靠前端隐藏）
+          revoked: row.deleted_at !== null,
+          media: row.deleted_at !== null ? [] : (row.media ?? []),
+        })),
+      }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
   return app
 }
 /**
