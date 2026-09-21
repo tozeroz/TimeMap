@@ -997,3 +997,83 @@ VISUAL_TARGET_VALIDITY: FAIL
 & 'scripts\m5\preflight-capture.ps1' -ExpectPackage com.campusx.demo [-ExpectCdpUrl 'https://localhost/#/campus']
   → 输出 VISUAL_TARGET_VALIDITY: PASS|FAIL 并以退出码表达（0/1）
 ```
+
+---
+
+# 🔑 `ENTRY REACHABILITY` / `USER-PATH REACHABILITY` —— 一等 Gate 类别
+
+> 2026-09-22 由审核记录 44 **正式冻结为一等类别**（与 FUNCTIONAL / PERSISTENCE /
+> CONFORMANCE / REGRESSION 并列）。
+
+## 一、为什么必须与"功能正确性"分开
+
+两次真实遗漏（**同一盲区，连续发生两次**）暴露了它：
+
+```
+WO#7：文字发送 —— 服务端 API 支持、UI **没有任何发送入口** → 用户根本发不出文字
+WO#8：消息列表 —— 真实会话 API 存在、列表**整段读 mock** → 用户永远到不了真实会话
+两次都"垂直 slice 全绿"：各自的 Gate 都在测**目标页面被调用之后**的行为。
+两次都躲过了所有 Gate：因为既有 Gate 都**直接用 hash 进页面**，跳过了"用户怎么走到那里"。
+```
+
+## 二、冻结定义（两者必须分开，不可互相替代）
+
+```
+Functional correctness:
+    给定目标页面/函数**已经被调用**，它是否正确工作？
+
+Entry reachability:
+    真实用户是否能从**受支持的上游入口**，
+    通过**正常 UI 操作**，
+    携带**正确的 authoritative identity**，
+    真正**到达**该功能？
+```
+
+## 三、测试方式的边界（关键）
+
+```
+✅ 允许并鼓励：直接设 hash / deep link
+   —— 用来**快速验证组件本身**（destination functionality）
+❌ 但这类测试 **绝不能** 证明 user-path reachability
+```
+
+**对每个核心能力，至少要再有一条完整链路断言**：
+```
+最近的**真实父级 UI** → 可见入口 → 用户交互 → **identity handoff** → 目标路由 → 期望的后端请求/状态
+```
+
+## 四、已实现的两个标准实例（可复制）
+
+### 4.1 `IMPLEMENTED_COMPOSER_CAPABILITY_COVERAGE`（composer 能力覆盖）
+```
+声明为"用户可发送"的能力 → 可达的 composer 入口 → 实际操作成功
+  text  → 发送控件（**非空 draft 后出现**才算可达；只看输入框不够）
+  image → 选文件控件
+  voice → 录音控件
+```
+※ 基准是**产品声明**，**不是**服务端 enum（enum 只作 INFO 对照，避免"内部/历史/只读 kind"造成假 FAIL）。
+
+### 4.2 会话列表身份连续性（WO#8）
+```
+server thread exists（/api/threads）
+  → 可达的列表行（真实 UI 入口进入，identity 逐行对应）
+  → 路由收到 **同一个 identity**（canonical #/chat?id=<uuid>）
+  → 该 identity 的 messages 请求 = 200
+```
+
+## 五、与本项目既有纪律的关系
+
+```
+测量清单（5 条）              → 防"量错东西"
+VISUAL_TARGET_VALIDITY GATE   → 防"量对方法但量错对象"
+ENTRY REACHABILITY            → 防"**测对了目标，但用户根本到不了它**"
+```
+
+## 六、自查问句（写 Gate 时问自己）
+
+```
+1. 我这条断言是从**哪个入口**进去的？那个入口是**真实用户路径**还是我设的 hash？
+2. 如果我只测了 destination functionality，我有没有额外一条链路断言？
+3. 链路上传递的 identity 是**权威来源**（后端给的）还是**本地造/mock**的？
+4. 如果这个功能在 UI 上**完全没有入口**，我的 Gate 会发现吗？
+```

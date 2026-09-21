@@ -273,13 +273,13 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 
 ## J. ⚠️ Round 258 重大发现：**主路径「消息」整段是 mock**
 
-- [ ] J1 **WO#8（修订版）待批准**：`docs/m5/WO8-PLAN-message-list-real-backend.md`
+- [x] J1 ✅ **WO#8 已实施并提交关账**（审核 44 批准 → 设备 Gate 7 项全 PASS）`n      产物：`docs/m5/WO8-PREFIX-FAIL-EVIDENCE.md`（改前 FAIL + 铁证）、`docs/m5/UI-DATA-SOURCE-INVENTORY.md`（26 屏数据源清单）`n      回归：WO#7 Gate PASS / WO#6 Gate PASS / M5 server gate PASS（REAL_EXIT=0）
       —— 「消息」列表接真实后端 + 修 `App.tsx` 的 chat 路由 id 取法 bug（与 M3 修过的 feed 同类）
       证据：26 屏幕中 **11 个纯 mock**（含 MessageScreen / GroupChatScreen / FeedListScreen / MapScreen）；
       设备实测 `#/message` 渲染 23 行全 mock；点群聊项 → `#/group?id=g1` 且 **0 网络请求**；
       对照 `#/chat/<真实UUID>` → API **200**（证明 ChatScreen 本身是好的）
 - [ ] J2 WO#9（顺延）：群聊接真实后端（**后端无 group 会话**，需先定语义与种子）→ 之后才做 AT 面板/@所有人
-- [ ] J3 前端**是否也以网页形式部署**到服务器（nginx 当前 `location / { return 404; }`）—— 待裁定
-- [ ] J4 建议把 **"入口可达性 entry reachability"** 写成 Gate 方法论的常规断言类别
+- [x] J3 ✅ **已裁定（审核 44）：不要求**`n      `PUBLIC_WEB_FRONTEND_DEPLOYMENT: NOT REQUIRED FOR CURRENT ANDROID 1:1 SCOPE``n      理由：最终产品对象是 Android 1:1 复现；Capacitor 前端打进 APK + APK 指向线上 Node/PG 后端`n      已经是合法的"独立前后端"——"前后端独立"≠"前端必须同时作为网站托管"。`n      额外公开 Web 版会新增一整套非目标 surface（浏览器 TLS 信任 / CORS / OTP dev sink 暴露面 /`n      浏览器与 WebView 权限差异 / URL routing / 静态部署 + 安全审计）→ 明确记为 scope expansion，不做。`n      当前"上线"要求 = 已部署后端 + 指向该后端的 release APK + 真机端到端验证。
+- [x] J4 ✅ **已完成（审核 44 正式冻结为一等类别）**：已写入 PLAN.md`n      命名 `ENTRY REACHABILITY / USER-PATH REACHABILITY`，与 FUNCTIONAL/PERSISTENCE/CONFORMANCE/REGRESSION 并列`n      含定义、测试方式边界（直接设 hash 只能证明 destination functionality）、两个标准实例、4 条自查问句
       （WO#7 的 Gate 用"直接设 hash"进页面，恰好跳过"用户怎么走到那里" → 正是本次缺陷躲过所有 Gate 的原因）
-- [ ] J5 逐项登记其余 mock 区块为 `MOCK_NOT_WIRED`（先登记，不假装它们是真实的）
+- [x] J5 ✅ **已完成**：`docs/m5/UI-DATA-SOURCE-INVENTORY.md`（26 屏逐屏登记 + 可复现盘点命令 + 维护规则）`n      纯 api 5 ／ 分区或混合 4 ／ **纯 mock 10** ／ 静态 7；P1 顺序 GroupChat→FeedList→UserProfile→Map`n      ⚠️ 特别标注 ProfileEditScreen：**写路径却纯 mock**（假成功），与本次修的"mock id 漏进真实 API"同类
