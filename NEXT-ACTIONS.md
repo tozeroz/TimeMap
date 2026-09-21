@@ -182,8 +182,8 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
 (C) 格                   若干"证据缺口"项（写代码不解决）
 
 ### G1. 待审核裁定后立即做（等审核 41 回复）
-- [ ] G1.1 若 WO6 判 CLOSED → 更新 gate 的 M5_OVERALL、docs/m5/A-D-LIST.md、AUDIT 账本
-- [ ] G1.2 把"截图前确认前台 App"纪律正式命名（若审核同意）
+- [x] G1.1 ✅ **已完成**（审核 41 已判 WO#6 CLOSED）：gate 的 M5_OVERALL 加 WO#6 段；A-D-LIST 新增第 0 条（tab 竖排 FIXED/CLOSED）与第 6 条（文字发送缺失）；AUDIT (B) 表同步
+- [x] G1.2 ✅ **已完成**：审核 41 正式命名为 **VISUAL_TARGET_VALIDITY GATE** 并冻结；已写入 PLAN，并实现为可执行门禁 `scripts/m5/preflight-capture.ps1`（判别力已验证）
 
 ### G2. (C) 类：找**可只读获得**的原版证据（不动产品代码，先取证）
 本轮**意外获得的半张证据**：误拍时拍到原版**群聊输入栏**（`GroupChatActivity`，
@@ -192,8 +192,8 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
 - [x] G2.1 ✅ **已完成**（改用**静态 APK 分析**，零设备交互，见 WO7 提案 §七 的合规判断）`n      产出：`docs/m5/WO7-PROPOSAL-composer-text-send.md`（声明结构 + 渲染态 dump + claim-level 对比）`n      **重要发现**：我方 composer **没有发送按钮、draft 从未被发送** → **会话页发不出文字消息**（真实功能缺口）`n      理由：进会话页可能触发"标记已读"= 服务端写，而群名 `GroupForEvidence(1)` 的成员数无法只读证明 → 按纪律不执行设备采集
       目标：确认 composer 的结构（输入框 / @ / 表情 / 圆形+ 按钮）与几何
       注意：**只用只读导航**进入（点开群聊不产生写入）；绝不发消息
-- [ ] G2.2 `AT_PANEL_VISUAL`：原版 @ 面板视觉（此前证据 INADMISSIBLE，需新来源）
-- [ ] G2.3 `MEDIA_PREVIEW_VISUAL`：原版媒体预览视觉（同上）
+- [x] G2.2 ✅ **部分完成（STRUCTURAL 层）**：`docs/m5/EVIDENCE-at-panel-structure.md`（静态 APK，可采信）：面板=底部弹层、标题「选择提醒的人」16sp bold、列表固定 500dp、**存在「所有人」项**（88dp/56dp 图标/16sp）、空态「暂无群成员」、失败「加载失败」`n      AT_PANEL_STRUCTURAL_CONFORMANCE: EVIDENCE_SECURED；AT_PANEL_VISUAL_CONFORMANCE: 仍 NOT_EVALUATED（需渲染态）`n      ⚠ **连带更正**：原版**确有 @所有人** → AUDIT 把该条从"设计决定"改回 (B) 类缺口
+- [x] G2.3 ✅ **部分完成（STRUCTURAL 层）**：存在 `layout/activity_image_preview`（id=im_image_preview_root）、`activity_single_image_preview`（id=photo_view）、`chat_image_preview_bottom_bar`（id=chat_media_preview_message_uuid）→ MEDIA_PREVIEW_STRUCTURAL_CONFORMANCE: EVIDENCE_SECURED；渲染态仍 NOT_EVALUATED
 
 ### G3. (D) 类：明确记为 KNOWN LIMITATION，不猜着实现
 - [x] G3.1 ✅ **已完成**：见 `docs/m5/G3-D-CLASS-QUOTA-AND-SURFACED-GAPS.md``n      `IMAGE_UPLOAD_COMPRESSION_CONFORMANCE = EVIDENCE_NOT_OBTAINABLE_BY_CURRENT_METHODS`（dex 扫描无第三方压缩库；降采样 API 命中但属显示用途）
