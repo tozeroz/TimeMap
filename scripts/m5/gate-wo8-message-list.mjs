@@ -204,7 +204,7 @@ const unionMatch = apiUnion.length === uiUnion.length && apiUnion.every((v, i) =
 
 const orderedMatch =
   apiItems.length > 0 && unionMatch && sameOrder(apiGroups, uiGroupsList) && sameOrder(apiDirects, uiDirectsList)
-log('IDENTITY_CONTINUITY', {
+log('THREAD_IDENTITY_SET_CONTINUITY / THREAD_SECTION_ORDER_CONTINUITY', {
   apiGroupIds: apiGroups,
   uiGroupIds: uiGroupsList,
   apiDirectIds: apiDirects,
@@ -314,7 +314,19 @@ log('NO_ID_NO_MOCK_FALLBACK', {
 const v = {
   ENTRY_FROM_REAL_UI: entry && entry.reached ? 'PASS' : 'FAIL',
   MESSAGE_LIST_FROM_API: netList.length >= 1 && apiItems.length >= 1 ? 'PASS' : 'FAIL',
-  IDENTITY_CONTINUITY: orderedMatch ? 'PASS' : 'FAIL',
+  /*
+    命名细化（审核记录 47 建议）——避免把"身份连续"与"全局展示排序"混成一个概念：
+      · THREAD_IDENTITY_SET_CONTINUITY   —— UI id **集合** == API id 集合（不漏、不多、不替换）
+      · THREAD_SECTION_ORDER_CONTINUITY  —— **每个分区内部**的顺序与 API 一致
+    两者都必须成立。**全局跨类型顺序不是 contract**（产品有明确的分区呈现：
+    API threads → group/direct 分类 → 各分区内呈现），所以不断言全局同序。
+  */
+  THREAD_IDENTITY_SET_CONTINUITY:
+    unionMatch && sameOrder(apiGroups, uiGroupsList) && sameOrder(apiDirects, uiDirectsList)
+      ? 'PASS'
+      : 'FAIL',
+  THREAD_SECTION_ORDER_CONTINUITY:
+    sameOrder(apiGroups, uiGroupsList) && sameOrder(apiDirects, uiDirectsList) ? 'PASS' : 'FAIL',
   CLICK_ROUTE_CANONICAL: canonicalOk || compatOk ? 'PASS' : 'FAIL',
   CLICK_SAME_UUID_200: sameUuid && sameUuidInRequest ? 'PASS' : 'FAIL',
   // 严格口径：非法 id 时**不得发出任何 messages 请求**（既不许请求坏 id，也不许改用 mock id）
@@ -341,7 +353,8 @@ const v = {
 const KEYS = [
   'ENTRY_FROM_REAL_UI',
   'MESSAGE_LIST_FROM_API',
-  'IDENTITY_CONTINUITY',
+  'THREAD_IDENTITY_SET_CONTINUITY',
+  'THREAD_SECTION_ORDER_CONTINUITY',
   'CLICK_ROUTE_CANONICAL',
   'CLICK_SAME_UUID_200',
   'CHAT_ROUTE_INVALID_ID',
