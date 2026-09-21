@@ -262,6 +262,18 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
     kind: string
     members: Array<{ id: string; displayName: string }>
   } | null>(null)
+  /**
+   * 会话元数据的加载状态（M5 WO#9B 层 A 的 closeout：空态/失败态）。
+   *
+   * 三态必须**明确可辨**，因为它们对应三种完全不同的用户现实：
+   *   'loading' → 还不知道（显示"加载中…"）
+   *   'ready'   → 拿到了（成员为空就是**真的空群** → 显示"暂无群成员"）
+   *   'error'   → **没拿到**（显示"加载失败"）
+   * ⚠️ 关键：'error' 与"成员为空"**不能混同** ——
+   *   把"请求失败"显示成"暂无群成员"等于告诉用户"这个群没人"，
+   *   而事实是"我们不知道里面有谁"。
+   */
+  const [metaState, setMetaState] = useState<'loading' | 'ready' | 'error'>('loading')
   /** AT 面板是否打开（入口位置是**我方设计选择**，见 composer 里的 @ 按钮） */
   const [atOpen, setAtOpen] = useState(false)
   /**
@@ -275,27 +287,49 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
    *   （将来若拿到原版证据证明原版就是这么存正文的，再单独讨论）。
    */
   const [atAll, setAtAll] = useState(false)
-  useEffect(() => {
-    if (variant !== 'group') return
+
+  /**
+   * 拉会话元数据（群名 + **权威成员列表**）。
+   *
+   * 抽成函数是因为**每次打开 AT 面板都要重取**（见下面 openAtPanel）：
+   *   成员列表属于"会变的数据"（有人退群、有人入群），打开面板时的新鲜度比挂载时更重要。
+   *
+   * ⚠️ 失败路径（审核记录 50 点名要求的一项 closeout）：
+   *   失败时**必须清空 members**，不能保留上一次成功的结果 ——
+   *   否则会出现"API 已失败，面板仍安静地展示上一批成员，看起来像成功"。
+   *   这是本项目反复出现的同一类错误：**旧数据冒充新数据**。
+   */
+  const loadMeta = useCallback(async () => {
     const shape = classifyThreadId(id)
     if (shape !== 'uuid') return // 形状不合法时**不发请求**（与 loadMessages 同一道防线）
-    let alive = true
-    void (async () => {
-      const r = await getThread(id)
-      if (!alive || !mounted.current) return
-      if (r.ok) {
-        setMeta({
-          title: r.value.title,
-          memberCount: r.value.memberCount,
-          kind: r.value.kind,
-          members: r.value.members,
-        })
-      }
-    })()
-    return () => {
-      alive = false
+    setMetaState('loading')
+    const r = await getThread(id)
+    if (!mounted.current) return
+    if (r.ok) {
+      setMeta({
+        title: r.value.title,
+        memberCount: r.value.memberCount,
+        kind: r.value.kind,
+        members: r.value.members,
+      })
+      setMetaState('ready')
+    } else {
+      // 清空 + 标错：绝不让旧成员列表以"成功"的姿态留在界面上
+      setMeta(null)
+      setMetaState('error')
     }
-  }, [id, variant])
+  }, [id])
+
+  /** 打开 AT 面板：先重取一次成员（失败也会明确显示，而不是拿旧数据糊过去） */
+  function openAtPanel() {
+    setAtOpen(true)
+    void loadMeta()
+  }
+
+  useEffect(() => {
+    if (variant !== 'group') return
+    void loadMeta()
+  }, [variant, loadMeta])
 
   /**
    * 拉一次消息。抽成函数是因为**发完图要重拉**（否则新消息只在服务端，界面上看不见），
@@ -667,7 +701,7 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
                 className="iconbtn chatbar__at"
                 aria-label="提醒的人"
                 data-at-panel-entry
-                onClick={() => setAtOpen(true)}
+                onClick={openAtPanel}
               >
                 @
               </button>
@@ -909,22 +943,41 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
                 成员来源 = **服务端** `GET /api/threads/:id` 的 members[]（blocker ①），
                 绝不从消息 sender / seed / mock / 本地缓存补成员。
                 每行带 data-member-id（稳定业务身份），供 AT_MEMBER_SOURCE_AUTHORITY 做集合比对。
+
+                ⚠️ 三种状态**必须可辨**（审核记录 50 的 closeout）：
+                  metaState='loading' → 显示"加载中…"（还不知道）
+                  metaState='error'   → 显示"加载失败"（**没拿到**）—— 且**不得**回退到旧成员列表
+                  metaState='ready' 且 members 为空 → 显示"暂无群成员"（**真的空群**）
+                把 error 显示成"暂无群成员"等于告诉用户"这个群没人"，
+                而事实是"我们不知道里面有谁" —— 两者不能混同。
               */}
-              {(meta?.members ?? []).map((m) => (
-                <div key={m.id} className="atitem atitem--member" data-at-panel-item data-member-id={m.id}>
-                  <span className="atitem__icon" aria-hidden>
-                    {m.displayName.slice(0, 1)}
-                  </span>
-                  <span className="atitem__label">{m.displayName}</span>
-                </div>
-              ))}
+              {metaState === 'loading' && (
+                <p className="atpanel__empty" data-at-panel-loading>
+                  加载中…
+                </p>
+              )}
+              {metaState === 'error' && (
+                <p className="atpanel__empty" data-at-panel-failure>
+                  加载失败
+                </p>
+              )}
+              {metaState === 'ready' &&
+                (meta?.members ?? []).map((m) => (
+                  <div key={m.id} className="atitem atitem--member" data-at-panel-item data-member-id={m.id}>
+                    <span className="atitem__icon" aria-hidden>
+                      {m.displayName.slice(0, 1)}
+                    </span>
+                    <span className="atitem__label">{m.displayName}</span>
+                  </div>
+                ))}
 
               {/*
                 空态 —— 按 dump：可见性默认 GONE，文案"暂无群成员"。
                 ⚠️ 证据分层：它由**受控 stub** 验证，标 CLIENT_CODEPATH PASS，
                 **不**声称"真实服务器/空账号 E2E"（当前种子群非空，也不为此再造空账号）。
+                只在 metaState='ready' 时显示 —— 失败态有它自己的文案，不能互相顶替。
               */}
-              {(meta?.members ?? []).length === 0 && (
+              {metaState === 'ready' && (meta?.members ?? []).length === 0 && (
                 <p className="atpanel__empty" data-at-panel-empty>
                   暂无群成员
                 </p>

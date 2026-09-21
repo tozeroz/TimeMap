@@ -430,6 +430,128 @@ const failFlow = await evaluate(`(async () => {
 })()`)
 log('FAIL_FLOW', failFlow)
 
+// ---------- 7) 空态 / 失败态（审核记录 50 的两条 closeout）----------
+console.log('')
+console.log('=== 7) 空态 / 失败态：受控 stub（CLIENT_CODEPATH，不声称真实服务器 E2E）===')
+/*
+  审核 50 明确：这两条不是新要求，而是 48/49 已冻结进 WO#9B 最终 Gate 的 Layer A 条目。
+  证据强度按原定口径：**受控 stub → client code-path PASS**，
+  不造空账号、不破坏真实群、不声称服务器 E2E。
+
+  三条子断言：
+    7.1 空态：stub 让 thread detail 返回 members=[] → 显示「暂无群成员」且**不渲染伪造成员行**
+    7.2 失败态（冷启动）：stub 让请求失败 → 显示「加载失败」且**无成员行**
+    7.3 失败态（★反向条件，审核点名）：**先成功加载过成员** → 之后请求失败
+        → 必须显示失败，且**不得让旧成员列表冒充成功数据**
+*/
+
+/** 在页面里安装一个可随时开关的 fetch stub（只拦 thread detail） */
+const installMetaStub = async (mode) =>
+  evaluate(`(() => {
+    if (!window.__WO9BDETAIL_ORIG__) window.__WO9BDETAIL_ORIG__ = window.fetch
+    const orig = window.__WO9BDETAIL_ORIG__
+    window.__WO9BDETAIL_MODE__ = ${JSON.stringify(mode)}
+    window.fetch = async (...args) => {
+      const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || ''
+      const isDetail = /\\/api\\/threads\\/[0-9a-f-]{36}$/i.test(url)
+      const mode = window.__WO9BDETAIL_MODE__
+      if (isDetail && mode === 'empty') {
+        return new Response(JSON.stringify({
+          id: '${GROUP_ID}', kind: 'group', title: '计算机测试群', memberCount: 0, peerName: null, members: [],
+        }), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (isDetail && mode === 'fail') {
+        return new Response(JSON.stringify({ error: 'injected_detail_failure' }), {
+          status: 500, headers: { 'content-type': 'application/json' },
+        })
+      }
+      return orig(...args)
+    }
+    return window.__WO9BDETAIL_MODE__
+  })()`)
+
+const closeAtPanel = async () => {
+  await evaluate(`(() => {
+    const c = document.querySelector('[data-at-panel-close]')
+    if (c) c.click()
+    const m = document.querySelector('[data-at-panel-mask]')
+    if (!m && document.querySelector('[data-at-panel]')) {
+      // 兜底：直接让入口再点一次会把面板重开，所以用遮罩/关闭控件优先
+    }
+    return true
+  })()`)
+  await new Promise((r) => setTimeout(r, 500))
+}
+
+// --- 7.1 空态 ---
+await closeAtPanel()
+await installMetaStub('empty')
+const emptyState = await evaluate(`(async () => {
+  document.querySelector('[data-at-panel-entry]').click()
+  await new Promise(r => setTimeout(r, 1500))
+  const p = document.querySelector('[data-at-panel]')
+  return {
+    panelOpen: !!p,
+    emptyText: p ? ((p.querySelector('[data-at-panel-empty]') || {}).textContent || null) : null,
+    hasEmptyNode: !!(p && p.querySelector('[data-at-panel-empty]')),
+    memberRowCount: p ? p.querySelectorAll('[data-member-id]').length : -1,
+    atAllStillPresent: !!(p && p.querySelector('[data-at-all-item]')),
+  }
+})()`)
+log('EMPTY_STATE_STUB', emptyState)
+
+// --- 7.2 失败态（冷启动）---
+await closeAtPanel()
+await installMetaStub('fail')
+const failState = await evaluate(`(async () => {
+  document.querySelector('[data-at-panel-entry]').click()
+  await new Promise(r => setTimeout(r, 1500))
+  const p = document.querySelector('[data-at-panel]')
+  return {
+    panelOpen: !!p,
+    failureText: p ? ((p.querySelector('[data-at-panel-failure]') || {}).textContent || null) : null,
+    hasFailureNode: !!(p && p.querySelector('[data-at-panel-failure]')),
+    hasEmptyNode: !!(p && p.querySelector('[data-at-panel-empty]')),
+    memberRowCount: p ? p.querySelectorAll('[data-member-id]').length : -1,
+  }
+})()`)
+log('FAILURE_STATE_STUB', failState)
+
+// --- 7.3 ★反向条件：旧成员不得冒充成功 ---
+await closeAtPanel()
+await installMetaStub('ok')
+const staleSeed = await evaluate(`(async () => {
+  document.querySelector('[data-at-panel-entry]').click()
+  await new Promise(r => setTimeout(r, 1600))
+  const p = document.querySelector('[data-at-panel]')
+  const n = p ? p.querySelectorAll('[data-member-id]').length : -1
+  const c = document.querySelector('[data-at-panel-close]')
+  if (c) c.click()
+  await new Promise(r => setTimeout(r, 400))
+  return { memberRowsOnSuccess: n }
+})()`)
+// 现在**切换为失败**，再次打开面板：必须显示失败，且**不得**继续显示那批旧成员
+await installMetaStub('fail')
+const staleAfterFail = await evaluate(`(async () => {
+  document.querySelector('[data-at-panel-entry]').click()
+  await new Promise(r => setTimeout(r, 1600))
+  const p = document.querySelector('[data-at-panel]')
+  return {
+    hasFailureNode: !!(p && p.querySelector('[data-at-panel-failure]')),
+    memberRowCount: p ? p.querySelectorAll('[data-member-id]').length : -1,
+    failureText: p ? ((p.querySelector('[data-at-panel-failure]') || {}).textContent || null) : null,
+    visibleText: p ? (p.textContent || '').slice(0, 80) : null,
+  }
+})()`)
+log('STALE_MASQUERADE_CHECK', { staleSeed, staleAfterFail })
+
+// 复原：卸载 stub 并回到真实数据，避免影响后续断言与回归
+await evaluate(`(() => {
+  if (window.__WO9BDETAIL_ORIG__) window.fetch = window.__WO9BDETAIL_ORIG__
+  window.__WO9BDETAIL_MODE__ = 'ok'
+  return true
+})()`)
+
 // ---------- 层 A 判定（改前应全 FAIL）----------
 const num = (s) => (typeof s === 'string' ? Number.parseFloat(s) : NaN)
 const titleOk = panel && panel.title && panel.title.trim() === EXPECT.title
@@ -509,6 +631,30 @@ const v = {
   MENTIONS_ALL_FAILURE_PRESERVES_SELECTION:
     failFlow && failFlow.chipAfterFail === true && failFlow.draftAfterFail === 'WO9B-SEL-FAIL' ? 'PASS' : 'FAIL',
   AT_ALL_PANEL_CLOSES_ON_SELECT: selectAtAll && selectAtAll.panelClosed ? 'PASS' : 'FAIL',
+
+  /*
+    ---- 空态 / 失败态（审核记录 50 的两条 closeout）----
+    证据强度：**受控 stub → CLIENT_CODEPATH PASS**；
+    不声称"真实服务器故障 / 空账号 E2E"，也不为此造空账号（当前种子群非空）。
+  */
+  AT_PANEL_EMPTY_STATE_CODEPATH:
+    emptyState && emptyState.hasEmptyNode && (emptyState.emptyText || '').trim() === '暂无群成员' && emptyState.memberRowCount === 0
+      ? 'PASS'
+      : 'FAIL',
+  AT_PANEL_FAILURE_STATE_CODEPATH:
+    failState && failState.hasFailureNode && (failState.failureText || '').trim() === '加载失败' && failState.memberRowCount === 0
+      ? 'PASS'
+      : 'FAIL',
+  /*
+    ★ 审核 50 点名的**反向条件**：
+      "previously loaded members → subsequent controlled request failure
+       → stale member list must **not** masquerade as fresh successful data"
+    即：API 已失败，面板仍安静地展示上一批成员、看起来像成功 —— 这是**不允许**的。
+  */
+  AT_PANEL_FAILURE_NO_STALE_MASQUERADE:
+    staleSeed && staleSeed.memberRowsOnSuccess > 0 && staleAfterFail && staleAfterFail.hasFailureNode && staleAfterFail.memberRowCount === 0
+      ? 'PASS'
+      : 'FAIL',
   AT_PANEL_TRIGGER: 'OUR_DESIGN_CHOICE / ORIGINAL_NOT_EVALUATED',
   AT_TRIGGER_STATIC_TRACE: 'FOUND',
   AT_PANEL_GROUPING_RULE: 'NOT_EVALUATED',
@@ -541,6 +687,9 @@ const KEYS = [
   'MENTIONS_ALL_SUCCESS_CLEARS_SELECTION',
   'MENTIONS_ALL_FAILURE_PRESERVES_SELECTION',
   'AT_ALL_PANEL_CLOSES_ON_SELECT',
+  'AT_PANEL_EMPTY_STATE_CODEPATH',
+  'AT_PANEL_FAILURE_STATE_CODEPATH',
+  'AT_PANEL_FAILURE_NO_STALE_MASQUERADE',
 ]
 /* 注意：AT_PANEL_NO_INVENTED_GROUPING 不在"必须 PASS"列表里 ——
    它在面板存在时才有意义（见上面注释），面板存在时若违规会单独报 FAIL 并在 detail 里可见。 */
