@@ -201,7 +201,20 @@ autovacuum_max_workers = 2
             共享 helper：`device-login-helper.ps1` 的 Reset-DeviceToLoggedOut；
             **Slice 0B 与 Slice 3 都走它**（不再各自一份冷启动逻辑）
             原版侧继续只读；发布后的反馈/跳转/动画 = BLOCKED_BY_POLICY
-      - [ ] Slice 4（恢复页一致性）→ M3 Final Gate
+      - [x] **Slice 4 完成**：recovered pages 的集成与一致性（`docs/m3/SLICE4-REPORT.md`）
+            → `M3_SLICE4_GATE_RESULT: PASS`
+            前置（审核记录 11）：证据来源审计 `docs/m3/EVIDENCE-PROVENANCE-AUDIT.md`；
+            违规取得的证据标 `conformance_evidence=INADMISSIBLE`，Gate 有机械检查
+            按分层口径报：`POI_DETAIL_VISUAL: PASS`（证据可采信）；
+            `AT_PANEL_VISUAL_CONFORMANCE` / `MEDIA_PREVIEW_VISUAL: NOT_EVALUATED
+            reason=CONFORMANCE_EVIDENCE_INADMISSIBLE`；`MEDIA_UPLOAD_AND_SEND_TRANSITION: BLOCKED_BY_POLICY`
+            **口径**：baseline coverage remains 22/0；本切片只增加 integration coverage
+      - [ ] **M3 Final Gate**（下一个可交付成果）
+            待办（本轮记录的缺口）：
+            - 再补一条**非校内**地点种子（让「距我N公里」不再是退化的 0 公里，
+              更接近原版那条广州地点的内容）
+            - 清理库里早期测试残留帖子（当前 60 条里大部分是 M1/TLS 等测试帖）
+            - M3 Final Gate：把六个 key 汇总 + 收口 PERSISTENT / STAGE / REGRESSION 三层
 
 ---
 
