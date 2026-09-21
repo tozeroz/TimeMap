@@ -59,6 +59,10 @@ note "  → M4_BACKUP_RESTORE: ${KEY[M4_BACKUP_RESTORE]}"
 
 echo
 echo "=== 5) 孤儿清扫：dry-run 必须什么都不删，且不碰被引用的文件 ==="
+# 本组用**自己的**标志（CLEAN_LOCAL_FAIL），不复用全局 FAILED。
+# 原因：全局 FAILED 会被前面步骤的失败置 1，于是本 key 会被连带标成 FAIL ——
+# 那会把「某一步没过」误报成「这一步也没过」，掩盖真实状态（本轮实测踩到）。
+CLEAN_LOCAL_FAIL=0
 NODE=/opt/node-v24.21.0-linux-x64/bin/node
 CLEAN() { sudo -u campus bash -c "set -a; . /srv/campus/server.env; set +a; $NODE /srv/campus/server/dist/cleanup.mjs $*"; }
 UP=/srv/campus/uploads
@@ -70,7 +74,7 @@ if [ "$BEFORE" = "$AFTER" ]; then
   echo "    PASS dry-run 未删除任何文件（$BEFORE → $AFTER）"
 else
   echo "    FAIL dry-run 竟然删了文件（$BEFORE → $AFTER）"
-  FAILED=1
+  CLEAN_LOCAL_FAIL=1
 fi
 SEED_KEEP=0
 for k in 2026/09/seed-anmoss-1.png 2026/09/seed-lemy-1.png; do
@@ -90,7 +94,7 @@ else
   echo "    FAIL 阈值保护异常: $BIG"
   FAILED=1
 fi
-if [ "$FAILED" -eq 0 ]; then KEY[MEDIA_ORPHAN_CLEANUP]=PASS; else KEY[MEDIA_ORPHAN_CLEANUP]=FAIL; fi
+if [ "$CLEAN_LOCAL_FAIL" -eq 0 ]; then KEY[MEDIA_ORPHAN_CLEANUP]=PASS; else KEY[MEDIA_ORPHAN_CLEANUP]=FAIL; FAILED=1; fi
 note "  → MEDIA_ORPHAN_CLEANUP: ${KEY[MEDIA_ORPHAN_CLEANUP]}"
 
 echo

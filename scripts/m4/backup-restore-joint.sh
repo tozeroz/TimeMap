@@ -121,8 +121,8 @@ echo "  media 行数=$DB_MEDIA_ROWS  盘上文件=$((FS_PUBLIC + FS_PRIVATE))"
 
 echo
 echo "=== B. DATABASE_RESTORE：从 dump 恢复到全新库 ==="
-PGPASSWORD="$(cat /srv/campus/.db_password)" psql -h 127.0.0.1 -U campus -d postgres -q -c "drop database if exists $RESTORE_DB" >/dev/null 2>&1
-PGPASSWORD="$(cat /srv/campus/.db_password)" psql -h 127.0.0.1 -U campus -d postgres -q -c "create database $RESTORE_DB" >/dev/null 2>&1
+sudo -u postgres psql -q -c "drop database if exists $RESTORE_DB" >/dev/null 2>&1
+sudo -u postgres psql -q -c "create database $RESTORE_DB owner campus" >/dev/null 2>&1
 PGPASSWORD="$(cat /srv/campus/.db_password)" pg_restore -h 127.0.0.1 -U campus -d "$RESTORE_DB" --no-owner --no-privileges "$GEN/database.dump" >/dev/null 2>&1
 R_USERS="$(PSQLD "$RESTORE_DB" 'select count(*) from users')"
 R_MEDIA="$(PSQLD "$RESTORE_DB" 'select count(*) from media')"
@@ -227,7 +227,7 @@ if [ -n "$FIXTURE_IDS" ]; then
   LEFT_FIX="$(PSQL "select count(*) from media where owner_user_id='$FID'")"
   [ "$LEFT_FIX" = "0" ] && ok "fixture 已清理（含落盘文件）" || bad "fixture 仍有 $LEFT_FIX 条残留"
 fi
-PGPASSWORD="$(cat /srv/campus/.db_password)" psql -h 127.0.0.1 -U campus -d postgres -q -c "drop database if exists $RESTORE_DB" >/dev/null 2>&1
+sudo -u postgres psql -q -c "drop database if exists $RESTORE_DB" >/dev/null 2>&1
 rm -rf "$RESTORE_DIR"
 [ -d "$GEN" ] && ok "备份 generation 保留在 $GEN（便于复查；不进 git）" || bad "备份目录消失了"
 
