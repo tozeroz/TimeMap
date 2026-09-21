@@ -53,8 +53,9 @@ export function BoardScreen({ peerId }: { peerId: string }) {
     const text = draft.trim()
     if (!text || busy) return
     setBusy(true)
-    // **只提交 body**：当前用户永远来自 session，客户端不提交 from_user_id
-    // （服务端也会忽略该字段；verify-board-notes.sh 的 B8 组断言了这一点）
+    // **只提交 body**：当前用户永远来自 session，客户端不提交 from_user_id。
+    // 服务端对这类字段是**严格拒绝**（出现即 400 from_user_id_not_accepted），
+    // 而不是静默忽略 —— 由 verify-board-notes.sh 的 B8 组断言（已在真实服务器上验证）。
     const r = await postBoardNote(peerId, text)
     setBusy(false)
     if (r.ok) {
