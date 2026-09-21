@@ -53,12 +53,29 @@
         {
           "id": "FEED_CLOSE_NAVIGATION",
           "claim": "关闭 → **返回上一页**（真实的历史后退语义）",
-          "evidence": "baseline.json navigation[0] = \"关闭 → 返回上一页\"",
-          "status": "DEVIATION_PENDING_FIX",
-          "implementation_impact": "当前 goBack('campus') 是**固定跳 Campus**，只在'上一页恰好是 Campus'时碰巧一致；需改为真正的返回上一页",
-          "work_order": "WO#11",
+          "evidence": "baseline.json navigation[0] = \"关闭 → 返回上一页\"；**实测裁决**（scripts/m5/diagnose-feed-close-navigation.mjs）：走 #/more → 校园圈 → #/feedlist，点左上控件后落到 **#/more**（来源页，≠ campus）",
+          "status": "MATCH",
+          "implementation_impact": "无需修改。goBack(fallback) 的实现是 `history.length>1 ? history.back() : navigate(fallback)`，主行为是**真后退**；'campus' 只是**空历史时的回落**",
+          "work_order": null,
           "deviation_id": null,
-          "_note": "审核记录 52 特别指出：第三项**不是**'已一致'。'某次观察结果相同'≠'实现了同一条契约'。"
+          "_correction_history": [
+            "① 我最初审计判 MATCH（读源码）",
+            "② 审核记录 52 认为 goBack('campus') 是'固定跳 Campus' → 判 DEVIATION",
+            "③ 我据此把自己正确的结论改成 DEVIATION",
+            "④ 复核发现审核的前提不成立（goBack 主行为是 history.back()）→ 设计**判别性实测**：",
+            "   用'上一页 ≠ campus'的路径（#/more）→ 关闭后确实回到 #/more → **H1 成立**",
+            "→ 最终回到 MATCH。教训：**当别人纠正你时，也要用可区分的证据复核那条纠正本身**；",
+            "  '我最初的判断'与'权威的意见'都不是证据，实测才是。"
+          ]
+        },
+        {
+          "id": "FEED_CLOSE_EMPTY_HISTORY_FALLBACK",
+          "claim": "空历史（无法后退）时关闭应当去哪",
+          "evidence": "baseline.json 只写\"关闭 → 返回上一页\"，**未涉及空历史情形**",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "我们回落到 #/campus（goBack 的默认 fallback）—— 这是我方选择，不声称与原版一致",
+          "work_order": null,
+          "deviation_id": null
         },
         {
           "id": "FEED_MIDDLE_SCHOOL_SWITCHER",
