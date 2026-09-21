@@ -1421,6 +1421,101 @@ export function buildServer(deps: ServerDeps) {
     }
   })
 
+  // -------------------------------------------------------------------------
+  // M4 Slice C：发送消息 + @ 提及（最小闭环，审核记录 16）
+  //
+  // 范围刻意最小：只做"消息提到某些用户"这一条关系。
+  // **不做 @所有人** —— 若将来要做，必须单独明确语义，绝不能伪造成某个 user id
+  // （那会让"提到全体"与"提到某人"在数据上无法区分）。
+  //
+  // 两条写入校验（Gate 会机械验证）：
+  //   ① 被提及者**必须是会话成员**（复用 is_thread_member —— 成员关系只有一处定义）
+  //   ② 不允许提到自己（自指没有语义，与 board_notes 的 from<>to 同理）
+  // 任何一条不满足 → 400 且**不写入任何行**（消息与 mention 都不写）。
+  // -------------------------------------------------------------------------
+  app.post('/api/threads/:id/messages', async (req, reply) => {
+    const threadId = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(threadId)) {
+      reply.code(404)
+      return { error: 'not_found' }
+    }
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') {
+      reply.code(404)
+      return { error: 'not_found' }
+    }
+    const body = req.body as { body?: unknown; kind?: unknown; mentions?: unknown } | undefined
+    const text = typeof body?.body === 'string' ? body.body.trim() : ''
+    const kind = typeof body?.kind === 'string' ? body.kind : 'text'
+    if (!text || text.length > 2000) {
+      reply.code(400)
+      return { error: 'bad_body' }
+    }
+    if (!['text', 'image', 'voice'].includes(kind)) {
+      reply.code(400)
+      return { error: 'bad_kind' }
+    }
+    const rawMentions = Array.isArray(body?.mentions) ? body.mentions : []
+    const mentions = [...new Set(rawMentions.filter((m): m is string => typeof m === 'string'))]
+    for (const m of mentions) {
+      if (!/^[0-9a-f-]{36}$/i.test(m)) {
+        reply.code(400)
+        return { error: 'bad_mention_id', mention: m }
+      }
+    }
+
+    const client = await db.pool.connect()
+    try {
+      await client.query('begin')
+      // 发送者必须是会话成员（否则连"这个会话存在"都不告诉他 → 404）
+      const member = await client.query(
+        'select 1 from thread_members where thread_id = $1 and user_id = $2',
+        [threadId, s.user.userId],
+      )
+      if (!member.rowCount) {
+        await client.query('rollback')
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      // 校验被提及者：必须是会话成员、且不能是自己
+      for (const m of mentions) {
+        if (m === s.user.userId) {
+          await client.query('rollback')
+          reply.code(400)
+          return { error: 'cannot_mention_self', mention: m }
+        }
+        const ok2 = await client.query('select is_thread_member($1, $2) as ok', [threadId, m])
+        if (!ok2.rows[0]?.ok) {
+          await client.query('rollback')
+          reply.code(400)
+          return { error: 'mention_not_in_thread', mention: m }
+        }
+      }
+      const msgId = randomUUID()
+      await client.query(
+        'insert into messages (id, thread_id, sender_id, body, kind) values ($1, $2, $3, $4, $5)',
+        [msgId, threadId, s.user.userId, text, kind],
+      )
+      for (const m of mentions) {
+        await client.query(
+          'insert into message_mentions (id, message_id, mentioned_user_id) values ($1, $2, $3)',
+          [randomUUID(), msgId, m],
+        )
+      }
+      await client.query('commit')
+      reply.code(201)
+      return { id: msgId, kind, mentions }
+    } catch (err) {
+      await client.query('rollback').catch(() => undefined)
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    } finally {
+      client.release()
+    }
+  })
+
   return app
 }
 /**

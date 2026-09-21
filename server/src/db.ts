@@ -7,6 +7,7 @@ import m3RevisionsSql from './migrations/004_m3_model_revisions.sql'
 import m3AuthSql from './migrations/005_phone_otp_identity.sql'
 import mediaScopeSql from './migrations/006_media_scope.sql'
 import mediaLinkIdsSql from './migrations/007_media_link_ids.sql'
+import messageMentionsSql from './migrations/008_message_mentions.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -25,6 +26,7 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '005_phone_otp_identity', sql: m3AuthSql },
   { version: '006_media_scope', sql: mediaScopeSql },
   { version: '007_media_link_ids', sql: mediaLinkIdsSql },
+  { version: '008_message_mentions', sql: messageMentionsSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */
