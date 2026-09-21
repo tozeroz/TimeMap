@@ -186,5 +186,14 @@ echo "# M5_SERVER_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
 #      NATIVE_FILE_PICKER_INTERACTION  （真实点击入口 → 系统 picker → 选图 → WebView 收到 File）
 #    → 所以这里**不再**笼统写"前端用户路径未完成"（那会让人误以为前端没做完），
 #      而是点名唯一未决的那一格。
-echo "# M5_OVERALL: PENDING_REVIEW（WO2 后端 ACCEPTED；FILE_INPUT_POST_SELECTION_E2E PASS；NATIVE_FILE_PICKER_INTERACTION PASS（2026-09-21 19:25，证据 docs/m5/G3-NATIVE-PICKER-E2E-RESULT.md）；待审核确认 WO2_FINAL_CLOSE）"
+# ⚠️ 分列写明（审核记录 27 强制）：**不得**合并成"真人触摸完整 E2E"之类的说法 ——
+#    前者说的是"产品路径通了"（这是 WO#2 的命题），
+#    后者说的是"Android 输入层分发也走通了"（本次用 CDP 注入触摸，**未验证**）。
+echo "# M5_OVERALL: WO2_CLOSED（审核记录 27）"
+echo "#   NATIVE_FILE_PICKER_PRODUCT_PATH:     PASS"
+echo "#   SYSTEM_PICKER_SELECTION:             PASS"
+echo "#   WEBVIEW_FILE_DELIVERY:               PASS"
+echo "#   ANDROID_INPUTDISPATCHER_ENTRY_TOUCH: NOT_EVALUATED（CDP 注入触摸，非物理输入分发）"
+echo "#   FILE_INPUT_POST_SELECTION_E2E:       PASS"
+echo "#   M5 其余 A/D 项: C4（UNRESOLVED+FREEZE）/ tab deviation / 气泡偏差观察——见 docs/m5/A-D-LIST.md"
 exit "$([ "$FAILED" -eq 0 ] && echo 0 || echo 1)"
