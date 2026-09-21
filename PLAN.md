@@ -924,3 +924,76 @@ mCurrentFocus = Window{... com.**kairuotu.campus**/...GroupChatActivity}   ← *
 那个"黑色圆形 + 按钮"其实是对**原版群聊输入栏**的真实观察 —— 不是坏数据，
 只是**答非所问**。它说明原版群聊 composer 右侧有一个黑色圆形 + 按钮，
 可作为**未来 chat composer 呈现比对**的候选证据（与 WO#6 无关，另行登记）。
+
+---
+
+# 🎯 `VISUAL_TARGET_VALIDITY GATE`（2026-09-22 冻结，审核记录 41 命名）
+
+## 一句话
+
+**在采集任何截图/视觉证据之前与之后，都要证明"这一帧画面确实属于我要验证的那个对象"。**
+
+## 它防的是什么（与"测量清单"互补）
+
+```
+测量清单（5 条）             → 防 "**量错东西**"（definition/unit/frame/semantic box/method）
+VISUAL_TARGET_VALIDITY GATE  → 防 "**量对方法但量错对象**"   ← 本条
+```
+> 审核原话："'测量方法完全正确，但测的是错误对象' —— 这种比坐标算错**更根本**。"
+
+## 真实反例（2026-09-22 我踩的）
+
+```
+CDP target    = https://localhost/#/campus   ← 我方 WebView，看起来完全正确
+screen pixels = com.kairuotu.campus          ← 但像素来自**原版 App**，它在后台？
+                                                不 —— 是它在**前台**，我方在后台
+```
+**两者居然可以同时成立。** 我据此做了一次"视觉验证"，视觉模型回我
+"这是聊天输入栏，右侧有黑色圆形+按钮" —— 那句话其实是对**原版群聊页**的真实描述，
+只是**答非所问**。若我当时直接采信，就会去改一个根本没问题的东西。
+
+## 冻结语义
+
+```
+Before capture:
+    target foreground package/activity == expected
+    if CDP is used:
+        CDP target URL/route == expected
+
+Capture
+
+After capture:
+    foreground package/activity still == expected
+```
+
+失败时：
+```
+VISUAL_TARGET_VALIDITY: FAIL
+  → screenshot evidence **INVALID**
+  → **no product verdict**      ← 不是产品 FAIL，是"证据作废"
+```
+
+## 与 `DEVICE_HEALTH` **必须分开**（不可互相替代）
+
+| 检查 | 证明什么 | 本轮实证 |
+|---|---|---|
+| `DEVICE_HEALTH` | 设备能正常响应输入 / 刷新画面 | 当时报 `B 屏幕未重绘` |
+| `VISUAL_TARGET_VALIDITY` | 当前画面**确实属于**要验证的对象 | 真正的问题是**前台是另一个 App** |
+
+> 审核："设备健康问题与目标身份问题**不能互相替代**。"
+
+## 处置纪律
+
+```
+若前台不是目标 → 用 `am start -n <目标包>/<目标Activity>` 把目标带到前台
+                 ⚠ **绝不**默认 force-stop 原版（既有第三方进程干预纪律）
+采集后必须**再核一次**前台（防止采集期间被切走）
+```
+
+## 落地实现
+
+`scripts/m5/preflight-capture.ps1` —— 采集前/后各调一次，机器可判：
+```
+& 'scripts\m5\preflight-capture.ps1' -ExpectPackage com.campusx.demo [-ExpectCdpUrl 'https://localhost/#/campus']
+  → 输出 VISUAL_TARGET_VALIDITY: PASS|FAIL 并以退出码表达（0/1）
+```

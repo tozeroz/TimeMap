@@ -189,7 +189,7 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
 本轮**意外获得的半张证据**：误拍时拍到原版**群聊输入栏**（`GroupChatActivity`，
 文本样本 `GroupForEvidence(1)` / `@` / `发消息…`），说明原版群聊 composer 右侧有一个
 **黑色圆形 + 按钮**。这是真实观察，但**答非所问**，需正式取证。
-- [ ] G2.1 **原版群聊 composer 呈现**（只读：进群聊页 → dump + 截图）
+- [x] G2.1 ✅ **已完成**（改用**静态 APK 分析**，零设备交互，见 WO7 提案 §七 的合规判断）`n      产出：`docs/m5/WO7-PROPOSAL-composer-text-send.md`（声明结构 + 渲染态 dump + claim-level 对比）`n      **重要发现**：我方 composer **没有发送按钮、draft 从未被发送** → **会话页发不出文字消息**（真实功能缺口）`n      理由：进会话页可能触发"标记已读"= 服务端写，而群名 `GroupForEvidence(1)` 的成员数无法只读证明 → 按纪律不执行设备采集
       目标：确认 composer 的结构（输入框 / @ / 表情 / 圆形+ 按钮）与几何
       注意：**只用只读导航**进入（点开群聊不产生写入）；绝不发消息
 - [ ] G2.2 `AT_PANEL_VISUAL`：原版 @ 面板视觉（此前证据 INADMISSIBLE，需新来源）
