@@ -1,0 +1,50 @@
+﻿PASS 已取得会话（作者身份 = anmoss）
+  seed 下 aaaaaaaa-0001-4001-8001-000000000001 的赞数 = 2（seed 里是 lemy 点的）
+
+=== A. 未登录时的读取 ===
+PASS 未登录读详情：likedByMe=false
+PASS 未登录读详情：likeCount=2（来自 DB）
+PASS 列表带 likedByMe 字段（未登录恒 false）
+PASS 列表带 likeCount 字段
+PASS 列表带 commentCount 字段
+
+=== B. 跨用户隔离：seed 里别人（lemy）点过赞，不能算成我的 ===
+PASS likeCount=2 但 likedByMe=false（别人的赞不算我的）
+
+=== C. 鉴权：未登录不能点赞/取消 ===
+PASS 未登录点赞 → 401
+PASS 未登录取消点赞 → 401
+
+=== D. 点赞 → 计数 +1、likedByMe 变 true、DB 有行 ===
+PASS 点赞 → 200
+PASS 响应 liked=true
+PASS likeCount 变为 3
+PASS DB 中存在我的点赞行
+PASS 带会话读详情：likedByMe=true
+
+=== E. 重复点赞幂等（计数不重复增加）===
+PASS 重复点赞后 likeCount 仍为 3（幂等）
+PASS DB 中我的点赞行仍只有 1 行
+
+=== F. 取消点赞 → 计数 -1、likedByMe 变 false、DB 行消失 ===
+PASS 响应 liked=false
+PASS likeCount 回到 2
+PASS DB 中我的点赞行已删除
+PASS 带会话读详情：likedByMe 回到 false
+
+=== G. 重复取消幂等 ===
+PASS 重复取消后 likeCount 仍为 2（幂等）
+
+=== H. 错误输入 ===
+PASS 非法 id → 400
+PASS 不存在的帖子 → 404
+
+=== I. 另一篇帖子不受影响（隔离）===
+PASS 另一篇帖子的 likedByMe=false（点赞不会串帖）
+PASS 另一篇帖子的 likeCount 与 DB 一致（0）
+
+=== J. 清理并回到 seed 状态 ===
+PASS 点赞表回到 seed 状态（2 条）
+PASS 测试账号的点赞已清理
+
+LIKES_RESULT PASS

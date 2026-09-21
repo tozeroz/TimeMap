@@ -1,0 +1,74 @@
+{
+  "slice": "M3 Slice 2（点赞）",
+  "kind": "read_only_observation",
+  "observed_at": "2026-09-21T12:31+08:00",
+  "by": "M3 Slice 2 原版只读观察",
+  "method": "只读：截图 + uiautomator dump + 纯导航点击（不点赞）",
+  "policy_note": "点赞是写操作 → 禁止在原版上执行（用户硬约束 + 审核记录 09）。本文件只记录静态可观察的事实；切换行为与『点之后』的样式一律记 BLOCKED_BY_POLICY。",
+
+  "read_only_facts": [
+    {
+      "fact": "点赞区整体是点击热区",
+      "evidence": "id/post_like_section 是 LinearLayout 且 clickable=true，bounds [869,1780][936,1857]（帖子1，1 赞）",
+      "impact": "实现时把整块（图标 + 计数）作为热区，而不是只让图标可点",
+      "verdict": "SUPPORTED"
+    },
+    {
+      "fact": "图标在左、计数在右；计数是纯数字、无单位",
+      "evidence": "post_like_icon_container / post_like_icon [869,1797][911,1839]（42x42）；post_like_count TextView [922,1804][936,1833] text=1",
+      "impact": "不要写成「1 赞」或「1人赞」；图标约 42px，计数紧贴其右（约 11px 间隔）",
+      "verdict": "SUPPORTED"
+    },
+    {
+      "fact": "0 赞时计数控件整个不存在（不是显示 0，而是 dump 里没有这个节点）",
+      "evidence": "帖子2（0 赞）：post_like_section 宽度只有 42（[894,1780][936,1857]），没有 post_like_count 节点，页面全部文本里也没有赞数",
+      "impact": "展示层规则：likes=0 → 只渲染图标；likes>0 → 图标 + 数字。热区宽度随之变化",
+      "verdict": "SUPPORTED"
+    },
+    {
+      "fact": "评论数在 0 时显示的是文字「评论」而不是数字 0",
+      "evidence": "Preflight 阶段那条无评论动态的 dump：comment_num_section 内 num_comment 的 text 为「评论」；而本条（1 条评论）为 1",
+      "impact": "评论计数展示：0 → 显示「评论」二字；>0 → 显示数字。与点赞的「0 就隐藏」是两种不同规则，不要写成同一个逻辑",
+      "verdict": "SUPPORTED"
+    },
+    {
+      "fact": "存在点赞动画覆盖层",
+      "evidence": "id/like_animation_view（ImageView）bounds [0,0][1080,1085]，覆盖在媒体区之上",
+      "impact": "原版点赞时在媒体区播放动画。属动效，M3 不做；记录以免以后被当成漏实现",
+      "verdict": "DEFERRED"
+    },
+    {
+      "fact": "没有「谁点了赞」的展示",
+      "evidence": "详情页点赞区附近没有头像或昵称列表；整页文本只有作者名、时间、评论内容与计数",
+      "impact": "不需要点赞用户列表接口与 UI",
+      "verdict": "SUPPORTED"
+    }
+  ],
+
+  "blocked_by_policy": [
+    {
+      "what": "点赞的切换行为：点一下会发生什么、是否可取消、取消后的反馈",
+      "why": "点赞是写操作，会改变对方服务端数据。硬约束禁止；连「点一下看 UI 反馈」也不做，因为对写操作来说点击就是执行。",
+      "classification": "BLOCKED_BY_POLICY",
+      "substitute": "在自建 demo（我们的后端 + 设备端用例）里验证切换语义"
+    },
+    {
+      "what": "已点赞状态的原版样式：图标是否变实心或变色",
+      "why": "要产生已点赞状态必须点赞，即写操作",
+      "classification": "BLOCKED_BY_POLICY",
+      "substitute": "只按数据模型实现我的点赞态；样式参考未点赞态图标并保持同尺寸。报告里必须写明此处不声称与原版 1:1"
+    }
+  ],
+
+  "display_rules_to_implement": {
+    "like_count": "0 → 不渲染计数（只留图标）；>0 → 纯数字",
+    "comment_count": "0 → 显示「评论」二字；>0 → 显示数字（含回复的总数）",
+    "note": "这两条规则不同，容易写成同一个。已在两端分别实现并各加断言"
+  },
+
+  "evidence": [
+    ".mumu-capture/m3-slice2/01-feed.png（信息流只读截图）",
+    ".mumu-capture/m3-slice2/03-detail2.png（0 赞帖子的详情：计数控件缺失）",
+    "docs/original-baseline/screens/feed-detail/recovered-m3-ui.xml（1 赞帖子的详情：含 post_like_count=1）"
+  ]
+}

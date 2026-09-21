@@ -476,14 +476,27 @@ export function buildServer(deps: ServerDeps) {
   // 帖子
   // -------------------------------------------------------------------------
 
-  app.get('/api/posts', async (_req, reply) => {
+  app.get('/api/posts', async (req, reply) => {
+    // 可选会话：登录后列表里每条帖子都带上 likeCount / commentCount / likedByMe
+    // （未登录时不查库，likedByMe 恒为 false）
+    const sess = await resolveSession(req.headers.authorization)
+    if (sess.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    const meId = sess.kind === 'ok' ? sess.user.userId : null
     try {
-      const r = await db.pool.query<PostRow>(
-        `select id, author_name, author_id, body, place, created_at
-           from posts
-          order by created_at desc, id desc
+      const r = await db.pool.query<
+        PostRow & { like_count: string; comment_count: string; liked_by_me: boolean }
+      >(
+        `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at,
+                (select count(*) from likes l where l.post_id = p.id)::text as like_count,
+                (select count(*) from comments c where c.post_id = p.id)::text as comment_count,
+                exists (
+                  select 1 from likes l2
+                   where l2.post_id = p.id and l2.user_id = $2::uuid
+                ) as liked_by_me
+           from posts p
+          order by p.created_at desc, p.id desc
           limit $1`,
-        [LIST_LIMIT],
+        [LIST_LIMIT, meId],
       )
       return {
         items: r.rows.map((row) => ({
@@ -494,12 +507,15 @@ export function buildServer(deps: ServerDeps) {
           body: row.body,
           place: row.place,
           createdAt: row.created_at.toISOString(),
+          // M3 Slice 2：列表卡片需要显示计数与"我点过没"
+          likeCount: Number.parseInt(row.like_count ?? '0', 10),
+          commentCount: Number.parseInt(row.comment_count ?? '0', 10),
+          likedByMe: row.liked_by_me,
         })),
       }
     } catch (err) {
       // 连接层错误 → 立刻把就绪状态降级并返回 503；
       // 只有真正的查询错误（比如 SQL 写错）才是 500
-      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
       reply.code(500)
       return { error: 'db_error', message: (err as Error).message }
@@ -667,6 +683,10 @@ export function buildServer(deps: ServerDeps) {
       reply.code(400)
       return { error: 'invalid_id' }
     }
+    // 可选会话：登录了就带上"我是否点过赞"，没登录就 false（不查库）
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    const meId = s.kind === 'ok' ? s.user.userId : null
     try {
       const pr = await db.pool.query<PostRow>(
         `select id, author_name, author_id, body, place, created_at
@@ -682,10 +702,7 @@ export function buildServer(deps: ServerDeps) {
         'select count(*)::text as n from comments where post_id = $1',
         [id],
       )
-      const lr = await db.pool.query<{ n: string }>(
-        'select count(*)::text as n from likes where post_id = $1',
-        [id],
-      )
+      const like = await likeStateFor(id, meId)
       return {
         id: post.id,
         author: post.author_name,
@@ -694,7 +711,8 @@ export function buildServer(deps: ServerDeps) {
         place: post.place,
         createdAt: post.created_at.toISOString(),
         commentCount: Number.parseInt(cr.rows[0]?.n ?? '0', 10),
-        likeCount: Number.parseInt(lr.rows[0]?.n ?? '0', 10),
+        likeCount: like.likeCount,
+        likedByMe: like.likedByMe,
       }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
@@ -792,6 +810,93 @@ export function buildServer(deps: ServerDeps) {
         createdAt: row.created_at.toISOString(),
         parentId: parentId || null,
       }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  // -------------------------------------------------------------------------
+  // 点赞（M3 Slice 2）
+  //
+  // 1:1 依据（原版**只读**观察，见 supplements/slice2-likes-readonly.json）：
+  //   - 点赞区是整块热区（id/post_like_section clickable），图标在左、计数在右
+  //   - 计数是**纯数字无单位**（不是「1 赞」）
+  //   - **0 赞时计数控件不存在**（不是显示 0）→ 展示层规则：0 只渲染图标
+  //   - 详情页没有「谁点了赞」的列表 → 不需要点赞用户列表接口
+  //
+  // 政策约束：原版上的点赞**切换行为**与**已点赞态样式**属写操作，禁止取证，
+  // 记 BLOCKED_BY_POLICY；这两项的验证只来自本自建系统（见 verify-likes.sh）。
+  // -------------------------------------------------------------------------
+
+  /** 点赞计数 + 当前用户是否已赞（可选会话：未登录时 likedByMe=false，不发 DB 查询） */
+  async function likeStateFor(
+    postId: string,
+    userId: string | null,
+  ): Promise<{ likeCount: number; likedByMe: boolean }> {
+    const r = await db.pool.query<{ n: string; mine: string }>(
+      `select count(*)::text as n,
+              coalesce(bool_or(l.user_id = $2::uuid), false)::text as mine
+         from likes l
+        where l.post_id = $1`,
+      [postId, userId],
+    )
+    const row = r.rows[0]
+    return {
+      likeCount: Number.parseInt(row?.n ?? '0', 10),
+      likedByMe: row?.mine === 'true',
+    }
+  }
+
+  /** 点赞（幂等：重复点赞不报错、不重复计数） */
+  app.post('/api/posts/:id/like', async (req, reply) => {
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') return unauthorized(reply)
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    try {
+      const pr = await db.pool.query('select 1 from posts where id = $1', [id])
+      if (!pr.rowCount) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      // on conflict do nothing：把"重复点赞"定义为幂等，而不是让客户端去猜状态
+      await db.pool.query(
+        `insert into likes (id, post_id, user_id) values ($1, $2, $3)
+         on conflict (user_id, post_id) do nothing`,
+        [randomUUID(), id, s.user.userId],
+      )
+      const st = await likeStateFor(id, s.user.userId)
+      return { liked: true, ...st }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  /** 取消点赞（同样幂等：没点过也不报错） */
+  app.delete('/api/posts/:id/like', async (req, reply) => {
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') return unauthorized(reply)
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    try {
+      await db.pool.query('delete from likes where post_id = $1 and user_id = $2', [
+        id,
+        s.user.userId,
+      ])
+      const st = await likeStateFor(id, s.user.userId)
+      return { liked: false, ...st }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
       reply.code(500)
