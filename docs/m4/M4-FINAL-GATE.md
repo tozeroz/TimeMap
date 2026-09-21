@@ -74,3 +74,48 @@ upload → validate → store → authorize → deliver → delete/recover
 3. **`CROSS_REFERENCE_INTEGRITY` 抓到我自己的 fixture 不一致**：
    Slice A 的 fixture 换过磁盘文件但 DB sha256 没同步 → 检查按设计抓到了真实不一致。
    清理后逐行比对 `REMAIN_MISMATCH=0`。
+
+---
+
+## 七、五条 storage closeout 逐条销项（回应审核记录 18）
+
+审核要求：这五条**具体断言**必须明确覆盖，而不是只写"五个 key 都 PASS"。
+以下是每条的断言内容、执行位置与测量结果 —— **断言都在代码里，不在文档里**。
+
+| # | 断言 | 执行位置 | 结果 |
+|---|---|---|---|
+| ① | **backup consistency barrier**：备份**归档之前**核对两侧一致（每条 media 行都要有文件且 sha256 一致 = 无悬空引用；每个文件都要有 DB 行 = 无未登记文件），不一致则这份备份判定为不可信 | `backup-restore-joint.sh` A2 段 | `CLOSEOUT_1_BARRIER: PASS` |
+| ② | **file→row 双向恢复**：正向（DB 行 → 文件）与**反向（文件 → DB 行）都参与判定**（旧版反向只 echo 提示，不判定） | `backup-restore-joint.sh` D 段 | `CLOSEOUT_2_BIDIRECTIONAL: PASS` |
+| ③ | **restore 后私有权限**：恢复后**用恢复库的真实数据**验证授权行为 —— 会话成员可读、**非成员不可读**、撤回后成员也读不到（旧版只检查函数是否存在） | `backup-restore-joint.sh` B 段 | `CLOSEOUT_3_POST_RESTORE_AUTH: PASS` |
+| ④ | **cleanup 在 DB down 时 fail-closed**：连接被拒时必须以非 0 退出，**且盘上文件数不变**（后者才是实质）；对照：库可用时 dry-run 也不删 | `verify-cleanup-failclosed.sh` | `CLOSEOUT_4_CLEANUP_FAILCLOSED: PASS` |
+| ⑤ | **pixel/decode bounds**：单边上限 + **像素总量上限**（`MAX_PIXELS = 40_000_000`），四类格式统一走 `checkDimensions`；强度边界明确写为"结构校验，不是完整解码" | `imageProbe.ts` + `probe-unit-test.mjs` | `CLOSEOUT_5_PIXEL_DECODE_BOUNDS: PASS`（`IMAGE_PROBE_UNIT` 12/12） |
+
+### 这五条不是"补文档"，它们找出并修掉了一个真实泄漏
+
+① 的屏障上线后立刻报出：`未登记文件：盘上有但 DB 无行 → public/2026/09/9c08755d-…png`。
+追查根因：`verify-media-upload.sh` 的清理**只删已知的两个 id**，
+但该脚本还会因**路径穿越用例**用合法图片 + 恶意 filename 成功上传一次 ——
+那次产生的行与文件都不在清理列表里，于是**行删了、文件留在盘上**。
+
+修法：清理改为**按 owner_user_id**（删该测试用户的全部 media 及其盘上文件）+ 兜底核对。
+复验：重跑后五条 closeout 与五个 key 全 PASS，**且没有再产生新的孤儿** ——
+证明修的是根因，不是"把垃圾扫掉后碰巧通过"。
+
+如果继续让反向核对只"提示不判定"，这个泄漏会一直累积，
+直到某次恢复演练把垃圾一起打包过去。
+
+## 八、M4 Final Gate（当前 HEAD 实测）
+
+```
+M3_FINAL_GATE_RESULT: PASS        （完整 regression，三层全 PASS，证据 m4-final-regression-20260921-163857.txt）
+M4_STORAGE_GATE_RESULT: PASS      （五 key + 五 CLOSEOUT 全 PASS，证据 m4-gate-20260921-163807.txt 附近）
+M4_FINAL_GATE_LAYERS:
+  PERSISTENT: PASS
+  STAGE:      PASS
+  REGRESSION: PASS
+M4_FINAL_GATE_RESULT: PASS
+```
+
+**执行顺序说明**：先重新部署服务器（`imageProbe.ts` 的像素上限进入运行产物），
+再跑 M3 完整 regression —— 保证**被验证的代码与正在运行的代码是同一版本**，
+而不是"改了代码、验的是旧产物"。
