@@ -215,11 +215,23 @@ psql -h 127.0.0.1 -U campus -d campus -Atc "select count(*) from posts p join us
 }
 
 # ---------------------------------------------------------------------------
-Head '阶段报告口径（审核强制）'
-Say 'total original screens: 22'
-Say 'observed baseline:      19'
-Say 'evidence-blocked:        3   (poi-detail / media-preview / at-panel)'
-Say 'out-of-scope:            0'
+Head '阶段报告口径（审核强制，唯一真源 = manifest.coverage）'
+# 口径不再硬编码在 Gate 里：由 docs/original-baseline/manifest.json 的 coverage.current 推导。
+# 原因（审核记录 07 P1-2）：三个 blocked 页面取证成功后口径应当**当场改变**，
+# 硬编码会让 Gate 继续打印过期的 19/3。历史值保留在 coverage.history 里可审计。
+$manPath = Join-Path $repo 'docs\original-baseline\manifest.json'
+if (Test-Path -LiteralPath $manPath) {
+  $cov = (Get-Content -LiteralPath $manPath -Raw -Encoding UTF8 | ConvertFrom-Json).coverage
+  Say "  （当前口径来自 coverage.current @ $($cov.current.stage)）"
+  Say "total original screens: $($cov.current.total_original_screens)"
+  Say "observed baseline:      $($cov.current.observed)"
+  Say "evidence-blocked:       $($cov.current.evidence_blocked)"
+  Say "out-of-scope:           $($cov.current.out_of_scope)"
+  if ($cov.current.evidence_blocked -gt 0) { Say "  仍被阻断: $($cov.current.blocked_screens -join ', ')" }
+  Say "  （历史口径: $(($cov.history | ForEach-Object { "$($_.stage)=$($_.observed) observed/$($_.evidence_blocked) blocked" }) -join '; ')）"
+} else {
+  Bad '缺少 docs/original-baseline/manifest.json（无法取得口径）'
+}
 
 Say ''
 Say 'M2 认证与传输结论（审核记录 05 要求分开记）：'

@@ -1,0 +1,93 @@
+{
+  "screen_id": "media-preview",
+  "title": "图片预览",
+  "recovered_at": "2026-09-21T10:26:31+08:00",
+  "recovered_by": "M3 Evidence Preflight",
+  "method": "真实 UI 入口进入 + adb screencap（1080x1920 无损 PNG）+ uiautomator 控件树",
+
+  "activity": "com.kairuotu.chat.conversation.preview.media.ChatMediaPreviewActivity",
+
+  "recovery_entry": [
+    "启动原版 app → 校园 tab → 右上「消息」气泡 → MessageActivity",
+    "右上按钮 →「发起群聊」→ 输入群名 → 创建 → GroupChatActivity",
+    "输入框右侧「+」（id: plusBtn）→ 底部附件面板 → 点「相册」（id: btn_album）",
+    "相册选择器（MaterialSelectActivity）里选图 → 选择器自带预览（MaterialPreviewActivity）→ 点「发送」",
+    "图片以 id/chatImageCardView 出现在群聊消息里 → **点这张图片卡片** → ChatMediaPreviewActivity"
+  ],
+
+  "supersedes": {
+    "file": "screens/media-preview/baseline.json",
+    "field": "states.normal.status",
+    "from": "not_reproducible",
+    "to": "observed",
+    "why_m0_missed": "M0 只有 deep link（campusx://chat/media-preview）；该 Activity 未注册外部 scheme，必然回落。且真实入口要求「聊天里存在图片消息」，M0 环境无聊天数据。",
+    "m0_evidence_note": "M0 的 screens/media-preview/normal.png 保留不动。本次新增 recovered-m3.png。"
+  },
+
+  "observations": {
+    "interactions": [
+      "全屏图片查看（内容节点 content-desc =「图片」，铺满 [0,42][1080,1920]）",
+      "左上「关闭」（content-desc: 关闭）[16,100][100,184]",
+      "右上「保存」（content-desc: 保存）[980,100][1064,184]",
+      "本次只有 1 张图 → **未出现页码指示**"
+    ],
+    "navigation": [
+      "关闭 → 返回聊天页",
+      "保存 → 保存图片到相册（未进一步验证结果提示）"
+    ],
+    "persistence": [
+      "无（预览不写状态）；「保存」会产生相册副作用"
+    ],
+    "known_unknowns_resolved": {
+      "保存按钮位置": "**右上角**",
+      "页码指示": "单图时没有",
+      "缩放手势": "本次未测（未验证双击/捏合）"
+    },
+    "known_unknowns_still_open": [
+      "多图时的左右滑动与页码指示样式",
+      "是否支持双击放大 / 捏合缩放"
+    ]
+  },
+
+  "ui_ids": {
+    "note": "该 Activity 的控件只用 content-desc 暴露，没有 resource-id（与其它页面不同）",
+    "close": "content-desc='关闭' [16,100][100,184]",
+    "save": "content-desc='保存' [980,100][1064,184]",
+    "image": "content-desc='图片' [0,42][1080,1920]"
+  },
+
+  "model_facts": [
+    {
+      "claim": "聊天图片消息与图片预览是两级：消息里是卡片，点开才进预览",
+      "evidence": "群聊里图片消息节点为 id/chatImageCardView；点它才进入 ChatMediaPreviewActivity",
+      "impact": "messages 需要能承载「图片类型消息」并引用 media 记录。V0.1 的 messages 只有 body(text)，**缺少消息类型与媒体引用**",
+      "verdict": "REVISION_NEEDED_LATER",
+      "note": "M4（媒体）阶段必须给 messages 增加 kind（text/image/…）+ media 引用；本阶段不实现聊天写入，故不现在改。"
+    },
+    {
+      "claim": "相册一次最多选 20 个内容",
+      "evidence": "相册选择器预览页显示「可选20个内容」",
+      "impact": "与 PLAN 第六节冻结的「单帖 ≤ 9 张」是**两条不同约束**：发帖 ≤9，聊天/相册选择 ≤20。实现时不要混用",
+      "verdict": "SUPPORTED"
+    },
+    {
+      "claim": "相册选择器与预览是第三方风格的内置模块（Material*）",
+      "evidence": "Activity 名为 MaterialSelectActivity / MaterialPreviewActivity，控件 id 为 materialSelectItem / selectableLayout / thumbnailIv",
+      "impact": "属于**实现细节**，不影响我们的领域模型；记录在此以免被误当成本项目要复刻的 UI",
+      "verdict": "NOT_A_MODEL_FACT"
+    }
+  ],
+
+  "data_precondition_delta": {
+    "changed": true,
+    "detail": "为取得聊天图片上下文：授予 app 存储/相机权限、向模拟器相册放入 1 张测试图（/sdcard/Pictures/m3-test-image.png）、在群聊里发送 1 张图片。",
+    "disclosure": "放入相册的图是本项目自己截的页面截图（非用户隐私数据）。该消息落在 app 自己的账号下；不影响 M0 冻结证据。"
+  },
+
+  "evidence": [
+    "screens/media-preview/recovered-m3.png",
+    "screens/chat/recovered-m3-entry.png（其真实入口：带图片消息的聊天页）"
+  ],
+
+  "reporting_impact": "observed 19 → 22（三页全部恢复）；整体口径变为 observed 22 / evidence-blocked 0"
+}

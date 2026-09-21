@@ -390,7 +390,7 @@ export function buildServer(deps: ServerDeps) {
   return app
 }
 
-/** 进程入口：跑迁移 → 起服务 */
+/** 进程入口：起服务 → 后台跑迁移 */
 async function main() {
   const cfg = loadConfig()
   const db = createDb(cfg)
@@ -419,14 +419,6 @@ async function main() {
       console.error('[migrate] failed (will retry):', (err as Error).message)
     }
   }
-  await tryMigrate()
-  if (!migrated) {
-    // 首次失败才起重试定时器；成功后自动停掉，不会一直空转
-    migrateTimer = setInterval(() => {
-      void tryMigrate()
-    }, 10_000)
-    migrateTimer.unref?.()
-  }
 
   const app = buildServer({
     db,
@@ -447,8 +439,29 @@ async function main() {
   process.on('SIGTERM', () => void shutdown('SIGTERM'))
   process.on('SIGINT', () => void shutdown('SIGINT'))
 
+  /**
+   * **先 listen，再在后台跑迁移**（顺序很重要，这里改过一次）。
+   *
+   * 原来是 `await tryMigrate()` 在 `app.listen()` 之前。实测踩到：PG 一时连不上时，
+   * 迁移里的 `pool.connect()` 会耗掉几十秒，于是进程**根本不监听** ——
+   * 外部看到的是 "connection refused"（像进程死了），而不是「进程活着、但没就绪」。
+   * 这与我们刻意做的 liveness / readiness 语义分离直接矛盾。
+   *
+   * 现在：liveness 立刻可用；schema 没就绪时 /api/ready 如实返回 503；
+   * 迁移在后台进行，失败每 10 秒重试，成功后自动停止空转。
+   */
   await app.listen({ host: cfg.host, port: cfg.port })
   console.log(`[listen] http://${cfg.host}:${cfg.port}`)
+
+  void (async () => {
+    await tryMigrate()
+    if (!migrated) {
+      migrateTimer = setInterval(() => {
+        void tryMigrate()
+      }, 10_000)
+      migrateTimer.unref?.()
+    }
+  })()
 }
 
 // 仅在被当作入口执行时启动（import 时不启动，方便测试）

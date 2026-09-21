@@ -161,6 +161,9 @@ autovacuum_max_workers = 2
       （规格 `docs/m2/SPEC.md`、模型追溯 `docs/m2/DATA-MODEL.md`、结果 `docs/m2/REPORT.md`）
 - [ ] M3 垂直切片迁移（行为恢复 + UI/API 集成 + 数据模型验证，**IN PROGRESS**）
       规格：`docs/m3/SPEC.md`（审核记录 07 有条件批准，5 点已并入）
+      - [x] **Evidence Preflight 完成**：三个 blocked 页面全部恢复，口径 → `22 / 0`（`docs/m3/PREFLIGHT.md`）
+      - [x] 模型验证登记表建立并首轮更新（`docs/m3/MODEL-VALIDATION.md`），已落实 `004_m3_model_revisions`
+      - [ ] Slice 0A 登录语义观察 → Slice 0B 登录 UI → Slice 1 → Slice 2 → Slice 3 → Slice 4 → M3 Final Gate
 
 ---
 
@@ -214,7 +217,13 @@ User action → React → Nginx /api → Fastify → PostgreSQL INSERT/UPDATE
 
 - 必须做：Fastify + PG pool + migration + health/ready + systemd(enabled) + Nginx 反代 + 一个真实 vertical slice
 - 不得做：为 3 个 evidence-blocked 页面补证据（留给 M3 从真实入口恢复）
-- 报告口径：始终 `total 22 / observed 19 / evidence-blocked 3`，不得写 `19/19`
+- 报告口径（M1 当时）：`total 22 / observed 19 / evidence-blocked 3`，不得写 `19/19`
+
+> **口径已更新（M3 Evidence Preflight，2026-09-21）**：三个页面已从真实入口恢复证据，
+> 当前口径为 `total 22 / observed 22 / evidence-blocked 0`。
+> **唯一真源是 `docs/original-baseline/manifest.json` 的 `coverage` 字段**（含 current 与 history），
+> Gate 不再硬编码数字。历史值 `19 / 3` 保留在 `coverage.history` 与 `docs/m0/ANCHOR.md` 中，可审计。
+> 详情见 `docs/m3/PREFLIGHT.md`。
 
 ### 治理结转项（non-blocking）
 

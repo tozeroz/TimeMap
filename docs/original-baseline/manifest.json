@@ -113,14 +113,18 @@
     {
       "id": "poi-detail",
       "title": "地点详情",
-      "target": "campusx://feed/poi/detail（实测回落到 trident，deep link 不生效）",
+      "target": "com.kairuotu.feed.poi.detail.PoiDetailActivity（真实入口，见 supplements/poi-detail.json）",
       "has_evidence": true,
       "states": {
-        "normal": "not_reproducible",
+        "normal": "observed",
         "loading": "not_reproducible",
         "empty": "not_reproducible",
         "error": "not_reproducible"
-      }
+      },
+      "supplements": [
+        "supplements/poi-detail.json"
+      ],
+      "recovered_at": "2026-09-21T10:21:11+08:00"
     },
     {
       "id": "publish",
@@ -245,26 +249,74 @@
     {
       "id": "media-preview",
       "title": "图片预览",
-      "target": "campusx://chat/media-preview（实测回落到 trident）",
+      "target": "com.kairuotu.chat.conversation.preview.media.ChatMediaPreviewActivity（真实入口，见 supplements/media-preview.json）",
       "has_evidence": true,
       "states": {
-        "normal": "not_reproducible",
+        "normal": "observed",
         "loading": "not_reproducible",
         "empty": "not_reproducible",
         "error": "not_reproducible"
-      }
+      },
+      "supplements": [
+        "supplements/media-preview.json"
+      ],
+      "recovered_at": "2026-09-21T10:26:31+08:00"
     },
     {
       "id": "at-panel",
       "title": "@面板",
-      "target": "campusx://group/atPanel（实测回落到 trident）",
+      "target": "com.kairuotu.chat.conversation.GroupAtPanelActivity（真实入口，见 supplements/at-panel.json）",
       "has_evidence": true,
       "states": {
-        "normal": "not_reproducible",
+        "normal": "observed",
         "loading": "not_reproducible",
         "empty": "not_reproducible",
         "error": "not_reproducible"
-      }
+      },
+      "supplements": [
+        "supplements/at-panel.json"
+      ],
+      "recovered_at": "2026-09-21T10:23:52+08:00"
     }
-  ]
+  ],
+  "coverage": {
+    "note": "本块是口径的唯一真源：current 由 screens[].states.normal 推导；history 记录各阶段当时的真实口径，历史值不得被改写",
+    "current": {
+      "stage": "M3 Evidence Preflight",
+      "total_original_screens": 22,
+      "observed": 22,
+      "evidence_blocked": 0,
+      "blocked_screens": [],
+      "out_of_scope": 0,
+      "derived_from": "未到达（baseline.json 带 blocked_reason 且无 supplement）的页面记为 evidence_blocked；observed = expected - evidence_blocked"
+    },
+    "history": [
+      {
+        "stage": "M0",
+        "recorded_in": "docs/m0/ANCHOR.md",
+        "total_original_screens": 22,
+        "observed": 19,
+        "evidence_blocked": 3,
+        "blocked_screens": [
+          "poi-detail",
+          "media-preview",
+          "at-panel"
+        ],
+        "why": "这 3 页只能通过内部 Activity 进入，deep link 未注册外部 scheme → 必然回落 TridentActivity"
+      },
+      {
+        "stage": "M3 Evidence Preflight",
+        "recorded_in": "docs/m3/PREFLIGHT.md",
+        "total_original_screens": 22,
+        "observed": 22,
+        "evidence_blocked": 0,
+        "recovered": [
+          "poi-detail",
+          "media-preview",
+          "at-panel"
+        ],
+        "why": "改用真实 UI 入口取证（动态详情→地点 / 群聊输入@ / 聊天图片消息），证据以 supplements/ 追加，未改写 M0 记录"
+      }
+    ]
+  }
 }

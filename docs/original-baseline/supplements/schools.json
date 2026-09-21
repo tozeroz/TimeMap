@@ -1,0 +1,85 @@
+{
+  "assumption": "schools 是否应独立成表（M2 只在 users.school_name 放文本）",
+  "solved_at": "2026-09-21T10:29:30+08:00",
+  "solved_during": "M3 Evidence Preflight",
+  "verdict": "SUPPORTED（学校是真实实体）",
+  "additional_finding": "REVISION_NEEDED —— 还缺一层『校区』子实体，且『校园圈』的粒度是 学校 × 校区",
+
+  "recovery_entry": [
+    "启动原版 app → 底部导航「地图」（675,1810）",
+    "点顶部地区选择器「北京交通大学（校本部）▼」（约 165,150）",
+    "下拉展开后出现：北京交通大学 / 校本部 / 威海校区 / 东校区 / 搜索其他学校",
+    "点「搜索其他学校」（约 207,550）→ React Native 页面 XhsReactActivity 的学校搜索页"
+  ],
+
+  "observed_ui": {
+    "campus_picker": [
+      "标题：北京交通大学（当前学校）",
+      "校本部",
+      "威海校区",
+      "东校区",
+      "搜索其他学校"
+    ],
+    "school_search": [
+      "搜索框 placeholder：「搜索选择学校...」+ 取消",
+      "分组标题：「更多学校」",
+      "行格式：「学校名 (校区名)」+ 右侧「N条校园圈」+ 可选「X小时前更新」",
+      "实例：上海视觉艺术学院 (校本部) 15条校园圈",
+      "实例：上海交通大学 (闵行校区) 6小时前更新 2502条校园圈",
+      "实例：北京交通大学 (校本部) 4条校园圈",
+      "实例：浙江师范大学 (金华校区) 329条校园圈"
+    ],
+    "activity": "com.xingin.xhsreactnative.ui.XhsReactActivity（该页是 React Native 实现，原版混用原生 + RN）"
+  },
+
+  "observations": {
+    "interactions": [
+      "校园页/地图页的顶部下拉**不是学校列表**，而是**当前学校的校区列表**",
+      "学校搜索页每一行是「学校 (校区)」二元组",
+      "每行右侧显示该「校园圈」的动态数",
+      "部分行显示「X小时前更新」→ 圈子有最后更新时间"
+    ],
+    "navigation": [
+      "选一个学校/校区 → 切换当前校园圈（未逐一验证后续行为）"
+    ]
+  },
+
+  "model_verdicts": [
+    {
+      "claim": "schools 应独立成表",
+      "verdict": "SUPPORTED",
+      "evidence": "存在专门的「搜索选择学校」页与「更多学校」列表，学校是可选实体而非自由文本",
+      "impact": "M2 的 users.school_name 单文本不够；新建 schools 表"
+    },
+    {
+      "claim": "校区是学校下的子实体",
+      "verdict": "SUPPORTED",
+      "evidence": "同一学校下出现「校本部 / 威海校区 / 东校区」三个并列项",
+      "impact": "新建 campuses(school_id) 表"
+    },
+    {
+      "claim": "「校园圈」的粒度是 学校 × 校区",
+      "verdict": "SUPPORTED",
+      "evidence": "搜索结果每行都写成「学校 (校区)」，右侧统计的是该圈子的动态数",
+      "impact": "动态应归属到 campuses（或 school×campus 组成的圈子），不是只归属学校"
+    },
+    {
+      "claim": "M2 的 users.school_name 需要被 school_campus 引用取代",
+      "verdict": "REVISION_NEEDED",
+      "evidence": "同上",
+      "impact": "新增 users.school_campus_id 与 posts.school_campus_id（可空，历史数据保持 NULL，不伪造归属）"
+    }
+  ],
+
+  "applied_migration": "004_m3_model_revisions（schools / campuses / groups.name ≤ 24）",
+
+  "uncertainties": [
+    "「校园圈」是否就是 campuses 本身，还是另有「圈子」实体（本次只观察到展示层的『学校 (校区)』与动态数）",
+    "「X小时前更新」是圈子的字段还是动态的最后时间（未验证）"
+  ],
+
+  "evidence": [
+    "screens/poi-search/recovered-m3-campus-picker.png",
+    "screens/poi-search/recovered-m3-school-search.png"
+  ]
+}

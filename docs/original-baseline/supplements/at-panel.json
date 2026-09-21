@@ -1,0 +1,96 @@
+{
+  "screen_id": "at-panel",
+  "title": "@面板",
+  "recovered_at": "2026-09-21T10:23:52+08:00",
+  "recovered_by": "M3 Evidence Preflight",
+  "method": "真实 UI 入口进入 + adb screencap（1080x1920 无损 PNG）+ uiautomator 控件树",
+
+  "activity": "com.kairuotu.chat.conversation.GroupAtPanelActivity",
+
+  "recovery_entry": [
+    "启动原版 app → 校园 tab → 右上「消息」气泡 → MessageActivity",
+    "右上角按钮（id: btn_right_icon）→ 弹出菜单 → 选「发起群聊」",
+    "对话框里输入群名 → 点「创建群聊」→ 进入 GroupChatActivity",
+    "在群聊输入框（id: inputTextView）中**输入 @** → 自动弹出 GroupAtPanelActivity（底部弹层）"
+  ],
+
+  "supersedes": {
+    "file": "screens/at-panel/baseline.json",
+    "field": "states.normal.status",
+    "from": "not_reproducible",
+    "to": "observed",
+    "why_m0_missed": "M0 只有 deep link（campusx://group/atPanel），而该 Activity 未注册外部 scheme，必然回落；且 @ 面板需要「群聊上下文 + 输入框中打 @」才会出现，M0 既无群聊也无该上下文。",
+    "m0_evidence_note": "M0 的 screens/at-panel/normal.png 保留不动（deep link 失败的回落页证据）。本次新增 recovered-m3.png。"
+  },
+
+  "observations": {
+    "interactions": [
+      "**底部弹层**（不是全屏页、不是抽屉）：内容区从 y=933 起，占屏幕下半部分；上半部分是半透明遮罩（id: root 全屏 clickable，点为关闭）",
+      "标题：id/tvTitle =「选择提醒的人」",
+      "左上关闭按钮：id/btnClose（content-desc: 关闭），位置 [0,933][126,1045]",
+      "列表首项固定为「所有人」：图标 id/ivIcon（content-desc: 所有人）+ 名称 id/tvName =「所有人」，行高约 154px",
+      "其下为群成员列表（行结构同上，头像 + 昵称）"
+    ],
+    "navigation": [
+      "点某个成员/「所有人」→ 把该 @ 插入输入框并关闭面板（未逐一验证）",
+      "点遮罩或关闭按钮 → 关闭面板，回到群聊"
+    ],
+    "persistence": [
+      "无（面板本身不存状态）"
+    ],
+    "known_unknowns_resolved": {
+      "面板以抽屉还是弹层出现": "**底部弹层**（从 y=933 起，占下半屏）",
+      "成员列表排序": "首项固定「所有人」，其后为群成员",
+      "搜索框有无": "**无搜索框**"
+    },
+    "known_unknowns_still_open": [
+      "群成员很多时是否有滚动分组/字母索引",
+      "点成员后输入框里的 @ 文本格式（是否带 userId）"
+    ]
+  },
+
+  "ui_ids": {
+    "root": "全屏遮罩（clickable）[0,42][1080,1920]",
+    "contentLayout": "弹层内容 [0,933][1080,1920]",
+    "btnClose": "关闭 [0,933][126,1045]",
+    "tvTitle": "标题「选择提醒的人」[456,933][624,1045]",
+    "ivIcon": "首项图标（content-desc: 所有人）[28,1073][126,1171]",
+    "tvName": "首项名称「所有人」[147,1103][1052,1141]"
+  },
+
+  "model_facts": [
+    {
+      "claim": "消息可以 @ 特定成员，且「@所有人」是特殊项（不是普通成员）",
+      "evidence": "面板标题「选择提醒的人」，首项固定为「所有人」并带独立图标，之后才是群成员",
+      "impact": "messages 需要能表达「提及了谁」。V0.1 的 messages 表目前只有 body，**缺少提及关系**",
+      "verdict": "REVISION_NEEDED_LATER",
+      "note": "M3 本阶段不实现群聊写入，因此不必现在建表；但 M4 实现群聊时必须补「提及」关系（例如 message_mentions(message_id, user_id) 或 body 内嵌结构 + 解析）。已登记为模型待补项。"
+    },
+    {
+      "claim": "群名有长度上限 24 字",
+      "evidence": "创建群聊对话框中右下角显示「0/24」计数",
+      "impact": "groups.name 应加 CHECK(length(name) <= 24)（V0.1 目前只有非空 CHECK）",
+      "verdict": "REVISION_NEEDED"
+    },
+    {
+      "claim": "群标题会拼接成员数展示为「群名(N)」",
+      "evidence": "创建后群聊标题 id/title =「GroupForEvidence(1)」",
+      "impact": "这是**展示层**拼接，不应存进 groups.name；群成员数应从 group_members 聚合",
+      "verdict": "SUPPORTED",
+      "note": "提醒实现时不要把 (N) 写进 name 字段"
+    }
+  ],
+
+  "data_precondition_delta": {
+    "changed": true,
+    "detail": "为取得群聊上下文，本次创建了 1 个群（名称 GroupForEvidence）并在群内发送 1 条文本「@」与 1 张图片。M0 环境为「未登录 + 无群聊」。",
+    "disclosure": "该群与消息是取证用数据，落在 app 自己的后端账号下，不影响 M0 冻结证据。"
+  },
+
+  "evidence": [
+    "screens/at-panel/recovered-m3.png",
+    "screens/group/recovered-m3-entry.png（其真实入口：群聊页）"
+  ],
+
+  "reporting_impact": "observed 19 → 21（累计）；三页全部恢复后整体口径变为 observed 22 / evidence-blocked 0"
+}
