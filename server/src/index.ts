@@ -1609,9 +1609,13 @@ export function buildServer(deps: ServerDeps) {
         kind: string
         created_at: Date
         deleted_at: Date | null
+        mentions_all: boolean
         media: unknown
       }>(
         `select m.id, m.sender_id, u.display_name as sender_name, m.body, m.kind, m.created_at, m.deleted_at,
+                -- M5 WO#9B：@所有人 是消息的**持久属性**（存在列上），读模型必须原样带出，
+                -- 否则"刷新后 @所有人 就消失了"——而它本该与消息同生共死。
+                m.mentions_all,
                 -- 消息的媒体引用。除 id 与尺寸外，**语音还需要 mime 与 duration_ms**：
                 --   · mime   → 客户端据此决定渲染成图片气泡还是语音气泡（不能靠"宽度为 null"来猜）
                 --   · duration_ms → **时长必须来自这里**。MediaRecorder 产出的 live/WebM 文件头
@@ -1645,6 +1649,8 @@ export function buildServer(deps: ServerDeps) {
           // 撤回：**保留 kind 与行**，只标记状态 —— 界面显示"消息已撤回"，
           // 而媒体授权也已经因为 deleted_at 变成不可读（服务端强制执行，不是靠前端隐藏）
           revoked: row.deleted_at !== null,
+          // M5 WO#9B：与 `mentions`（逐人）**并列**的独立字段，语义不混同
+          mentionsAll: row.mentions_all === true,
           media: row.deleted_at !== null ? [] : (row.media ?? []),
         })),
       }
@@ -1752,6 +1758,45 @@ export function buildServer(deps: ServerDeps) {
       return { error: 'media_requires_media_kind', kind, allowed: ['image', 'voice'] }
     }
 
+    /*
+      ---- M5 WO#9B：@所有人（mentions_all）的形状级检查 ----------------------------
+
+      ## 为什么是**独立布尔**而不是"逐人提及的一种特殊形式"
+        既有 `message_mentions.mentioned_user_id` 是**指向 users(id) 的外键** ——
+        要表达"全体"只能塞一个**假的 user 行**，而那正是 AUDIT 明确否决的做法
+        （"绝不能伪造成某个 user id：那会让'提到全体'与'提到某人'在数据上无法区分"）。
+        → 独立布尔，与逐人提及**并存但不混同**。
+
+      ## 为什么"互斥"在**这里**判（而不是只靠事务内）
+        它只依赖请求体本身，不需要连库。越早拒越省事，也避免为一次必然失败的请求开事务。
+
+      ## 与既有先例一致
+        本接口对 `mediaIds`（复数）也是**显式拒绝**而不是"不认识就忽略" ——
+        因为静默忽略会让客户端收到 **201**：以为语义生效了，其实没有。见上面 mediaId 段注释。
+
+      ## 口径（审核记录 48 强制要求）
+        MENTIONS_ALL_DIRECT_POLICY: REJECT
+        PROVENANCE:                 OUR_DESIGN_CHOICE
+        ORIGINAL_BEHAVIOR:          NOT_EVALUATED
+        ⚠️ **不**声称"direct 里 @全体 逻辑上不可能"——该说法已被审核 48 否决；
+           只是**我方产品选择**不提供该语义。direct 的拒绝放在事务内（需要 kind）。
+    */
+    const mentionsAllRaw = (body as { mentionsAll?: unknown } | undefined)?.mentionsAll
+    if (mentionsAllRaw !== undefined && typeof mentionsAllRaw !== 'boolean') {
+      reply.code(400)
+      return { error: 'bad_mentions_all', got: typeof mentionsAllRaw }
+    }
+    const mentionsAll = mentionsAllRaw === true
+    if (mentionsAll && mentions.length > 0) {
+      // 互斥：两者同时出现会让"全体"与"逐人"的语义同时存在，读端无法区分该按哪个解释
+      reply.code(400)
+      return {
+        error: 'mentions_all_conflicts_with_mentions',
+        mentionsAll: true,
+        mentionsCount: mentions.length,
+      }
+    }
+
     const client = await db.pool.connect()
     try {
       await client.query('begin')
@@ -1764,6 +1809,25 @@ export function buildServer(deps: ServerDeps) {
         await client.query('rollback')
         reply.code(404)
         return { error: 'not_found' }
+      }
+      /*
+        ---- M5 WO#9B：@所有人 只在**群聊**里成立 ----------------------------------
+        口径（审核记录 48）：MENTIONS_ALL_DIRECT_POLICY: REJECT ／
+                             PROVENANCE: OUR_DESIGN_CHOICE ／ ORIGINAL_BEHAVIOR: NOT_EVALUATED
+        ⚠️ 这里**不**写"direct 里 @全体 语义不可能" —— 该说法已被审核 48 否决；
+           只是**我方产品选择**不提供该语义（拒绝而非忽略：忽略会让调用方以为生效了）。
+
+        成员资格**先判**（上面已判），所以这里取 kind 不会泄漏"这个会话是否存在"：
+        非成员在上一行就已经拿到 404 并 rollback 了。
+      */
+      if (mentionsAll) {
+        const th = await client.query<{ kind: string }>('select kind from message_threads where id = $1', [threadId])
+        const threadKind = th.rows[0]?.kind ?? null
+        if (threadKind !== 'group') {
+          await client.query('rollback')
+          reply.code(400)
+          return { error: 'mentions_all_requires_group', kind: threadKind }
+        }
       }
       // 校验被提及者：必须是会话成员、且不能是自己
       for (const m of mentions) {
@@ -1850,9 +1914,16 @@ export function buildServer(deps: ServerDeps) {
         }
       }
       const msgId = randomUUID()
+      /*
+        M5 WO#9B：把 mentions_all 一并写入。
+        ⚠️ 它必须在**同一个 INSERT** 里 —— 不能"先插消息、再 UPDATE mentions_all"：
+           那样中间存在一个"消息已存在但 @所有人 标记还没写上"的窗口，
+           读端可能读到半成品；而且一旦 UPDATE 失败就留下语义残缺的消息。
+           （这正是审核 48 要求的"服务端事务不变量"：任一失败 → 零消息 + 零 mention 变更。）
+      */
       await client.query(
-        'insert into messages (id, thread_id, sender_id, body, kind) values ($1, $2, $3, $4, $5)',
-        [msgId, threadId, s.user.userId, text, kind],
+        'insert into messages (id, thread_id, sender_id, body, kind, mentions_all) values ($1, $2, $3, $4, $5, $6)',
+        [msgId, threadId, s.user.userId, text, kind, mentionsAll],
       )
       for (const m of mentions) {
         await client.query(
@@ -1872,7 +1943,9 @@ export function buildServer(deps: ServerDeps) {
       }
       await client.query('commit')
       reply.code(201)
-      return { id: msgId, kind, mentions, mediaId }
+      // M5 WO#9B：把 mentionsAll 一并回给调用方 —— 客户端要靠它确认"@所有人 确实生效了"，
+      // 而不是自己以为生效（Gate：AT_ALL_SELECTION_STATE_MATCHES_PAYLOAD 正是校验这一点）。
+      return { id: msgId, kind, mentions, mentionsAll, mediaId }
     } catch (err) {
       await client.query('rollback').catch(() => undefined)
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)

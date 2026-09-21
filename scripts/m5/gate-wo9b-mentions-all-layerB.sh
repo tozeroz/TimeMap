@@ -88,7 +88,12 @@ if [ "$((AFTER_MSG - BEFORE_MSG))" = "1" ]; then ok "DB delta = +1"; else bad "D
 NEW_ID="$(PSQL "select id from messages where body='$MARK' limit 1")"
 if [ -n "$NEW_ID" ]; then
   MA="$(PSQL "select coalesce(mentions_all::text,'<no-col>') from messages where id='$NEW_ID'")"
-  if [ "$MA" = "t" ]; then ok "DB: mentions_all = true"; else bad "DB: mentions_all = $MA（期望 t）"; fi
+  # ⚠️ 期望值是 **true/false**，不是 **t/f** —— 我第一版写成 t/f 而误判 FAIL：
+  #   PostgreSQL 里 `boolean::text` 得到 'true'/'false'；
+  #   只有**不经 cast** 直接输出 boolean 时 psql 才显示 't'/'f'。
+  #   这里做了归一化，两种写法都能接受，避免将来因为渲染形式再误判一次。
+  MA_NORM="$(printf '%s' "$MA" | tr 'A-Z' 'a-z')"
+  if [ "$MA_NORM" = "true" ] || [ "$MA_NORM" = "t" ]; then ok "DB: mentions_all = true"; else bad "DB: mentions_all = $MA（期望 true／t）"; fi
   MM="$(PSQL "select count(*) from message_mentions where message_id='$NEW_ID'")"
   if [ "$MM" = "0" ]; then ok "**message_mentions = 0 行**（未伪造逐人提及）"; else bad "message_mentions = $MM 行（期望 0）"; fi
   FAKE="$(PSQL "select count(*) from message_mentions mm left join users u on u.id=mm.mentioned_user_id where mm.message_id='$NEW_ID' and u.id is null")"
@@ -144,6 +149,34 @@ if [ "$((D_AFTER - D_BEFORE))" = "0" ]; then ok "direct DB delta = 0（零 mutat
 
 # ---------------------------------------------------------------------------
 echo
+echo "--- 4b) 敏感度：**自然对照变量对**（比突变构建更省且更强）---"
+#
+# 本项目既有纪律：优先用**自然对照变量对**证明断言有判别力。
+# 这里用它替代"改代码→重构建→部署→跑→回滚"的突变流程，成本低一个数量级：
+#   对照 A（已由第 7 步覆盖）：
+#       群 + mentionsAll=true  → DB true
+#       群 + 不带 mentionsAll   → DB **false**   ⇒ MENTIONS_ALL_DB 能区分真假（不是恒真）
+#   对照 B（本步）：
+#       direct + mentionsAll=true  → 400
+#       direct + **不带** mentionsAll → 应当 **201**  ⇒ 那个 400 是由 mentionsAll 引起的，
+#                                                     而**不是**"direct 一律被拒"
+D_CTRL_MARK="WO9B-DIRECT-CTRL-$(date +%s)"
+D_CTRL_BEFORE="$(PSQL "select count(*) from messages where thread_id='$DIRECT'")"
+D_CTRL_CODE="$(curl -s -o /tmp/wo9b_direct_ctrl.json -w '%{http_code}' -X POST \
+  "$BASE/api/threads/$DIRECT/messages" \
+  -H "authorization: Bearer $TOK_A" -H 'content-type: application/json' \
+  -d "{\"body\":\"$D_CTRL_MARK\",\"kind\":\"text\"}")"
+D_CTRL_AFTER="$(PSQL "select count(*) from messages where thread_id='$DIRECT'")"
+info "direct 对照组（不带 mentionsAll）HTTP $D_CTRL_CODE  delta=$((D_CTRL_AFTER - D_CTRL_BEFORE))"
+if [ "$D_CTRL_CODE" = "201" ] && [ "$((D_CTRL_AFTER - D_CTRL_BEFORE))" = "1" ]; then
+  ok "敏感度对照 B：direct 不带 mentionsAll → 201 且落库（证明上面的 400 确由 mentionsAll 引起）"
+else
+  bad "敏感度对照 B 不成立：direct 不带 mentionsAll 得到 HTTP $D_CTRL_CODE、delta=$((D_CTRL_AFTER - D_CTRL_BEFORE))（期望 201/+1）—— 那样上面那条 400 就无法归因于 mentionsAll"
+fi
+PSQL "delete from messages where body='$D_CTRL_MARK'" >/dev/null
+
+# ---------------------------------------------------------------------------
+echo
 echo "--- 5) 非成员带 mentionsAll → 404 且**零 mutation** ---"
 N_BEFORE="$(PSQL "select count(*) from messages where thread_id='$GROUP'")"
 N_CODE="$(curl -s -o /tmp/wo9b_nonmember.json -w '%{http_code}' -X POST \
@@ -191,7 +224,9 @@ if [ "$NC" = "201" ]; then ok "普通群消息发送 201"; else bad "普通群�
 NROW="$(PSQL "select id from messages where body='$NORM_MARK' limit 1")"
 if [ -n "$NROW" ]; then
   NVAL="$(PSQL "select coalesce(mentions_all::text,'<no-col>') from messages where id='$NROW'")"
-  if [ "$NVAL" = "f" ]; then ok "普通群消息 mentions_all = false（未默认 true）"; else bad "普通群消息 mentions_all = $NVAL（期望 f）"; fi
+  # 同上的归一化：`boolean::text` 给 'false'，不 cast 才给 'f'
+  NVAL_NORM="$(printf '%s' "$NVAL" | tr 'A-Z' 'a-z')"
+  if [ "$NVAL_NORM" = "false" ] || [ "$NVAL_NORM" = "f" ]; then ok "普通群消息 mentions_all = false（未默认 true）"; else bad "普通群消息 mentions_all = $NVAL（期望 false／f）"; fi
 else
   bad "普通群消息未落库（无法判定 mentions_all 默认值）"
 fi

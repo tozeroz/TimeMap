@@ -19,4 +19,8 @@ fi
 echo
 echo "=== 清理后基线 ==="
 PSQL "select 'messages=' || (select count(*) from messages) || ' media=' || (select count(*) from media) || ' message_media=' || (select count(*) from message_media) || ' board_notes=' || (select count(*) from board_notes) || ' users=' || (select count(*) from users)"
-echo "  （期望 messages=2 media=2 message_media=0 board_notes=1 users=3）"
+# ⚠️ 期望值必须随**种子口径**更新，否则这条 INFO 会长期误导：
+#   WO#9A 起种子新增了群会话（1 个群 + 2 名成员 + 3 条消息 + 1 个私聊 media + 1 条 message_media），
+#   因此当前口径是 messages=5 media=3 message_media=1 board_notes=1 users=3。
+#   （更早的口径 messages=2 media=2 message_media=0 已过期 —— 本条注释即为更正记录。）
+echo "  （当前种子口径期望：messages=5 media=3 message_media=1 board_notes=1 users=3）"

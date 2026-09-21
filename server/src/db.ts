@@ -10,6 +10,7 @@ import mediaLinkIdsSql from './migrations/007_media_link_ids.sql'
 import messageMentionsSql from './migrations/008_message_mentions.sql'
 import voiceMediaSql from './migrations/009_voice_media.sql'
 import voiceMediaStrictSql from './migrations/010_voice_media_strict.sql'
+import mentionsAllSql from './migrations/011_mentions_all.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -33,6 +34,9 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '009_voice_media', sql: voiceMediaSql },
   // 010：加严 MIME ↔ duration 一致性（审核记录 35 要求；009 已应用不能改，故追加）
   { version: '010_voice_media_strict', sql: voiceMediaStrictSql },
+  // 011：群聊 @所有人 —— messages.mentions_all（M5 WO#9B 层 B；审核记录 48 §3 批准）
+  //      只加列，不用 CHECK/trigger 表达"与逐人提及互斥"（那是 service 事务不变量）
+  { version: '011_mentions_all', sql: mentionsAllSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */
