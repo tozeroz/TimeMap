@@ -352,3 +352,11 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       · 入口位置 = 我方设计选择（`AT_PANEL_TRIGGER: ORIGINAL_BEHAVIOR NOT_EVALUATED`）
       · 选中状态：**composer chip/state**（**不得**写进 message body）+ 成功清除／失败保留／可取消
       · 然后重采层 A 的改前 FAIL 与改后 PASS
+### K2 收尾（Round 260 结束状态）
+- [x] K2.15 ✅ **层 A 设备 Gate 14 条断言全 PASS**（entry/kind/title/close/所有人项/几何/
+      **AT_MEMBER_SOURCE_AUTHORITY**/选中可见/与 payload 一致/**未写进 body**/可取消/成功清除/失败保留/面板关闭）
+- [ ] K2.16 等审核裁定 **WO9B 是否 CLOSED**；并确认"空态/失败态受控 stub"是遗留项还是可单独跟踪
+- [ ] K2.17 **WO#10 + 按 UI-DATA-SOURCE-INVENTORY 的 P 顺序**（FeedList → UserProfile → Map）
+      其中 **ProfileEditScreen 是纯 mock 的"写路径"**（假成功），建议提前
+- [x] K2.18 ✅ 新增 3 个工具：`check-gate-syntax.sh`（机械语法检查）、
+      `cleanup-all-gate-residue.sh`（集中清理残留）、`verify-thread-members-contract.sh`（blocker ① 契约核验）
