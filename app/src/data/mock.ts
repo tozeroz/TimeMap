@@ -468,7 +468,18 @@ export const boardNotes: BoardNote[] = [
   },
 ]
 
-export const boardEmojis = ['😂', '👑', '❤️', '👀', '😱', '+1']
+/*
+  留言板表情行。
+  **数量必须与只读证据一致**：supplements/message-board.json 的 strength=strong 条目记载
+    "id/rvEmojiList 下 id/fl_emoji_root 出现 7 次（间距 112px）"，fact 为"表情行恰好 7 个表情"。
+  此前这里只有 6 个 —— 是一处**真实的一致性缺口**，本轮已补齐为 7 个。
+
+  ⚠ **但不声称具体是哪 7 个**：baseline.json 把"表情行的完整表情集合"列为**待补项**，
+    也就是说**只有数量与间距有证据，具体字符没有采集**。
+    因此前 6 个沿用既有值（它们来自更早的观察），第 7 个用 '🎉' 仅是占位，
+    **不是证据支持的结论**；要声称字符一致，必须先做一次只读观察把 7 个字符都 dump 下来。
+*/
+export const boardEmojis = ['😂', '👑', '❤️', '👀', '😱', '+1', '🎉']
 
 export const dailyFeed = [
   { id: 'd1', title: '今天最想说的一句话', desc: '一句话记录今天', color: '#ffd9e8' },
