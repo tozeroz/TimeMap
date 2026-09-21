@@ -98,6 +98,27 @@ printf '%s' "$RA" | grep -q '"visibleTo":"two_parties_only"' && ok "返回 visib
 printf '%s' "$RA" | grep -q '"emptyText":"可以给同学留言噢"' && ok "返回 emptyText「可以给同学留言噢」（原版空态文案）" || bad "缺少空态文案口径"
 
 echo
+echo
+echo "=== B8 客户端**不能**提交 from_user_id（伪造发送者必须无效）==="
+# 审核记录 18 明确要求：当前用户永远来自 session，不允许客户端提交 from_user_id。
+# 做法：用**丙**的会话去发，同时在 body 里谎称 from_user_id 是甲 ——
+# 若实现正确，留言的发送者仍然是**丙**（session 才是权威），伪造字段被完全忽略。
+PSQL "delete from board_notes where from_user_id='$ID_C' or to_user_id='$ID_C'" >/dev/null
+R="$(curl -s -m 10 -X POST "$BASE/api/board-notes/$ID_B" \
+  -H 'Content-Type: application/json' -H "Authorization: Bearer $T_C" \
+  -d "{\"body\":\"伪造发送者测试\",\"from_user_id\":\"$ID_A\",\"fromUserId\":\"$ID_A\"}")"
+NFAKE="$(PSQL "select count(*) from board_notes where from_user_id='$ID_A' and body='伪造发送者测试'")"
+NC="$(PSQL "select count(*) from board_notes where from_user_id='$ID_C' and body='伪造发送者测试'")"
+[ "$NFAKE" = "0" ] && ok "**伪造的 from_user_id 没有被采纳**（没有以甲的名义写入）" || bad "伪造成功：以甲的名义写了 $NFAKE 条"
+[ "$NC" = "1" ] && ok "留言的发送者是**会话用户丙**（session 才是权威）" || bad "发送者不是会话用户（丙的记录 $NC 条）"
+
+echo
+echo "=== B9 第三方**构造两个都不是我的 ID** 也读不到 ==="
+# 审核记录 18：第三方不能通过构造一对用户 ID 读取两人的留言。
+# 做法：用丙的会话去读 (甲, 乙) 这一对 —— 甲给乙的那条留言**不能**出现在结果里。
+RAB="$(curl -s -m 10 "$BASE/api/board-notes/$ID_B?fromUserId=$ID_A&toUserId=$ID_B&as=$ID_A" -H "Authorization: Bearer $T_C")"
+printf '%s' "$RAB" | grep -q 'M5 留言测试' && bad "**丙构造查询参数后读到了甲乙之间的留言！**" || ok "**丙构造查询参数也读不到甲乙之间的留言**（服务端不采纳客户端指定的任一方）"
+printf '%s' "$RAB" | grep -q "\"peerId\":\"$ID_B\"" && ok "接口只按 (会话用户, 路径参数) 这一对解释请求（peerId 仍是乙）" || bad "响应形态异常"
 echo "=== 清理 ==="
 PSQL "delete from board_notes where from_user_id in ('$ID_A','$ID_B','$ID_C') or to_user_id in ('$ID_A','$ID_B','$ID_C')" >/dev/null
 PSQL "delete from sessions where user_id in ('$ID_A','$ID_B','$ID_C')" >/dev/null
