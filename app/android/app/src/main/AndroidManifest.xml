@@ -63,6 +63,24 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
+    <!--
+        ⚠️ 实验性改动（2026-09-21，WO#5 语音消息 可行性探针 PREREQ-1）
+        ⚠️ 这是**为了验证"能否录音"而加的真实 APK 改动**，当前产品**尚无任何可用的录音功能**。
+
+        为什么必须加：Android 对**未声明**的权限是**直接拒绝且不弹窗**。
+        实测（加此行之前）：`getUserMedia({audio:true})` → `NotAllowedError: Permission denied`，
+        且**没有出现系统授权 UI** —— 用户连授权的机会都没有，因此无法验证后续链路。
+
+        治理约定（审核记录 34 §六）：
+          · 若后续探针 **NO-GO**（例如 P3「是否出现真实 Android 授权 UI」失败）→
+            **必须回退本行**，不要把没有任何可用功能的麦克风权限长期留在正式产品里；
+          · 探针通过后再随 WO#5 的实际实现一起保留。
+        回退方式：删除本 `<uses-permission>` 块即可（本改动是单一 commit，便于回退）。
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
     <!-- 真实定位（@capacitor/geolocation）：地图蓝点跟随真实位置 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
