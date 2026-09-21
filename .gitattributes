@@ -12,5 +12,19 @@ scripts/**/*.sh text eol=lf
 # Windows 侧的 PowerShell 脚本保持自动处理（本仓库主要在 Windows 开发机上执行）
 *.ps1 text
 
+# ⚠️ 但下面这三个例外必须**固定 LF**（2026-09-22 实测定论）：
+#   它们的正文里有**单引号 here-string 包住的 bash 脚本**，会被原样 base64 发到 Linux 执行。
+#   若文件是 CRLF，bash 收到的是 `pipefail\r` → 报 `set: pipefail: invalid option name`
+#   并**什么都不做**（但 .ps1 自身仍 exit=0、输出正常）—— 即**部署静默失效**。
+#   判别性实测（同一文件、都有 BOM，只差换行）：
+#     LF  版 → 部署成功（服务器产物 mtime 变化）
+#     CRLF 版 → 部署失败（bash 报 invalid option name）
+#   因此这里显式覆盖上面的 `*.ps1 text`（gitattributes 里**后面的规则优先**）。
+#   注意：`.gitattributes` 只保证**今后 checkout** 的换行；
+#   工作区里已有的 CRLF 需要手动转一次（见 scripts/m5/check-ps1-integrity.sh 的检查）。
+tools/deploy-server.ps1     text eol=lf
+tools/deploy-nginx-tls.ps1  text eol=lf
+tools/push-ops.ps1          text eol=lf
+
 # 基线截图是二进制
 *.png binary
