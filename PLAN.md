@@ -184,8 +184,12 @@ autovacuum_max_workers = 2
             落实审核记录 08 的三处修订；`M3_SLICE0B_GATE_RESULT: PASS`
             口径拆分：`LOGIN_ENTRY_VISUAL: PASS` / `OTP_UI_FUNCTIONAL: PASS` /
             `OTP_UI_VISUAL_CONFORMANCE: NOT_EVALUATED (BLOCKED_BY_ETHICS)`
-      - [ ] Slice 1（帖子详情/评论 → 解决 `comments.parent_id`）→ Slice 2（点赞）
-            → Slice 3（登录后发帖，**无 session 夹具**）→ Slice 4（恢复页一致性）→ M3 Final Gate
+      - [x] **Slice 1 完成**：帖子详情 / 评论 / 回复（`docs/m3/SLICE1-REPORT.md`）
+            `comments.parent_id` 判定 **MODEL: SUPPORTED / PRESENTATION: EXPANDED**
+            后端 `COMMENTS_RESULT PASS`（20 条断言）+ 设备端 detail/cardtap/composer/authgate 全 PASS
+            ⚠️ 证据带 `EVIDENCE_OBTAINED_BY_POLICY_VIOLATION`（见 `docs/POLICY-VIOLATION-2026-09-21.md`）
+      - [ ] Slice 2（点赞）→ Slice 3（登录后发帖，**无 session 夹具**）
+            → Slice 4（恢复页一致性）→ M3 Final Gate
 
 ---
 
