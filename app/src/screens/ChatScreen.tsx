@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchMediaBlobUrl,
   getThreadMessages,
+  postThreadImageMessage,
   relativeTime,
+  uploadMedia,
   type ApiMessage,
 } from '../api/client'
 import { Screen, TopBar } from '../components/Shell'
-import { IconBack, IconEmoji, IconMore, IconPlus } from '../components/icons'
+import { IconBack, IconEmoji, IconImage, IconMore, IconPlus } from '../components/icons'
 import { goBack } from '../router'
 import './chat.css'
 
@@ -70,6 +72,9 @@ function MediaImage({ mediaId, alt }: { mediaId: string; alt: string }) {
  *   - 图片消息用 MediaImage（blob 方式，见上）
  *   - 撤回消息显示「消息已撤回」——**服务端已经把 media 清空**，
  *     所以这里即使想渲染也拿不到图（双重保险：界面表现 + 服务端强制）
+ *
+ * M5 WO#2 追加：**发图**。发图是两步（上传 → 发消息），两条链路都可能独立失败，
+ * 所以这里的状态机按"哪一步"分开报错，不合并成一句模糊的「网络错误」。
  */
 export function ChatScreen({ id }: { id: string }) {
   const [messages, setMessages] = useState<ApiMessage[]>([])
@@ -77,25 +82,85 @@ export function ChatScreen({ id }: { id: string }) {
   const [err, setErr] = useState('')
   const [draft, setDraft] = useState('')
 
+  /**
+   * 发图状态。
+   * 为什么一定要有它：真机上"点了选图之后什么都不会发生"和"App 卡住了"是同一个观感，
+   * 所以上传/发送期间必须**可见**（chatbar 上方的状态行 + 选图按钮禁用）。
+   */
+  const [busy, setBusy] = useState<'' | 'uploading' | 'posting'>('')
+  /** 发送失败的原因（**必须显示出来**：图没发出去却看起来正常，比报错糟得多） */
+  const [sendErr, setSendErr] = useState('')
+  const fileRef = useRef<HTMLInputElement | null>(null)
+
+  // 组件是否还挂着：异步回来时不要往已卸载的组件里写 state
+  const mounted = useRef(true)
   useEffect(() => {
-    let alive = true
-    setState('loading')
-    void (async () => {
-      const r = await getThreadMessages(id)
-      if (!alive) return
-      if (r.ok) {
-        setMessages(r.value.items)
-        setState('ready')
-      } else {
-        // 404 同时覆盖"不存在"、"不是成员"、"未登录"三种情况 —— 前端不区分（服务端刻意不区分）
-        setErr(r.status === 404 ? '这个会话不存在，或你没有权限查看' : `加载失败：${r.reason}`)
-        setState('error')
-      }
-    })()
+    mounted.current = true
     return () => {
-      alive = false
+      mounted.current = false
+    }
+  }, [])
+
+  /**
+   * 拉一次消息。抽成函数是因为**发完图要重拉**（否则新消息只在服务端，界面上看不见），
+   * 而重拉必须和首次加载走完全同一条路径 —— 不能另写一份"发完图之后的我以为"。
+   */
+  const loadMessages = useCallback(async () => {
+    const r = await getThreadMessages(id)
+    if (!mounted.current) return
+    if (r.ok) {
+      setMessages(r.value.items)
+      setErr('')
+      setState('ready')
+    } else {
+      // 404 同时覆盖"不存在"、"不是成员"、"未登录"三种情况 —— 前端不区分（服务端刻意不区分）
+      setErr(r.status === 404 ? '这个会话不存在，或你没有权限查看' : `加载失败：${r.reason}`)
+      setState('error')
     }
   }, [id])
+
+  useEffect(() => {
+    setState('loading')
+    void loadMessages()
+  }, [loadMessages])
+
+  /**
+   * 选图 → 上传 → 发消息 → 重拉。
+   *
+   * 每个刻意的细节：
+   *   - `purpose: 'chat'` → 服务端映射 scope=private。会话图**必须**私有，
+   *     用 'post' 会把私聊图挂成公图（任何登录用户可按 id 读到）。
+   *   - 先取 file 再**立刻清空 input**：不清空的话，同一张图选第二次不会触发 change
+   *     （value 没变），用户会以为"选图按钮坏了"。
+   *   - 上传成功但发消息失败 → 只报错，**不重试也不吞掉**：
+   *     服务端可能已经建了这个 media（未被引用的资源由 cleanup 回收），
+   *     前端没有"删媒体"的接口，假装成功才是真正的错。
+   */
+  async function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null
+    // 立刻清空 input（上面那条"选第二次没反应"的坑）—— 必须在任何 await 之前
+    e.target.value = ''
+    if (!file) return
+
+    setSendErr('')
+    setBusy('uploading')
+    try {
+      const up = await uploadMedia(file, 'chat')
+      if (!up.ok) {
+        setSendErr(`发送失败：图片上传未成功（${up.reason}）`)
+        return
+      }
+      setBusy('posting')
+      const sent = await postThreadImageMessage(id, up.value.id)
+      if (!sent.ok) {
+        setSendErr(`发送失败：消息未发出（${sent.reason}）`)
+        return
+      }
+      await loadMessages()
+    } finally {
+      if (mounted.current) setBusy('')
+    }
+  }
 
   return (
     <Screen
@@ -115,20 +180,53 @@ export function ChatScreen({ id }: { id: string }) {
         />
       }
       footer={
-        <div className="chatbar">
-          <button className="iconbtn" aria-label="表情">
-            <IconEmoji size={22} />
-          </button>
-          <input
-            className="chatbar__input"
-            placeholder="发消息..."
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            aria-label="消息输入框"
-          />
-          <button className="iconbtn" aria-label="更多">
-            <IconPlus size={22} />
-          </button>
+        <div className="chatbar__footer">
+          {/* 发送中：状态行是**用户唯一能看出"点了有反应"**的地方 */}
+          {busy !== '' && (
+            <div className="chatbar__status" role="status">
+              {busy === 'uploading' ? '图片上传中…' : '发送中…'}
+            </div>
+          )}
+          {/* 失败：显式红色文案，不静默 */}
+          {sendErr !== '' && (
+            <div className="chatbar__error" role="alert">
+              {sendErr}
+            </div>
+          )}
+          <div className="chatbar">
+            <button className="iconbtn" aria-label="表情">
+              <IconEmoji size={22} />
+            </button>
+            <input
+              className="chatbar__input"
+              placeholder="发消息..."
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              aria-label="消息输入框"
+            />
+            {/*
+              选图入口。用原生 `<input type="file">`（不引 Capacitor 插件、不动原生工程）：
+              - `<label>` 包住 input，input 用 CSS 铺满并透明 → 用户点图标时点到的是 input 本体，
+                不依赖"label 转发点击"的各种浏览器差异；
+              - accept="image/*" 只做**挑文件的过滤**，真正判类型的是服务端（按内容 probe，
+                不信 Content-Type 与扩展名），所以这里不是安全边界，只是省得用户选错。
+            */}
+            <label className="chatbar__pick" aria-label="选图">
+              <input
+                ref={fileRef}
+                className="chatbar__file"
+                type="file"
+                accept="image/*"
+                onChange={onPickImage}
+                disabled={busy !== ''}
+                aria-label="选择图片"
+              />
+              <IconImage size={22} />
+            </label>
+            <button className="iconbtn" aria-label="更多">
+              <IconPlus size={22} />
+            </button>
+          </div>
         </div>
       }
       scroll

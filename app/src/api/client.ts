@@ -32,6 +32,13 @@ export const API_ORIGIN = (env.VITE_API_ORIGIN?.trim() || DEFAULT_API_ORIGIN).re
 
 const TIMEOUT_MS = 8000
 
+/**
+ * 上传专用超时（M5 WO#2）。**比普通请求宽 2.5 倍**：
+ * 手机网络下传几 MB 图片很容易超过 8s，用普通超时会把正常上传判成失败，
+ * 用户看到"发送失败"而服务端其实已经收到了 —— 那是最难查的一类不一致。
+ */
+const UPLOAD_TIMEOUT_MS = 20000
+
 /** 服务端返回的帖子形状（与 server/src/index.ts 的 JSON 一一对应） */
 export interface ApiPost {
   id: string
@@ -126,12 +133,138 @@ export interface ApiMessage {
 
 export async function getThreads(): Promise<ApiResult<{ items: ApiThread[] }>> {
   return request<{ items: ApiThread[] }>('/api/threads')
-}export async function getThreadMessages(
+}
+
+export async function getThreadMessages(
   threadId: string,
 ): Promise<ApiResult<{ threadId: string; items: ApiMessage[] }>> {
   return request<{ threadId: string; items: ApiMessage[] }>(
     `/api/threads/${encodeURIComponent(threadId)}/messages`,
   )
+}
+
+// ===========================================================================
+// M5 WO#2：给会话发一张图片（前端接入上传 + 图片消息）
+//
+// 为什么是**两步**（先上传拿 id，再发消息挂 id）：这是服务端 API 的形状，不是前端的选择。
+//   ① POST /api/media                     multipart → mediaId（此刻资源已入库，但还没被任何消息引用）
+//   ② POST /api/threads/:id/messages      { body, kind:'image', mediaId } → 把 id 挂到消息上
+// 中途失败会留下一个**未被引用的资源**：服务端有 cleanup-unattached 负责回收
+// （scripts/m5/verify-cleanup-unattached.sh），客户端不需要、也不应该自己去删 ——
+// 客户端没有"删媒体"的接口，硬凑一个只会制造越权面。
+// ===========================================================================
+
+/** 上传接口的返回值。**只暴露 id 与尺寸**，storage_key 不出现在这里（换对象存储不用改客户端）。 */
+export interface ApiUploadedMedia {
+  id: string
+  /** 幂等重放分支不返回宽高（服务端只回 id/storageKey/mime/scope）→ 所以允许 null */
+  width: number | null
+  height: number | null
+}
+
+/**
+ * 上传一张图片，返回 mediaId。
+ *
+ * multipart 字段名**必须逐字一致**（服务端按这些名字取，见 server/src/index.ts:1126 一带）：
+ *   file            —— 文件本体
+ *   purpose: 'chat' —— 会话私图：服务端映射为 scope=private，只有会话成员可读
+ *   uploadRequestId —— 幂等键，**必须是 UUID**（非 UUID → 400 missing_upload_request_id）
+ *
+ * 三个刻意的约束（都是踩过或审过的点）：
+ *   1) **不手动设 Content-Type**。multipart 的 boundary 是浏览器/WebView 自己生成的，
+ *      手写 `content-type: multipart/form-data` 会把 boundary 丢掉 → 服务端解析不到任何字段。
+ *      这里连 request() 都不能用：request() 会强制 JSON 并 JSON.stringify(body)。
+ *   2) `uploadRequestId` 必须是 UUID 而不是随便一个字符串：它是**幂等键**，
+ *      语义是"这是同一次逻辑上传"，服务端拿它做重放去重（同一个键重复上传不会建第二个文件）。
+ *   3) 复用既有的 `authHeaders()`，不另写一套凭据拼装 —— 上传同样需要会话（服务端按会话定 owner）。
+ *
+ * 超时比普通请求长（20s）：手机上传几 MB 图比拉一段 JSON 慢得多，用 8s 会误杀正常上传。
+ */
+export async function uploadMedia(
+  file: File | Blob,
+  purpose: 'post' | 'chat',
+): Promise<ApiResult<ApiUploadedMedia>> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('purpose', purpose)
+  form.append('uploadRequestId', crypto.randomUUID())
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS)
+  try {
+    const res = await fetch(`${API_ORIGIN}/api/media`, {
+      method: 'POST',
+      headers: authHeaders(), // 只有凭据，**没有** content-type（见上）
+      body: form,
+      signal: controller.signal,
+    })
+    const text = await res.text()
+    if (!res.ok) {
+      return { ok: false, reason: `HTTP ${res.status}: ${text.slice(0, 200)}`, status: res.status }
+    }
+    try {
+      const v = JSON.parse(text) as { id: string; width?: number | null; height?: number | null }
+      if (!v?.id) return { ok: false, reason: '上传响应里没有 id' }
+      return { ok: true, value: { id: v.id, width: v.width ?? null, height: v.height ?? null } }
+    } catch {
+      return { ok: false, reason: '上传响应不是合法 JSON' }
+    }
+  } catch (err) {
+    const e = err as Error
+    const reason =
+      e.name === 'AbortError' ? `上传超时（${UPLOAD_TIMEOUT_MS}ms）` : `${e.name}: ${e.message}`
+    return { ok: false, reason }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** 发送接口的回显（客户端据此确认消息真的挂上了媒体） */
+export interface ApiSentMessage {
+  id: string
+  kind: string
+  mediaId: string | null
+}
+
+/**
+ * 往会话里发一条消息。**需要登录且必须是会话成员**（服务端会话决定发送者）。
+ *
+ * ⚠ 两个必须遵守的服务端口径：
+ *   1) `mediaId` 是**单数**。服务端**明确拒绝** `mediaIds: [...]`（400 bad_media_id）——
+ *      这是刻意的：静默忽略复数会让客户端以为图发出去了。所以这里**没有**数组入口。
+ *   2) `body` 对图片消息也**必须非空**（服务端先校验 body 再校验 kind）：
+ *      纯图也要带一句正文，见 IMAGE_MESSAGE_BODY。
+ */
+export async function postThreadMessage(
+  threadId: string,
+  input: { body: string; kind?: 'text' | 'image' | 'voice'; mediaId?: string; mentions?: string[] },
+): Promise<ApiResult<ApiSentMessage>> {
+  return request<ApiSentMessage>(`/api/threads/${encodeURIComponent(threadId)}/messages`, {
+    method: 'POST',
+    // 传对象，序列化只在 request() 里做一次（双重编码那个坑）
+    body: input,
+  })
+}
+
+/**
+ * 图片消息的正文。
+ *
+ * 服务端要求 body 非空（`bad_body`），发纯图也得有一句正文；
+ * 界面在 kind='image' 且 media 非空时**渲染图片而不渲染这句话**，
+ * 所以它只在"图挂了但媒体取不到"之类的降级场景里露出来 —— 那时显示「[图片]」比空白好。
+ */
+export const IMAGE_MESSAGE_BODY = '[图片]'
+
+/** 发一条图片消息：把已经上传好的 mediaId 挂到消息上（两步里的第二步） */
+export async function postThreadImageMessage(
+  threadId: string,
+  mediaId: string,
+): Promise<ApiResult<ApiSentMessage>> {
+  return postThreadMessage(threadId, {
+    body: IMAGE_MESSAGE_BODY,
+    kind: 'image',
+    mediaId,
+  })
 }
 
 // ===========================================================================
