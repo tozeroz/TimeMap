@@ -470,9 +470,11 @@ export const boardNotes: BoardNote[] = [
 
 /*
   留言板表情行。
-  **数量必须与只读证据一致**：supplements/message-board.json 的 strength=strong 条目记载
-    "id/rvEmojiList 下 id/fl_emoji_root 出现 7 次（间距 112px）"，fact 为"表情行恰好 7 个表情"。
-  此前这里只有 6 个 —— 是一处**真实的一致性缺口**，本轮已补齐为 7 个。
+  **⚠ 数量存在证据冲突，尚未确定**（见 docs/m5/EMOJI-COUNT-CONFLICT.md）：
+    · 强证据（控件树 dump）：id/rvEmojiList 下 id/fl_emoji_root 出现 **7** 次，间距 112px
+    · 弱证据（截图 + 视觉读数）：可见 **6** 项（5 个 emoji + "+1"），且判断"未截断"
+  现暂取 7（依据强证据），但**不声称已确定** —— 两份证据不一致时应补证据，不是挑一个信。
+  解决路径：做一次新的只读 dump，保存原始 xml（含 bounds 与 content-desc）到仓库。
 
   ⚠ **但不声称具体是哪 7 个**：baseline.json 把"表情行的完整表情集合"列为**待补项**，
     也就是说**只有数量与间距有证据，具体字符没有采集**。
