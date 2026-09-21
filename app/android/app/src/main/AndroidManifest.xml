@@ -79,6 +79,37 @@
     -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!--
+        ⚠️ 同一个实验性改动的一部分（WO#5 PREREQ-2 调查结论）
+
+        为什么必须**同时**声明这个：Capacitor 的 WebView 权限桥在
+        `BridgeWebChromeClient.onPermissionRequest()` 里，对 AUDIO_CAPTURE 申请的是
+        **两个**权限（读的是我们 node_modules 里的 Capacitor 源码，非猜测）：
+
+            if (resources 含 "android.webkit.resource.AUDIO_CAPTURE") {
+                permissionList.add(Manifest.permission.MODIFY_AUDIO_SETTINGS);   // ← 这个
+                permissionList.add(Manifest.permission.RECORD_AUDIO);
+            }
+            permissionLauncher.launch(permissions);   // RequestMultiplePermissions
+
+        而它的结果判定是"**全部必须授予**"：
+
+            for (Map.Entry<String, Boolean> p : isGranted.entrySet())
+                if (!p.getValue()) granted = false;
+            permissionListener.onPermissionSelect(granted);
+
+        → 我们之前只声明了 RECORD_AUDIO，未声明 MODIFY_AUDIO_SETTINGS，
+          于是该项恒为 false → 整体 granted=false → request.deny() → WebView 报
+          NotAllowedError（实测 260ms、无弹窗，与"RECORD_AUDIO 已授权故无需弹窗"完全吻合）。
+
+        MODIFY_AUDIO_SETTINGS 是 protectionLevel=normal 的安装期权限（不弹窗、无用户可见影响），
+        声明它是**让 Capacitor 既有桥能正常工作**的必要条件，
+        而不是我另写一套 WebChromeClient（审核明确禁止那样做）。
+
+        治理同前：若探针最终 NO-GO，本行与 RECORD_AUDIO 一并回退。
+    -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- 真实定位（@capacitor/geolocation）：地图蓝点跟随真实位置 -->
