@@ -76,10 +76,14 @@ ok "4 类 media 行 + 1 条引用消息就绪（旧无引用 / 新无引用 / �
 echo
 echo "=== C1+C3+C4. dry-run：新图不进候选、孤儿列表不受影响、什么都不删 ==="
 J="$(UPLOAD_ROOT="$UP" DATABASE_URL="postgres://campus:$(cat /srv/campus/.db_password)@127.0.0.1/campus" node "$CLEANUP" --json 2>&1)"
-printf '%s' "$J" | grep -q "\"$MID_OLD\"" && ok "3 天前的无引用 media 出现在 unattached 候选里" || bad "旧的无引用 media 没被识别：$(printf '%s' "$J" | head -c 300)"
-printf '%s' "$J" | grep -q "\"$MID_NEW\"" && bad "**1 分钟前的在途图片竟然进了候选**（会误删用户正要发的图）" \
+# ⚠ 断言不要写成 grep -q "\"$MID_OLD\""（要求 id 带引号）：
+# U32 生成的是**无连字符**的 32 位 hex，它在 JSON 里只作为 rel 值的一部分出现
+# （"rel":"private/…/wo2-unattached-old-<undashed>.png"），周围并没有紧跟的引号，
+# 于是带引号的模式必然匹配失败 → 会报"没被识别"这种**假失败**（已实测踩到）。
+printf '%s' "$J" | grep -q "$MID_OLD" && ok "3 天前的无引用 media 出现在 unattached 候选里" || bad "旧的无引用 media 没被识别：$(printf '%s' "$J" | head -c 300)"
+printf '%s' "$J" | grep -q "$MID_NEW" && bad "**1 分钟前的在途图片竟然进了候选**（会误删用户正要发的图）" \
   || ok "1 分钟前的无引用 media **不在候选里**（TTL 保护在途图片）"
-printf '%s' "$J" | grep -q "\"$MID_REF\"" && bad "**被消息引用的 media 进了候选**" \
+printf '%s' "$J" | grep -q "$MID_REF" && bad "**被消息引用的 media 进了候选**" \
   || ok "被消息引用的 media 不在候选里（引用优先）"
 printf '%s' "$J" | grep -q '"unattachedMissingFile":1' && ok "盘上无文件的那条被单独报出（unattachedMissingFile=1），不混进候选" \
   || bad "没有如实报出「有行无文件」的条数：$(printf '%s' "$J" | head -c 400)"
@@ -94,7 +98,7 @@ printf '%s' "$TXT" | grep -q '孤儿（未登记文件）' && printf '%s' "$TXT"
 echo
 echo "=== C2. 阈值放到 8760h（一年）→ 候选为空、什么都不删 ==="
 J="$(UPLOAD_ROOT="$UP" DATABASE_URL="postgres://campus:$(cat /srv/campus/.db_password)@127.0.0.1/campus" node "$CLEANUP" --json --unattached-max-age-hours 8760 2>&1)"
-printf '%s' "$J" | grep -q "\"$MID_OLD\"" && bad "阈值放大到一年后旧图仍在候选里（阈值参数没生效）" \
+printf '%s' "$J" | grep -q "$MID_OLD" && bad "阈值放大到一年后旧图仍在候选里（阈值参数没生效）" \
   || ok "阈值 8760h 时候选为空（阈值保护生效）"
 
 echo
