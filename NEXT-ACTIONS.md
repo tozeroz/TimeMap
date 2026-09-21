@@ -411,3 +411,21 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       ③ 后撤须登记 KNOWN_DEVIATION ④ **把现象写成缺陷前先查是否已有解释**（我同一轮两次急着定性）
 - [ ] AUDIT.6 ⬅ 等裁定：feed-list 的 3 处偏差**并入 WO#11 一起修**（建议）
 - [ ] AUDIT.7 后续每个 WO 的 Gate 都要按新纪律加"基线核对"层
+### WO#11 完成（Round 262）
+- [x] WO11.7 ✅ 审核 52 裁定：**WO11: APPROVED TO IMPLEMENT**（且指出"五项其实上轮已裁定"，我不必再等）
+- [x] WO11.8 ✅ **数据清理完成**（按授权七步流程）：deleted_count=20、规范数据完好、门禁残留清零
+- [x] WO11.9 ✅ **层 1 实施完成**：FeedListScreen 接入 GET /api/posts、三态、真实刷新、
+      移除 mock 与假权威数字、标题「校园圈」、左上关闭语义、学校切换 HIDE/DEFER、右侧按钮 UNCHANGED
+      → 设备 Gate **13 条断言全 PASS**
+- [x] WO11.10 ✅ 给 PostCard 加 `data-feed-id`（稳定业务身份测试钩子，替代"按位置选对象"）
+- [x] WO11.11 ✅ 服务端回归连查并修复**三个真实问题** → REAL_EXIT=0：
+      ① 认证清理从未自动运行（装 systemd timer，每 6h）
+      ② 语音 C1 假 FAIL（8s 持锁 vs 5s 超时仅 1.3s 余量 → 改 20s；产品本身是对的）
+      ③ 断言语义与清理节奏不一致（加真不变量 M5_AUTH_NO_UNBOUNDED_ACCUMULATION：30h 界 + 先收敛再断言 0）
+- [x] WO11.12 ✅ 更新**冻结 manifest**：6 条 feed claim 由 DEVIATION_PENDING_FIX → **MATCH**（附设备实测证据），
+      新增 FEED_NO_TEST_RESIDUE；现状 31 条 claim（MATCH 15 / NOT_EVALUATED 10 / DEVIATION_DELIBERATE 3 / UNCHANGED 3）
+- [ ] ⚠️ WO11.13 **未定位的间歇故障（如实记录）**：首轮 server gate 报媒体段"登录失败"，单独跑即 PASS；
+      已排除限流/sink/服务不可用；时间线显示失败发生在服务进程重启（05:23:45）**之前**。
+      **未复现、未定位根因、不声称已修**。若再现需抓现场（建议：失败时快照 journalctl + pg_stat_activity）
+- [ ] WO11.14 下一步：**UserProfileScreen → MapScreen**（按审核 50 排序），照 WO#10/WO#11 方法先做字段级 inventory
+- [ ] AUDIT.7 后续每个 WO 的 Gate 都要按纪律加"基线逐条核对"层（manifest 已就位）

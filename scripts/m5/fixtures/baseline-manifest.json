@@ -35,20 +35,22 @@
         {
           "id": "FEED_TITLE",
           "claim": "页面标题逐字为「校园圈」",
-          "evidence": "baseline.json title = \"校园圈\"；baseline_observation_record",
-          "status": "DEVIATION_PENDING_FIX",
-          "implementation_impact": "FeedListScreen 顶部需渲染标题「校园圈」（当前无标题，中间只放学校名）",
-          "work_order": "WO#11",
-          "deviation_id": null
+          "evidence": "baseline.json title = \"校园圈\"；**设备实测**（scripts/m5/gate-wo11-feed-list.mjs 的 BASELINE_CLAIMS：titleText=\"校园圈\"、hasTitleNode=true）",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11）：顶部渲染 `校园圈` 标题",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commit 8bb42a0）"
         },
         {
           "id": "FEED_LEFT_CONTROL",
           "claim": "左上控件是**关闭**（X），不是返回箭头",
-          "evidence": "baseline.json interactions[0] = \"顶部「校园圈」+「北京交通大学 ▼」+ 左上关闭\"；PNG 目视一致（close 图标）",
-          "status": "DEVIATION_PENDING_FIX",
-          "implementation_impact": "当前用 IconBack + aria-label=\"返回\"；需改为关闭图标与关闭语义",
-          "work_order": "WO#11",
-          "deviation_id": null
+          "evidence": "baseline.json interactions[0] = \"顶部「校园圈」+「北京交通大学 ▼」+ 左上关闭\"；**设备实测** leftAria=\"关闭\"、schoolSwitcherPresent=false",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11）：IconClose + aria-label=\"关闭\"",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commit 8bb42a0）"
         },
         {
           "id": "FEED_CLOSE_NAVIGATION",
@@ -87,11 +89,21 @@
           "deviation_id": null
         },
         {
+          "id": "FEED_NO_TEST_RESIDUE",
+          "claim": "可见 feed 里不得出现测试残留（如 M1-E2E-* / TLS 日志泄漏检查）",
+          "evidence": "**服务端实测**：posts 表原有 20 条 M1 E2E 残留（占 24 条中的 20），已按审核 52 授权的七步流程删除（deleted_count=20、规范数据完好）；**设备实测** residueHits=[]",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11 层 2 数据清理）：残留清零；并加反向断言防再次泄漏",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commits 8bb42a0 / e43cdbe）"
+        },
+        {
           "id": "FEED_SCHOOL_NAME_SOURCE",
           "claim": "顶部学校名应有权威来源",
           "evidence": "⚠️ schools/campuses 两表存在但**数据为空**、三个用户 school_campus_id **全为 NULL**（实测）",
           "status": "NOT_EVALUATED",
-          "implementation_impact": "无权威来源 → 按审核 52：**HIDE / DEFER**；不填静态'北京交通大学'、不临时 seed",
+          "implementation_impact": "无权威来源 → 按审核 52：**HIDE / DEFER**；已实现为**不渲染学校切换**（设备实测 schoolSwitcherPresent=false）；不填静态'北京交通大学'、不临时 seed",
           "work_order": null,
           "deviation_id": null
         },
@@ -107,11 +119,12 @@
         {
           "id": "FEED_REFRESH_SEMANTICS",
           "claim": "「刷新」→ **重新请求**（真实网络请求）",
-          "evidence": "baseline.json navigation[1] = \"刷新 → 重新请求\"",
-          "status": "DEVIATION_PENDING_FIX",
-          "implementation_impact": "当前刷新 **fetchDelta = 0**（零请求）却渲染 12 条编造动态；需改为真实请求，失败则停在失败态",
-          "work_order": "WO#11",
-          "deviation_id": null
+          "evidence": "baseline.json navigation[1] = \"刷新 → 重新请求\"；**设备实测** REFRESH_IS_REAL = {fetchDelta: 1, cardCountAfter: 4}",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11）：刷新走 listPosts() 真请求；失败时停在失败态，不回退 mock",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commit 8bb42a0）"
         },
         {
           "id": "FEED_NORMAL_LIST_CONFORMANCE",
@@ -125,20 +138,22 @@
         {
           "id": "FEED_NO_MOCK_FEED",
           "claim": "页面不得渲染编造的动态内容",
-          "evidence": "改前实测：点刷新后显示 12 条编造动态（作者为 mock 身份）",
-          "status": "DEVIATION_PENDING_FIX",
-          "implementation_impact": "整页改接 GET /api/posts",
-          "work_order": "WO#11",
-          "deviation_id": null
+          "evidence": "**设备实测**（WO#11 Gate）：DOM 的 [data-feed-id] 集合 == GET /api/posts items[].id 集合（集合级相等，4/4）",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11）：整页改接 GET /api/posts，`posts`（mock）import 已移除",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commit 8bb42a0）"
         },
         {
           "id": "FEED_NO_FAKE_AUTHORITATIVE_METRICS",
           "claim": "页面不得出现编造的统计数字（如 12,486 / 38,920）",
-          "evidence": "改前实测：刷新后 DOM 中出现 [\"12,486\",\"38,920\"]；mock.ts:499-504 的 campusInfo",
-          "status": "DEVIATION_PENDING_FIX",
-          "implementation_impact": "移除这两个数字（不显示），并加反向断言",
-          "work_order": "WO#11",
-          "deviation_id": null
+          "evidence": "**设备实测**（WO#11 Gate）：fakeNumbersPresent = []（含 12486/38920 变体）",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11）：移除两个编造数字，只显示服务端返回的真实条数",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commit 8bb42a0）"
         }
       ]
     },
