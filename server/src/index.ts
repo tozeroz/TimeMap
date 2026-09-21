@@ -1,5 +1,9 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { mkdir, rename, statfs, unlink, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import multipart, { type MultipartFile } from '@fastify/multipart'
 import Fastify from 'fastify'
+import { probeImage } from './imageProbe.ts'
 import {
   createRateLimiter,
   hashLoginCode,
@@ -1003,6 +1007,200 @@ export function buildServer(deps: ServerDeps) {
   // -------------------------------------------------------------------------
   const MEDIA_URL_PREFIX = process.env.MEDIA_URL_PREFIX ?? '/media'
   const PRIVATE_XACCEL_PREFIX = process.env.PRIVATE_XACCEL_PREFIX ?? '/_private_media'
+  const UPLOAD_ROOT = process.env.UPLOAD_ROOT ?? '/srv/campus/uploads'
+  const MEDIA_MAX_BYTES = 5 * 1024 * 1024 // 单图 ≤ 5MB（PLAN §6）
+  const DISK_RESERVE_BYTES = 1024 * 1024 * 1024 // 预留 1GB
+  const DISK_REJECT_PERCENT = 90 // >90% 拒绝新上传
+
+  // multipart 解析器（上传接口用）。limit 在调用处再收紧到 5MB。
+  // 不 await：buildApp 是同步函数，Fastify 的 register 会在 ready() 时完成加载
+  // （调用方本来就会 await app.ready()，所以这里的顺序是有保证的）。
+  app.register(multipart, {
+    limits: { fileSize: MEDIA_MAX_BYTES, files: 1, fields: 10 },
+  })
+
+  /**
+   * 磁盘水位检查（审核记录 13 第 5 条）。
+   *
+   * 两个条件都要满足才算"还有空间"，任一不满足就拒绝新上传：
+   *   ① 使用率 ≤ 90%
+   *   ② 剩余 ≥ 1GB
+   * 为什么两个都要：这台机器只有 20GB 盘，**百分比在小盘上会抖动**
+   * （删一点日志使用率就掉几个点，但绝对余量并没有变安全）。
+   * 用 statfs 拿的是**真实文件系统**数据，不是应用层的估算。
+   */
+  async function checkDisk(root: string): Promise<{ ok: boolean; usedPercent: number; freeBytes: number }> {
+    const st = await statfs(root)
+    const total = Number(st.blocks) * Number(st.bsize)
+    const free = Number(st.bavail) * Number(st.bsize)
+    const usedPercent = total > 0 ? Math.round(((total - free) / total) * 100) : 100
+    const ok = usedPercent <= DISK_REJECT_PERCENT && free >= DISK_RESERVE_BYTES
+    return { ok, usedPercent, freeBytes: free }
+  }
+
+  /**
+   * M4：上传媒体（multipart）。
+   *
+   * 边界逐条对应审核记录 13 的 7 条与记录 15 的 4 条：
+   *   ① DB 只存**逻辑 key**（YYYY/MM/<uuid>.<ext>），不存 URL / 绝对路径
+   *   ② 文件名**服务端生成**（UUID）；客户端 filename 只用来记日志，绝不参与路径
+   *   ③ 不信任 Content-Type / 扩展名：用 imageProbe **按字节**判类型与尺寸
+   *   ④ 顺序不变式：**先有文件、后有 DB 行**（宁可留可清扫的 orphan，
+   *      也不要留"DB 说有图、实际取不到"的悬空引用）
+   *   ⑤ 磁盘 Gate：>90% 或剩余 < 1GB → **507**；写盘 ENOSPC → 507（可恢复的外部条件）
+   *   ⑥ scope 由服务端按 purpose 决定（post→public / chat→private），不接受客户端直接给 scope
+   *   ⑦ 幂等键 upload_request_id：重复上传返回**同一条** media，不新建文件
+   */
+  app.post('/api/media', async (req, reply) => {
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') return unauthorized(reply)
+
+    let data
+    try {
+      data = await (req as unknown as { file: (o?: unknown) => Promise<MultipartFile | undefined> }).file({
+        limits: { fileSize: MEDIA_MAX_BYTES, files: 1 },
+      })
+    } catch (err) {
+      // @fastify/multipart 在超限时抛错（fileSize limit）
+      const code = (err as { code?: string }).code ?? ''
+      if (code === 'FST_REQ_FILE_TOO_LARGE' || code === 'FST_FILES_LIMIT') {
+        reply.code(413)
+        return { error: 'file_too_large', limit: MEDIA_MAX_BYTES }
+      }
+      reply.code(400)
+      return { error: 'bad_multipart', message: (err as Error).message }
+    }
+    if (!data) {
+      reply.code(400)
+      return { error: 'no_file' }
+    }
+
+    // 幂等键：客户端为一次逻辑上传生成；缺失则一律拒绝（否则重试会重复建文件）
+    const uploadRequestId = (data.fields?.uploadRequestId as { value?: string } | undefined)?.value
+    if (!uploadRequestId || !/^[0-9a-f-]{36}$/i.test(uploadRequestId)) {
+      reply.code(400)
+      return { error: 'missing_upload_request_id' }
+    }
+    // purpose → scope 的映射在**服务端**；客户端不能直接指定 scope
+    const purpose = ((data.fields?.purpose as { value?: string } | undefined)?.value ?? 'post').trim()
+    const scope = purpose === 'chat' ? 'private' : purpose === 'post' ? 'public' : null
+    if (!scope) {
+      reply.code(400)
+      return { error: 'bad_purpose', allowed: ['post', 'chat'] }
+    }
+
+    const buf = await data.toBuffer()
+    if (buf.length === 0) {
+      reply.code(400)
+      return { error: 'empty_file' }
+    }
+    if (buf.length > MEDIA_MAX_BYTES) {
+      reply.code(413)
+      return { error: 'file_too_large', limit: MEDIA_MAX_BYTES }
+    }
+
+    // ③ 按**内容**判类型（不信任 Content-Type 与扩展名）
+    const probe = probeImage(new Uint8Array(buf))
+    if (!probe.ok) {
+      reply.code(400)
+      return { error: 'not_an_image', reason: probe.reason }
+    }
+    const ext = probe.mime === 'image/png' ? 'png' : probe.mime === 'image/jpeg' ? 'jpg' : 'webp'
+    const sha256 = createHash('sha256').update(buf).digest('hex')
+
+    try {
+      // ⑦ 先查幂等键：命中就直接返回原来的 media（不写文件、不建行）
+      const dup = await db.pool.query<{ id: string; storage_key: string; mime: string }>(
+        'select id, storage_key, mime from media where owner_user_id = $1 and upload_request_id = $2',
+        [s.user.userId, uploadRequestId],
+      )
+      if (dup.rows[0]) {
+        return {
+          id: dup.rows[0].id,
+          storageKey: dup.rows[0].storage_key,
+          mime: dup.rows[0].mime,
+          scope,
+          idempotentReplay: true,
+        }
+      }
+
+      // ⑤ 磁盘 Gate（在写盘之前）
+      const disk = await checkDisk(UPLOAD_ROOT)
+      if (!disk.ok) {
+        reply.code(507)
+        return { error: 'insufficient_storage', usedPercent: disk.usedPercent, freeBytes: disk.freeBytes }
+      }
+
+      // ② storage_key 完全由服务端生成；④ 先写 tmp，再原子 rename 到最终路径
+      const id = randomUUID()
+      const now = new Date()
+      const yyyy = String(now.getUTCFullYear())
+      const mm = String(now.getUTCMonth() + 1).padStart(2, '0')
+      const relDir = `${yyyy}/${mm}`
+      const storageKey = `${relDir}/${id}.${ext}`
+      const finalPath = join(UPLOAD_ROOT, scope, storageKey)
+      const tmpPath = join(UPLOAD_ROOT, '.tmp', `${id}.${ext}`)
+
+      await mkdir(join(UPLOAD_ROOT, scope, relDir), { recursive: true, mode: 0o750 })
+      try {
+        await writeFile(tmpPath, buf, { mode: 0o640 })
+        await rename(tmpPath, finalPath) // 同文件系统（同一个 uploads 根）→ 原子
+      } catch (err) {
+        await unlink(tmpPath).catch(() => undefined)
+        const code = (err as { code?: string }).code ?? ''
+        if (code === 'ENOSPC') {
+          reply.code(507)
+          return { error: 'insufficient_storage', reason: 'enospc' }
+        }
+        throw err
+      }
+
+      // ④ 文件已就位，再写 DB
+      try {
+        await db.pool.query(
+          `insert into media (id, owner_user_id, scope, storage_key, mime, bytes, width, height, sha256, upload_request_id)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [id, s.user.userId, scope, storageKey, probe.mime, buf.length, probe.width, probe.height, sha256, uploadRequestId],
+        )
+      } catch (err) {
+        // DB 失败 → 把刚落的文件删掉（避免留下无登记的 orphan）
+        await unlink(finalPath).catch(() => undefined)
+        // 并发下另一个请求可能刚插了同一个幂等键 → 返回那条
+        const again = await db.pool
+          .query<{ id: string; storage_key: string; mime: string }>(
+            'select id, storage_key, mime from media where owner_user_id = $1 and upload_request_id = $2',
+            [s.user.userId, uploadRequestId],
+          )
+          .catch(() => ({ rows: [] as Array<{ id: string; storage_key: string; mime: string }> }))
+        if (again.rows[0]) {
+          return {
+            id: again.rows[0].id,
+            storageKey: again.rows[0].storage_key,
+            mime: again.rows[0].mime,
+            scope,
+            idempotentReplay: true,
+          }
+        }
+        throw err
+      }
+
+      reply.code(201)
+      return {
+        id,
+        storageKey,
+        mime: probe.mime,
+        bytes: buf.length,
+        width: probe.width,
+        height: probe.height,
+        scope,
+      }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
 
   app.get('/api/media/:id', async (req, reply) => {
     const id = (req.params as { id?: string }).id ?? ''
