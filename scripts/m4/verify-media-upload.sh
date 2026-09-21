@@ -153,18 +153,26 @@ C404="$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/media/$MID4" "${AUTH[@
 
 echo
 echo "=== I. 清理 ==="
-for mid in "$MID" "$MID4"; do
-  [ -n "$mid" ] || continue
-  K="$(PSQL "select scope || '/' || storage_key from media where id='$mid'")"
+# **按 owner 清理，而不是按已知 id 列表清理**。
+# 原因（M4 CLOSEOUT ①② 的屏障抓到的真实泄漏）：
+# 旧版只删 $MID 与 $MID4 两条，但本脚本还会因为其它用例产生 media ——
+# 例如**路径穿越用例**会用合法图片 + 恶意 filename 成功上传一次，
+# 那次上传的 media 行与盘上文件都不在 $MID/$MID4 里，于是**行删了、文件留在盘上**，
+# 成了"未登记文件"。它不会被任何断言看见，却会让备份一致性屏障失败
+# （屏障是对的：这类垃圾会被恢复演练一起打包过去）。
+# 改成按 owner_user_id 清理后，无论脚本将来加多少上传用例都不会再泄漏。
+for K in $(PSQL "select scope || '/' || storage_key from media where owner_user_id='$MEMBER_ID'"); do
   [ -n "$K" ] && rm -f "$UPLOADS/$K"
-  PSQL "delete from media where id='$mid'" >/dev/null
 done
+PSQL "delete from media where owner_user_id='$MEMBER_ID'" >/dev/null
+# 兜底：万一将来又有没落到 owner 上的用例，这里再核对一次盘上是否还有本测试用户的痕迹
+LEAK="$(PSQL "select count(*) from media where owner_user_id='$MEMBER_ID'")"
 PSQL "delete from sessions where user_id='$MEMBER_ID'" >/dev/null
 PSQL "delete from login_challenges where phone_e164='+86$PHONE'" >/dev/null
 PSQL "delete from users where id='$MEMBER_ID'" >/dev/null
 rm -rf "$WORK"
 LEFT="$(PSQL "select count(*) from media where owner_user_id='$MEMBER_ID'")"
-[ "$LEFT" = "0" ] && ok "测试数据已清理" || bad "仍有残留"
+[ "$LEFT" = "0" ] && [ "$LEAK" = "0" ] && ok "测试数据已清理（按 owner 清理，含所有上传用例产生的 media 与文件）" || bad "仍有残留"
 
 echo
 if [ "$FAILED" -eq 0 ]; then echo "MEDIA_UPLOAD_RESULT PASS"; else echo "MEDIA_UPLOAD_RESULT FAIL"; fi
