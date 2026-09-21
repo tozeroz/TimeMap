@@ -9,6 +9,23 @@
 > 这两者在报告里必须可区分：前者叫 **KNOWN_DEVIATION（有意后撤）**，
 > 否则一句"WO#10 清理完成"会把**与原版的真实差距**掩盖掉。
 
+## 〇、五条**互相独立**的状态轴（审核记录 52 冻结）
+
+```
+IMPLEMENTATION_STATUS     实现有没有做
+FUNCTIONAL_VERIFICATION   功能验证过没有
+ORIGINAL_CONFORMANCE      与原版是否一致
+KNOWN_DEVIATION           有意的偏离（含批准记录与恢复条件）
+EVIDENCE_LIMITATION       证据本身的边界（**不是**缺陷、也**不是**后撤）
+```
+
+**这五项不得互相代替**，尤其：
+```
+❌ "功能验证通过" 暗示 "与原版一致"
+❌ "实现完成"     暗示 "已 conform"
+✅ 每一项单独给状态；本册子管的是 KNOWN_DEVIATION，L 系列管的是 EVIDENCE_LIMITATION
+```
+
 ## 一、格式约定
 
 每条必须写清：
@@ -96,11 +113,26 @@ L-002 ORIGINAL_MESSAGE_LIST_WITH_CONVERSATIONS: NOT_EVALUATED
       依据：known_unknowns = ["已存在会话时的列表样式（**本机为 0 会话**）"]
       → 后果：我们的会话列表样式（WO#8 后由真实 API 驱动）**没有原版对照物**。
 
-L-003 ORIGINAL_GROUP_NORMAL_STATE: NOT_EVALUATED
+L-003 ORIGINAL_GROUP_NORMAL_STATE_FULL_CONFORMANCE: NOT_EVALUATED
       屏：group（群聊）
-      依据：states.normal = **unknown**；states.empty = observed（normal.png 实为空态截图）
-      → 后果：我们的群聊消息呈现**没有"原版正常态"对照物**；
-             WO#9A 已冻结的相关项（发送者名呈现、气泡左右、时间分隔插入规则）维持 NOT_EVALUATED。
+      依据：baseline.json 的 states.normal = **unknown**；
+            states.empty = observed（该目录下的 normal.png 实为空态截图）
+      ⚠️ **审核记录 52 收紧**：**不得**笼统写成 `ORIGINAL_GROUP_NORMAL_STATE: NOT_EVALUATED` ——
+         因为我们**确实有**原版群聊的 **XML dump**，能证明若干 normal-state 的局部属性。
+         把"整体未评估"写成覆盖一切的结论，会**反过来抹掉已经取得的有效证据**。
+      → 正确写法：整体一致性未评估，但保留已观察到的局部事实：
+
+```
+ORIGINAL_GROUP_NORMAL_STATE_FULL_CONFORMANCE: NOT_EVALUATED
+GROUP_HEADER_STRUCTURE:            OBSERVED     （leftIcon(返回)/chatAvatar/title(群名)/rightIcon）
+OWN_MESSAGE_ALIGNMENT:             OBSERVED
+TIME_SEPARATOR_PRESENCE:           OBSERVED
+PEER_GROUP_PRESENTATION:           NOT_EVALUATED
+TIME_SEPARATOR_INSERTION_RULE:     NOT_EVALUATED
+```
+
+      → 后果：我们**可以**声称"群聊头部结构与 dump 一致"，
+        但**不能**声称"群聊正常态整体与原版一致"。
 ```
 
 ## 三、与 1:1 目标的关系（如实陈述，不含糊）

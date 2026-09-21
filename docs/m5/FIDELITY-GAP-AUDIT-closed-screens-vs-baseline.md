@@ -36,12 +36,12 @@
 
 | 项 | 原版基线 | 我们的实现 | 判定 |
 |---|---|---|---|
-| 标题 | 「校园圈」 | **无标题**（中间只放学校名） | ❌ **偏差** |
-| 左侧控件 | **左上关闭**（X） | `IconBack` + `aria-label="返回"` | ❌ **偏差**（图标与语义都不对） |
-| 中间 | 「北京交通大学 ▼」 | 学校名 + chevron | ✅ 一致 |
-| 导航 | 关闭 → 返回上一页 | `goBack('campus')` | ✅ 语义一致 |
-| 右侧 | **基线未提及** | 「发布」+ 号 | ⚠️ `FEED_RIGHT_CONTROL: NOT_EVALUATED` |
-| 刷新 | **刷新 → 重新请求** | 刷新 → **零请求** + 显示 mock | ❌ **偏差**（语义相反） |
+| 标题 | 「校园圈」 | **无标题**（中间只放学校名） | ❌ **DEVIATION** |
+| 左侧控件 | **左上关闭**（X） | `IconBack` + `aria-label="返回"` | ❌ **DEVIATION**（图标与语义都不对） |
+| 中间 | 「北京交通大学 ▼」 | 学校名 + chevron | ✅ MATCH |
+| 导航 | 关闭 → **返回上一页** | `goBack('campus')` —— **固定跳 Campus** | ❌ **DEVIATION**（见 §3.3：固定跳只有在"上一页恰好是 Campus"时才碰巧一致，**不等于实现了同一条契约**） |
+| 右侧 | **基线未提及** | 「发布」+ 号 | ⚠️ `ORIGINAL_RIGHT_ACTION: NOT_EVALUATED` ／ **`PRODUCT: UNCHANGED`**（不得因基线没写就删除） |
+| 刷新 | **刷新 → 重新请求** | 刷新 → **零请求** + 显示 mock | ❌ **DEVIATION**（语义相反） |
 | normal 态 | **not_reproducible** | 我们显示真实列表 | ⚠️ `ORIGINAL_NORMAL_LIST: NOT_EVALUATED` |
 
 ### 2.2 `message`（WO#8 / WO#10 目标）
@@ -116,13 +116,61 @@ known_unknowns = ["面板以抽屉还是弹层出现、成员列表排序、搜�
   ① 若 docs/original-baseline/screens/<screen>/baseline.json 存在：
        逐条核对 title / interactions / navigation，并对每条给出
          MATCH / DEVIATION(有意，含理由与批准记录) / NOT_EVALUATED
-     有 xml dump 的以 dump 为准；只有 png 的标"线索级"
   ② 若 baseline.json 不存在或内容为空：
        必须**显式记录"该屏无可用基线"**，而不是跳过不提
   ③ 凡因**我方数据/能力不足**而移除或未实现的原版内容，
      必须登记为 **KNOWN_DEVIATION（有意后撤）**，
      不得只写"清理完成 / 已接线" —— 后者会掩盖与原版的差距
 ```
+
+### 3.1 ⚠️ 证据选择规则（审核记录 52 收紧，**不得**写成普遍优先级）
+
+我此前写过"**有 xml dump 的以 dump 为准，只有 png 的标线索级**" —— 审核 52 明确要求收回这种普遍化表述：
+
+```
+❌ 错误表述：XML dump 普遍优先于 PNG
+✅ 正确表述：**按 claim 类型选择最直接的证据**
+
+  claim 类型                                  → 最直接的证据
+  ─────────────────────────────────────────────────────────────
+  文字 / resource-id / bounds / accessibility / hierarchy  → XML dump
+  像素外观 / 图标形状 / 颜色 / 视觉间距                     → native PNG
+  navigation / refresh semantics                          → baseline observation record
+                                                           + **runtime interaction evidence**
+  动态业务行为                                             → runtime evidence
+  APK layout / resource                                   → static evidence
+                                                           （只证明声明/结构，
+                                                              **不自动证明 runtime state**）
+```
+
+审核 52 的原话要旨：**"XML 不能因为'机器可读'就凌驾于截图去判断视觉事实。"**
+
+### 3.2 五条状态轴必须**互相独立**（审核记录 52）
+
+```
+IMPLEMENTATION_STATUS     实现有没有做
+FUNCTIONAL_VERIFICATION   功能验证过没有
+ORIGINAL_CONFORMANCE      与原版是否一致
+KNOWN_DEVIATION           有意的偏离（含批准记录与恢复条件）
+EVIDENCE_LIMITATION       证据本身的边界（不是缺陷、也不是后撤）
+```
+
+今后报告里这五项**不得互相代替**（例如不得用"功能验证通过"暗示"与原版一致"）。
+
+### 3.3 ⚠️ 我自己的一处误判（审核 52 指出，已更正）
+
+我在 §2.1 把 `FEED_CLOSE_NAVIGATION` 标成 **"✅ 语义一致"** —— **这是错的**：
+
+```
+原版 contract：关闭 → **返回上一页**
+我们的实现：  goBack('campus')  ← **固定跳 Campus**
+
+"固定跳 Campus" 只有在"上一页恰好是 Campus"时才**碰巧**一致。
+它不是"实现了一致的语义"，而是"在一个特定栈状态下看起来一致"。
+→ 判定应改为 **DEVIATION**（要修成真正的"返回上一页"）。
+```
+
+这也是一条通用教训：**"在某一次观察中结果相同"不等于"实现了同一条契约"。**
 
 ## 四、本审计产出的待办（已登记 NEXT-ACTIONS）
 
