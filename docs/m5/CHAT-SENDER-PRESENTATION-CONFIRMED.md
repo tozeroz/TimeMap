@@ -80,3 +80,59 @@ app/src/screens/chat.css:41         .bubble--me 已存在（primary 底、右上
 
 **注意**：按本项目纪律，实现前应先把这条判定的**证据强度**与**未验证部分**写清（本节已完成），
 再动手；且改完后需**设备验证**（截图对照原版那条右对齐消息）。
+
+---
+
+## 六、证据升级（2026-09-21 21:01）：原版 APK **自身的资源名**证明 left/right 布局成对存在
+
+被停止的观察者（`659cfcd8`）在被中断前已经做了**比我从它 dump 里读到的更强的事**：
+它从原版 APK 的 `resources.arsc` 里**提取了聊天相关资源名**，证据入库为
+`docs/original-baseline/screens/original-chat/arsc-chat-resource-names.txt`（提交 `9788cbb`）。
+
+### 关键资源名（原版自己命名的）
+
+```
+im_chat_left_common_item_layout
+im_chat_left_content_layout
+im_chat_subitem_text_left_style_layout
+im_chat_subitem_voice_left_layout
+
+im_chat_right_text_item_bg
+im_chat_right_text_item_bg_night
+im_chat_subitem_voice_right_layout
+```
+
+**即：原版显式成对声明了 `im_chat_left_*` 与 `im_chat_right_*` 两套聊天项布局。**
+这不是"我们观察到一条消息靠右"，而是**应用自己的资源表所声明的结构** ——
+属于**与渲染观测不同、且更权威的一类证据**（它表达的是应用的设计意图，而非某次渲染的结果）。
+
+### 因此偏差判定的证据现在是**两类独立证据**互相支撑
+
+| 类别 | 证据 | 强度 |
+|---|---|---|
+| **渲染观测** | 我们发的那条图片消息：气泡 `x=[625,975]`、头像 `x=[989,1052]`（靠右） | 强（bounds 实测） |
+| **APK 资源表** | `im_chat_left_*` / `im_chat_right_*` 成对布局资源名 | **强（应用自身声明）** |
+
+→ **`CHAT_MESSAGE_SENDER_PRESENTATION: DEVIATION` 的判定由此更加稳固。**
+
+### 同时该提交还纠正了一处事实（我自己漏了的）
+
+提交 `9788cbb` 的消息写明：
+
+> record data provenance (**both observed messages were forged by the earlier violation**)
+
+**即那个会话里有两条消息，两条都是我们违规时创建的**（不是我此前以为的一条）。
+→ 本文件 §三 关于"证据来源"的说明应据此更新：
+   **样本是两条自造消息**，仍然**没有他人消息样本** → "对方靠左"仍是**推断**（原版资源名里有 left 布局，
+   这**支持**"对方在左"，但那是**资源命名**而非"观察到他人消息在左"）。
+
+### 一条关于"打断"的教训（对我自己）
+
+我为了给实现者让出设备而停掉了这个观察者，理由是"它的关键证据已采到、结论我已读出"。
+**但事实上它当时仍在产出更强的证据（APK 资源名提取）** —— 我的判断过快了。
+
+**更好的处置**应该是：先**问它**当前进度与是否已得出可交付结论（`send_message` 会在它当前轮结束后送达，
+至少不会立即中断它），或者在委派实现者时**就要求它串行等待**，而不是中途打断一个仍在产出高价值内容的执行者。
+
+→ 记入设备纪律的配套原则：**"让出设备"不等于"立刻打断"**；若执行者仍在产出高价值结论，
+   应先确认它的阶段性产出是否已落盘，再决定停或等。
