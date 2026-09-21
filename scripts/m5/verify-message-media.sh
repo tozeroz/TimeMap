@@ -76,7 +76,24 @@ TA="$(login "$PA")"; TB="$(login "$PB")"
 IDA="$(PSQL "select id from users where phone_e164='+86$PA'")"
 IDB="$(PSQL "select id from users where phone_e164='+86$PB'")"
 [ -n "$TA" ] && [ -n "$TB" ] && [ -n "$IDA" ] && [ -n "$IDB" ] && ok "两个账号登录成功（A=${IDA:0:8}… B=${IDB:0:8}…）" \
-  || { bad "登录失败"; exit 1; }
+  || {
+    bad "登录失败"
+    # 审核记录 53：接受"记录并观察"，但**下次失败要自动抓现场**。
+    # 逐项打印当次实际值 —— 便于区分"token 拿不到"与"用户 id 查不到"这两类不同的失败
+    printf '    [诊断] PA=%s PB=%s\n' "$PA" "$PB"
+    printf '    [诊断] TA=%s（%s 字符）  TB=%s（%s 字符）\n' \
+      "$([ -n "$TA" ] && echo '<非空>' || echo '<空>')" "${#TA}" \
+      "$([ -n "$TB" ] && echo '<非空>' || echo '<空>')" "${#TB}"
+    printf '    [诊断] IDA=%s  IDB=%s\n' "${IDA:-<空>}" "${IDB:-<空>}"
+    printf '    [诊断] sink 目录内容：\n'
+    ls -la "$SINK" 2>&1 | sed 's/^/      /'
+    if [ -x /tmp/m5/capture-login-failure-forensics.sh ] || [ -f /tmp/m5/capture-login-failure-forensics.sh ]; then
+      bash /tmp/m5/capture-login-failure-forensics.sh "verify-message-media.sh 登录失败 PA=$PA PB=$PB TA_len=${#TA} TB_len=${#TB}" 2>&1 | sed 's/^/    /'
+    else
+      echo "    [forensics] ⚠️ 找不到 /tmp/m5/capture-login-failure-forensics.sh（未抓现场）"
+    fi
+    exit 1
+  }
 AUTH_A=(-H "Authorization: Bearer $TA")
 AUTH_B=(-H "Authorization: Bearer $TB")
 

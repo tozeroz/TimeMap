@@ -41,7 +41,19 @@ P_C="138$(printf '%08d' $((RANDOM*RANDOM%100000000)))"
 T_A="$(login_as "$P_A")"; ID_A="$(PSQL "select id from users where phone_e164='+86$P_A'")"
 T_B="$(login_as "$P_B")"; ID_B="$(PSQL "select id from users where phone_e164='+86$P_B'")"
 T_C="$(login_as "$P_C")"; ID_C="$(PSQL "select id from users where phone_e164='+86$P_C'")"
-[ -n "$T_A" ] && [ -n "$T_B" ] && [ -n "$T_C" ] && ok "三个账号就绪（甲/乙/丙）" || { bad "登录失败"; exit 1; }
+[ -n "$T_A" ] && [ -n "$T_B" ] && [ -n "$T_C" ] && ok "三个账号就绪（甲/乙/丙）" || {
+  bad "登录失败"
+  # 审核记录 53：接受"记录并观察"，但**下次失败要自动抓现场**
+  printf '    [诊断] 手机号 A=%s B=%s C=%s\n' "$P_A" "$P_B" "$P_C"
+  printf '    [诊断] token 长度 A=%s B=%s C=%s\n' "${#T_A}" "${#T_B}" "${#T_C}"
+  printf '    [诊断] user id A=%s B=%s C=%s\n' "${ID_A:-<空>}" "${ID_B:-<空>}" "${ID_C:-<空>}"
+  if [ -f /tmp/m5/capture-login-failure-forensics.sh ]; then
+    bash /tmp/m5/capture-login-failure-forensics.sh "verify-board-notes.sh 登录失败 A=$P_A B=$P_B C=$P_C" 2>&1 | sed 's/^/    /'
+  else
+    echo "    [forensics] ⚠️ 找不到 /tmp/m5/capture-login-failure-forensics.sh（未抓现场）"
+  fi
+  exit 1
+}
 
 echo
 echo "=== B1 甲给乙留言 → 双方都能读到 ==="

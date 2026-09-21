@@ -11,6 +11,45 @@
 #   bash scripts/m5/run-device-gate.sh <gate脚本.mjs> [更多参数...]
 set -u
 
+# ---------------------------------------------------------------------------
+# ⭐ 互斥锁（2026-09-22 新增；起因是一个**未定位的间歇性失败**）
+#
+# ## 为什么要它
+#   M5 **服务器侧** Gate 里有一节 `verify-tmp-selfheal.sh`，它会
+#       systemctl restart campus-backend.service   +   rm -rf /srv/campus/uploads/.tmp
+#   即：**服务器侧 Gate 会重启后端并清空上传临时目录**（这本身是必要的测试，
+#   但意味着它**不是无副作用的**）。
+#   因此"设备侧 Gate 正在打同一个后端"与"服务器侧 Gate 正在重启它"**并发**时会互相干扰：
+#   在飞的请求会失败，表现为**间歇性**的 "FAIL 登录失败"，
+#   而把同一个脚本**单独**再跑一次却 PASS —— 这正是此前那处
+#   "未复现、未定位"故障的形态。
+#
+# ## 它做什么
+#   用一个锁目录保证"同一时刻只有一个 Gate 在打这台后端"。
+#   锁按**机器**（不是按进程）保护：设备 Gate 在服务器上建锁文件（通过 ssh），
+#   服务器 Gate 的入口 `run-gate.sh` 也检查同一把锁。
+#   拿到锁 → 跑；拿不到 → **明确报"另一个 Gate 正在运行"并退出**，
+#   而不是并行跑出一个含糊的失败。
+#
+# ## 边界（不要夸大）
+#   它解决的是**这一类**并发干扰。它**不**证明 05:19:37 那次具体的失败就是这个原因
+#   —— 那一次仍未定位；已按审核 53 的要求加了"下次失败自动抓现场"
+#   （scripts/m5/capture-login-failure-forensics.sh）。
+# ---------------------------------------------------------------------------
+LOCK_HELPER='G:\demo map\scripts\m5\gate-lock.sh'
+if [ -x "$LOCK_HELPER" ] || [ -f "$LOCK_HELPER" ]; then
+  # 注意：这里必须用 "$1"（GATE 变量在下面才赋值）—— 我第一版写成 "$GATE"，
+  # 于是锁的持有者名字是空的（owner=device-gate:），日志里看不出是哪个 Gate 持有。
+  if ! bash "$LOCK_HELPER" acquire "device-gate:$(basename "${1:-unknown}")"; then
+    echo "FATAL 另一个 Gate 正在运行（互斥锁被占用）—— 两个 Gate 不得并发打同一后端。"
+    echo "      稍后重试；若确认没有别的 Gate 在跑：bash scripts/m5/gate-lock.sh release"
+    exit 3
+  fi
+  trap 'bash "$LOCK_HELPER" release >/dev/null 2>&1 || true' EXIT
+else
+  echo "WARN 找不到 $LOCK_HELPER —— 跳过互斥保护（并发跑 Gate 可能互相干扰）"
+fi
+
 if [ $# -lt 1 ]; then
   echo "用法: bash scripts/m5/run-device-gate.sh <gate脚本.mjs> [args...]"
   exit 2
