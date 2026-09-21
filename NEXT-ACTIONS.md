@@ -298,3 +298,22 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [ ] K4 按 `docs/m5/UI-DATA-SOURCE-INVENTORY.md` 的 P 顺序继续接线：
       FeedListScreen（P2）→ UserProfileScreen（P3）→ MapScreen（P4）
       ⚠️ 其中 **ProfileEditScreen 是"写路径"却纯 mock**（假成功），建议提前
+### K2 进展（Round 260）
+- [x] K2.0 ✅ 按审核 47 落实**命名细化**：IDENTITY_CONTINUITY → `THREAD_IDENTITY_SET_CONTINUITY`（集合级）
+      + `THREAD_SECTION_ORDER_CONTINUITY`（分区内有序列）；实测两条 PASS，exit 0（commit 4f7caaf）
+- [x] K2.1 ✅ 实现**机械前置** `API_E2E_ORIGIN_VALIDITY`（审核 47 要求）：`scripts/m5/preflight-api-origin.mjs`
+      已接入 `run-device-gate.sh` 4/7 步。正常 PASS；**判别力已验证**（origin 指向 WebView 自身 →
+      status 200 但 text/html → **FATAL exit 2**）。顺带把陷阱**实证**出来：
+      `RELATIVE_PATH_BEHAVIOUR_INFO = {"status":200,"contentType":"text/html","isHtml":true}`
+- [x] K2.2 ✅ WO#9B 计划按"两层分离"修订并提交审核（层 A UI / 层 B 语义，**状态键互不掩盖**）；
+      含审核要求的 5 个冻结问题立场 + `AT_ALL_PERMISSION_MODEL: NOT_EVALUATED`
+- [x] K2.3 ✅ **层 A 设备门禁 + 改前 FAIL**：`scripts/m5/gate-wo9b-at-panel-layerA.mjs`
+      改前：入口可达 PASS（entryReached=true），面板相关 6 项 FAIL，4 项 NOT_EVALUATED，exit 1
+      自查修掉 3 处 GATE_DEFECT：① 跨导航取值导致 "Uncaught" ② 分组断言在"面板不存在"时被误判
+      ③ **命名冲突使断言永不能通过**（`entry` 被重新赋值）
+- [x] K2.4 ✅ **层 B 服务器门禁 + 改前 FAIL**：`scripts/m5/gate-wo9b-mentions-all-layerB.sh`
+      改前核心缺陷被精确刻画：API **静默忽略** mentionsAll（收下字段→201→写出无提及语义的消息，
+      direct 上也不拒绝）；非成员路径（404 + 零 mutation）既有行为正确
+      自查修掉：① 把"非成员越权"与"direct 不该被接受"合成一条断言（定位会误导）→ 拆成两条
+      ② 在 bash 里误用 C 风格 `/* */` 注释 → 改 `#`
+- [ ] K2.5 等审核批准 WO#9B（修订版）→ 实施：迁移 011 + 接口/读模型 + 层 A 面板
