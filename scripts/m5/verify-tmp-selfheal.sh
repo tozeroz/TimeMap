@@ -38,7 +38,17 @@ echo "  副作用声明：本步会重启 $SVC 并删除 $UP/.tmp（会打断此
 systemctl restart "$SVC" || { echo "  FAIL 重启失败"; exit 1; }
 
 READY_OK=0
-for i in $(seq 1 30); do
+# ⚠️ 超时从 30s 提到 **240s**（2026-09-22 实测修正）：
+#   实测这台 2 vCPU / 396MB 的机器上，重启后要 **2 分 56 秒**才 ready：
+#     06:49:54 Started → 06:50:47 .tmp 就绪(53s) → 06:51:05 listen(71s)
+#     → 06:51:21~06:52:43 连续 "[migrate] retryable: database unreachable"
+#     → 06:52:50 "[health] ready: false -> true"（**176 秒**）
+#   原因（已测）：free 只剩 8MB、swap 用了 183MB、loadavg 3.27、**PG max_connections 只有 15**（used 10）
+#     → 启动阶段连库频繁被拒，Node 反复重试。
+#   ⭐ 这正是长期"未定位的间歇性登录失败"的机制：
+#     重启窗口内的任何请求（登录/媒体）都会失败，而**本脚本原来只 sleep 5**，
+#     完全错过这个窗口 → 本段之后的段（要登录的）偶发失败，单独跑同一脚本却 PASS。
+for i in $(seq 1 240); do
   RC="$(curl -s -m 2 -o /dev/null -w '%{http_code}' http://127.0.0.1/api/ready 2>/dev/null || echo 000)"
   if [ "$RC" = "200" ]; then READY_OK=1; echo "  就绪：/api/ready=200（等待 ${i}s）"; break; fi
   sleep 1
@@ -49,7 +59,7 @@ if [ "$READY_OK" != "1" ]; then
   #    只保留以 SELF_HEAL 或 ABORT 开头的行。若这里用普通 "  FAIL ..." 开头，
   #    失败时会**只剩一条 M5_TMP_SELFHEAL FAIL、看不到原因** —— 那等于把诊断信息丢掉。
   #    （这个过滤是我这次加就绪轮询时才发现的：新加的"副作用声明/就绪"两行明明执行了却没出现在报告里。）
-  echo "ABORT 重启后 30s 内未就绪（/api/ready 最后为 $RC）"
+  echo "ABORT 重启后 240s 内未就绪（/api/ready 最后为 $RC）"
   echo "  --- 现场 ---"
   systemctl is-active "$SVC" 2>&1 | sed 's/^/    /'
   journalctl -u "$SVC" -n 30 --no-pager 2>&1 | tail -20 | sed 's/^/    /'

@@ -574,6 +574,32 @@ export function getUser(id: string): Promise<ApiResult<ApiUserIdentity>> {
 }
 
 /**
+ * 修改**自己的**昵称（M5 WO#13，审核记录 54 批准的第一个 profile-update 写能力）。
+ *
+ * ## 为什么需要它
+ *   ProfileEditScreen 原来是**假写成功**：saveEdit() 只 setState、零网络请求，
+ *   而界面**确实显示新值** → 用户以为改成功了。该页从「我的」页**一步可达**，
+ *   所以这不是"未接线"，而是**向用户谎报持久写入已成功**。
+ *
+ * ## 契约（与 server 的 PATCH /api/users/me 一致）
+ *   · 只接受 displayName；**不传**用户 id —— 服务端从会话取（客户端无权指定改谁）
+ *   · 成功返回**服务端库里刚写入的值**（不是回显请求体），调用方必须用这个返回值更新 UI
+ *   · 失败（4xx/5xx）→ 调用方必须**保留用户输入**且**不得显示成功**
+ */
+export function patchMyDisplayName(displayName: string): Promise<ApiResult<ApiUserIdentity>> {
+  /*
+    ⚠️ 传**对象**而不是 JSON.stringify 的结果：request() 内部会 `JSON.stringify(init.body)`
+       （见 request 的实现）。我第一版在这里写了 JSON.stringify(...) —— 那会把
+       一个**字符串**再 stringify 一次，服务端收到的是 "{\"displayName\":...}" 这个字符串字面量，
+       解析出来不是对象 → 400 且报"不支持字段"。属于"自己把自己坑了"那一类。
+  */
+  return request<ApiUserIdentity>('/api/users/me', {
+    method: 'PATCH',
+    body: { displayName },
+  })
+}
+
+/**
  * 发一条文本帖子。
  * **注意输入里没有 author**：M2 起作者只能由服务端会话决定，
  * 客户端一旦提交 author/authorId 会被服务端 strict 400 拒绝（见 server/src/index.ts）。

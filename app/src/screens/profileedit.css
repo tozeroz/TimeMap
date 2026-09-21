@@ -234,3 +234,37 @@
   width: 100%;
   margin-top: 4px;
 }
+
+/* ===========================================================================
+   M5 WO#13：消灭"假写成功"相关样式
+   =========================================================================== */
+
+/* 首字占位头像（users 表没有 avatar 列）。
+   ⚠️ 原来的头像用 mock 生成的 SVG（<img>），并且旁边那个「更换头像」相机按钮
+      **没有 onClick**（inert 控件）。按审核 54 冻结：avatar = initial placeholder、
+      no fake "更换头像" control —— 因此那个按钮已从 JSX 里移除，其 .pe__camera 样式也已不再使用。 */
+.pe__avatar--ph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--c-text-2);
+  background: var(--c-surface-sunken);
+  user-select: none;
+}
+
+/* 加载态 / 不可用态的说明文字 */
+.pe__note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--c-text-3);
+}
+
+/* 保存失败时的错误提示。
+   它出现的**同一时刻**界面绝不能同时给出成功表象（见 ProfileEditScreen 的 saveNickname）。 */
+.pe__error {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--c-danger, #d33);
+}

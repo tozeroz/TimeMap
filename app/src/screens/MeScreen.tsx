@@ -5,7 +5,6 @@ import { Screen, TopBar } from '../components/Shell'
 import { Drawer } from '../components/Drawer'
 import {
   IconChatBubble,
-  IconChevronRight,
   IconEdit,
   IconImage,
   IconMenu,
@@ -50,34 +49,45 @@ export function MeScreen() {
     >
       <section className="me__profile">
         <div className="me__side me__side--left">
-          <button className="me__entry" onClick={() => navigate('profile-edit')}>
+          {/*
+            ⚠️ M5 WO#13 + 审核记录 54：这四个入口**原本全部 navigate('profile-edit')**，
+               也就是把「我的兴趣 / 我的标签 / 介绍一下自己～ / 我的学校」都当成"改昵称页面"——
+               这是**没有证据支持**的（审核 54：你只证明了 Me 里五个条目存在、「编辑资料」→资料编辑页）。
+               冻结的处置：
+                 · 条目本身**保留**（trident-me/baseline.json:38 逐字记了这五个文案与位置 → 有基线）
+                 · 但**不得**再进入 ProfileEditScreen；也**不得**接到 App.tsx 里那五个旧 mock 路由
+                 · 当前目的地显式记为 NOT_EVALUATED / DEFERRED，**不能再假装"我的兴趣 = 改昵称"**
+               因此这里渲染为**不可点**的行，并明确标注"待核对"，而不是留一个通向错误页面的可点入口。
+          */}
+          <div className="me__entry me__entry--deferred" data-me-entry="interests">
             <span>我的兴趣</span>
-            <IconChevronRight size={14} />
-          </button>
-          <button className="me__entry" onClick={() => navigate('profile-edit')}>
+            <span className="me__deferredTag">待核对</span>
+          </div>
+          <div className="me__entry me__entry--deferred" data-me-entry="tags">
             <span>我的标签</span>
-            <IconChevronRight size={14} />
-          </button>
+            <span className="me__deferredTag">待核对</span>
+          </div>
         </div>
 
         <div className="me__center">
           <img className="me__avatar" src={me.avatar} alt="" />
           <h2 className="me__name">{me.name}</h2>
-          <button className="me__edit" onClick={() => navigate('profile-edit')}>
+          {/* ⭐ 只有这一个入口指向 ProfileEditScreen（有基线支持：baseline.json:42） */}
+          <button className="me__edit" data-me-entry="edit-profile" onClick={() => navigate('profile-edit')}>
             <IconEdit size={14} />
             <span>编辑资料</span>
           </button>
         </div>
 
         <div className="me__side me__side--right">
-          <button className="me__entry" onClick={() => navigate('profile-edit')}>
+          <div className="me__entry me__entry--deferred" data-me-entry="bio">
             <span>介绍一下自己～</span>
-            <IconChevronRight size={14} />
-          </button>
-          <button className="me__entry" onClick={() => navigate('profile-edit')}>
+            <span className="me__deferredTag">待核对</span>
+          </div>
+          <div className="me__entry me__entry--deferred" data-me-entry="school">
             <span>我的学校</span>
-            <IconChevronRight size={14} />
-          </button>
+            <span className="me__deferredTag">待核对</span>
+          </div>
         </div>
       </section>
 

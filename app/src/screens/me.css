@@ -188,3 +188,23 @@
   background: #111;
   color: #fff;
 }
+
+/* M5 WO#13：MeScreen 里四个"目的地未知"的条目（审核记录 54 的处置）。
+   ⚠️ 它们**刻意不是 <button>**：原实现把「我的兴趣/我的标签/介绍一下自己～/我的学校」
+      全部 navigate('profile-edit')，等于假装"我的兴趣 = 改昵称页面"——没有证据支持。
+   条目本身保留（trident-me/baseline.json:38 逐字记了这五个文案与位置），
+   但目的地记为 NOT_EVALUATED / DEFERRED，并在界面上**如实标注**，而不是留一个通向错误页面的可点入口。 */
+.me__entry--deferred {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.me__deferredTag {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  color: var(--c-text-3);
+  font-size: 10.5px;
+  line-height: 1.5;
+}

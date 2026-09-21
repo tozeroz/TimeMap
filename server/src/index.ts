@@ -45,6 +45,15 @@ const LIST_LIMIT = 50
 /** POST /api/posts 只接受这两个字段，多一个就 400 */
 const POST_ALLOWED_KEYS = ['body', 'place'] as const
 
+/**
+ * PATCH /api/users/me 只接受这一个字段（M5 WO#13，审核记录 54 冻结的契约）。
+ *
+ * ⚠️ 关键点（审核 54 明确要求）：**bio / gender / tags / school 等字段不得被静默忽略**。
+ *    如果它们被"接受但丢弃"，调用方会以为保存成功了 —— 那正是 WO#13 要消灭的那类
+ *    "假写成功"，只是换到了服务端。因此未知字段一律 400，且错误里点名是哪些字段。
+ */
+const ME_PATCH_ALLOWED_KEYS = ['displayName'] as const
+
 /** 就绪之前也放行的路径：它们本身就是用来"报告状态"的 */
 const READINESS_EXEMPT = new Set(['/api/health', '/api/ready'])
 
@@ -113,7 +122,17 @@ export function buildServer(deps: ServerDeps) {
     if (typeof origin === 'string' && allowed.has(origin)) {
       reply.header('access-control-allow-origin', origin)
       reply.header('vary', 'Origin')
-      reply.header('access-control-allow-methods', 'GET,POST,OPTIONS')
+      /*
+        ⚠️ **必须包含 PATCH**（M5 WO#13 加 PATCH /api/users/me 时踩到）：
+          原来这里是 'GET,POST,OPTIONS'。而 PATCH 带 `content-type: application/json`
+          与 `authorization` 头时，浏览器/WebView 会先发 **CORS 预检（OPTIONS）**；
+          预检响应里没列 PATCH → 预检失败 → fetch 直接以 **"Failed to fetch"** 报错。
+        为什么**服务端脚本测不出来**：curl/psql 不带 CORS 语义，预检那一步根本不存在 ——
+          所以 verify-wo13-patch-me.sh 全 PASS，而设备上保存 100% 失败。
+          **这是设备级 E2E 独有的发现**（也正是"真机验证"这条纪律的价值所在）。
+        教训：**每新增一个 HTTP 方法，都要同步检查 CORS 的 allow-methods**。
+      */
+      reply.header('access-control-allow-methods', 'GET,POST,PATCH,OPTIONS')
       reply.header('access-control-allow-headers', 'content-type,authorization')
       reply.header('access-control-max-age', '600')
     }
@@ -555,6 +574,91 @@ export function buildServer(deps: ServerDeps) {
         return { error: 'not_found' }
       }
       // 只这两个字段（审核 53：当前阶段只允许这两个）
+      return { id: row.id, displayName: row.display_name }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  /*
+    -------------------------------------------------------------------------
+    PATCH /api/users/me —— profile-update 写能力（M5 WO#13，审核记录 54 批准）
+    -------------------------------------------------------------------------
+
+    ## 为什么需要它
+      WO#13 修的是 ProfileEditScreen 的**假写成功**：saveEdit() 只 setState、零网络请求，
+      而界面**确实显示新值** → 用户以为改成功了。而该页从「我的」页**一步可达**
+      （MeScreen 5 个入口），所以这不是"未接线"，是**向用户谎报持久写入已成功**。
+
+    ## 契约（审核记录 54 冻结，逐条落实）
+      · **仅登录用户**（未登录 → 401）
+      · body **严格只接受** `{ displayName: string }`；出现任何其它字段 → **400**，
+        并在 details 里点名是哪些字段 —— **不得静默忽略**（静默忽略会让调用方以为保存了，
+        只是把"假写成功"从客户端搬到了服务端）
+      · **user id 一律来自会话**，客户端**不能**提交"我要改哪个 user"
+        （body 里出现 id/userId 之类会被上面的严格检查直接 400 —— 归属必须可机械验证）
+      · 成功 → **200 + `{ id, displayName }`**，且 displayName 是**服务端库里刚写入的值**
+        （不是回显请求体：回显请求体会在"写入失败但回显成功"时骗过客户端）
+      · 失败 → 明确的 4xx/5xx，**且零写入**
+
+    ## 保存链（审核 54 冻结的语义）
+      draft → PATCH → DB mutation → **authoritative server response** → UI commit
+      PATCH 失败 → **保留 draft** → 权威值不变 → **不得出现成功表象**
+
+    ## 边界（不夸大）
+      · 只支持 displayName 一个字段。bio / gender / tags / campus-card / school **不加列**、
+        也不接收（审核 54：没有权威 schema、没有页面内容基线，不应反推数据模型）。
+      · 它**不**改变任何读取路径；GET /api/auth/me 与 GET /api/users/:id 会自动反映新值。
+  */
+  app.patch('/api/users/me', async (req, reply) => {
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') return unauthorized(reply)
+    const session = s.user
+
+    const payload = (req.body ?? {}) as Record<string, unknown>
+
+    // strict schema：只允许 displayName（与 POST /api/posts 同一纪律）
+    const extra = Object.keys(payload).filter(
+      (k) => !(ME_PATCH_ALLOWED_KEYS as readonly string[]).includes(k),
+    )
+    if (extra.length) {
+      reply.code(400)
+      return {
+        error: 'invalid_payload',
+        details: [
+          `不支持字段: ${extra.join(', ')}（当前只支持 displayName；用户由服务端会话决定）`,
+        ],
+      }
+    }
+
+    const raw = typeof payload.displayName === 'string' ? payload.displayName.trim() : ''
+    const errors: string[] = []
+    if (!raw) errors.push('displayName 不能为空')
+    else if (raw.length > DISPLAY_MAX) errors.push(`displayName 不能超过 ${DISPLAY_MAX} 字`)
+    if (errors.length) {
+      reply.code(400)
+      return { error: 'invalid_payload', details: errors }
+    }
+
+    try {
+      /*
+        用 `returning` 取回**库里的新值**再返回 —— 而不是回显 raw。
+        这样"响应里的 displayName == 数据库里的 displayName"成为结构性事实，
+        客户端的 UI commit 就必然基于权威值（审核 54 要求的 authoritative server response）。
+      */
+      const r = await db.pool.query<{ id: string; display_name: string }>(
+        'update users set display_name = $2, updated_at = now() where id = $1 returning id, display_name',
+        [session.userId, raw],
+      )
+      const row = r.rows[0]
+      if (!row) {
+        // 会话有效但用户行不存在（理论不该发生）→ 明确报错，不假装成功
+        reply.code(500)
+        return { error: 'user_row_missing', message: '会话有效但用户行不存在' }
+      }
       return { id: row.id, displayName: row.display_name }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)

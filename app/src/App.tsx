@@ -16,7 +16,6 @@ import { PublishScreen } from './screens/PublishScreen'
 import { LoginScreen } from './screens/LoginScreen'
 import { OnboardingScreen } from './screens/OnboardingScreen'
 import { AnnounceScreen } from './screens/AnnounceScreen'
-import { SimpleScreen } from './screens/SimpleScreen'
 import { FeedListScreen } from './screens/FeedListScreen'
 import { PoiDetailScreen } from './screens/PoiDetailScreen'
 import { MediaPreviewScreen } from './screens/MediaPreviewScreen'
@@ -142,48 +141,32 @@ export default function App() {
         />
       )}
 
-      {root === 'interests' && (
-        <SimpleScreen title="我的兴趣" subtitle="选择你感兴趣的内容，我们会为你推荐">
-          <div className="chips">
-            {['摄影', '美食', '读书', '音乐', '运动', '旅行', '电影', '宠物', '手作', '考研'].map(
-              (t) => (
-                <span key={t} className="chip">
-                  {t}
-                </span>
-              ),
-            )}
-          </div>
-        </SimpleScreen>
-      )}
-      {root === 'tags' && (
-        <SimpleScreen title="我的标签" subtitle="标签会展示在你的主页">
-          <div className="chips">
-            {['INFP', '天秤座', '夜猫子', '食堂测评员', '图书馆常驻'].map((t) => (
-              <span key={t} className="chip chip--blue">
-                {t}
-              </span>
-            ))}
-          </div>
-        </SimpleScreen>
-      )}
-      {root === 'bio' && (
-        <SimpleScreen title="介绍一下自己" subtitle="一句话让别人认识你">
-          <p className="para">喜欢傍晚的操场和图书馆四楼的窗边位，偶尔写点东西。</p>
-        </SimpleScreen>
-      )}
-      {root === 'school' && (
-        <SimpleScreen title="我的学校" subtitle="北京交通大学">
-          <p className="para">海淀区西直门外上园村 3 号</p>
-          <p className="para">12,486 位同学已加入</p>
-        </SimpleScreen>
-      )}
-      {root === 'edit-profile' && (
-        <SimpleScreen title="编辑资料" subtitle="修改后立即生效">
-          <p className="para">昵称：自定义名称6</p>
-          <p className="para">学院：计算机与信息技术学院</p>
-          <p className="para">年级：本科三年级</p>
-        </SimpleScreen>
-      )}
+      {/*
+        ---- M5 WO#13：删除 5 个 **fabricated orphan route**（审核记录 54 批准）----
+
+        被删除的是 interests / tags / bio / school / edit-profile 这五个**静态假页面**。
+        删除依据（两条都已实测）：
+          ① 它们**没有任何真实导航入口**：全仓递归搜 navigate 到这几个名字 → 零命中；
+             而 MeScreen 的五个条目此前**全部** navigate('profile-edit')，从不走这里。
+          ② 它们的内容是**硬编码假数据**，其中 App.tsx（原 :177）还写着
+             「**12,486 位同学已加入**」—— 那正是 WO#11 从动态列表页判定为编造并移除的数字，
+             它在这里**存活了下来**。另 :182-184 是「昵称：自定义名称6 / 学院：计算机与信息技术学院 /
+             年级：本科三年级」等无来源断言。
+
+        ⚠️ 边界（审核 54 明确要求区分两层）：
+          · 删掉"**编造的 route surface**"是**合理清理**，不必一律登记成 KNOWN_DEVIATION ——
+            因为不能因为"将来可能有用"就保留一个**可通过手工 URL 打开**的假业务页面。
+          · 但 KNOWN_DEVIATION 需要**原版事实**作参照。我**没有**证据说明原版的
+            兴趣/标签/介绍/学校各自进入什么页面，因此这四个目的地记为：
+              ORIGINAL_INTEREST_DESTINATION: NOT_EVALUATED
+              ORIGINAL_TAG_DESTINATION:      NOT_EVALUATED
+              ORIGINAL_BIO_DESTINATION:      NOT_EVALUATED
+              ORIGINAL_SCHOOL_DESTINATION:   NOT_EVALUATED
+            （见 docs/m5/WO13-PLAN-profile-edit-field-inventory.md）
+          · 注意：本次**不是**"仓库里任何地方都不能出现字符串 12,486"——
+            审核 54 提醒应检查**可执行/可呈现的 surface**，而不是全仓字符串绝迹
+            （mock.ts 里可能仍有未被治理页面的数据）。
+      */}
 
       {tab && <TabBar active={tab} />}
     </Shell>
