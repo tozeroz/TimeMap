@@ -180,3 +180,57 @@ VOICE_TO_TEXT: NOT_IMPLEMENTED（不可复刻：依赖对方 ASR 服务）  ← 
 3. 验收标准（§四）是否合格？特别是 ④ 的"时长文本 ±1s"是否合理？
 4. **是否需要我先做一次"MediaRecorder 可行性验证"**（不改产品，只报告能否采集）？
    我倾向**先做这一步**，因为若 WebView 不支持，整个 Phase 1 都要改成原生桥接，方案会不同。
+
+---
+
+## 七、✅ 可行性验证已完成（2026-09-21 22:35，**不改产品**）
+
+> 完整结果见 `docs/m5/PROBE-recording-capability.md`
+
+### 结论：**Phase 1 可行，不需要原生桥接**
+
+```
+hasMediaRecorder: true         ← WebView 里 MediaRecorder 存在
+isSecureContext:  true         （https://localhost，满足 getUserMedia 要求）
+supportedMimes:   [ 'audio/webm', 'audio/webm;codecs=opus' ]   ← **只有 webm/opus**
+                             （不支持 audio/mp4 / audio/aac / audio/ogg;codecs=opus / audio/3gpp）
+hasPermissionsAPI: **false**   ← 没有 navigator.permissions.query，**无法静默预检权限**
+```
+
+### 但实际采集**当前必然失败**（实测）
+
+```
+getUserMedia({audio:true}) → NotAllowedError / "Permission denied"（1362ms）
+且**没有出现系统弹窗**（焦点仍在我方 App）
+原因: 我方 APK **未声明 RECORD_AUDIO** —— Android 对未声明权限**直接拒绝且不弹窗**，
+      用户**连授权机会都没有**
+```
+
+### 由此**新增三条硬前置**（补进本计划）
+
+```
+PREREQ-1  清单加 <uses-permission android:name="android.permission.RECORD_AUDIO" />
+          （不加则永远 NotAllowedError 且无弹窗 —— 已实测证实）
+PREREQ-2  实测 Capacitor WebView 是否会把 getUserMedia 权限请求转给系统；
+          若实测不弹窗 → 需自定义 WebChromeClient（**这一步必须实测，不能假设**）
+PREREQ-3  迁移 009 的音频白名单**就写 audio/webm**
+          （最终以实测的 MediaRecorder.mimeType 为准；opus 是 codecs 参数，不单列）
+```
+
+### 实施顺序据此调整为（**先验证再写码**）
+
+```
+1. 加 RECORD_AUDIO 清单权限 → 重新构建装机
+2. **重跑探针**验证: ① 是否出现系统授权弹窗 ② 授权后 MediaRecorder 能否产出**非空 blob**
+   → 通过才继续；不通过则报 VOICE_RECORDING_UNSUPPORTED **并停在报告**
+3. 再写产品代码
+```
+
+### 仍未验证的部分（如实标注）
+
+```
+· "MediaRecorder 真能产出非空 blob" —— **尚未验证**（本次因权限未声明而失败，未走到那一步）
+· PREREQ-2 的弹窗行为 —— **尚未验证**（同上）
+```
+
+⚠ 因此本计划的状态仍是**待批准**；若审核同意，实施第一步就是 PREREQ-1 + 重跑探针。
