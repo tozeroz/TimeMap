@@ -103,16 +103,32 @@ async function centerOf(selector, textMatch) {
     const nodes = [...document.querySelectorAll(${JSON.stringify(selector)})]
     const el = ${textMatch ? `nodes.find((n) => n.textContent.trim() === ${JSON.stringify(textMatch)}) ?? nodes[0]` : 'nodes[0]'}
     if (!el) return null
-    // 先滚进视口（block:center 让目标尽量居中，减少被固定头尾遮挡的概率）
-    el.scrollIntoView({ block: 'center', inline: 'nearest' })
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-    const r = el.getBoundingClientRect()
-    if (r.width === 0 || r.height === 0) return null
-    const x = r.left + r.width / 2
-    const y = r.top + r.height / 2
-    // 中心点必须在视口内：否则合成触摸一定落空
-    if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null
-    return { x, y }
+    const rectOf = () => el.getBoundingClientRect()
+
+    // 先把目标滚进视口。**behavior:'instant'**：默认的 smooth 会在动画中途被读取坐标，
+    // 于是合成触摸点落在旧位置 —— 表现成"有时点得开、有时点不开"的非确定性（实测踩到）。
+    el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })
+    /*
+      然后**轮询直到坐标稳定**（连续两次读数一致且宽度非 0）。
+      为什么不能只等一两次 rAF：布局/图片加载/滚动惯性都可能让位置继续变化，
+      读一次就点等于赌那一刻是对的。这与"等 UI 出现要用轮询而不是 sleep"是同一条纪律。
+    */
+    let prev = null
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => requestAnimationFrame(r))
+      const r = rectOf()
+      if (r.width === 0 || r.height === 0) continue
+      const cur = { l: Math.round(r.left), t: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }
+      if (prev && prev.l === cur.l && prev.t === cur.t && prev.w === cur.w && prev.h === cur.h) {
+        const x = cur.l + cur.w / 2
+        const y = cur.t + cur.h / 2
+        // 中心点必须在视口内，否则合成触摸一定落空
+        if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null
+        return { x, y }
+      }
+      prev = cur
+    }
+    return null
   })()`)
 }
 
@@ -218,6 +234,10 @@ if (mode === 'cardtap') {
 }
 
 if (mode === 'composer') {
+  // **先强制 reload**：与成功过的诊断脚本一致（它每次 reload 后都能点开弹层）。
+  // 只改 hash 时，若页面已经在该路由上就不会重挂载，组件可能带着旧状态（实测导致点击无效）。
+  await evaluate(`location.reload()`)
+  await wait(2500)
   await evaluate(`location.hash = '#/feed?id=${seedPostId}'`)
   await wait(2500)
 
@@ -256,6 +276,9 @@ if (mode === 'composer') {
 }
 
 if (mode === 'authgate') {
+  // 先 reload，保证是全新挂载（见 composer 分支的说明）
+  await evaluate(`location.reload()`)
+  await wait(2500)
   // 确保未登录
   await evaluate(`localStorage.removeItem('campus.demo.session.v1')`)
   await evaluate(`location.hash = '#/feed?id=${seedPostId}'`)
