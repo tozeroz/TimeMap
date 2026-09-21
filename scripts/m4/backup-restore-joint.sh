@@ -117,6 +117,61 @@ cat > "$GEN/manifest.json" <<JSON
 }
 JSON
 [ -s "$GEN/manifest.json" ] && ok "manifest.json 生成（记录两侧计数与 sha256）" || bad "manifest.json 失败"
+
+# ---------------------------------------------------------------------------
+# A2. **备份一致性屏障**（M4 CLOSEOUT ①，审核记录 18 点名）
+#
+# 为什么"生成了 manifest"不算屏障：那只是**记录**了这次备份里有什么。
+# 屏障的含义是：**备份只有在两侧一致时才有效** ——
+# 若 DB 里有一行却没有文件（悬空引用），或盘上有文件却没有行（未登记文件），
+# 那么这份备份本身就是不一致的，恢复出来必然还是不一致。
+# 所以这里在**归档之前**先核对两侧，不一致就直接 FAIL，不让不一致的备份"成功"。
+#
+# 与 ② 的区别：② 校验的是**恢复之后**的产物；① 校验的是**备份当时**的输入。
+# 两者都要有 —— 否则"备份时就脏、恢复后碰巧一致"这种情况会漏过去。
+BARRIER_FAIL=0
+BARRIER_CHECKED=0
+
+# 正向：每条 media 行都必须有文件，且 sha256 一致
+PSQL \
+  "select scope || ' ' || storage_key || ' ' || sha256 from media" > /tmp/m4-barrier.txt 2>/dev/null
+while read -r sc key sha; do
+  [ -n "${sc:-}" ] || continue
+  BARRIER_CHECKED=$((BARRIER_CHECKED + 1))
+  f="$UPLOADS/$sc/$key"
+  if [ ! -f "$f" ]; then
+    BARRIER_FAIL=$((BARRIER_FAIL + 1))
+    [ "$BARRIER_FAIL" -le 3 ] && echo "    悬空引用：DB 有行但盘上无文件 → $sc/$key"
+  else
+    got="$(sha256sum "$f" | cut -d' ' -f1)"
+    [ "$got" = "$sha" ] || {
+      BARRIER_FAIL=$((BARRIER_FAIL + 1))
+      [ "$BARRIER_FAIL" -le 3 ] && echo "    内容不符：$sc/$key（DB ${sha:0:12}… 文件 ${got:0:12}…）"
+    }
+  fi
+done < /tmp/m4-barrier.txt
+rm -f /tmp/m4-barrier.txt
+
+# 反向：盘上每个文件都必须有 DB 行
+find "$UPLOADS/public" "$UPLOADS/private" -type f 2>/dev/null > /tmp/m4-barrier-files.txt
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  rel="${f#$UPLOADS/}"
+  sc="${rel%%/*}"; key="${rel#*/}"
+  n="$(PSQL "select count(*) from media where scope='$sc' and storage_key='$key'")"
+  if [ "$n" != "1" ]; then
+    BARRIER_FAIL=$((BARRIER_FAIL + 1))
+    [ "$BARRIER_FAIL" -le 3 ] && echo "    未登记文件：盘上有但 DB 无行 → $rel"
+  fi
+done < /tmp/m4-barrier-files.txt
+rm -f /tmp/m4-barrier-files.txt
+
+if [ "$BARRIER_FAIL" = "0" ]; then
+  ok "**备份一致性屏障通过**：两侧一致（$BARRIER_CHECKED 条 media 行 ↔ 盘上文件，无悬空引用、无未登记文件）"
+else
+  bad "**备份一致性屏障失败**：两侧不一致（$BARRIER_FAIL 处）—— 这份备份不可信，先修正数据再备份"
+  echo "      → 盘上有未登记文件时用 dist/cleanup.mjs 清理；DB 有悬空引用时说明上传流程被打断"
+fi
 echo "  media 行数=$DB_MEDIA_ROWS  盘上文件=$((FS_PUBLIC + FS_PRIVATE))"
 
 echo
