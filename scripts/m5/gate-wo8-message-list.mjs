@@ -186,15 +186,34 @@ const apiDirects = byKind(apiItems, 'direct')
 const uiGroupsList = uiRows.ids.filter((_, i) => uiRows.kinds[i] === 'group').map(String)
 const uiDirectsList = uiRows.ids.filter((_, i) => uiRows.kinds[i] === 'direct').map(String)
 const sameOrder = (a, b) => a.length === b.length && a.every((v, i) => v === b[i])
+
+/*
+  ⚠️ 审核记录 46 明确要求**同时**成立三条，我第一版漏了第一条：
+
+    ① `UI ids union == API ids union`  ← **集合级**完整性
+    ② `group UI ids == API group ids`（有序）
+    ③ `direct UI ids == API direct ids`（有序）
+
+  为什么 ① 不能省：如果将来 API 出现一种**我没有渲染**的类型（例如 kind='channel'），
+  那么 ②③ 会**双双通过**（它们只比较自己那一类），而实际上有一整类会话在 UI 上缺失 ——
+  那正是"coverage gap"从指缝里溜走的方式。集合级比较专门堵这个洞。
+*/
+const apiUnion = [...apiItems.map((t) => String(t.id))].sort()
+const uiUnion = [...uiRows.ids.map(String)].sort()
+const unionMatch = apiUnion.length === uiUnion.length && apiUnion.every((v, i) => v === uiUnion[i])
+
 const orderedMatch =
-  apiGroups.length + apiDirects.length > 0 &&
-  sameOrder(apiGroups, uiGroupsList) &&
-  sameOrder(apiDirects, uiDirectsList)
+  apiItems.length > 0 && unionMatch && sameOrder(apiGroups, uiGroupsList) && sameOrder(apiDirects, uiDirectsList)
 log('IDENTITY_CONTINUITY', {
   apiGroupIds: apiGroups,
   uiGroupIds: uiGroupsList,
   apiDirectIds: apiDirects,
   uiDirectIds: uiDirectsList,
+  unionMatch,
+  unionApiCount: apiUnion.length,
+  unionUiCount: uiUnion.length,
+  apiKindsPresent: [...new Set(apiItems.map((t) => t.kind))],
+  uiKindsPresent: [...new Set(uiRows.kinds.filter(Boolean))],
   groupsMatch: sameOrder(apiGroups, uiGroupsList),
   directsMatch: sameOrder(apiDirects, uiDirectsList),
   uiMode: uiRows && uiRows.mode,

@@ -290,7 +290,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [x] K1 ✅ **WO#9A 已实施并提交关账**（审核 45 批准 + 收紧）`n      设备 Gate 8 项全 PASS + 身份 3/3；授权矩阵 12 项全 PASS（含非成员**零 mutation**）`n      改前 FAIL 已取得（5 项）；回归：WO#8/WO#7/WO#6/M5 server 全 PASS
       前提核查结论：**后端 schema 已支持 group**（`kind CHECK IN ('direct','group')`、成员表无上限无角色、
       `title` 可空）→ 无需迁移，主要是**造种子 + 前端接真实 API + Gate**
-- [ ] K2 **WO#9B AT 面板 / @所有人**：在 WO#9A 的真实群会话之上做
+- [ ] K2 ⬅ **下一步：WO#9B AT 面板 / @所有人**（WO#9A 已 CLOSED，真实群会话已就绪）`n      在 WO#9A 的真实群会话之上做
       （AT 面板的结构证据已就绪：`docs/m5/EVIDENCE-at-panel-structure.md`；
        `mentions_all` 数据模型设计已就绪）——**不与 WO#9A 混成一个 Gate**
 - [ ] K3 **WO#10 MessageScreen 剩余 mock 区块接线**：邀请卡的学校/学院/年级/头像、
