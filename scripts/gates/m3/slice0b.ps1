@@ -35,12 +35,15 @@ $script:Failed = 0
   这里用 $script:CurrentSlice 标记当前正在检查哪一段，Bad() 把失败记到对应 slice 上。
 #>
 $script:SliceFail = @{ PRE = 0; SLICE0B = 0; SLICE1 = 0; SLICE2 = 0; SLICE3 = 0; SLICE4 = 0 }
+$script:LayerFail = @{ PERSISTENT = 0; STAGE = 0; REGRESSION = 0 }
+$script:CurrentLayer = 'PERSISTENT'
 $script:CurrentSlice = 'SLICE0B'
 function Ok([string]$m) { Write-Output "PASS $m" }
 function Bad([string]$m) {
   Write-Output "FAIL $m"
   $script:Failed = 1
   $script:SliceFail[$script:CurrentSlice] = 1
+  $script:LayerFail[$script:CurrentLayer] = 1
 }
 function Head([string]$m) { Write-Output ''; Write-Output "=== $m ===" }
 function Say([string]$m) { Write-Output $m }
@@ -115,6 +118,7 @@ $remoteReady = (Invoke-SshRaw 'systemctl is-active campus-backend.service' | Out
 if ($remoteReady -eq 'active') { Ok 'campus-backend.service active' } else { Bad "后端服务状态: $remoteReady" }
 
 # ---------------------------------------------------------------------------
+$script:CurrentLayer = 'PERSISTENT'
 Head '2) PERSISTENT：健康语义三分离（M0/M1 冻结不变量）'
 $probe = @'
 set -uo pipefail
@@ -137,6 +141,7 @@ if (($health | Where-Object { $_ -match '"applied":5' }) -and ($health | Where-O
 } else { Bad '迁移版本数不是 5/5' }
 
 # ---------------------------------------------------------------------------
+$script:CurrentLayer = 'STAGE'
 Head '3) STAGE：Slice 0B 后端（phone+OTP、HMAC、dev sink、就绪门禁）'
 Emit-Section '3.1 认证脚本（A–G 组）' 'AUTH_OTP_RESULT' (Run-Remote (Join-Path $repo 'scripts\m3\verify-auth-otp.sh'))
 
@@ -181,6 +186,7 @@ if ($sd -eq '700') { Ok 'dev sink 目录权限 0700' } else { Bad "dev sink 目�
 if ($rd -match 'RuntimeDirectory=campus') { Ok 'systemd RuntimeDirectory=campus 已配置（重启后 sink 自动重建）' } else { Bad "RuntimeDirectory 未配置: $rd" }
 
 # ---------------------------------------------------------------------------
+$script:CurrentLayer = 'STAGE'
 Head '4) STAGE：设备端登录 E2E（不注入 session 夹具）'
 if ($SkipDevice) {
   Bad '使用了 -SkipDevice：正式 Gate 不允许跳过设备端闭环'
@@ -212,6 +218,7 @@ if ($SkipDevice) {
 }
 
 # ---------------------------------------------------------------------------
+$script:CurrentLayer = 'REGRESSION'
 Head '5) REGRESSION：M1/M2 已证明过的能力未被弄坏'
 Emit-Section '5.1 后端与作者信任（verify-backend，M3 阶段：用手机号+验证码取会话）' 'BACKEND_RESULT' (Run-RemoteArgs (Join-Path $repo 'scripts\m1\verify-backend.sh') 'M3')
 Emit-Section '5.2 seed 幂等 + canonical + 收敛性（M2）' 'SEED_RESULT' (Run-Remote (Join-Path $repo 'scripts\m2\verify-seed.sh'))
@@ -224,6 +231,7 @@ Emit-Section '5.4 TLS 服务器侧（M2）' 'TLS_SERVER_RESULT' (Run-Remote (Joi
 # M3_SLICE0B_GATE_RESULT 在 PASS/FAIL 之间翻转 —— 那不是一个阶段结论，
 # 而是"跑 Gate 时的仓库状态"。归因错了会让人误以为 Slice 0B 挂了。
 $script:CurrentSlice = 'PRE'
+$script:CurrentLayer = 'PERSISTENT'
 Head '6) PERSISTENT：基线证据完整性（M0 冻结项 + supplements 审计）'
 $manPath = Join-Path $repo 'docs\original-baseline\manifest.json'
 if (Test-Path -LiteralPath $manPath) {
@@ -244,6 +252,7 @@ else { foreach ($f in $m0fail) { Bad "M0: $f" } }
 
 # ---------------------------------------------------------------------------
 $script:CurrentSlice = 'SLICE1'
+$script:CurrentLayer = 'STAGE'
 Head '6.5) STAGE Slice 1：帖子详情 / 评论 / 回复（含点卡片进详情的回归）'
 Emit-Section '6.5.1 后端评论接口（含层级语义与计数口径）' 'COMMENTS_RESULT' (Run-Remote (Join-Path $repo 'scripts\m3\verify-comments.sh'))
 
@@ -276,6 +285,7 @@ foreach ($mode in @('detail', 'cardtap', 'composer', 'authgate')) {
 }
 # ---------------------------------------------------------------------------
 $script:CurrentSlice = 'SLICE2'
+$script:CurrentLayer = 'STAGE'
 Head '6.6) STAGE Slice 2：点赞（原版侧只读；切换行为 BLOCKED_BY_POLICY）'
 Emit-Section '6.6.1 后端点赞接口（幂等 / 鉴权 / 跨用户隔离）' 'LIKES_RESULT' (Run-Remote (Join-Path $repo 'scripts\m3\verify-likes.sh'))
 
@@ -328,6 +338,7 @@ foreach ($case in @(
 
 # ---------------------------------------------------------------------------
 $script:CurrentSlice = 'SLICE3'
+$script:CurrentLayer = 'STAGE'
 Head '6.7) STAGE Slice 3：登录后发帖（无 session 夹具；作者只能来自会话）'
 Emit-Section '6.7.1 后端发帖 + 攻击用例（手工塞 author/authorId → strict 400 且不产生行）' 'PUBLISH_RESULT' (Run-Remote (Join-Path $repo 'scripts\m3\verify-publish.sh'))
 Emit-Section '6.7.2 设备端闭环（冷启动 → OTP 登录 → UI 发帖 → 归属 → 重启后仍在）' 'DEVICE_PUBLISH_RESULT' `
@@ -337,6 +348,7 @@ Say '  （本组只在**我们自己的 app** 上发帖；不声称与原版 1:1
 
 # ---------------------------------------------------------------------------
 $script:CurrentSlice = 'SLICE4'
+$script:CurrentLayer = 'STAGE'
 Head '6.8) STAGE Slice 4：recovered pages 的集成与一致性'
 Emit-Section '6.8.1 后端地点接口 + 发帖地点归属落库（聚合的前提）' 'PLACES_RESULT' (Run-Remote (Join-Path $repo 'scripts\m3\verify-places.sh'))
 
@@ -372,6 +384,7 @@ Say '    MEDIA_UPLOAD_AND_SEND_TRANSITION: BLOCKED_BY_POLICY'
 Say '  口径（审核记录 11）：baseline coverage remains 22/0；本组增加的是 integration coverage'
 
 # ---------------------------------------------------------------------------
+$script:CurrentLayer = 'PERSISTENT'
 Head '7) POLICY：第三方只读约束的执行情况（用户 2026-09-21 明确要求）'
 $pvPath = Join-Path $repo 'docs\POLICY-VIOLATION-2026-09-21.md'
 if (Test-Path -LiteralPath $pvPath) {
@@ -473,5 +486,13 @@ if ($script:SliceFail.SLICE3 -eq 0) {
 } else {
   Write-Output '# M3_SLICE3_GATE_RESULT: FAIL'
 }
+Write-Output '############################################################'
+# ---- M3 Final Gate：三层汇总（PLAN §10 的 Gate 结构）----
+# 与 slice 记账并存：slice 回答"哪个切片过了"，layer 回答"哪一类保证还成立"。
+Write-Output '# M3_FINAL_GATE_LAYERS:'
+foreach ($layer in @('PERSISTENT', 'STAGE', 'REGRESSION')) {
+  if ($script:LayerFail[$layer] -eq 0) { Write-Output "#   ${layer}: PASS" } else { Write-Output "#   ${layer}: FAIL" }
+}
+if ($script:Failed -eq 0) { Write-Output '# M3_FINAL_GATE_RESULT: PASS' } else { Write-Output '# M3_FINAL_GATE_RESULT: FAIL' }
 Write-Output '############################################################'
 exit $script:Failed

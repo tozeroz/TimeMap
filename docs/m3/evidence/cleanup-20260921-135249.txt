@@ -1,0 +1,30 @@
+﻿=== A. 清理前盘点（按明确标记）===
+M1-E2E|23
+M1-前端联调|1
+M1-真机|6
+M2-AUTH|10
+M2-GATE|3
+SEED(保留)|4
+TLS|16
+PASS 所有非种子帖子都能被已知标记指认（没有无法归类的残留）
+  非种子用户数: 5
+  清理前 posts 总数: 63
+
+=== B. 执行定向删除 ===
+PASS 已删除带明确标记的测试帖子（评论/点赞随外键级联）
+PASS 已删除非种子用户及其会话/验证码
+PASS dev sink 已清空
+
+=== C. 清理后的断言 ===
+PASS posts 只剩种子 4 条（63 → 4）
+PASS users 只剩种子 3 个
+PASS 4 条种子帖全部保留
+PASS comments 回到种子 2 条
+PASS likes 回到种子 2 条
+
+=== D. canonical 必须**未变**（清理不该改变种子逻辑内容）===
+  实测: 4e7e4cc8c547fff5063a15cfb3a0116fc13a69d67c80162b253ff507fc52e7b5
+  期望: 4e7e4cc8c547fff5063a15cfb3a0116fc13a69d67c80162b253ff507fc52e7b5
+PASS 清理后 canonical 哈希未变（种子逻辑内容完好）
+
+CLEANUP_RESULT PASS
