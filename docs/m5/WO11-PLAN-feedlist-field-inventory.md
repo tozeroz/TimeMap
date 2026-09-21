@@ -270,9 +270,24 @@ known_unknowns: "有后端且已登录时的正常列表长什么样（本机无
   **FEED_REFRESH_IS_REAL**       「刷新」触发**真实请求**（不是用 mock 冒充成功）：
                                  用 fetch 计数证明点击刷新时**确实发出了请求**；
                                  且请求失败时**停在失败态**（不得展示 mock 内容）
-  **FEED_NO_FAKE_AUTHORITATIVE_NUMBERS**
+                                 ⭐ 原版基线 `navigation: ["刷新 → 重新请求"]` **直接支持**这条
+  FEED_NO_FAKE_AUTHORITATIVE_NUMBERS
                                  DOM 里**不得出现** "12,486" / "38,920" 这类编造的统计数字
-                                 （它们是"假权威"—— 看起来像平台真实统计）
+
+改后（层 1b：原版基线支持的**忠实度**断言 —— 证据级）
+  FEED_TITLE_IS_CAMPUS_CIRCLE    标题逐字 == **「校园圈」**（基线 `title`）
+  FEED_LEFT_CONTROL_IS_CLOSE     左上控件是**关闭**语义（基线 `interactions`："左上关闭"）
+                                 当前实现是 `IconBack` + `aria-label="返回"` → **改前即 FAIL**
+  FEED_CLOSE_RETURNS_PREVIOUS    点关闭 → 返回上一页（基线 `navigation`）
+  FEED_RIGHT_CONTROL: NOT_EVALUATED
+                                 ⚠️ 基线**未提及**右侧控件；我们先不动，标 NOT_EVALUATED
+                                 （不去猜"应该有/不应该有"，也不据此删掉现有按钮）
+  ORIGINAL_NORMAL_LIST: NOT_EVALUATED
+                                 ⚠️ **重要范围限制**：基线里 loading/empty/**normal 全部
+                                 not_reproducible**，`known_unknowns` 明写"正常列表长什么样
+                                 （本机无法进入）"→ **原版正常列表形态无基线**。
+                                 故本单**不得**声称"列表条目形态与原版一致"，
+                                 只能声称"数据来源是真实的"。
 改后（层 2，数据清理）：
   FEED_NO_TEST_RESIDUE           可见 feed 里**不得**出现 "M1-E2E-" / "TLS 日志泄漏检查" 形态
                                  （这是**反向断言**：防止将来测试数据再次泄漏到用户界面）
