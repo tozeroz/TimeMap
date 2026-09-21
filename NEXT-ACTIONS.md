@@ -206,3 +206,34 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
       → 可加为一句话检查脚本或写进提交前自查
 - [x] G4.2 ✅ 已抽出 `scripts/m5/preflight-capture.ps1`（VISUAL_TARGET_VALIDITY，含前台包名 + CDP URL 双检）
       把"设备健康 + 前台确认 + CDP 就绪"抽成一个共用前置函数，避免每个脚本各写一遍
+
+---
+
+## H. WO#7 收尾（2026-09-22 02:14 更新）
+
+- [ ] H1 **等审核裁定 WO#7 是否可 CLOSED**（设备 Gate 6 项 + DB oracle + SERVER_REGRESSION 全绿）
+- [ ] H2 若 CLOSED → 更新 gate 的 `M5_OVERALL`、`A-D-LIST` 第 6 条状态、AUDIT (B) 表
+- [ ] H3 **`COMPOSER_CAPABILITY_COVERAGE` 高层检查**（审核记录 42 建议，值得做）：
+      机械列出当前产品声明支持的消息类型 × "是否存在可达的 UI 入口"：
+      ```
+      text  → 入口：.chatbar__send（本轮 WO#7 补上）
+      image → 入口：.chatbar__file（选图）
+      voice → 入口：.chatbar__mic（按住说话）
+      ```
+      **关键**：若 API 支持某能力、UI 也叫 composer，却没有用户入口 → 暴露为 **coverage gap**。
+      （本轮的文字发送正是这种"垂直 slice 全绿、横向能力缺一块"的情形。）
+      实现方式：一个**机械**脚本读 message kind 枚举 + 探测三类入口是否存在，纳入 gate。
+- [ ] H4 **修 VISUAL_TARGET_VALIDITY 的调用顺序**（本轮踩到）：
+      必须先建立 CDP 转发（`adb forward tcp:9222 ...`）**再**跑 preflight，
+      否则 CDP 检查会假 FAIL。建议封一个 runner：建 forward → preflight → 采集 → 再核 preflight。
+- [ ] H5 **G4.1 的落地**：把"改过 .ps1 后检查前 3 字节是否 EF BB BF"做成提交前自查（本轮已用它救回 deploy 脚本）
+
+### 证据 backlog（等 runtime 或直接静态行为证据，**不做产品改动**）
+- composer 高度（原版 134 vs 我方 96）：群聊/单聊 confounder 未排除
+- voiceIv 切换模型：只有布局 GONE + constraint，不足证明状态机
+- emoji/plus 精确尺寸与顺序（原版 28dp/32dp）
+- plusRedDot（8dp）/ quoteViewStub（引用回复条）：**存在性 ≠ 需要当前显示**
+- 图片**像素尺寸**上限：文案 `im_image_size_exceed`="图片尺寸超过限制（8000px）" —— 阈值有证据，
+  但"任一边 >8000 还是总面积""客户端拦还是服务端拦"未确证
+- 视频消息（播放/暂停/进度）、保存至相册、本地媒体失效重试：原版有，我方无（属新媒体类型，大件）
+- `im_chat_revoke`="撤回" + `im_long_press_menu_layout`：我方有撤回**显示**，撤回**动作**入口待核对
