@@ -24,10 +24,12 @@ if (-not $SkipBuild) {
 $bundle = Join-Path $root 'server\dist\index.mjs'
 $seedBundle = Join-Path $root 'server\dist\seed.mjs'
 $adminBundle = Join-Path $root 'server\dist\admin.mjs'
+$cleanupBundle = Join-Path $root 'server\dist\cleanup.mjs'
 if (-not (Test-Path -LiteralPath $bundle)) { Write-Error "缺少构建产物: $bundle"; exit 2 }
 if (-not (Test-Path -LiteralPath $seedBundle)) { Write-Error "缺少构建产物: $seedBundle"; exit 2 }
 if (-not (Test-Path -LiteralPath $adminBundle)) { Write-Error "缺少构建产物: $adminBundle"; exit 2 }
-Write-Output ("=== 2. 上传 index/seed/admin 三个包：{0:N1} / {1:N1} / {2:N1} KB ===" -f ((Get-Item $bundle).Length / 1KB), ((Get-Item $seedBundle).Length / 1KB), ((Get-Item $adminBundle).Length / 1KB))
+if (-not (Test-Path -LiteralPath $cleanupBundle)) { Write-Error "缺少构建产物: $cleanupBundle"; exit 2 }
+Write-Output ("=== 2. 上传 index/seed/admin/cleanup 四个包：{0:N1} / {1:N1} / {2:N1} / {3:N1} KB ===" -f ((Get-Item $bundle).Length / 1KB), ((Get-Item $seedBundle).Length / 1KB), ((Get-Item $adminBundle).Length / 1KB), ((Get-Item $cleanupBundle).Length / 1KB))
 Write-Output '    用 scp 传文件而不是命令行 base64：1.6MB 包编码后约 2MB，超过 Windows 32767 字符的命令行上限'
 & scp -i $Key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes $bundle "${Target}:/tmp/campus-backend-index.mjs"
 if ($LASTEXITCODE -ne 0) { Write-Error 'scp 失败（index bundle）'; exit 1 }
@@ -35,6 +37,8 @@ if ($LASTEXITCODE -ne 0) { Write-Error 'scp 失败（index bundle）'; exit 1 }
 if ($LASTEXITCODE -ne 0) { Write-Error 'scp 失败（seed bundle）'; exit 1 }
 & scp -i $Key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes $adminBundle "${Target}:/tmp/campus-admin.mjs"
 if ($LASTEXITCODE -ne 0) { Write-Error 'scp 失败（admin bundle）'; exit 1 }
+& scp -i $Key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes $cleanupBundle "${Target}:/tmp/campus-cleanup.mjs"
+if ($LASTEXITCODE -ne 0) { Write-Error 'scp 失败（cleanup bundle）'; exit 1 }
 
 $sh = @'
 set -euo pipefail
@@ -42,6 +46,7 @@ echo "== 安装后端包 =="
 install -o campus -g campus -m 0750 /tmp/campus-backend-index.mjs /srv/campus/server/dist/index.mjs
 install -o campus -g campus -m 0750 /tmp/campus-seed.mjs /srv/campus/server/dist/seed.mjs
 install -o campus -g campus -m 0750 /tmp/campus-admin.mjs /srv/campus/server/dist/admin.mjs
+install -o campus -g campus -m 0750 /tmp/campus-cleanup.mjs /srv/campus/server/dist/cleanup.mjs
 rm -f /tmp/campus-backend-index.mjs /tmp/campus-seed.mjs /tmp/campus-admin.mjs
 ls -l /srv/campus/server/dist/
 
