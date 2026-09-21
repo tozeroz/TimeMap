@@ -19,13 +19,17 @@
 
 ## 一、差异清单
 
-### 1. `CHAT_MESSAGE_SENDER_PRESENTATION` — **DEVIATION**（新登记）
+### 1. `CHAT_MESSAGE_SENDER_PRESENTATION` — **FIXED / VERIFIED**（2026-09-21，commit `c9d7a7d`）
 
 ```
 observed: 自己发的图片消息渲染在左侧 peer 气泡里
 来源:     WO#2 前端实现时发现（既有渲染逻辑，非本工作单引入）
-审核裁定: 审核记录 25 —— "这是真实产品问题，但不是本工作单引入的"，
-          应进入 M5 后续 A/D 清单，**不把 WO#2 无限扩张**
+审核裁定: 记录 25 登记 → 记录 27/29 **ACCEPTED / CLOSED**（WO#3）
+实测:     真机实际几何 —— 自己发的气泡 left=456.3/386.1（视口 618 的 73.8%/62.5%）；
+          对方 left=16（2.6%）；类名与几何逐条一致；与原版截图并排一致
+实现:     ChatScreen 按 senderId === getSession()?.user?.id 选 --me/--peer（meId=null 时降级 --peer）
+未覆盖:   meId===null 降级分支真机不可达 → SOURCE-VERIFIED / RUNTIME: NOT_EVALUATED（**不得写成 PASS**）
+证据:     docs/m5/CHAT-SENDER-PRESENTATION-CONFIRMED.md、scripts/m5/device-chat-sender-align.mjs
 说明:     "我的消息 / 对方消息的布局区分"属于更一般的 chat presentation semantic，
           需要先只读观察原版在这方面的表现，再决定实现（**不要凭感觉加区分**）
 ```
@@ -37,8 +41,11 @@ observed: ~~原版底部是 4 项~~ → **错误**：看 bounds 才知「校园�
 证据:     docs/original-baseline/raw-dumps/board-observation-1.xml
 补充:     该 tab 指向的页面**不是列表式 feed，而是拼贴照片墙（collage）**：
           collageView + view_image_container + view_user_tag（图片上的作者标签）
-性质:     不只是"少一个 tab"，而是**该 tab 的呈现模型本身就不同**
-未确证:   交互模型（点单图去哪 / 标签是否可点 / 是否分页）**尚未确证**，需新的只读观察
+⚠ 本条的**撤销范围**（写清以免被误读）:
+  撤销: "原版底部有 4 个 tab、我们缺「校园广场」" —— 这是误数，不成立
+  **仍然成立**: 「校园广场」**页面**（顶部栏目，非底部 tab）的呈现是**拼贴照片墙**
+              （collageView + view_image_container + view_user_tag），而我方该页为 column-count:2 瀑布流
+              → 这一条**是另一件事**，见 §五 与会话小结；其**交互模型**（点单图去哪/标签是否可点/是否分页）仍未确证
 ```
 
 ### 3. 留言板表情行 — 四项
@@ -48,7 +55,8 @@ observed: ~~原版底部是 4 项~~ → **错误**：看 bounds 才知「校园�
 | 项数 / 宽 / pitch / 首末边界 | **FIXED** | 6 项、70 / 112（设备 px）逐项与原版吻合；CSS 40px + gap 24px，设备实测确认 |
 | 底色（C5） | **FIXED** | 原版无底色（像素采样圆内点亦纯白）；我们原有灰色圆片 → 已改为 transparent |
 | 字号（C6） | **FIXED** | 16px → 24px（据实心字形墨迹外接的**直接测量**；估计值，残余不确定已标注） |
-| **字符与形态（C4）** | **已收口（审核记录 30）：`C4_EMOJI_RENDERING_KIND: CONFIRMED — ImageView / image-based`；`C4_EXACT_6_ASSETS: NOT_CAPTURED`（停止投入）** | 此前依据节点 id `emotion_image` 判为"原版是图片"。**但那是照 id 名字下判断**（本项目已因此在 C1/C2 栽过两次），且视觉读图显示边缘特征更像**字体渲染**。两份证据冲突 → 降为 UNRESOLVED，见 `docs/m5/C4-EVIDENCE-CONFLICT.md`。**决定性检验（渲染对比）待做。** |
+| **字符与形态（C4）** | **已收口（审核记录 30）：`C4_EMOJI_RENDERING_KIND: CONFIRMED — ImageView / image-based`；`C4_EXACT_6_ASSETS: NOT_CAPTURED`（停止投入）** | 已按审核记录 30 收口为**三层结论**：`C4_EMOJI_ASSET_SYSTEM: CONFIRMED`（154 个随包 webp）、`C4_BOARD_ROW_PACKAGED_DRAWABLE_BINDING: STRONGLY_SUPPORTED / DIRECT_BINDING NOT CAPTURED`、`C4_EXACT_6_ASSETS: NOT_CAPTURED`（停止投入）。'
+  （历史：曾据 id 名判"是图片" → 又因像素读数降为 UNRESOLVED → 本轮用 aapt2 资源表 + 运行时 ImageView 确证。见 `docs/m5/C4-FORENSICS-RESULT.md`、`docs/m5/C4-EVIDENCE-CONFLICT.md`。） |
 
 ### 4. 留言板下拉刷新（C3） — **BLOCKED_BY_POLICY**
 
@@ -77,11 +85,15 @@ C2 原判: 缺留言总数
 
 ```
 已修:   表情行几何（项数/宽/pitch/边界）、底色、字号
-成立:   C4 表情形态（图片 vs 文字）—— 待裁定实现方式
-成立:   CHAT_MESSAGE_SENDER_PRESENTATION（自己消息渲染在 peer 气泡）
-撤销:   底部 tab 4 vs 3（实为**误数**：把顶部栏目当成了底部 tab；我们的 3 tab + FAB 发布按钮与原版一致）
+已修:   CHAT_MESSAGE_SENDER_PRESENTATION（自己消息靠右；真机几何断言通过）
+已收口: C4 表情形态 = **image-based（CONFIRMED）**；exact 6 assets 未捕获且**停止投入**
+        → 结构层可解冻（审核记录 30 建议另立 WO#4），exact asset 选择继续冻结
+撤销:   底部 tab 4 vs 3（误数：把顶部栏目当成底部 tab；我们的 3 tab + FAB 与原版一致）
 阻断:   C3 下拉刷新（BLOCKED_BY_POLICY）
 撤销:   C1 顶部按钮、C2 留言总数（被只读观察推翻）
+待办:   「校园广场」**页面**的交互模型（点单图去哪 / 标签可点性 / 是否分页）——需只读观察
+待办:   语音消息（真实功能级缺口；我方为"类型预留+界面占位+明确标注"，见 AUDIT 附五）
+待办:   C4 的结构层改动（WO#4，需先报计划再动代码）
 ```
 
 ## 三、维护规则
