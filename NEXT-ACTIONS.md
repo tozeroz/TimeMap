@@ -290,7 +290,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [x] K1 ✅ **WO#9A 已实施并提交关账**（审核 45 批准 + 收紧）`n      设备 Gate 8 项全 PASS + 身份 3/3；授权矩阵 12 项全 PASS（含非成员**零 mutation**）`n      改前 FAIL 已取得（5 项）；回归：WO#8/WO#7/WO#6/M5 server 全 PASS
       前提核查结论：**后端 schema 已支持 group**（`kind CHECK IN ('direct','group')`、成员表无上限无角色、
       `title` 可空）→ 无需迁移，主要是**造种子 + 前端接真实 API + Gate**
-- [ ] K2 ⬅ **下一步：WO#9B AT 面板 / @所有人**（WO#9A 已 CLOSED，真实群会话已就绪）`n      在 WO#9A 的真实群会话之上做
+- [x] K2 ✅ **已完成**：WO#9B 两层全部实施（层 A 面板 14 条断言 + 层 B 语义 25 条断言全 PASS）；见 K2.14/K2.15
       （AT 面板的结构证据已就绪：`docs/m5/EVIDENCE-at-panel-structure.md`；
        `mentions_all` 数据模型设计已就绪）——**不与 WO#9A 混成一个 Gate**
 - [ ] K3 **WO#10 MessageScreen 剩余 mock 区块接线**：邀请卡的学校/学院/年级/头像、
@@ -316,9 +316,9 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       direct 上也不拒绝）；非成员路径（404 + 零 mutation）既有行为正确
       自查修掉：① 把"非成员越权"与"direct 不该被接受"合成一条断言（定位会误导）→ 拆成两条
       ② 在 bash 里误用 C 风格 `/* */` 注释 → 改 `#`
-- [ ] K2.5 等审核批准 WO#9B（修订版）→ 实施：迁移 011 + 接口/读模型 + 层 A 面板
+- [x] K2.5 ✅ **已完成**：审核 49 批准 → 迁移 011（applied=11/11）+ 接口/读模型 + 层 A 面板
 ### K2 进展（Round 260 续）
-- [ ] K2.5 ⬅ **等审核确认 BLOCKER ①② 已冻结** → 然后实施：
+- [x] K2.5b ✅ **已完成**：审核 49 确认两个 blocker 已冻结并批准实施 → 已实施
       迁移 `011_mentions_all.sql` + `GET /api/threads/:id` 返回 `members[]` + 层 A 面板 + 选中状态
 - [x] K2.6 ✅ 审核 48 要求的**有界静态 trace**：`scripts/m5/probe-at-trigger-static-trace.mjs`
       结果 `AT_TRIGGER_STATIC_TRACE: FOUND`（含**专用触发符号 openAtPanel ×1 @classes3.dex**，
@@ -345,7 +345,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       `members: [{id, displayName}]` → `MEMBER_SOURCE_CONTRACT: PASS`（15 条断言）
       含审核 49 点名边界：只含最小身份字段（**无 phone**）、`memberCount == members.length`、
       成员集合 == DB `thread_members`、非成员 404、**顺序不作为 conformance**
-- [ ] K2.14 ⬅ **下一步：层 A UI**（AT 面板）
+- [x] K2.14 ✅ **层 A UI 已完成**：AT 面板 + 「@所有人」选中链路（见 K2.15）
       · 底部弹层（全屏遮罩可点关闭 + 底部锚定）/ 关闭控件 / 标题「选择提醒的人」16sp bold 居中
       · 「所有人」项（行高 88dp、图标 56dp、标签 16sp、图文间距 12dp）
       · 成员平铺（**不渲染** section header）+ 空态/失败态（**受控 stub**，标 CLIENT_CODEPATH）
