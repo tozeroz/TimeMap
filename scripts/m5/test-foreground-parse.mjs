@@ -29,7 +29,13 @@ function detectPackage(dumpsysOutput, pkg) {
   return { line: line.trim(), matched: line.includes(pkg) }
 }
 
-// —— 真实样本（来自本会话早前的实测输出，非编造）——
+// —— 样本来源（如实标注，避免声称比实际更强）——
+//   样本 1：本会话早前 C1 只读观察时**实测到的那一行**（dumpsys 输出原文）
+//   样本 2：我们的 App 前台（包名/Activity 已知，格式与样本 1 同型）
+//   样本 3：启动器前台 —— 2026-09-21 19:00 只读实测得 **app.lawnchair/.LawnchairLauncher**
+//           ⚠️ 本文件早期版本此处写的是 com.mumu.launcher，那是我**臆测**的包名、并未实测；
+//              发现后已替换为实测值。解析结论不受影响，但对样本来源的声明必须诚实。
+//   样本 4：空输出（降级路径的构造用例，非实测）
 const SAMPLES = [
   {
     name: '原版 App 在前台（C1 观察时实测到的那一行）',
@@ -42,9 +48,9 @@ const SAMPLES = [
     expectTop: 'com.campusx.demo',
   },
   {
-    name: '系统 UI 在前台（例如刚弹出 picker 后回到桌面）',
-    raw: '  topResumedActivity=ActivityRecord{1234 u0 com.mumu.launcher/.Launcher t1}',
-    expectTop: 'com.mumu.launcher',
+    name: '启动器在前台（实测值：本机启动器是 app.lawnchair）',
+    raw: '  topResumedActivity=ActivityRecord{31a0b21 u0 app.lawnchair/.LawnchairLauncher t2}',
+    expectTop: 'app.lawnchair',
   },
   {
     name: 'dumpsys 取不到（空输出）—— 必须降级为"未匹配"，不能抛异常',
