@@ -986,6 +986,83 @@ export function buildServer(deps: ServerDeps) {
     }
   })
 
+  // -------------------------------------------------------------------------
+  // M4：媒体下发（审核记录 13 第 6 条 + 记录 15 的 P0-A / X-Accel）
+  //
+  // 设计要点：
+  //   public  → 由 Nginx 直接静态下发（/media/...），应用层不管字节；
+  //             本接口对 public 只做 302 到静态路径（保证前端可以用同一个 URL 形态）
+  //   private → **没有静态入口**；本接口做会话 + can_read_media 鉴权，
+  //             然后用 X-Accel-Redirect 让 Nginx 从 internal location 取文件。
+  //             Node 只判定、不搬字节（396MB 内存的机器上这很重要）。
+  //
+  // 授权**复用** can_read_media（它又复用 can_read_message）——
+  // 不在这个接口里另写一套可见性规则，这是 P0-A 防权限漂移的核心。
+  //
+  // 不满足 → **404 而不是 403**：403 会主动告诉未授权者"这个 id 存在"。
+  // -------------------------------------------------------------------------
+  const MEDIA_URL_PREFIX = process.env.MEDIA_URL_PREFIX ?? '/media'
+  const PRIVATE_XACCEL_PREFIX = process.env.PRIVATE_XACCEL_PREFIX ?? '/_private_media'
+
+  app.get('/api/media/:id', async (req, reply) => {
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(404)
+      return { error: 'not_found' }
+    }
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+
+    try {
+      // 一次查询同时拿到 storage_key / scope / mime，并用**同一个函数**判定可读性
+      const r = await db.pool.query<{
+        storage_key: string
+        scope: string
+        mime: string
+        allowed: boolean
+      }>(
+        `select m.storage_key, m.scope, m.mime,
+                can_read_media($1::uuid, m.id) as allowed
+           from media m
+          where m.id = $2`,
+        [s.kind === 'ok' ? s.user.userId : null, id],
+      )
+      const row = r.rows[0]
+      // 不存在 / 不可读 → 一律 404（对外不可区分）
+      if (!row || !row.allowed) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+
+      // 私有媒体的响应头：不允许任何缓存（含中间代理）
+      reply.header('Cache-Control', 'private, no-store')
+      reply.header('X-Content-Type-Options', 'nosniff')
+
+      if (row.scope === 'public') {
+        // public 走 Nginx 静态；302 过去，字节不经过 Node
+        reply.header('X-Media-Scope', 'public')
+        reply.code(302)
+        reply.header('Location', `${MEDIA_URL_PREFIX}/${row.storage_key}`)
+        return null
+      }
+
+      // private：要求必须已登录（未登录在上面已经因为 allowed=false 变成 404）
+      if (s.kind !== 'ok') {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      reply.header('X-Media-Scope', 'private')
+      // Nginx internal location 映射到 uploads/private/
+      reply.header('X-Accel-Redirect', `${PRIVATE_XACCEL_PREFIX}/${row.storage_key}`)
+      reply.code(200)
+      return null
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
   return app
 }
 /**
