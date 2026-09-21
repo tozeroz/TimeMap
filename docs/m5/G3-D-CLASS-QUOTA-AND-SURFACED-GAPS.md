@@ -92,3 +92,52 @@ C:\Program Files\Git\bin\bash.exe 'G:/demo map/scripts/m5/probe-original-quota.s
 # 或手工：
 aapt2 dump resources <apk> | grep -i -E 'quota|limit|exceed|too_large' | head
 ```
+
+---
+
+## 七、已核对归属的原版文案（**不凭印象归属**）
+
+起因：我在 AUDIT 里一度把"该图片尺寸超过最大限制"归给 `string/im_image_size_exceed`，
+但扫描输出显示那句话实际来自 `string/capa_import_too_large_image`。
+**归属错文案 = 造出一个不存在的证据**，故用脚本把「资源名 ↔ 文案」严格对应起来核对
+（`tools/tmp/verify-string-attribution.sh`，按 `resource 0x… string/<name>$` 精确匹配后读下一行）。
+
+**核对结果（逐条，均已确认归属）**：
+
+| 资源名 | 文案（原文） | 我方现状 |
+|---|---|---|
+| `string/im_chat_send_msg` | **发消息…** | placeholder 相同 ✓ **一致** |
+| `string/im_image_size_exceed` | **图片尺寸超过限制（8000px）** | **无尺寸上限** → 候选缺口，**阈值明确=8000px** |
+| `string/im_image_upload_failed` | 发送失败 | 我方文案不同 |
+| `string/im_chat_video_duration_exceeded` | **视频时长超过2分钟，暂不支持发送** | 无视频 |
+| `string/im_chat_media_storage_insufficient` | 存储空间不足，无法发送所选媒体 | 我方 507 文案不同 |
+| `string/im_chat_record_error` | **语音录制失败，请重试** | 我方："录音失败：…"（WO#5 相关，可低成本对齐） |
+| `string/im_chat_summary_image` | **[图片]** | 我方 `IMAGE_MESSAGE_BODY='[图片]'` ✓ **一致** |
+| `string/capa_import_too_large_image` | 该图片尺寸超过最大限制 | （发布/相机模块，非 chat） |
+| `string/capa_import_too_large_video` | 该视频尺寸超过最大限制 | 同上 |
+| `string/capa_select_photo_limit` | 可选 %1$d 张图片 | 同上（选图数量上限） |
+| `string/capa_post_video_size_over_limit` | 视频大小超过 200M，暂不支持发布 | 同上 |
+
+### 7.1 ⭐ 本轮**最有价值的一条**：图片尺寸上限**阈值有证据**
+
+```
+string/im_image_size_exceed = "图片尺寸超过限制（8000px）"
+  · 属 chat 模块（im_*），不是发布模块（capa_*）
+  · **阈值 8000px 直接写在文案里** —— 这是少见的"规格自带数值"情形
+  · 我方对照：只有体积上限 MEDIA_MAX_BYTES = 5MB，**没有任何尺寸上限**
+```
+
+**但仍有两点未确证，实现前必须解决**：
+```
+1. 8000 指的是"任一边 > 8000px"还是"总像素/面积"？文案只说"尺寸…（8000px）"
+2. 是**客户端先拦**（选图时提示）还是**服务端拒绝**？原版文案出现在 im_* 命名空间，
+   更像客户端提示；但**没有行为证据**
+→ 因此本项仍**不能直接实现**：修法（在哪一层拦、按什么口径）还不明确。
+```
+
+### 7.2 另一条待查线索（登记，不扩散）
+
+`string/im_chat_revoke` = **"撤回"**，且 APK 内有 `im_long_press_menu_layout` /
+`im_layout_long_press_menu_item` 布局 → 原版有**长按菜单**与**撤回动作**。
+我方：有撤回的**显示**（`bubble__revoked` + 服务端 `deleted_at`），
+但**是否有撤回动作的入口**尚未核对 → 记为本批线索，待专项核对。

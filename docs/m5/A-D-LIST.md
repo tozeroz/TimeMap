@@ -19,6 +19,42 @@
 
 ## 一、差异清单
 
+### 0. 底部 tab 项排布方向（图标/文字相对位置） — **FIXED / CLOSED**（2026-09-22，commit `1f7c761`）
+
+```
+observed: 原版底部 tab 项是**竖排**（图标在上、文字在下）；我方是**横排**（图标在左、文字在右）
+证据:     ① dump bounds（docs/original-baseline/raw-dumps/board-observation-1.xml）：
+             激活态图标 y=[1746,1795]、文字 y=[1829,1868] → **y 区间不重叠**、水平中心接近（160.5 vs 174.5）
+           ② 截图 trident-campus/normal.png 视觉：三个 tab **均为图标在上、文字在下**
+           我方实测（CDP getBoundingClientRect）：icon y=1035、label y=1037/1039 → **y 重叠、x 分离** → 横排
+实现:     app/src/components/tabbar.css 的 .tabbar__item 加 flex-direction: column + 交叉轴居中
+          （**只改方向与对齐**；gap/padding/颜色/字号/字重均未动）
+Gate:     scripts/m5/gate-wo6-tabbar-orientation.mjs（设备侧，**坐标单位显式冻结为 CSS px**）
+          改前 **FAIL**（stackGapCss=-17.86~-19.86、alignDeltaCss=28~30.61）
+          改后 **PASS**（stackGapCss=5、alignDeltaCss=0）
+          + TAB_LABELS_PRESERVED / TAB_NAVIGATION_REGRESSION / FAB_GEOMETRY_UNCHANGED /
+            TABBAR_HEIGHT_UNCHANGED 全 PASS；M5_SERVER_REGRESSION PASS（REAL_EXIT=0）
+裁定:     docs/review-log/40（批准，附两处计划修正）、docs/review-log/41（**PASS / CLOSED**）
+未做:     未激活态精确字号/尺寸 = NOT_EVALUATED（无证据，不动）
+          FAB 可见直径 = NOT_MEASURED_RELIABLY / PRODUCT_CHANGE: NONE（两种像素方法自判 INVALID）
+```
+
+### 6. 会话页**文字消息发送路径缺失** — **DEVIATION（已提案 WO#7，待批准）**
+
+```
+observed: 我方 ChatScreen 的 draft 只用于 input 的 value/onChange —— **draft 从未被发送**；
+          全屏只有图片与语音两种发送，没有发送按钮、没有回车发送
+          → **我方 demo 的会话页发不出文字消息**
+原版证据: 静态布局（aapt2，APK sha256 已核验）：layout/im_input_box（res/P9.xml）**声明了 sendBtn**
+          （56dp×36dp，src=ic_send_msg_btn，**默认 visibility=GONE**）
+我方证据: composer 5 个子控件中**无任何 send 控件**；源码无本地发送调用；CSS 无 send 类
+修法明确: 服务端 /api/threads/:id/messages 早已支持纯文本（gate 长期有 "T1 纯文本 → 201"）
+⚠ 推断强度: "无文字时显示表情+加号、有文字时显示发送"这一**切换关系**由
+          "sendBtn 默认 GONE + emojiBtn/plusBtn 常显"**推断**而来；
+          **渲染态（输入文字后）未观察到** → 实现前必须标注该推断
+提案:     docs/m5/WO7-PROPOSAL-composer-text-send.md（含合规问题：见该文档 §七）
+```
+
 ### 1. `CHAT_MESSAGE_SENDER_PRESENTATION` — **FIXED / VERIFIED**（2026-09-21，commit `c9d7a7d`）
 
 ```
