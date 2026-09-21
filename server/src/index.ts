@@ -1720,14 +1720,31 @@ export function buildServer(deps: ServerDeps) {
           结果是一条"语音消息"里挂着图片 —— 客户端会去按音频解析而拿到 PNG，属于语义错误。
           （这正是 WO#4 被驳回时审核点出的形态："看起来一个东西、发出去另一个东西"。）
 
-          分类用 mime 前缀而不是具体枚举，这样将来 DB 白名单扩了（例如第二种音频格式），
-          这里不需要跟着改；DB 的 media_mime_allowed 才是"到底允许哪些"的权威。
+          分类**同时**用"已批准 MIME 集"与"mime 前缀"：
+            · 已批准集是**权威判据**（可收紧、扩展时必须显式登记）；
+            · 前缀只用来给出**可读的错误信息**（expectedPrefix）。
+
+          ⚠️ **已知的语义瑕疵（审核记录 37 §6 指出）**：早先这里只用
+          `mime.startsWith('audio/')`，等于让"任何未来的 audio/* 自动获得 voice 资格"。
+          当前**没有实际安全扩张**（DB 的 media_mime_allowed 只放行 audio/webm，
+          新增音频格式必须过一次迁移），但语义上不理想 —— 已改为显式批准集。
+          **扩展音频格式时必须把新 MIME 同时加进 AUDIO_MIMES 与 DB 白名单**，
+          不要依赖"它在 audio/ 前缀下"就悄悄获得 voice 资格。
         */
+        const IMAGE_MIMES: readonly string[] = ['image/jpeg', 'image/png', 'image/webp']
+        const AUDIO_MIMES: readonly string[] = ['audio/webm']
         const wantPrefix = kind === 'image' ? 'image/' : 'audio/'
-        if (!row.mime.startsWith(wantPrefix)) {
+        const approved = kind === 'image' ? IMAGE_MIMES : AUDIO_MIMES
+        if (!row.mime.startsWith(wantPrefix) || !approved.includes(row.mime)) {
           await client.query('rollback')
           reply.code(400)
-          return { error: 'media_kind_mismatch', kind, mediaMime: row.mime, expectedPrefix: wantPrefix }
+          return {
+            error: 'media_kind_mismatch',
+            kind,
+            mediaMime: row.mime,
+            expectedPrefix: wantPrefix,
+            approved,
+          }
         }
         if (row.scope !== 'private') {
           // 公共动态图不能挂进私聊。DB 层的复合外键本来也会拒，
