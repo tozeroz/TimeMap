@@ -382,3 +382,19 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [ ] WO10.9 等审核裁定 WO10 是否 CLOSED；并确认是否需要回头重跑历史 app/ 项
 - [ ] WO10.10 **下一步：FeedListScreen → UserProfileScreen → MapScreen**
       照 WO#10 方法先做字段级 inventory 再报计划
+### WO#11 进展（Round 261）
+- [x] WO11.1 ✅ 字段级 inventory：`GET /api/posts` **已存在**（与 WO#10 性质不同 → 本单是**接线**单）
+      单条字段 id/author/authorId/body/place/createdAt/likeCount/commentCount/likedByMe/images[]
+- [x] WO11.2 ✅ 发现库里 **20/24 条是 M1 E2E 测试残留**；且 **CampusScreen 已接真实 API 并正在显示这些残留**
+      → **脏数据泄漏是当前活缺陷**，不是未来风险（我修正了原计划里过度保守的描述）
+- [x] WO11.3 ✅ 发现 `campusInfo.members='12,486'` / `posts='38,920'` 是**编造的统计数字**（假权威）
+      真实库 users=3 / posts=24，差几个数量级 → 处置：不显示 + 反向断言
+- [x] WO11.4 ✅ 发现「刷新」是**假刷新**：`fetchDelta = 0`（零请求）却渲染 12 条编造动态
+- [x] WO11.5 ✅ **入口溯源**：FeedListScreen **只能经 demo 脚手架到达**
+      （Me → 三横线 → Drawer →「更多功能」[带 demo 徽章] → #/more → 校园圈 → #/feedlist）
+      → `FEED_ENTRY_PROVENANCE: DEMO_SCAFFOLD` ／ `ORIGINAL_FEED_ENTRY: NOT_EVALUATED`
+- [x] WO11.6 ✅ 改前 FAIL 证据（PREFERRED），含**门禁顺序修正**
+      （内容类断言必须读"刷新后"快照，否则因停在错误态而**空过**）
+- [ ] WO11.7 ⬅ **等审核裁定**：批准范围／**授权删除 20 条测试残留**／入口忠实性归属／
+      name+region 处置／`/api/posts` 匿名可读口径
+- [ ] WO11.8 裁定后实施：只读接线 + 数据清理（先 pg_dump 备份 + 先打印将删内容）
