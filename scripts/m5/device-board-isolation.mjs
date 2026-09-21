@@ -339,8 +339,51 @@ try {
   //   诊断证据：force-stop 原版后，我们的 App 立刻回到前台，
   //   .tabbar__item 数量 = 3、hash = #/campus，helper 也就跑得通了。
   //   这**不是产品缺陷**，是设备环境没归位；而且原版 App 对本单毫无用处（我们只验自己的 App）。
-  await adb(['shell', 'am', 'force-stop', 'com.kairuotu.campus']).catch(() => {})
-  info('已 force-stop 原版 App（com.kairuotu.campus），避免它抢占前台遮蔽我们的 App')
+  /*
+    ⚠ **不再默认 force-stop 原版 App**（审核记录 23 收紧后的规则）。
+    原做法（adb force-stop com.kairuotu.campus）技术上不是对原版**服务端业务数据**的写操作，
+    但它是对第三方 App 的**主动本地状态干预**；在本项目"原版只读取证"的治理原则下，
+    不应把这种干预**永久嵌入正常 Gate 路径**。
+
+    改为按优先级：
+      1) 检测前台包 → 若不是我们的 App，**先把我们自己的 Activity 拉回前台**；
+      2) 仍无法可靠恢复 → **abort 并提示**，绝不替用户去动第三方 App；
+      3) 若要保留 force-stop 能力，必须**显式开关**（ALLOW_FORCE_STOP_ORIGINAL=1，默认关），
+         且每次使用都要在证据里写明。
+  */
+  const ALLOW_FORCE_STOP_ORIGINAL = process.env.ALLOW_FORCE_STOP_ORIGINAL === '1'
+  const OUR_PKG = 'com.campusx.demo'
+  const ORIGINAL_PKG = 'com.kairuotu.campus'
+  const fgPkg = (await adb(['shell', 'dumpsys', 'activity', 'activities']).catch(() => ''))
+    .split('\n').find((l) => l.includes('topResumedActivity') || l.includes('mResumedActivity')) ?? ''
+  const originalIsForeground = fgPkg.includes(ORIGINAL_PKG)
+  info(`前台包检测: ${fgPkg.trim().slice(0, 120) || '(取不到)'}`)
+
+  if (originalIsForeground) {
+    info('检测到前台是原版 App —— 按规则先尝试把我们自己的 App 拉回前台（不动第三方 App）')
+    await adb(['shell', 'am', 'start', '-n', `${OUR_PKG}/.MainActivity`]).catch(() => {})
+    await new Promise((r) => setTimeout(r, 2500))
+    const fg2 = (await adb(['shell', 'dumpsys', 'activity', 'activities']).catch(() => ''))
+      .split('\n').find((l) => l.includes('topResumedActivity') || l.includes('mResumedActivity')) ?? ''
+    const recovered = fg2.includes(OUR_PKG)
+    check(
+      recovered,
+      '已把我们自己的 App 拉回前台（未干预原版 App）',
+      `无法可靠恢复前台（当前仍不是 ${OUR_PKG}）。` +
+        `按纪律**不主动 force-stop 原版 App**：请手工把前台切回我们的 App 后重跑，` +
+        `或显式设置 ALLOW_FORCE_STOP_ORIGINAL=1 并接受一次本地状态干预。`,
+    )
+    if (!recovered) {
+      if (ALLOW_FORCE_STOP_ORIGINAL) {
+        info('（显式开关已打开）执行 force-stop 原版 App —— 本次将在证据中标注此动作')
+        await adb(['shell', 'am', 'force-stop', ORIGINAL_PKG]).catch(() => {})
+        await new Promise((r) => setTimeout(r, 2000))
+      } else {
+        fail('设备前台不可恢复，已 abort（未干预原版 App）')
+        process.exit(4)
+      }
+    }
+  }
 
   const helperLog = `${REPO}\\.tmp-m5-iso\\helper-login.log`
   let helperOut = ''
