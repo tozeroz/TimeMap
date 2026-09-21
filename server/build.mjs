@@ -62,6 +62,11 @@ const TARGETS = [
     outfile: 'dist/cleanup.mjs',
     bannerNote: '// Campus 媒体孤儿清扫 CLI —— 由 server/build.mjs 生成，请勿手改',
   },
+  {
+    entryPoints: ['src/cleanup-auth-entry.ts'],
+    outfile: 'dist/cleanup-auth.mjs',
+    bannerNote: '// Campus 认证数据清扫 CLI（sessions / login_challenges）—— 由 server/build.mjs 生成，请勿手改',
+  },
 ]
 
 const built = []
@@ -134,6 +139,19 @@ if (smokeCleanup.status !== 2 || !cleanupOut.includes('缺少 DATABASE_URL')) {
   process.exit(1)
 }
 
+// 3c) cleanup-auth 产物：同样是 CLI，无 DATABASE_URL 时必须自行拒绝（退出码 2）——
+//     与 cleanup 同理：没有目标库就绝不能删认证数据。
+const smokeCleanupAuth = spawnSync(process.execPath, ['dist/cleanup-auth.mjs'], {
+  encoding: 'utf8',
+  env: { ...process.env, DATABASE_URL: '' },
+})
+const cleanupAuthOut = `${smokeCleanupAuth.stdout ?? ''}${smokeCleanupAuth.stderr ?? ''}`
+if (smokeCleanupAuth.status !== 2 || !cleanupAuthOut.includes('缺少 DATABASE_URL')) {
+  console.error('[build] 冒烟失败：cleanup-auth 产物行为不符合预期')
+  console.error(cleanupAuthOut.slice(0, 2000))
+  process.exit(1)
+}
+
 console.log(
-  '[build] 冒烟通过：API 产物可被 Node 加载；seed/admin/cleanup CLI 在无 DATABASE_URL 时按预期拒绝执行',
+  '[build] 冒烟通过：API 产物可被 Node 加载；seed/admin/cleanup/cleanup-auth CLI 在无 DATABASE_URL 时按预期拒绝执行',
 )

@@ -96,17 +96,17 @@
       login_challenges:  pending-valid / expired / consumed / age distribution
       ```
       依据 schema 已有语义（`sessions.expires_at`/`revoked_at`、`login_challenges.expires_at`/`consumed_at`）
-- [ ] E2 **冻结 retention 语义**，界定"**确定已经死亡的数据**"：
+- [x] E2 ✅ **已冻结**：`docs/m5/E2-RETENTION-FREEZE-auth.md`（四类"确定已死"判据 + 两类"绝不删" + grace 默认 24h 可配，取值依据 E1 实测分布）`n- [ ] ~~E2~~，界定"**确定已经死亡的数据**"：
       `expired session older than retention grace` / `revoked session older than retention grace` /
       `expired challenge older than retention grace` / `consumed challenge older than retention grace`
       → cleanup eligible
       ⚠ **active session / still-valid challenge 绝不按总数删除**
-- [ ] E3 **独立 `cleanup-auth`**（不塞进 media cleanup —— 避免把媒体生命周期与认证生命周期
+- [x] E3 ✅ **已实现并验证**：`server/src/cleanup-auth-entry.ts`（独立 CLI，不塞进 media cleanup）`n      验证 `server/tests/verify-cleanup-auth.mjs`：**PASS=23 FAIL=0**（含 SENSITIVITY 证明 grace 真生效、fail-closed 退出码 2、幂等、活跃/有效行零误删）`n      构建目标已加 `dist/cleanup-auth.mjs` + 无 DATABASE_URL 冒烟（退出码 2）`n- [ ] ~~E3~~（不塞进 media cleanup —— 避免把媒体生命周期与认证生命周期
       绑成一个破坏半径很大的工具）。沿用既有纪律：dry-run 默认 / 显式 `--apply` / 分类计数 /
       DB 错误时 fail closed。报告字段：
       `expiredSessions / revokedSessions / expiredChallenges / consumedChallenges /`
       `activeSessions / pendingChallenges`
-- [ ] E4 **Gate 只查"死数据"，不查总数**：
+- [ ] E4 **（下一步）Gate 只查"死数据"，不查总数**：
       `STALE_EXPIRED_SESSIONS = 0`、`STALE_CONSUMED_CHALLENGES = 0`
       或允许明确 retention window：`expired_at < now - 24h → 必须不存在`
       ⚠ **不要写 `sessions < 50`**。总行数只保留为**次级** trend/warning
