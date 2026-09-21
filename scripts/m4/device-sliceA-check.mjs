@@ -112,6 +112,29 @@ else bad(`有 ${parsed.tokenInUrl} 个 img.src 含凭据字样`)
 console.log(`  撤回文案可见: ${parsed.revokedShown}`)
 
 // ---------------------------------------------------------------------------
+// 断言 ⑥：blob URL 在组件销毁后必须被 revoke
+//
+// 做法：先记住当前 blob URL → 离开会话路由（组件卸载，cleanup 应调用 revokeObjectURL）
+// → 再尝试 fetch 那个 blob URL。已 revoke 的 blob 会抛错（浏览器行为），
+// 所以"抛错"就是 revoke 成功的证据。
+// 若没 revoke，fetch 会成功 —— 那说明组件泄漏了 blob（长时间浏览会累积内存）。
+// ---------------------------------------------------------------------------
+const hadBlob = await ev(
+  `(() => { const i = document.querySelector('.bubble__media'); if (!i) return null; window.__m4blob = i.src; return i.src.slice(0, 5) })()`,
+)
+if (hadBlob === 'blob:') {
+  await ev(`location.hash = '#/campus'`)
+  await wait(2500)
+  const after = await ev(`(async () => {
+    try { await fetch(window.__m4blob); return 'alive' } catch (e) { return 'revoked:' + String(e).slice(0, 40) }
+  })()`)
+  if (String(after).startsWith('revoked')) ok(`**离开路由后 blob 已 revoke**（fetch 该 blob URL 失败：${after}）`)
+  else bad('离开路由后 blob 仍然可读 —— 组件没有 revokeObjectURL（内存泄漏）')
+} else {
+  bad('没拿到 blob URL，无法验证 revoke（前一条断言已失败？）')
+}
+
+// ---------------------------------------------------------------------------
 // A5 前端侧：清掉会话后（等价于 logout / 非成员）重新加载，**必须取不到私图**
 //
 // 审审核要求原话："logout 后重新加载不能取得私图"。
