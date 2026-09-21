@@ -429,3 +429,18 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       **未复现、未定位根因、不声称已修**。若再现需抓现场（建议：失败时快照 journalctl + pg_stat_activity）
 - [ ] WO11.14 下一步：**UserProfileScreen → MapScreen**（按审核 50 排序），照 WO#10/WO#11 方法先做字段级 inventory
 - [ ] AUDIT.7 后续每个 WO 的 Gate 都要按纪律加"基线逐条核对"层（manifest 已就位）
+### WO#12 进展（Round 262 收尾）
+- [x] WO12.1 ✅ 字段级 inventory + **高严重度发现**：`UserProfileScreen.tsx:14` 的
+      `const user = users[id] ?? users.u1` —— 传入的 id 形如 `u:<uuid>`（client.ts 的 toFeedPost 产出），
+      **永不匹配** mock 字典 → 必然回落 u1。设备实测：点真实作者「Lemy」→ 资料页显示「**蒸柿煮捞呆**」
+- [x] WO12.2 ✅ 改前 FAIL 证据（PREFERRED）：确认**三处缺陷**
+      ① **假身份**（IDENTITY_FROM_ROUTE FAIL）② **死路私信**（→ #/chat?id=t1 → invalid、无 composer）
+      ③ ⭐ **假成功关注**（fetchDelta=**0** 却显示"已关注"，与 WO#10 好友申请同类）
+      另：AVATAR_PLACEHOLDER FAIL（仍用 mock SVG）
+- [x] WO12.3 ✅ 前置未知已实测核实：**无** GET /api/users/:id（23 条路由核对）；
+      /api/threads **只返 peerName 无 peerId**；该屏**无原版基线** → 记 NOT_EVALUATED
+- [ ] WO12.4 ⬅ **等审核裁定 4 项**：严重度排序（是否插队 P0）／是否允许新增 GET /api/users/:id／
+      是否允许给 threads 加 peerId／无基线按 NOT_EVALUATED 处理
+- [ ] WO12.5 裁定后实施（层1 修假身份+接线；层2 处理两处假交互）
+- [ ] ⚠️ WO12.6 **门禁一条断言的诚实标注**：`USER_PROFILE_NO_SOURCELESS_FIELDS` 当前 PASS 是**偶然**
+      （mock u1 恰好没有 mbti 字段）→ 实现后需用**有该字段的 mock 对象**再验一次才算真过
