@@ -4,6 +4,7 @@ import {
   getComments,
   getPost,
   likePost,
+  mediaUrl,
   readSnapshot,
   relativeTime,
   unlikePost,
@@ -253,6 +254,26 @@ export function FeedDetailScreen({ id }: { id: string }) {
         </header>
 
         <p className="feed__text">{post.body}</p>
+
+        {/* M4：详情页的帖子图片。与列表同口径 —— 统一走 mediaUrl(id)，
+            公图 302 → Nginx 静态、私图 X-Accel，前端不关心区别。
+            图片给出宽高（来自 media 行）以便按原版比例占位，避免加载时跳动。 */}
+        {(post.images ?? []).length > 0 && (
+          <div className="feed__media">
+            {(post.images ?? []).map((m) => (
+              <img
+                key={m.id}
+                className="feed__mediaImg"
+                src={mediaUrl(m.id)}
+                alt=""
+                data-media-id={m.id}
+                width={m.width ?? undefined}
+                height={m.height ?? undefined}
+                loading="lazy"
+              />
+            ))}
+          </div>
+        )}
       </article>
 
       <section className="feed__comments">

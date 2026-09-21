@@ -330,3 +330,21 @@
   border: 1px solid var(--c-divider);
   font-size: 15px;
 }
+
+/* M4：帖子详情页的图片区。
+   图片按 media 行记录的宽高占位，避免加载过程中布局跳动；
+   宽度铺满内容区，高度自适应（保持原始比例）。 */
+.feed__media {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feed__mediaImg {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+  background: var(--c-surface-sunken);
+}

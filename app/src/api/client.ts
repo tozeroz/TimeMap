@@ -305,6 +305,8 @@ export interface ApiPostDetail {
   likeCount: number
   /** 当前会话用户是否点过赞（未登录恒 false） */
   likedByMe: boolean
+  /** M4：帖子的公图片（只含 id 与尺寸；用 mediaUrl(id) 取图） */
+  images?: ApiMediaRef[]
 }
 
 /** 帖子详情。404 会返回 ok:false + status 404，调用方可据此显示"已删除" */

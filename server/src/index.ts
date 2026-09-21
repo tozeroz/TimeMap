@@ -743,6 +743,15 @@ export function buildServer(deps: ServerDeps) {
         [id],
       )
       const like = await likeStateFor(id, meId)
+      // M4：详情也要带图片（与列表同口径：只取 public，只给 id 与尺寸）
+      const imgs = await db.pool.query<{ id: string; width: number | null; height: number | null }>(
+        `select m.id, m.width, m.height
+           from post_media pm
+           join media m on m.id = pm.media_id
+          where pm.post_id = $1 and m.scope = 'public'
+          order by pm.position`,
+        [id],
+      )
       return {
         id: post.id,
         author: post.author_name,
@@ -753,6 +762,7 @@ export function buildServer(deps: ServerDeps) {
         commentCount: Number.parseInt(cr.rows[0]?.n ?? '0', 10),
         likeCount: like.likeCount,
         likedByMe: like.likedByMe,
+        images: imgs.rows,
       }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
