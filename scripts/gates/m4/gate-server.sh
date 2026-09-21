@@ -167,6 +167,6 @@ printf '#   %-12s %s\n' "REGRESSION" "NOT_RUN_IN_THIS_GATE（M4 Final Gate 必�
 #      中间/子系统结果 → M4_STORAGE_GATE_RESULT
 #      阶段最终结果     → M4_FINAL_GATE_RESULT（要等 A/C 完成并在 M4 Final Gate 上跑）
 echo "# M4_STORAGE_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
-echo "# M4_OVERALL: IN_PROGRESS（A 消息/图片前端与 C @ 提及关系尚未完成）"
+echo "# M4_OVERALL: CLOSE_PENDING_REVIEW（A/B/C 均已完成：SLICE_A_DEVICE_RESULT 6/6、MESSAGING_API_RESULT 13、MENTIONS_RESULT 13；本 key 待审核裁定）"
 echo "############################################################"
 exit "$FAILED"
