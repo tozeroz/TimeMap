@@ -32,10 +32,12 @@
       "verdict": "SUPPORTED"
     },
     {
-      "fact": "存在点赞动画覆盖层",
+      "fact": "存在与点赞动画相关的 UI/view 结构",
       "evidence": "id/like_animation_view（ImageView）bounds [0,0][1080,1085]，覆盖在媒体区之上",
-      "impact": "原版点赞时在媒体区播放动画。属动效，M3 不做；记录以免以后被当成漏实现",
-      "verdict": "DEFERRED"
+      "impact": "只能证明原版**存在**点赞动画相关的 view 结构。**不能**仅凭这个节点断言『点击点赞时一定会播放某种动画』—— 触发动作被政策禁止，拿不到 transition 证据。属动效，M3 不做",
+      "verdict": "LIKE_ANIMATION_CAPABILITY: OBSERVED",
+      "transition_verdict": "LIKE_ANIMATION_TRANSITION: BLOCKED_BY_POLICY",
+      "wording_note": "审核记录 10：措辞从『原版点赞有动画』更正为上面两条 —— 前者把「存在结构」说成了「存在行为」。这是同一种过度断言的典型：观测到能力 ≠ 观测到行为。"
     },
     {
       "fact": "没有「谁点了赞」的展示",

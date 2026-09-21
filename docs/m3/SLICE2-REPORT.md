@@ -32,7 +32,7 @@ M3_SLICE2_GATE_RESULT: PASS
 | **0 赞时计数控件不存在** | 0 赞帖子的 dump 里根本没有 `post_like_count` 节点，且热区宽度从 67 缩到 42 |
 | 评论数 0 时显示**文字「评论」** | 无评论动态的 `num_comment` 文本为「评论」；有 1 条时为 '1' |
 | 没有「谁点了赞」的列表 | 详情页点赞区附近无头像/昵称 |
-| 存在点赞动画覆盖层 | `like_animation_view` [0,0][1080,1085]（M3 不做，记为 DEFERRED） |
+| 存在点赞动画覆盖层 | `like_animation_view` [0,0][1080,1085] → **`LIKE_ANIMATION_CAPABILITY: OBSERVED`**（只证明存在相关 view 结构）；**`LIKE_ANIMATION_TRANSITION: BLOCKED_BY_POLICY`**（不能凭节点断言"点击时一定播动画"） |
 
 ### 原版侧：**禁止**取证的部分（BLOCKED_BY_POLICY）
 

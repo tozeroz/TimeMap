@@ -188,10 +188,21 @@ autovacuum_max_workers = 2
             `comments.parent_id` 判定 **MODEL: SUPPORTED / PRESENTATION: EXPANDED**
             后端 `COMMENTS_RESULT PASS`（20 条断言）+ 设备端 detail/cardtap/composer/authgate 全 PASS
             ⚠️ 证据带 `EVIDENCE_OBTAINED_BY_POLICY_VIOLATION`（见 `docs/POLICY-VIOLATION-2026-09-21.md`）
-      - [x] **Slice 2 完成**：点赞（`docs/m3/SLICE2-REPORT.md`）→ `M3_SLICE2_GATE_RESULT: PASS`
+      - [x] **Slice 2 完成并 CLOSED**（审核记录 10）：点赞（`docs/m3/SLICE2-REPORT.md`）
+            → `M3_SLICE2_GATE_RESULT: PASS`
             原版侧**只读**（点赞按钮/计数规则/0 赞隐藏/评论数 0 显示「评论」）；
             **切换行为与已点赞态样式 = BLOCKED_BY_POLICY**（禁止在原版点赞），仅自建系统验证
-      - [ ] Slice 3（登录后发帖，**无 session 夹具**）→ Slice 4（恢复页一致性）→ M3 Final Gate
+            证据措辞已按审核更正：`LIKE_ANIMATION_CAPABILITY: OBSERVED` /
+            `LIKE_ANIMATION_TRANSITION: BLOCKED_BY_POLICY`（观测到能力 ≠ 观测到行为）
+      - [ ] **Slice 3（已批准开工）**：登录后发帖，**无 session 夹具**
+            要求：真实 OTP 登录 → PublishScreen → 请求体**不含** author/authorId
+            → backend 从 session 解析 author_id → 写 PG → 列表/详情归属一致 → 重启后仍在
+            攻击用例：手工塞 author/authorId → strict 400 **且 DB 无任何行**
+            工程要求：把"冷启动 → OTP 登录 → 已登录设备状态"抽成**可复用 helper**，
+            Slice 0B 与 Slice 3 各自调用（不得整段复用 verify-device-login.ps1，
+            避免两个 Gate 因测试流程互相耦合）
+            原版侧继续只读；发布后的反馈/跳转/动画无只读证据 → BLOCKED_BY_POLICY
+      - [ ] Slice 4（恢复页一致性）→ M3 Final Gate
 
 ---
 
