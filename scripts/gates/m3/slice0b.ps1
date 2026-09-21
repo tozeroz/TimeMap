@@ -136,9 +136,18 @@ $ready = ($health | Where-Object { $_ -match '^ready=' }) -replace '^ready=', ''
 if ($edge -eq '200') { Ok 'Nginx /health = 200（网关活着）' } else { Bad "Nginx /health = $edge" }
 if ($live -eq '200') { Ok '/api/health = 200（进程活着）' } else { Bad "/api/health = $live" }
 if ($ready -eq '200') { Ok '/api/ready = 200（schema 就绪）' } else { Bad "/api/ready = $ready" }
-if (($health | Where-Object { $_ -match '"applied":5' }) -and ($health | Where-Object { $_ -match '"expected":5' })) {
-  Ok '迁移 5/5（含 004 模型修订与 005 手机号身份）'
-} else { Bad '迁移版本数不是 5/5' }
+# 迁移就绪的断言必须**派生**，不能硬编码版本数。
+# 原因（M4 Final 跑完整 regression 时抓到的 GATE_DEFECT）：
+#   这里原本写死 "applied":5 / "expected":5，M4 加了 006/007/008 之后立刻变成 FAIL ——
+#   但"迁移数从 5 变成 8"是**正常的版本演进**，不是回归。
+#   硬编码等于让 Gate 与"当时有多少个迁移"耦合，每次加迁移都要改 Gate。
+# 正确口径：**applied == expected 且都 > 0**（这才是"全部迁移已生效"的语义）。
+$m = [regex]::Match(($health | Out-String), '"applied":(\d+).*?"expected":(\d+)')
+if ($m.Success -and [int]$m.Groups[1].Value -gt 0 -and $m.Groups[1].Value -eq $m.Groups[2].Value) {
+  Ok "迁移 $($m.Groups[1].Value)/$($m.Groups[2].Value) 全部生效（applied == expected，派生而非硬编码）"
+} else {
+  Bad "迁移未全部生效（applied/expected 不相等或解析失败）：$($m.Value)"
+}
 
 # ---------------------------------------------------------------------------
 $script:CurrentLayer = 'STAGE'
