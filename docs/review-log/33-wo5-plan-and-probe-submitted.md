@@ -20,7 +20,7 @@
 语音气泡（左右两套）: voiceContainerView → voice_msg_ll → 播放控件 + TextView(voice_msg_text)
   自己发的另有 voice_redDot（未读红点）
 语音转文字: voice_to_text_btn / voice_text / voice_text_loading_lottie / tvAsrText / clRecognize …
-  ⚠ 背后是**对方的 ASR 服务** → 我方**无法复刻** → 拟记 NOT_IMPLEMENTED，**不得用假文本冒充**
+  ⚠ 背后是**对方的 ASR 服务** → 我方不具备等价条件 → 拟记 NOT_IMPLEMENTED，**不得用假文本冒充**
 ```
 
 ## 三、⚠️ 我起初写错、核实后更正的部分（本提交最重要的一段）
@@ -94,7 +94,7 @@ PREREQ-3  迁移 009 白名单写 audio/webm
 ## 七、待裁定
 
 1. 批准 Phase 1？Phase 2（浮层+上滑取消）是否同单？
-2. 语音转文字按"不可复刻"记 NOT_IMPLEMENTED、不冒充 —— 是否同意？
+2. 语音转文字按"原版等价 ASR 服务/语义在当前范围内不可获得或无证据，因此不实现、不冒充"记 NOT_IMPLEMENTED、不冒充 —— 是否同意？
 3. **新增迁移 009 允许 `audio/webm`** —— 是否批准？（本单唯一触及 DB schema 的改动）
 4. 是否批准按"先验证再写码"顺序推进（下一步 = 加清单权限 + 重跑探针）？
 

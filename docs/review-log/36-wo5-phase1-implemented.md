@@ -134,7 +134,7 @@ VOICE_PERMISSION_DENIED_SYSTEM_E2E: NOT_EVALUATED
   （虚拟音频设备不施加该限制）。**不得**用 ⑦a 的桩通过来声称系统拒绝路径可用。
 ANDROID_PERMISSION_UI_VISIBLE: NOT_OBSERVED（本设备静默授予）
   不得推广到真实 Android 设备；产品代码不依赖"系统一定会弹框"。
-VOICE_TO_TEXT: NOT_IMPLEMENTED（不可复刻：依赖对方 ASR 服务；不冒充）
+VOICE_TO_TEXT: NOT_IMPLEMENTED（原版等价 ASR 服务/语义在当前范围内不可获得或无证据，因此不实现、不冒充）
 Phase 2（录音浮层 / 上滑取消）：未做（"上滑取消"无行为证据）
 ```
 
@@ -155,3 +155,16 @@ Phase 2（录音浮层 / 上滑取消）：未做（"上滑取消"无行为证�
 `scripts/m5/cleanup-voice-residue.sh`、`scripts/gates/m5/gate-server.sh`、
 `scripts/m5/probes/*`、`server/src/audioProbe.ts`、`app/src/native/recorder.ts`；
 commits `daa49f0`（本单实现）、`37e04c7`/`342aaba`（迁移 009/010）、`63cc1cb`（MODIFY_AUDIO_SETTINGS）
+
+## 十二、术语修正说明（透明记录，2026-09-22 00:55）
+
+审核记录 37 要求：**去掉"不可复刻"这个绝对词**，改用冻结口径
+"原版等价 ASR 服务/语义在当前范围内不可获得或无证据，因此不实现、不冒充"。
+
+已按此统一 `docs/m5/WO5-PLAN-voice-message.md`、`scripts/gates/m5/gate-server.sh`、
+`docs/comparison.md`、以及本目录 `33`/`34`/`36` 的措辞。
+
+⚠️ **透明说明**：`33`/`34` 是**当时提交内容的记录**，其中的措辞已按本条要求统一过 ——
+记录在此，以免后人以为那些日志一开始就是这么写的。
+（本次批量替换还误伤了 `docs/comparison.md` 的一个章节标题，
+已改回 `## 五、明确未复刻的部分` —— 教训：**术语替换必须逐处看上下文，不能整文件盲替**。）

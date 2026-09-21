@@ -76,3 +76,14 @@
 
 ## D. 已完成（留痕）
 （每完成一项，把该项的 `[x]` 与证据写到这里，保持 A/B 区干净）
+
+---
+
+## E. 本轮新发现的清理项（非阻塞，但不该忘）
+
+- [ ] E1 **sessions / login_challenges 行累积**：gate 的 info 行显示 `sessions=122`、`login_challenges=100`。
+      成因疑为"每次登录建一行 session、每次请求验证码建一行 challenge，而测试反复登录"。
+      需要查明：① 是否有过期清理（TTL GC）；② 若没有，是否应纳入 cleanup CLI。
+      ⚠ 这是**数据卫生**问题（不影响正确性），但会持续膨胀。
+- [ ] E2 `MP5_BASELINE_*` 的 info 行建议加一条 `sessions`/`login_challenges` 的**期望上界**提示，
+      否则"残留累积"永远只是被打印、不会被发现（本项目一贯原则：**只打印不判定 = 假信号**）。

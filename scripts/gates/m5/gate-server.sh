@@ -202,6 +202,43 @@ else
   setk M5_VOICE_MIME_DURATION_CONSISTENT "FAIL(缺 MIME↔duration 一致性)"; FAILED=1
 fi
 
+# ---------------------------------------------------------------- 5. 语音生命周期（WO#5 关账）
+# 审核记录 37 要求：用**真实 audio/webm fixture** 验证既有媒体基础设施
+# （TTL GC / 引用保护 / 备份屏障）没有暗藏"只支持图片"的假设。
+# 同时把 M4 时代记为**弱证据**的"HTTP 层在屏障窗口内返回 503"升级为端到端证据。
+step "5. 语音媒体生命周期（audio/webm，审核记录 37）"
+VL="$DIR/verify-voice-lifecycle.sh"
+VL_OUT=''
+if [ -f "$VL" ]; then
+  VL_OUT="$(bash "$VL" 2>&1)"
+  printf '%s\n' "$VL_OUT" | grep -E '^(  PASS|  FAIL|  FATAL|VOICE_LIFECYCLE)' | sed 's/^/    /'
+  if printf '%s' "$VL_OUT" | grep -q 'VOICE_LIFECYCLE: PASS'; then
+    setk M5_VOICE_LIFECYCLE PASS
+  else
+    setk M5_VOICE_LIFECYCLE FAIL; FAILED=1
+  fi
+  # 三条关键行为各自单独成键（防止"整体 PASS 但某条其实没跑"）
+  for pair in 'A4 超 TTL 的\*\*文件已删\*\*:M5_VOICE_LC_A_TTL_DELETE' \
+              'A6 在途的\*\*文件保留\*\*:M5_VOICE_LC_A_INFLIGHT_KEEP' \
+              'B1 被引用的行\*\*保留\*\*:M5_VOICE_LC_B_REF_KEEP' \
+              'C1 屏障窗口内真实上传返回 \*\*503\*\*:M5_VOICE_LC_C_503' \
+              'C3 窗口内 \*\*DB 零变更\*\*:M5_VOICE_LC_C_ZERO_DB' \
+              'C5 屏障释放后同类上传\*\*恢复成功\*\*:M5_VOICE_LC_C_RECOVER'; do
+    pat="${pair%%:*}"; key="${pair##*:}"
+    if printf '%s' "$VL_OUT" | grep -qE "PASS ${pat}"; then
+      setk "$key" PASS
+    else
+      setk "$key" "FAIL(未见 ${pat})"; FAILED=1
+    fi
+  done
+else
+  setk M5_VOICE_LIFECYCLE NOT_RUN; FAILED=1
+  for t in A_TTL_DELETE A_INFLIGHT_KEEP B_REF_KEEP C_503 C_ZERO_DB C_RECOVER; do
+    setk "M5_VOICE_LC_${t}" NOT_RUN
+  done
+  echo "    （找不到 $VL）"
+fi
+
 # ---------------------------------------------------------------- 汇总
 echo
 echo "# ----------------------------------------------------------------"
@@ -211,10 +248,10 @@ for k in M5_MEDIAID_STRICT_REJECT M5_TMP_SELFHEAL M5_BASELINE_SEED_INTEGRITY M5_
   [ "${KEY[$k]}" = "PASS" ] || P_FAIL=1
 done
 printf '#   %-12s %s\n' "PERSISTENT" "$([ $P_FAIL -eq 0 ] && echo PASS || echo FAIL)"
-printf '#   %-12s %s\n' "STAGE" "$([ "${KEY[M5_UNATTACHED_TTL_GC]}" = "PASS" ] && [ "${KEY[M5_VOICE_NEGATIVE_ASSERTIONS]}" = "PASS" ] && echo PASS || echo FAIL)"
+printf '#   %-12s %s\n' "STAGE" "$([ "${KEY[M5_UNATTACHED_TTL_GC]}" = "PASS" ] && [ "${KEY[M5_VOICE_NEGATIVE_ASSERTIONS]}" = "PASS" ] && [ "${KEY[M5_VOICE_LIFECYCLE]}" = "PASS" ] && echo PASS || echo FAIL)"
 printf '#   %-12s %s\n' "REGRESSION" "$([ "${KEY[M5_MEDIAID_STRICT_REJECT]}" = "PASS" ] && echo PASS || echo FAIL)"
 echo '#'
-for k in M5_MEDIA_MESSAGE_API M5_MEDIAID_STRICT_REJECT M5_UNATTACHED_TTL_GC M5_TMP_SELFHEAL M5_BOARD_NOTES M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT M5_VOICE_MEDIA_MIME_WHITELIST M5_VOICE_MIME_DURATION_CONSISTENT M5_VOICE_NEGATIVE_ASSERTIONS M5_VOICE_A4_1 M5_VOICE_A4_2 M5_VOICE_A4_3 M5_VOICE_A4_4 M5_VOICE_A4_5; do
+for k in M5_MEDIA_MESSAGE_API M5_MEDIAID_STRICT_REJECT M5_UNATTACHED_TTL_GC M5_TMP_SELFHEAL M5_BOARD_NOTES M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT M5_VOICE_MEDIA_MIME_WHITELIST M5_VOICE_MIME_DURATION_CONSISTENT M5_VOICE_NEGATIVE_ASSERTIONS M5_VOICE_A4_1 M5_VOICE_A4_2 M5_VOICE_A4_3 M5_VOICE_A4_4 M5_VOICE_A4_5 M5_VOICE_LIFECYCLE M5_VOICE_LC_A_TTL_DELETE M5_VOICE_LC_A_INFLIGHT_KEEP M5_VOICE_LC_B_REF_KEEP M5_VOICE_LC_C_503 M5_VOICE_LC_C_ZERO_DB M5_VOICE_LC_C_RECOVER; do
   printf '#   %-34s %s\n' "$k" "${KEY[$k]}"
 done
 echo
@@ -233,7 +270,8 @@ echo "# M5_SERVER_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
 # ⚠️ 分列写明（审核记录 27 强制）：**不得**合并成"真人触摸完整 E2E"之类的说法 ——
 #    前者说的是"产品路径通了"（这是 WO#2 的命题），
 #    后者说的是"Android 输入层分发也走通了"（本次用 CDP 注入触摸，**未验证**）。
-echo "# M5_OVERALL: WO1_WO2_WO3_CLOSED + WO5_PHASE1_IMPLEMENTED_AWAITING_REVIEW"
+echo "# M5_OVERALL: WO1_WO2_WO3_CLOSED + WO5_PHASE1_IMPLEMENTED_AWAITING_FINAL_CLOSE"
+echo "#   （WO5_PHASE1_IMPLEMENTATION: ACCEPTED；FINAL_CLOSE 待审核记录 37 的 3 条 lifecycle 结果确认）"
 echo "#   WO#1 board_notes functional/privacy:  CLOSED"
 echo "#   WO#2 chat image send path:            CLOSED"
 echo "#   WO#3 sender presentation:             FIXED/VERIFIED -> CLOSED"
@@ -246,7 +284,12 @@ echo "#     VOICE_DURATION_WITHIN_1S:           PASS（|记录-按住| <= 1000ms
 echo "#     VOICE_SURVIVES_RELOAD:              PASS（刷新后仍显示时长，不重新下载音频）"
 echo "#     VOICE_PERMISSION_DENIED_CODEPATH:   PASS（桩触发 NotAllowedError：明确提示 + 0 上传 + 0 消息 + 0 幽灵气泡）"
 echo "#     VOICE_PERMISSION_DENIED_SYSTEM_E2E: NOT_EVALUATED（本设备无法构造系统拒绝，见 PROBE2 §九）"
-echo "#     VOICE_TO_TEXT:                      NOT_IMPLEMENTED（不可复刻：依赖对方 ASR 服务；不冒充）"
+echo "#     VOICE_TO_TEXT:                      NOT_IMPLEMENTED（原版等价 ASR 服务/语义在当前范围内不可获得或无证据，因此不实现、不冒充）"
+echo "#     VOICE_LIFECYCLE（审核记录 37 的 3 条 audio 专属回归，真机 fixture）:"
+echo "#       A 未引用语音 TTL 前不删 / 超 TTL 后行+文件都删   PASS"
+echo "#       B 被引用语音（刻意设为已过期）cleanup --apply 后行+文件都在  PASS"
+echo "#       C 屏障窗口内真实 audio/webm 上传 503 + 零 DB/盘变更；释放后恢复 201  PASS"
+echo "#     （M4 时代记为**弱证据**的'HTTP 层屏障内返回 503'由此升级为**端到端证据**）"
 echo "#   tab deviation:                        RETRACTED"
 echo "#   C4 emoji rendering kind:              CONFIRMED=image-based / exact-6-assets NOT_CAPTURED"
 echo "#     WO#4 emoji structural change:       DEFERRED_BY_MISSING_BINDING_EVIDENCE（审核记录 32）"
