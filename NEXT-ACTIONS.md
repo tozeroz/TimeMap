@@ -536,3 +536,39 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       PATCH 触发预检(OPTIONS) → 预检失败 → fetch 报 "Failed to fetch" → 设备上保存 100% 失败，
       而 `verify-wo13-patch-me.sh`（curl，**不带 CORS 语义、不发预检**）全 PASS。
       → 已修 + 在服务端脚本里**新增预检断言**。教训：**每新增一个 HTTP 方法都要同步检查 allow-methods**。
+
+### ⭐ 本轮额外修好的三个"静默失效"问题（Round 263 续）
+- [x] WO13.11 ✅ **APK 里「取消点赞」一直坏**（用户可见）：
+      服务端注册了 DELETE `/api/posts/:id/like`、客户端**确实在用**，
+      但 CORS `allow-methods` **缺 DELETE** → DELETE 不是 CORS 简单方法、**必触发预检** →
+      预检失败 → fetch 报 "Failed to fetch"。
+      （点赞是 POST 且无 body 时客户端不带 content-type → 简单请求 → 所以**点赞正常、只有取消坏**，
+        这解释了长期没人发现。）
+      设备实测对照：修复前 DELETE → "Failed to fetch"；修复后
+        POST → 200 {"liked":true,...} ／ DELETE → 200 {"liked":false,...}
+      已修（allow-methods 加 DELETE）+ 新增机械门禁 `check-cors-methods.sh`
+      （从**部署产物**提取已注册方法，断言 ⊆ allow-methods）→ 现在 **CORS_METHODS_COVERAGE: PASS**
+- [x] WO13.12 ✅ **我把 `tools/deploy-server.ps1` 弄坏了并修好**（三层原因）：
+      ① 写入**无 BOM** → PS 5.1 按 ANSI 误读中文注释 → 解析失败
+      ② 含发往 Linux 的 bash here-string，**CRLF** 让 bash 收到 `pipefail\r` → invalid option name
+      ③ 替换链在空串上操作 → `WriteAllText` **只写出 BOM、文件被截断成 3 字节**；
+         而 `ParseFile` 对空脚本报 **0 错误**（"空脚本"合法！）
+      → 定位手段：`AST.EndBlock.Statements.Count == 0` 是唯一能识破"空脚本"的办法
+      → 验证：真机跑 .ps1，**mtime 变化**才算部署成功（而不是"看起来成功"）
+- [x] WO13.13 ✅ **`.gitattributes` 固定 LF**：`.ps1 text` + `autocrlf=true` 会在下次 checkout
+      把上面三个文件变回 CRLF、**静默再次弄坏部署**。已为
+      `deploy-server.ps1` / `deploy-nginx-tls.ps1` / `push-ops.ps1` 显式加 `eol=lf`。
+      验证：`git check-attr` 显示 eol: lf；且 `autocrlf=true` 下重新 checkout 后 CR=0、BOM 仍在。
+- [x] WO13.14 ✅ 新增 `check-ps1-integrity.sh`：体积下限、**顶层语句 > 0**、解析错误数，
+      以及**条件化**的 BOM/换行要求（含非 ASCII 才要 BOM；含 bash 正文才要 LF）。
+      ⚠️ 记录一个自省：第一版写成"无 BOM 一律 FAIL、含 CRLF 一律 FAIL"→ **18 个文件绝大多数被误判**
+      （它们解析正常、运行正常）。**会误报的门禁比没有门禁更糟 —— 它会训练人忽略红色。**
+      另有 CR 检测 bug：`grep -c $'\r'` 在 0 匹配时退出码为 1，`|| echo 0` 追加出 "0\n0" →
+      整列恒 yes。已改字节级 `tr -cd '\r' | wc -c`。
+- [x] WO13.15 ✅ 本轮方法教训（已入注释）：
+      · **每新增一个 HTTP 方法，都要同步检查 CORS 的 allow-methods**
+      · **服务端脚本 PASS ≠ 客户端可用**（curl 不带 CORS 语义、不发预检）—— 真机验证的不可替代性
+      · **搜"谁会做 X"要同时搜变量/间接引用**（我漏掉 `systemctl restart "$SVC"`）
+      · **零命中只有在搜索范围被证明完整后才有证据价值**（坏 glob 会给出假零命中）
+- [ ] WO13.16 ⬅ 等裁定（承 WO13.9）：① 服务器资源根因（396MB + PG max_connections=15）是否调整
+      ② MeScreen 自身仍显示 mock 的 me.name/me.avatar 是否单开一单
