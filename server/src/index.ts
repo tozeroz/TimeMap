@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, rename, statfs, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import multipart, { type MultipartFile } from '@fastify/multipart'
 import Fastify from 'fastify'
 import { probeImage } from './imageProbe.ts'
@@ -1492,6 +1493,15 @@ export function buildServer(deps: ServerDeps) {
   //   ① 被提及者**必须是会话成员**（复用 is_thread_member —— 成员关系只有一处定义）
   //   ② 不允许提到自己（自指没有语义，与 board_notes 的 from<>to 同理）
   // 任何一条不满足 → 400 且**不写入任何行**（消息与 mention 都不写）。
+  //
+  // M5 WO#2（审核记录 21 修订 1）：消息可以带**一张**私有图，字段是单数 `mediaId`。
+  //   - **刻意不接受数组**（`mediaIds`/`[id]` 一律 400 bad_media_id）：
+  //     当前**没有可采信证据**支持"一条消息多图"，数组属于没有证据的扩张；
+  //     将来真有证据再另立一单扩展（届时是新增字段，不是改语义）。
+  //   - `mediaId` 只能配 `kind='image'`：kind 与载荷必须自洽，
+  //     否则会写出"说自己是文本、其实挂了张图"的行。
+  //   - 校验全过才写；任一不过 → 4xx 且**一行都不写**（消息、mention、message_media 全不写），
+  //     错误码各自独立，便于 Gate 机械断言。
   // -------------------------------------------------------------------------
   app.post('/api/threads/:id/messages', async (req, reply) => {
     const threadId = (req.params as { id?: string }).id ?? ''
@@ -1505,7 +1515,9 @@ export function buildServer(deps: ServerDeps) {
       reply.code(404)
       return { error: 'not_found' }
     }
-    const body = req.body as { body?: unknown; kind?: unknown; mentions?: unknown } | undefined
+    const body = req.body as
+      | { body?: unknown; kind?: unknown; mentions?: unknown; mediaId?: unknown; mediaIds?: unknown }
+      | undefined
     const text = typeof body?.body === 'string' ? body.body.trim() : ''
     const kind = typeof body?.kind === 'string' ? body.kind : 'text'
     if (!text || text.length > 2000) {
@@ -1523,6 +1535,36 @@ export function buildServer(deps: ServerDeps) {
         reply.code(400)
         return { error: 'bad_mention_id', mention: m }
       }
+    }
+
+    // ---- M5 WO#2：可选的单个 mediaId --------------------------------------
+    // 格式问题在开事务**之前**就拒掉（不需要连库）；语义问题（存在/scope/owner）在事务内查。
+    // 形状检查顺序刻意如此：先要求"是个字符串"，这样传数组时给出的是 bad_media_id，
+    // 而不是被悄悄取成 undefined 当成"没带图"（那才是最难发现的一类 bug）。
+    //
+    // 复数 `mediaIds` **明确拒绝**（而不是"不认识就忽略"）：
+    // 依据是审核记录 21 修订 1 —— "当前没有证据支持一条消息多图，所以 API 用单数"。
+    // 如果这里只是静默忽略，客户端按旧计划发了 `mediaIds:[id]` 会收到 **201**：
+    // 消息发出去了、图没挂上，用户以为图发了，而服务端与客户端都不报错 ——
+    // 这类"静默丢数据"比 400 糟得多。本项目的既有纪律也是"身份/意图类字段宁可 strict 400，
+    // 不做宽容解析"（同 M5 留言板对 from_user_id 的处理）。
+    if (body?.mediaIds !== undefined) {
+      reply.code(400)
+      return { error: 'bad_media_id', reason: 'array_not_supported_use_singular_mediaId' }
+    }
+    const mediaId = body?.mediaId === undefined ? null : body.mediaId
+    if (mediaId !== null && typeof mediaId !== 'string') {
+      reply.code(400)
+      return { error: 'bad_media_id', reason: 'not_a_string' }
+    }
+    if (typeof mediaId === 'string' && !/^[0-9a-f-]{36}$/i.test(mediaId)) {
+      reply.code(400)
+      return { error: 'bad_media_id', reason: 'bad_format' }
+    }
+    // 带了图却不是图片消息 → 自相矛盾的载荷，直接拒（不写任何行）
+    if (mediaId !== null && kind !== 'image') {
+      reply.code(400)
+      return { error: 'media_requires_image_kind', kind }
     }
 
     const client = await db.pool.connect()
@@ -1552,6 +1594,41 @@ export function buildServer(deps: ServerDeps) {
           return { error: 'mention_not_in_thread', mention: m }
         }
       }
+      // ---- 校验 mediaId（全部通过才写；任一条不过 → rollback + 4xx，一行都不写）----
+      //
+      // 关于"media 当前有效"这条：**当前没有"已失效 media"这个概念，故不实现，但写下判断依据**。
+      //   证据：006_media_scope.sql 的 media 表只有 created_at，**没有** deleted_at / expires_at；
+      //   上传路径（POST /api/media）只写 scope='public'|'private'，且服务端从不 UPDATE media；
+      //   全仓唯一的 media 行删除路径是清扫工具里"确实无引用的孤儿"（含本次新增的 unattached TTL GC）。
+      //   因此"存在"就等于"有效"。将来若引入失效语义，必须在这里补一条判断，
+      //   并且要让 GET /api/media/:id 共用同一个 predicate（防权限漂移，审核记录 15 P0-A）。
+      if (mediaId !== null) {
+        const m = await client.query<{ owner_user_id: string; scope: string }>(
+          'select owner_user_id, scope from media where id = $1',
+          [mediaId],
+        )
+        const row = m.rows[0]
+        if (!row) {
+          await client.query('rollback')
+          reply.code(400)
+          return { error: 'media_not_found', mediaId }
+        }
+        if (row.scope !== 'private') {
+          // 公共动态图不能挂进私聊。DB 层的复合外键本来也会拒，
+          // 但那里报的是 FK 错误（500 不好诊断），所以在服务层先给出明确 400。
+          await client.query('rollback')
+          reply.code(400)
+          return { error: 'media_not_private', mediaId, scope: row.scope }
+        }
+        if (row.owner_user_id !== s.user.userId) {
+          // ★ 最容易漏的一条越权：知道别人的 private media id 就把它挂到自己的消息上。
+          //   注意这里**不是** 404 —— 会话成员身份已确认，返回明确 400 泄漏不了额外信息
+          //   （能拿到这个 id 的人本来就已经通过别的途径知道它存在）。
+          await client.query('rollback')
+          reply.code(400)
+          return { error: 'media_not_owned', mediaId }
+        }
+      }
       const msgId = randomUUID()
       await client.query(
         'insert into messages (id, thread_id, sender_id, body, kind) values ($1, $2, $3, $4, $5)',
@@ -1563,12 +1640,38 @@ export function buildServer(deps: ServerDeps) {
           [randomUUID(), msgId, m],
         )
       }
+      // ④ 消息与媒体引用**同事务**（否则会出现"消息在、图没挂上"或反之）。
+      // 不自己重写跨 scope 防线：message_media 的常量 CHECK(media_scope='private')
+      // + 复合外键 (media_id, media_scope) → media(id, scope) 仍在 DB 层兜底，
+      // 这里写的 media_scope 只是把"我们主张它是 private"显式表达出来。
+      if (mediaId !== null) {
+        await client.query(
+          "insert into message_media (message_id, media_id, media_scope, position) values ($1, $2, 'private', 0)",
+          [msgId, mediaId],
+        )
+      }
       await client.query('commit')
       reply.code(201)
-      return { id: msgId, kind, mentions }
+      return { id: msgId, kind, mentions, mediaId }
     } catch (err) {
       await client.query('rollback').catch(() => undefined)
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      // 23503 = foreign_key_violation。走到这里只可能是"校验通过之后那张 media 行没了"
+      // —— 例如 TTL GC 在同一瞬间把它回收了（cleanup-entry.ts 的 unattached 清扫）。
+      // 这**不是**服务端故障，也不该写任何行（上面已 rollback），
+      // 所以翻译成可重试的 4xx，而不是 500。
+      // （23514 = check_violation 理论上到不了，因为 scope 已在上面校验过；
+      //   留着是为了让"DB 防线被绕过"这种情况有可诊断的错误码，而不是 500。）
+
+      const code = (err as { code?: string }).code ?? ''
+      if (code === '23503') {
+        reply.code(409)
+        return { error: 'media_gone', mediaId }
+      }
+      if (code === '23514') {
+        reply.code(400)
+        return { error: 'media_scope_conflict', mediaId }
+      }
       reply.code(500)
       return { error: 'db_error', message: (err as Error).message }
     } finally {
@@ -1828,8 +1931,14 @@ async function main() {
 }
 
 // 仅在被当作入口执行时启动（import 时不启动，方便测试）
-const isEntry =
-  process.argv[1] !== undefined && import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`
+//
+// 用 pathToFileURL 而不是手拼 `file://${argv[1]}`：手拼那版在 Windows 上**恒为 false**
+// —— file URL 里有盘符前导斜杠且路径要百分号转义（本地仓库路径 `G:\demo map\…` 含空格，
+// 转义后是 `%20`），argv[1] 则是原生路径，两边永远不相等。
+// 后果就是"直接 node dist/index.mjs 什么都不发生、静默退出 0"，本地无法起服务做端到端验证
+// （服务器在 Linux 上路径无空格所以一直没暴露）。pathToFileURL 两种平台都给出规范 file URL，
+// 语义与原来完全一致（import 时不启动），Linux 行为不变。
+const isEntry = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href
 if (isEntry) {
   main().catch((err) => {
     console.error('[fatal]', err)

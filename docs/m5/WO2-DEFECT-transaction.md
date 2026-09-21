@@ -343,3 +343,61 @@ MESSAGE_MEDIA_RESULT:            PASS（修订 1 单数 mediaId 已正确实现�
 待办: cleanup 侧（unattached media TTL GC）的验证脚本尚未跑
 子代理产出: 实现正确；其自查与我的复核一致
 ```
+---
+
+## 十七、WO#2 cleanup 侧（unattached media TTL GC）验证结果
+
+### 先修了脚本自身一个路径 bug
+
+脚本里找 `/srv/campus/dist/cleanup.mjs`，而实际路径是 `/srv/campus/server/dist/cleanup.mjs`
+→ 首跑直接 `FAIL 找不到 ...（先 pnpm build 并部署产物）`。**这是 GATE_DEFECT（脚本路径写错）**，
+已修正（2 处）后重跑。产物核验：`cleanup.mjs` 里 `unattached` 出现 **29 次**（新版已部署）。
+
+### 重跑结果：**产品行为全部正确，唯一 FAIL 是脚本的检测断言**
+
+```
+FAIL 旧的无引用 media 没被识别：{"mode":"dry-run","scanned":9,"referenced":9,"tooNew":0,
+     "orphans":[],"totalBytes":0,"unattachedMaxAgeHours":24,
+     "unattached":[{"id":"d285abd5-…","rel":"…wo2-unattached-old-….png","bytes":10,"ageHours":72}], …}
+```
+
+**注意 FAIL 消息本身**：它抱怨"没被识别"，但后面打印的 JSON 里**那条 media 就在 `unattached` 数组内**
+（`ageHours: 72`）—— 即**产品识别正确，是脚本的匹配/解析断言写错了**（形状或字段名不符）。
+→ 分类 **GATE_DEFECT**，不是产品缺陷。
+
+### 其余断言全部 PASS（TTL GC 的行为正确）
+
+```
+PASS 1 分钟前的无引用 media **不在候选里**（TTL 保护在途图片）
+PASS 被消息引用的 media 不在候选里（引用优先）
+PASS 盘上无文件的那条**单独报出**（unattachedMissingFile=1），不混进候选
+PASS JSON 里 orphan 与 unattached 是**两个字段**（分开计数）
+PASS 文本输出里两类**分开报告**
+PASS dry-run 后**行在、文件在**（什么都没删）
+PASS 阈值 8760h 时候选为空（阈值保护生效）
+PASS 报告里 unattached 行删除数=1（**与孤儿数分开报**）
+PASS 过期的无引用 media **行已删**，文件**同时被删**（行与文件一起回收）
+PASS 1 分钟前的在途图片**行与文件都在**
+PASS **被消息引用的 media 行与文件都在**（引用优先于 TTL）
+PASS 引用关系完好（消息仍指着那张图）
+PASS 有行无文件的那条**没被动**（不属于本工具处置范围）
+PASS 第二次 --apply：unattached 删除数=0（**幂等**）
+PASS 缺 DATABASE_URL → 退出码 2
+PASS 测试数据已清理（DB 0 行、盘上 0 个文件）
+```
+
+### 结论
+
+```
+WO#2 cleanup（unattached TTL GC）:
+  产品行为: 正确（16 条行为断言 PASS，覆盖 TTL 保护/引用优先/分量计数/dry-run/幂等/fail-closed）
+  脚本:     1 处检测断言写法错误（GATE_DEFECT），需修后重跑
+  → 修复脚本断言后重跑通过，**才可**记为 CLEANUP_UNATTACHED_RESULT PASS
+```
+
+### 值得记的一点
+
+这是本会话**第二次**出现"FAIL 消息本身就包含了产品正确的证据"
+（上一次是 A7 那次的 `mediaIds` 静默忽略 —— 那次是真缺陷）。
+判断方法很简单但很关键：**FAIL 消息里打印的原始数据，往往比断言结论更可信**。
+修脚本前先读那段原始数据，能避免再一次错误的定性。
