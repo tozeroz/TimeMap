@@ -211,8 +211,8 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
 
 ## H. WO#7 收尾（2026-09-22 02:14 更新）
 
-- [ ] H1 **等审核裁定 WO#7 是否可 CLOSED**（设备 Gate 6 项 + DB oracle + SERVER_REGRESSION 全绿）
-- [ ] H2 若 CLOSED → 更新 gate 的 `M5_OVERALL`、`A-D-LIST` 第 6 条状态、AUDIT (B) 表
+- [x] H1 ✅ **WO#7 已 CLOSED**（审核记录 43：PASS / CLOSED；并肯定失败路径"draft 保留"的设计）
+- [x] H2 ✅ **已完成**：gate 的 M5_OVERALL 加 WO#7 段；A-D-LIST 第 6 条改 CLOSED；AUDIT (B) 表同步；另按审核 43 加 I 区（发布前 IP 清查）
 - [x] H3 ✅ **已完成**：`scripts/m5/gate-composer-coverage.mjs`（机械覆盖矩阵）+ `scripts/m5/get-declared-message-kinds.sh`（权威 kinds 来自 DB 约束 messages_kind_allowed = text,image,voice）`n      实测：text/image/voice **全部 REACHABLE** → PASS；**判别力已验证**（加一个未映射的 video → COVERAGE GAP / FAIL / exit 1）`n      关键设计：未知 kind → NO_ENTRY_MAPPED **判 FAIL**（沉默忽略等于把这类缺口又放回去）`n      边界声明：只证明"入口可达"，**不证明**端到端能用（后者由各 WO Gate 负责）
       机械列出当前产品声明支持的消息类型 × "是否存在可达的 UI 入口"：
       ```
@@ -237,3 +237,34 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
   但"任一边 >8000 还是总面积""客户端拦还是服务端拦"未确证
 - 视频消息（播放/暂停/进度）、保存至相册、本地媒体失效重试：原版有，我方无（属新媒体类型，大件）
 - `im_chat_revoke`="撤回" + `im_long_press_menu_layout`：我方有撤回**显示**，撤回**动作**入口待核对
+
+---
+
+## I. ⚠️ 发布前必做项（licensing / IP 清查）—— **不是现在做，但不能忘**
+
+> 依据：审核记录 43 第 3 点（"直接复制其 vector path 到要公开/商业发布的产品里
+> 可能涉及资产版权/许可问题 …… 最终发布前最好把'原样复制第三方图形资产'
+> 单独做一次 licensing/IP 清查"）。
+>
+> 当前定位是**私有复刻 demo**（对照学习/演示），本区**不阻塞**现有工作；
+> 但若将来要**公开或商业发布**，必须先清完这一区。
+
+- [ ] I1 **发布前 IP 清查**：逐一核对下列"逐字复制自第三方 APK"的资产，
+      决定 保留 / 替换为自绘等价物 / 移除：
+      ```
+      1. app/src/components/icons-send.tsx        发送按钮 vector pathData（res/JA.xml）
+      2. docs/original-baseline/supplements/original-emoji-*.txt
+                                                  154 个表情资源名与映射（原版随包资源）
+      3. docs/original-baseline/screens/**        原版截图（含第三方界面与内容）
+      4. .mumu-capture/apk/target.apk             原版 APK 副本（172MB）
+      5. app/src/** 其它"按原版截图/资源复刻"的图标（需逐个核对来源）
+      ```
+- [ ] I2 在仓库根加一个 `LICENSING-NOTES.md`：集中登记"哪些文件源自第三方、
+      各自的使用边界、发布前需要做什么"（避免这条只存在于 review-log 里而被忘掉）
+- [ ] I3 若确定要公开：为图标做"视觉等价但非直接复制"的重绘（并保留 `ASSET_ORIGIN` 注释以便溯源）
+
+### 已在代码里打的标记格式（供 I1/I2 检索）
+```
+ASSET_ORIGIN:        COPIED_FROM_THIRD_PARTY_APK
+PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
+```

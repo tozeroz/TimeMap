@@ -1,9 +1,11 @@
 /**
- * `COMPOSER_CAPABILITY_COVERAGE` —— 高层**机械**覆盖检查（审核记录 42 建议）
+ * `IMPLEMENTED_COMPOSER_CAPABILITY_COVERAGE` —— 高层机械覆盖检查
+ *
+ * （审核记录 42 建议立项、记录 43 **修正语义与命名**后定稿）
  *
  * ## 它防的是什么
  *
- * 本轮（WO#7）暴露的盲区极其典型：
+ * WO#7 暴露的盲区极其典型：
  * ```
  * WO#2 验证了图片发送、WO#5 验证了语音发送、服务端 Gate 验证了 text API ——
  * 三个垂直 slice 全绿，但**从来没人问"用户在 App 里能不能发文字"**。
@@ -11,30 +13,30 @@
  * 于是"服务端支持 text、UI 也叫聊天 composer，却没有用户入口"这种
  * **横向能力缺口**能长期存在而不被任何 Gate 发现。
  *
- * ## 本检查做什么（机械、可断言）
+ * ## ⚠️ 关键语义修正（审核记录 43 第 4 点）
  *
- * 输入：**声明支持的消息类型**（`messages_kind_allowed` 约束的取值 —— 权威来源是 DB）
- * 过程：对每个类型，在真实设备上探测"是否存在可达的 UI 发送入口"
- * 输出：覆盖矩阵 + `COMPOSER_CAPABILITY_COVERAGE: PASS/FAIL`
- *
- * **FAIL 的语义**：某个声明支持的类型**没有任何可达入口** → coverage gap。
- * 这正是 WO#7 之前 text 的状态。
- *
- * ## 入口映射（kind → 可达性判据）
- *
- * 映射本身是"产品设计事实"，写在下面的 ENTRIES 里，**每个都要给出可探测的判据**：
+ * **不要**让它从"服务端 message kind enum"机械推出"每个 enum 都必须有 UI 入口"：
  * ```
- * text  : 输入框存在 且 **输入非空后出现发送按钮**（不能只看输入框 —— 那正是缺口所在）
- * image : 选图 input[type=file] 存在且未禁用
- * voice : 麦克风按钮存在且未禁用
+ * 未来可能存在**内部 kind / 历史兼容 kind / 只读 kind** ——
+ * 那些本来就不该有发送入口，机械一一对应会造出**假 FAIL**。
  * ```
- * ⚠️ 未知 kind（例如将来新增 video）→ 记 `NO_ENTRY_MAPPED` 并判 **FAIL**，
- *    提醒"新增了消息类型但没有覆盖检查" —— 沉默地忽略等于把这类缺口又放回去。
+ * 正确的关系是：
+ * ```
+ * declared as **user-sendable** 的能力  →  每个都必须有可达的用户路径
+ *     text  → 发送控件
+ *     image → 选文件控件
+ *     voice → 录音控件
+ * ```
+ * 即检查的是 **UI ↔ "产品声明为用户可发送的能力"**，而不是 **UI ↔ DB enum**。
+ *
+ * 因此：
+ *   · 下面的 `SENDABLE` 是**产品声明**（人工维护、每个都要给出可探测判据）
+ *   · 服务端 enum 只作 **INFO 对照**打印，用来让"声明"与"实现"的漂移**可见**，
+ *     **不参与判定**（不因为多了个 enum 就判 FAIL）
  *
  * ## 用法
- *   node scripts/m5/gate-composer-coverage.mjs --kinds text,image,voice --thread <uuid>
- *   # 取 kinds 的权威来源（跑在服务器上）：
- *   #   psql -Atc "select pg_get_constraintdef(oid) from pg_constraint where conname='messages_kind_allowed'"
+ *   node scripts/m5/gate-composer-coverage.mjs --thread <uuid>
+ *   node scripts/m5/gate-composer-coverage.mjs --thread <uuid> --server-kinds text,image,voice  # 仅作 INFO 对照
  */
 import { writeFileSync } from 'node:fs'
 
@@ -43,11 +45,52 @@ const arg = (n, d) => {
   const i = argv.indexOf(`--${n}`)
   return i >= 0 ? argv[i + 1] : d
 }
-const KINDS = (arg('kinds', 'text,image,voice') || '').split(',').map((s) => s.trim()).filter(Boolean)
 const THREAD = arg('thread', '66666666-cccc-4ccc-8ccc-000000000003')
+/** 服务端 enum，**仅作 INFO 对照**，不参与判定 */
+const SERVER_KINDS = (arg('server-kinds', '') || '').split(',').map((s) => s.trim()).filter(Boolean)
+/**
+ * 敏感度自检钩子（**仅用于证明本检查能失败**，正常运行不要传）。
+ * 传 `--self-test-declare video` 会临时把一个"已声明但无入口"的能力加进声明表 →
+ * 期望结果：该能力报 COVERAGE GAP 且整体 FAIL、exit 非零。
+ * 这与本项目既有的 FIXTURE VALIDITY / SENSITIVITY 纪律同源：
+ * **先证明检查能失败，它的通过才有意义**。
+ */
+const SELF_TEST_DECLARE = (arg('self-test-declare', '') || '').split(',').map((s) => s.trim()).filter(Boolean)
 const OUT = 'G:\\demo map\\tools\\tmp\\composer-coverage.json'
 
-const report = { startedAt: new Date().toISOString(), kindsDeclared: KINDS, thread: THREAD, probe: null, matrix: {}, verdict: null }
+/**
+ * **产品声明**：哪些能力是"用户可发送"的，以及各自的可达性判据。
+ *
+ * 维护规则（写在这里以免被误用）：
+ *   · 新增一个**用户可发送**的消息类型时，必须在这里加一项 + 给出可探测判据；
+ *     否则该能力不会被覆盖检查保护到（这正是 WO#7 缺口的成因）。
+ *   · **仅服务端内部使用**的 kind **不要**加进来。
+ */
+const SENDABLE = [
+  {
+    kind: 'text',
+    entry: '发送控件（.chatbar__send）—— 注意必须"输入非空 draft 后出现"才算可达；只看输入框不够',
+    probe: 'text',
+  },
+  { kind: 'image', entry: '选文件控件（.chatbar__file）', probe: 'image' },
+  { kind: 'voice', entry: '录音控件（.chatbar__mic）', probe: 'voice' },
+  // 敏感度自检用：这些是"已声明但**没有**实现入口"的能力，判据恒 false
+  ...SELF_TEST_DECLARE.map((k) => ({
+    kind: k,
+    entry: `（敏感度自检注入：${k} 没有实现入口 —— 期望被判 COVERAGE GAP）`,
+    probe: 'none',
+  })),
+]
+
+const report = {
+  startedAt: new Date().toISOString(),
+  declaredSendable: SENDABLE.map((s) => s.kind),
+  serverKindsInfoOnly: SERVER_KINDS,
+  thread: THREAD,
+  probe: null,
+  matrix: {},
+  verdict: null,
+}
 const log = (k, v) => {
   report[k] = v
   writeFileSync(OUT, JSON.stringify(report, null, 2), 'utf8')
@@ -57,7 +100,7 @@ const log = (k, v) => {
 const list = await (await fetch('http://127.0.0.1:9222/json')).json()
 const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl)
 if (!page) {
-  console.error('FATAL 没有 CDP page target（先建 adb forward tcp:9222 ...）')
+  console.error('FATAL 没有 CDP page target（用 scripts/m5/run-device-gate.sh 跑，它会先建 forward）')
   process.exit(2)
 }
 const ws = new WebSocket(page.webSocketDebuggerUrl)
@@ -88,14 +131,20 @@ async function evaluate(expression, timeoutMs = 40000) {
   return r.result && r.result.result ? r.result.result.value : null
 }
 
-console.log('=== COMPOSER_CAPABILITY_COVERAGE ===')
-console.log(`  声明的消息类型（来自 DB 约束）: ${KINDS.join(', ')}`)
+console.log('=== IMPLEMENTED_COMPOSER_CAPABILITY_COVERAGE ===')
+console.log(`  产品声明"用户可发送"的能力: ${report.declaredSendable.join(', ')}`)
+if (SERVER_KINDS.length) {
+  console.log(`  服务端 enum（**仅 INFO 对照，不参与判定**）: ${SERVER_KINDS.join(', ')}`)
+  const extra = SERVER_KINDS.filter((k) => !report.declaredSendable.includes(k))
+  const missing = report.declaredSendable.filter((k) => !SERVER_KINDS.includes(k))
+  if (extra.length) console.log(`    info 服务端有但未声明为可发送: ${extra.join(', ')}（**不判 FAIL** —— 可能是内部/历史/只读 kind）`)
+  if (missing.length) console.log(`    info 已声明可发送但服务端 enum 里没有: ${missing.join(', ')}（**不判 FAIL**，但值得核对）`)
+}
 console.log(`  目标会话: ${THREAD}`)
 
 await evaluate(`location.hash = '#/chat/${THREAD}'`)
 await new Promise((r) => setTimeout(r, 2500))
 
-// 一次把"可达入口探测"全做了（含临时输入触发发送按钮，做完清空）
 const probe = await evaluate(`(async () => {
   const q = (s) => document.querySelector(s)
   const visible = (el) => !!el && el.offsetParent !== null && !el.disabled
@@ -106,59 +155,54 @@ const probe = await evaluate(`(async () => {
   }
   const inp = q('.chatbar__input')
   const out = {}
-  // image
   const fileInput = q('.chatbar__file')
-  out.image = { selector: '.chatbar__file', exists: !!fileInput, enabled: !!(fileInput && !fileInput.disabled), reachable: visible(fileInput) || !!(fileInput && !fileInput.disabled) }
-  // voice
+  out.image = { exists: !!fileInput, enabled: !!(fileInput && !fileInput.disabled) }
   const mic = q('.chatbar__mic')
-  out.voice = { selector: '.chatbar__mic', exists: !!mic, enabled: !!(mic && !mic.disabled), reachable: visible(mic) }
-  // text：必须"输入后能出现发送入口"，只看输入框不够（那正是缺口所在）
+  out.voice = { exists: !!mic, enabled: !!(mic && !mic.disabled), visible: visible(mic) }
   const beforeSend = !!q('.chatbar__send')
   if (inp) setVal(inp, 'COVERAGE-PROBE')
   await new Promise((r) => setTimeout(r, 500))
   const sendBtn = q('.chatbar__send')
-  out.text = {
-    selector: '.chatbar__input + .chatbar__send',
-    hasInput: !!inp,
-    sendBeforeTyping: beforeSend,
-    sendAfterTyping: !!sendBtn,
-    sendEnabled: !!(sendBtn && !sendBtn.disabled),
-    reachable: !!inp && !!sendBtn,
-  }
-  if (inp) setVal(inp, '')   // 清掉探针文字
+  out.text = { hasInput: !!inp, sendBeforeTyping: beforeSend, sendAfterTyping: !!sendBtn, sendEnabled: !!(sendBtn && !sendBtn.disabled) }
+  if (inp) setVal(inp, '')
   await new Promise((r) => setTimeout(r, 300))
   return out
 })()`)
 log('probe', probe)
 
-/** kind → 可达性判据（机械） */
-function judge(kind, p) {
-  if (kind === 'text') return { reachable: !!(p.text && p.text.reachable), why: 'input + 非空 draft 后出现的发送按钮' }
-  if (kind === 'image') return { reachable: !!(p.image && p.image.reachable), why: 'input[type=file]（选图）' }
-  if (kind === 'voice') return { reachable: !!(p.voice && p.voice.reachable), why: '麦克风按钮（按住说话）' }
-  return { reachable: false, why: 'NO_ENTRY_MAPPED（新增了消息类型但本检查未覆盖 → 必须补映射）' }
+function judge(spec, p) {
+  if (spec.probe === 'text') {
+    // 可达定义：输入框存在 **且** 非空 draft 后出现可用的发送控件
+    return !!(p.text && p.text.hasInput && p.text.sendAfterTyping && p.text.sendEnabled)
+  }
+  if (spec.probe === 'image') return !!(p.image && p.image.exists && p.image.enabled)
+  if (spec.probe === 'voice') return !!(p.voice && p.voice.exists && p.voice.enabled)
+  return false
 }
 
 const matrix = {}
 let gaps = 0
-for (const k of KINDS) {
-  const j = judge(k, probe || {})
-  matrix[k] = { reachable: j.reachable, entry: j.why }
-  if (!j.reachable) gaps++
+for (const s of SENDABLE) {
+  const reachable = judge(s, probe || {})
+  matrix[s.kind] = { reachable, entry: s.entry }
+  if (!reachable) gaps++
 }
 log('matrix', matrix)
 
 const verdict = gaps === 0 ? 'PASS' : 'FAIL'
 console.log('')
-console.log('=== 覆盖矩阵 ===')
-for (const k of KINDS) {
-  console.log(`  ${k.padEnd(8)} → ${matrix[k].reachable ? 'REACHABLE' : '**COVERAGE GAP**'}   （入口判据: ${matrix[k].entry}）`)
+console.log('=== 覆盖矩阵（声明的"用户可发送"能力 × 可达 UI 路径）===')
+for (const s of SENDABLE) {
+  console.log(`  ${s.kind.padEnd(8)} → ${matrix[s.kind].reachable ? 'REACHABLE' : '**COVERAGE GAP**'}`)
+  console.log(`             判据: ${s.entry}`)
 }
 console.log('')
-console.log(`  COMPOSER_CAPABILITY_COVERAGE: ${verdict}${gaps ? `（${gaps} 个声明支持的类型没有可达入口）` : ''}`)
+console.log(`  IMPLEMENTED_COMPOSER_CAPABILITY_COVERAGE: ${verdict}${gaps ? `（${gaps} 个已声明可发送的能力没有可达入口）` : ''}`)
 console.log('')
-console.log('  ⚠️ 本检查的边界：只证明"入口可达"，**不证明**该入口端到端能用 ——')
-console.log('     端到端能力由各自的 WO Gate 负责（如 TEXT_SEND_FUNCTIONAL / 图片 / 语音各自的断言）。')
+console.log('  ⚠️ 边界 1：只证明"入口可达"，**不证明**端到端能用（后者由各 WO Gate 负责）。')
+console.log('  ⚠️ 边界 2：本检查的基准是**产品声明**（SENDABLE），不是服务端 enum ——')
+console.log('     未来若新增 enum，不会自动要求它有 UI 入口（可能是内部/历史/只读 kind）。')
+console.log('     新增**用户可发送**类型时，必须回来在 SENDABLE 里登记，否则不受本检查保护。')
 
 log('verdict', verdict)
 ws.close()

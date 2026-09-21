@@ -323,9 +323,16 @@ echo "# M5_SERVER_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
 # ⚠️ 分列写明（审核记录 27 强制）：**不得**合并成"真人触摸完整 E2E"之类的说法 ——
 #    前者说的是"产品路径通了"（这是 WO#2 的命题），
 #    后者说的是"Android 输入层分发也走通了"（本次用 CDP 注入触摸，**未验证**）。
-echo "# M5_OVERALL: WO1_WO2_WO3_WO5_WO6_CLOSED + AUTH_HYGIENE_DONE; WO4_DEFERRED"
+echo "# M5_OVERALL: WO1_WO2_WO3_WO5_WO6_WO7_CLOSED + AUTH_HYGIENE_DONE; WO4_DEFERRED"
 echo "#   （审核记录 39：WO5_PHASE1: PASS / CLOSED —— 3 条 audio lifecycle 已补齐）"
 echo "#   （审核记录 41：WO6_TABBAR_VERTICAL_LAYOUT: PASS / CLOSED）"
+echo "#   （审核记录 43：WO7_TEXT_MESSAGE_SEND_PATH: PASS / CLOSED）"
+echo "#   WO#7 会话页文字发送：                 CLOSED（此前**会话页发不出文字消息** —— 横向能力缺口）"
+echo "#     TEXT_SEND_ENTRY/FUNCTIONAL/PERSISTENCE/FAILURE/DB_ORACLE/COMPOSER_REGRESSION/SENSITIVITY: 全 PASS"
+echo "#     ENTER_TO_SEND: NOT_IMPLEMENTED（原版无证据，审核 42 明确不做）"
+echo "#     COMPOSER_EXACT_VISIBILITY_STATE: NOT_EVALUATED（字符串池读不到方法体，不猜）"
+echo "#   IMPLEMENTED_COMPOSER_CAPABILITY_COVERAGE（设备侧，审核 43 命名）: PASS"
+echo "#     text→发送控件 / image→选文件 / voice→录音控件；基准=**产品声明**，服务端 enum 仅 INFO 对照"
 echo "#   WO#1 board_notes functional/privacy:  CLOSED"
 echo "#   WO#2 chat image send path:            CLOSED"
 echo "#   WO#3 sender presentation:             FIXED/VERIFIED -> CLOSED"
