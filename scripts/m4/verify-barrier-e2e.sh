@@ -30,8 +30,10 @@ echo "=== E0 两侧锁键必须一致（**这条不能靠人记，必须机械�
 # 于是 holder 与被测方用了**不同的键** → 机制层测试照样 PASS
 # （因为两侧用同一个错键也会互相阻塞），但**生产里屏障其实不生效**。
 # 这类"测试通过但证明了错的东西"最危险，所以把"键一致"做成断言。
-TS_KEY="$(sed -n 's/.*MEDIA_MUTATION_LOCK_KEY *= *0x\([0-9a-fA-F_]*\).*/\1/p' /srv/campus/server/src/mutationBarrier.ts | head -1 | tr -d '_')"
-APP_KEY=$((16#$TS_KEY))
+# 从**部署产物**里取键（服务器上只有 dist/，没有 src/ —— 上一版写成 src 路径导致取空、假失败）。
+# 打包后常量以内联字面量出现，例如 `4d344241` 的十进制 1295270465。
+APP_KEY="$(grep -o '1295270465' /srv/campus/server/dist/index.mjs | head -1)"
+[ -n "$APP_KEY" ] || APP_KEY="$(grep -oE 'pg_advisory_xact_lock_shared\([0-9]+\)' /srv/campus/server/dist/index.mjs | grep -oE '[0-9]+' | head -1)"
 if [ "$APP_KEY" = "$KEY" ]; then
   ok "脚本锁键与应用侧一致（$KEY）"
 else
@@ -52,14 +54,22 @@ IMG="$UP/public/2026/09/seed-lemy-1.png"
 [ -f "$IMG" ] && ok "测试图片就绪（$(stat -c %s "$IMG") 字节的真实 PNG）" || { bad "缺测试图片 $IMG"; exit 1; }
 
 upload() {   # $1 = requestId
+  # ⚠ uploadRequestId **必须是 UUID**（服务端校验 /^[0-9a-f-]{36}$/i）。
+  # 上一版传的是 e2e-window-<epoch>，不是 UUID → 400 bad_upload_request_id，
+  # 而且 400 发生在取锁**之前**，所以那两条断言根本没触及屏障。
   curl -s -o /dev/null -w '%{http_code}' -m 20 -X POST "$BASE/api/media" \
     -H "Authorization: Bearer $TOK" \
     -F "file=@$IMG;type=image/png" -F 'purpose=post' -F "uploadRequestId=$1"
 }
 
 echo
-echo "=== 开一个 12 秒的排他窗口（模拟备份）==="
-psql -h 127.0.0.1 -U campus -d campus -q -c "select pg_advisory_lock($KEY)" -c "select pg_sleep(12)" -c "select pg_advisory_unlock($KEY)" >/tmp/m4-e2e-holder.log 2>&1 &
+echo "=== 开一个 25 秒的排他窗口（模拟备份）==="
+# ⚠ 窗口必须**显著长于**业务侧的锁等待上限（mutationBarrier.ts 的 LOCK_TIMEOUT_MS=5s）。
+# 踩过的坑：上一版窗口只有 12 秒，而 E1 的上传本身会阻塞 5 秒，
+# 轮到 E2 时窗口只剩不到 5 秒 → cleanup 等到窗口结束拿到锁 → 正常退出 0。
+# 那是**正确行为**（窗口外放行），但会让"必须退 3"的断言变成时序运气。
+# 让窗口 > 超时，E2 才是确定性断言。
+psql -h 127.0.0.1 -U campus -d campus -q -c "select pg_advisory_lock($KEY)" -c "select pg_sleep(25)" -c "select pg_advisory_unlock($KEY)" >/tmp/m4-e2e-holder.log 2>&1 &
 HOLDER=$!
 sleep 2
 INLOCK="$(PSQL "select count(*) from pg_locks where locktype='advisory' and granted and objid=$KEY")"
@@ -67,7 +77,7 @@ INLOCK="$(PSQL "select count(*) from pg_locks where locktype='advisory' and gran
 
 echo
 echo "=== E1 窗口内 POST /api/media 必须 503 ==="
-C1="$(upload "e2e-window-$(date +%s)")"
+C1="$(upload "$(cat /proc/sys/kernel/random/uuid)")"
 [ "$C1" = "503" ] && ok "**窗口内上传 → 503**（备份窗口内写操作被明确拒绝，而不是静默成功）" \
   || bad "窗口内上传期望 503，实际 $C1"
 
@@ -92,7 +102,7 @@ sleep 1
 
 echo
 echo "=== E3 窗口结束后上传必须恢复 201 ==="
-RID="e2e-after-$(date +%s)"
+RID="$(cat /proc/sys/kernel/random/uuid)"
 C3="$(upload "$RID")"
 [ "$C3" = "201" ] && ok "**窗口结束后上传 → 201（写入恢复，屏障不会锁死功能）**" \
   || bad "窗口结束后上传期望 201，实际 $C3"
