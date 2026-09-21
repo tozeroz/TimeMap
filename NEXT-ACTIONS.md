@@ -213,7 +213,7 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
 
 - [ ] H1 **等审核裁定 WO#7 是否可 CLOSED**（设备 Gate 6 项 + DB oracle + SERVER_REGRESSION 全绿）
 - [ ] H2 若 CLOSED → 更新 gate 的 `M5_OVERALL`、`A-D-LIST` 第 6 条状态、AUDIT (B) 表
-- [ ] H3 **`COMPOSER_CAPABILITY_COVERAGE` 高层检查**（审核记录 42 建议，值得做）：
+- [x] H3 ✅ **已完成**：`scripts/m5/gate-composer-coverage.mjs`（机械覆盖矩阵）+ `scripts/m5/get-declared-message-kinds.sh`（权威 kinds 来自 DB 约束 messages_kind_allowed = text,image,voice）`n      实测：text/image/voice **全部 REACHABLE** → PASS；**判别力已验证**（加一个未映射的 video → COVERAGE GAP / FAIL / exit 1）`n      关键设计：未知 kind → NO_ENTRY_MAPPED **判 FAIL**（沉默忽略等于把这类缺口又放回去）`n      边界声明：只证明"入口可达"，**不证明**端到端能用（后者由各 WO Gate 负责）
       机械列出当前产品声明支持的消息类型 × "是否存在可达的 UI 入口"：
       ```
       text  → 入口：.chatbar__send（本轮 WO#7 补上）
@@ -223,7 +223,7 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
       **关键**：若 API 支持某能力、UI 也叫 composer，却没有用户入口 → 暴露为 **coverage gap**。
       （本轮的文字发送正是这种"垂直 slice 全绿、横向能力缺一块"的情形。）
       实现方式：一个**机械**脚本读 message kind 枚举 + 探测三类入口是否存在，纳入 gate。
-- [ ] H4 **修 VISUAL_TARGET_VALIDITY 的调用顺序**（本轮踩到）：
+- [x] H4 ✅ **已完成**：`scripts/m5/run-device-gate.sh` —— 把顺序封死：① am start 到前台 ② **先建 CDP 转发** ③ 采集前 VISUAL_TARGET_VALIDITY ④ 跑 Gate ⑤ **采集后再核一次**`n      实测两次 preflight 均 PASS（此前的"CDP unreachable 假 FAIL"已消除）
       必须先建立 CDP 转发（`adb forward tcp:9222 ...`）**再**跑 preflight，
       否则 CDP 检查会假 FAIL。建议封一个 runner：建 forward → preflight → 采集 → 再核 preflight。
 - [ ] H5 **G4.1 的落地**：把"改过 .ps1 后检查前 3 字节是否 EF BB BF"做成提交前自查（本轮已用它救回 deploy 脚本）
