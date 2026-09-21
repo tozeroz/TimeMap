@@ -23,42 +23,38 @@
  *   该词表是**我方 mock 的既有取值**，不是"原版契约" —— 它的作用是防止
  *   "把 mock 数据当真实数据展示"，而不是断言原版没有这些词。
  */
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 
 const OUT = 'G:\\demo map\\tools\\tmp\\wo10-gate.json'
+const FIXTURE = 'G:\\demo map\\scripts\\m5\\fixtures\\known-message-screen-mocks.json'
+
+/*
+  mock 身份**集中在一处 fixture**（审核记录 51 建议）。
+  好处：Gate 不再把被禁字符串散落在脚本里；audit 能知道为什么这些标识被禁止；
+       将来 mock 变化时只改一处。
+  ⚠️ 它是**历史 mock provenance fixture**，**不是**"禁止用户名列表"，
+     也不得被产品代码引用（产品里不存在任何"禁止用户名"逻辑）。
+*/
+const FIX = JSON.parse(readFileSync(FIXTURE, 'utf8'))
+const MOCK_ONLY_NAMES = FIX.mockOnlyDisplayNames
+const LEGACY_IDS = FIX.userIds
 
 /**
- * mock 专有昵称（**逐行抄录自 app/src/data/mock.ts 的实际取值**，非推测）。
- *
- * ⚠️⚠️ 这里有一个**必须说清的设计判断**（我第一版就差点做错）：
- *   mock.ts 里 u2='anmoss'、u4='Lemy'、u5='Azur冰弦' —— 这三个**同时也是
- *   真实种子用户的 display_name**（见 DB: users 表三个账号）。
+ * ⚠️⚠️ 一个**必须说清的设计判断**（我第一版就差点做错）：
+ *   fixture 里 u2='anmoss'、u4='Lemy'、u5='Azur冰弦'
+ *   —— 这三个**同时也是真实种子用户的 display_name**（见 DB: users 表三个账号）。
  *   如果把它们放进黑名单、并对**整页 DOM** 检查，就会在会话列表/群聊里
  *   把**合法的真实数据**误判成 mock（典型假阳性）。
  *   → 因此：
- *     ① 黑名单**只收 mock 专有**昵称（剔除那三个真实姓名）；
+ *     ① 昵称级黑名单**只收 mock 专有**昵称（fixture 的 mockOnlyDisplayNames，已剔除那三个）；
  *     ② 检查范围**限定在推荐区内**（[data-mock-region="suggestions"]），
  *        而不是整页 —— 因为"推荐区之外出现某昵称"本身不代表它是 mock。
  *   这也符合本项目的测量纪律：**先确定坐标框/语义框，再比较**。
+ *   （fixture 里也写了这条警示，见 _nameCollisionWarning。）
  */
-const MOCK_ONLY_NAMES = [
-  '蒸柿煮捞呆', // u1
-  '又又', // u6
-  '辣椒面', // u7
-  '苏苏', // u8
-  'eveee', // u9
-  '小支', // u10
-  '禾桉涵', // u11
-  '小熊汉堡', // u12（当前不在推荐数组里，一并登记以防将来加入）
-  '自定义名称6', // me（mock 的"我"；WO#8 已改为真实 session 名）
-]
-/*
-  ⚠️ 直接抄录**推荐数组的定义**（MessageScreen.tsx 行 66-76）：
-     useState<User[]>([users.u5, u6, u7, u8, u9, u10, u11, u1, u2])  ← **硬编码 9 项**
-  这是 WO#10 要消除的对象；上面的词表就是把它展开成名字（已逐个核对 mock.ts）。
-*/
-/** mock 用户 id 形态（mock.ts 用 'u1'…'u11'；真实后端只发 UUID，不会撞） */
-const MOCK_ID_RE = /^u\d{1,2}$/
+
+/** mock 用户 id 形态（fixture 用 'u1'…'u12' + 'u_me'；真实后端只发 UUID，不会撞） */
+const MOCK_ID_RE = /^u(_me|\d{1,2})$/
 
 const report = { startedAt: new Date().toISOString(), mockOnlyNames: MOCK_ONLY_NAMES, steps: [] }
 const log = (k, v) => {
@@ -175,10 +171,36 @@ const mockIdentity = await evaluate(`(() => {
       if (v) attrs.push(v)
     }
   }
-  const hitIds = [...new Set(attrs.filter((v) => /^u\\d{1,2}$/.test(String(v).trim())))]
+  /* 用 fixture 的 legacy id 集合判定，而不是在脚本里写死 u\d{1,2} 的正则 ——
+     这样"哪些 id 属于历史 mock"与 fixture 保持单一来源（审核 51 的建议）。 */
+  const legacyIds = ${JSON.stringify(LEGACY_IDS)}
+  const hitIds = [...new Set(attrs.filter((v) => legacyIds.includes(String(v).trim())))]
   return { found: true, hitNames, hitIds, attrsSample: attrs.slice(0, 10) }
 })()`)
 log('MOCK_IDENTITY_IN_SUGGEST', mockIdentity)
+
+// ---------- 3b) 两条新增反向条件（审核 51 要求）----------
+console.log('')
+console.log('=== 3b) 新增反向条件：假好友申请状态 / 惰性分享入口 ===')
+const newReverse = await evaluate(`(() => {
+  const sec = document.querySelector('[data-mock-region="suggestions"]')
+  const scopeText = (sec ? sec.innerText || sec.textContent : '') || ''
+  const bodyText = document.body.innerText || ''
+  return {
+    /* NO_FAKE_FRIEND_REQUEST_STATE：
+       推荐区内不得出现"已申请"这类**纯本地 state** 产生的伪业务状态。
+       范围限定在推荐区（那里才是它的来源）；同时也查全页是否存在好友申请弹窗的标题。 */
+    appliedInSuggest: /已申请/.test(scopeText),
+    friendDialogTitle: /好友申请/.test(bodyText),
+    /* NO_INERT_SHARE_ENTRY：
+       不存在"看着可操作但其实什么都不做"的分享流程 ——
+       既不渲染假分享目标，也不渲染"邀请/分享"入口本身（在没有真实分享能力时）。 */
+    shareTargetNodes: document.querySelectorAll('.dialog__target').length,
+    inviteEntryNodes: document.querySelectorAll('.invite__btn').length,
+    shareSheetNodes: document.querySelectorAll('.dialog__sheet').length,
+  }
+})()`)
+log('NEW_REVERSE_CONDITIONS', newReverse)
 
 // ---------- 4) 分享面板的假目标 ----------
 console.log('')
@@ -271,12 +293,28 @@ const verdict = {
   */
   NO_MOCK_USER_NAMES_IN_DOM:
     mockIdentity && mockIdentity.hitNames && mockIdentity.hitNames.length === 0 ? 'PASS' : 'FAIL',
+  /*
+    ---- 审核 51 新增的两条反向条件 ----
+    它们防的是"只删数据却留下假交互外壳"这一半成品状态。
+  */
+  // 推荐区内不得出现"已申请"这类纯本地 state 产生的伪业务状态；也不得有好友申请弹窗
+  NO_FAKE_FRIEND_REQUEST_STATE:
+    newReverse && newReverse.appliedInSuggest === false && newReverse.friendDialogTitle === false ? 'PASS' : 'FAIL',
+  // 没有真实分享能力时，不得存在"看着可操作但其实什么都不做"的分享流程（含入口本身）
+  NO_INERT_SHARE_ENTRY:
+    newReverse &&
+    newReverse.shareTargetNodes === 0 &&
+    newReverse.inviteEntryNodes === 0 &&
+    newReverse.shareSheetNodes === 0
+      ? 'PASS'
+      : 'FAIL',
   SESSION_NAME_CONSISTENCY: nameConsistency && nameConsistency.match ? 'PASS' : 'FAIL',
-  detail: { suggest, share, fakeSuccess, mockIdentity, nameConsistency },
+  detail: { suggest, share, fakeSuccess, mockIdentity, newReverse, nameConsistency },
   notes: {
     NO_MOCK_USER_IDS_IN_DOM: '当前空过（推荐行无 id 属性）；保留以捕捉未来回归',
     NO_MOCK_USER_NAMES_IN_DOM: '当前有约束力（改前实测命中 mock 专有昵称）',
     range: 'mock 身份检查范围限定在 [data-mock-region="suggestions"] 内，不是整页',
+    fixture: 'mock 身份词表来自 scripts/m5/fixtures/known-message-screen-mocks.json（测试用，产品不引用）',
   },
 }
 const KEYS = [
@@ -286,6 +324,8 @@ const KEYS = [
   'NO_FAKE_SUCCESS_PATH',
   'NO_MOCK_USER_IDS_IN_DOM',
   'NO_MOCK_USER_NAMES_IN_DOM',
+  'NO_FAKE_FRIEND_REQUEST_STATE',
+  'NO_INERT_SHARE_ENTRY',
   'SESSION_NAME_CONSISTENCY',
 ]
 verdict.WO10_GATE = KEYS.every((k) => verdict[k] === 'PASS') ? 'PASS' : 'FAIL'
