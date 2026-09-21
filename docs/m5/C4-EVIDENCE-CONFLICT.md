@@ -150,3 +150,59 @@ pitch/gap → 坐标基准 → 样本来源 → 我的 runtest 担心 → 这次
 → 同一次 dump **正常暴露了 4 条中文 TextView 文本**，却**没有任何表情字符**，
 且 `content-desc` **全空**。这直接支持"该行不是用文字字形渲染"的判断，
 **而不是**仅凭节点名 `emotion_image` 推断。
+---
+
+## 七、§六 的主张**已撤回**（审核记录 26；本节以 §七 为准）
+
+§六 我主张："结构级证据（树里无 emoji 文本 + `emotion_image`）是**强证据**，
+**支持'图片/非字符字形'**，按强度分级强证据优先。"
+
+**这个主张是错的，现撤回。** 原因：
+
+```
+"树里没有 emoji 文本" 只证明了一件事:
+    该行**不是**用普通 TextView 渲染的文本
+它**没有**证明:
+    它是位图素材，而不是"用 emoji 字体在 Canvas 上 drawText 画出来的"
+```
+
+**决定性反例**：自定义 View（或 ImageView）完全可以用 `Canvas.drawText` 配 emoji 字体
+把字形画上去 —— 那样 `uiautomator` 里**同样看不到 text**，但它**是字体渲染的**。
+
+因此审核给出的 `UNPROVEN` 清单（同时包含 `bitmap asset` 与 `platform emoji font`）
+**比我更准确**。
+
+### 冻结口径（审核记录 26，本节为权威）
+
+```
+C4_EMOJI_RENDERING_KIND: UNRESOLVED
+
+DIRECT_EVIDENCE:
+  - node resource-id = emotion_image
+  - rendered pixels captured
+
+UNPROVEN:
+  - bitmap asset
+  - vector drawable
+  - platform emoji font
+  - runtime-generated bitmap
+  - other drawable pipeline
+
+IMPLEMENTATION_IMPACT: FREEZE — no product change
+  → 不改 board.css / mock.ts；6 个已裁素材仅入库、不接入
+  → 字符维持 ORIGINAL_EMOJI_CHARACTERS: NOT_CAPTURED
+     VISUAL_CANDIDATES: 😂 / 🤩? / 💛? / 👀 / 😱 / +1   EVIDENCE_STRENGTH: WEAK
+```
+
+### 关于"同平台字体渲染对比"（我提的检验）
+
+审核：**认可为旁证，但不认可作为定论路径**。若要跑，只能作为**旁证**记录，不得单独定论。
+
+### 一条给后来者的提醒（比结论更重要）
+
+我在这一件事上**连续犯了两次方向相反的错**：
+1. 先**照 `resource-id` 名字**下结论（"是图片"）——本项目已在 C1/C2 栽过两次；
+2. 纠正时又**把一条只能排除一种实现的证据说成支持另一种实现**（"强证据支持是图片"）。
+
+**共同点：两次都不是由证据决定结论，而是由"我上一轮站哪边"决定。**
+→ 所以：**自我纠正也必须按证据强度来定，不是"反着说一次就平衡了"。**
