@@ -34,7 +34,7 @@ $script:Failed = 0
   "Slice 0B 过没过"和"Slice 1 过没过"混成一个数，产生歧义。
   这里用 $script:CurrentSlice 标记当前正在检查哪一段，Bad() 把失败记到对应 slice 上。
 #>
-$script:SliceFail = @{ SLICE0B = 0; SLICE1 = 0 }
+$script:SliceFail = @{ SLICE0B = 0; SLICE1 = 0; SLICE2 = 0 }
 $script:CurrentSlice = 'SLICE0B'
 function Ok([string]$m) { Write-Output "PASS $m" }
 function Bad([string]$m) {
@@ -251,6 +251,54 @@ foreach ($mode in @('detail', 'cardtap', 'composer', 'authgate')) {
   if ($res -match 'PASS') { Ok "设备端 $mode → PASS" } else { Bad "设备端 $mode → FAIL（未产出 $tag）" }
 }
 # ---------------------------------------------------------------------------
+$script:CurrentSlice = 'SLICE2'
+Head '6.6) STAGE Slice 2：点赞（原版侧只读；切换行为 BLOCKED_BY_POLICY）'
+Emit-Section '6.6.1 后端点赞接口（幂等 / 鉴权 / 跨用户隔离）' 'LIKES_RESULT' (Run-Remote (Join-Path $repo 'scripts\m3\verify-likes.sh'))
+
+Head '6.6.2 设备端展示规则（与原版只读观察、与数据库权威值比对）'
+$adb2 = 'G:\Program Files\Netease\MuMu\nx_main\adb.exe'
+$serial2 = '127.0.0.1:16384'
+$appPkg2 = 'com.campusx.demo'
+$prevEap2 = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  & $adb2 -s $serial2 shell am force-stop $appPkg2 | Out-Null
+  Start-Sleep -Seconds 2
+  & $adb2 -s $serial2 shell monkey -p $appPkg2 -c android.intent.category.LAUNCHER 1 | Out-Null
+  Start-Sleep -Seconds 7
+  $wp2 = (& $adb2 -s $serial2 shell pidof $appPkg2 | Out-String).Trim()
+  & $adb2 -s $serial2 forward --remove-all | Out-Null
+  if ($wp2) { & $adb2 -s $serial2 forward tcp:9222 "localabstract:webview_devtools_remote_$wp2" | Out-Null }
+} finally {
+  $ErrorActionPreference = $prevEap2
+}
+if (-not $wp2) { Bad '设备未就绪：找不到 app 进程' } else { Say "  WebView pid=$wp2（已转发 CDP 9222）" }
+
+# 从数据库读权威计数，作为"UI 与权威值一致"的比对基准
+# （用单引号 PS 字符串 + '' 转义，避免嵌套 here-string 把脚本解析打断）
+$countsCmd = 'export PGPASSWORD=$(cat /srv/campus/.db_password); for p in aaaaaaaa-0001-4001-8001-000000000001 aaaaaaaa-0002-4002-8002-000000000002; do echo "$p $(psql -h 127.0.0.1 -U campus -d campus -Atc "select count(*) from likes where post_id=''''$p''''") $(psql -h 127.0.0.1 -U campus -d campus -Atc "select count(*) from comments where post_id=''''$p''''")"; done'
+$counts = Invoke-SshRaw $countsCmd
+$p1Line = @($counts | Where-Object { "$_" -match '0001-4001' }) | Select-Object -First 1
+$p2Line = @($counts | Where-Object { "$_" -match '0002-4002' }) | Select-Object -First 1
+$p1Parts = "$p1Line".Trim().Split(' ')
+$p2Parts = "$p2Line".Trim().Split(' ')
+$p1L = $p1Parts[1]; $p1C = $p1Parts[2]
+$p2L = $p2Parts[1]; $p2C = $p2Parts[2]
+Say "  DB 权威计数：p1 likes=$p1L comments=$p1C；p2 likes=$p2L comments=$p2C"
+
+foreach ($case in @(
+  @{ args = @('display',  '--post', 'aaaaaaaa-0001-4001-8001-000000000001', '--expect-like', $p1L, '--expect-comment', $p1C); tag = 'SLICE2_DISPLAY_RESULT' },
+  @{ args = @('display',  '--post', 'aaaaaaaa-0002-4002-8002-000000000002', '--expect-like', $p2L, '--expect-comment', $p2C); tag = 'SLICE2_DISPLAY_RESULT' },
+  @{ args = @('authgate', '--post', 'aaaaaaaa-0001-4001-8001-000000000001', '--expect-like', $p1L); tag = 'SLICE2_AUTHGATE_RESULT' }
+)) {
+  $out2 = & node (Join-Path $repo 'scripts\m3\device-slice2.mjs') @($case.args) 2>&1
+  $lines2 = @($out2 | ForEach-Object { "$_" })
+  foreach ($l in $lines2) { if ("$l".Trim()) { Say "  $l" } }
+  $res2 = @($lines2 | Where-Object { "$_" -match $case.tag }) | Select-Object -Last 1
+  if ($res2 -match 'PASS') { Ok "设备端 $($case.args[0]) → PASS" } else { Bad "设备端 $($case.args[0]) → FAIL（未产出 $($case.tag)）" }
+}
+
+# ---------------------------------------------------------------------------
 Head '7) POLICY：第三方只读约束的执行情况（用户 2026-09-21 明确要求）'
 $pvPath = Join-Path $repo 'docs\POLICY-VIOLATION-2026-09-21.md'
 if (Test-Path -LiteralPath $pvPath) {
@@ -291,6 +339,16 @@ if ($script:SliceFail.SLICE1 -eq 0) {
   Write-Output '#   EVIDENCE_OBTAINED_BY_POLICY_VIOLATION: TRUE (结论保留，手段违规已登记)'
 } else {
   Write-Output '# M3_SLICE1_GATE_RESULT: FAIL'
+}
+if ($script:SliceFail.SLICE2 -eq 0) {
+  Write-Output '# M3_SLICE2_GATE_RESULT: PASS'
+  Write-Output '#   LIKE_TOGGLE_IDEMPOTENT:        PASS'
+  Write-Output '#   LIKE_CROSS_USER_ISOLATION:     PASS'
+  Write-Output '#   LIKE_COUNT_HIDDEN_WHEN_ZERO:   PASS（与原版只读观察一致）'
+  Write-Output '#   COMMENT_COUNT_ZERO_SHOWS_WORD: PASS（与原版只读观察一致）'
+  Write-Output '#   LIKE_TOGGLE_EVIDENCE:          BLOCKED_BY_POLICY（原版禁止取证；仅自建系统验证，不声称 1:1）'
+} else {
+  Write-Output '# M3_SLICE2_GATE_RESULT: FAIL'
 }
 Write-Output '############################################################'
 exit $script:Failed
