@@ -278,7 +278,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       证据：26 屏幕中 **11 个纯 mock**（含 MessageScreen / GroupChatScreen / FeedListScreen / MapScreen）；
       设备实测 `#/message` 渲染 23 行全 mock；点群聊项 → `#/group?id=g1` 且 **0 网络请求**；
       对照 `#/chat/<真实UUID>` → API **200**（证明 ChatScreen 本身是好的）
-- [ ] J2 WO#9（顺延）：群聊接真实后端（**后端无 group 会话**，需先定语义与种子）→ 之后才做 AT 面板/@所有人
+- [x] J2 ✅ **已由 WO#9A 完成并 CLOSED**（群聊接真实后端 + 授权矩阵）；本条为历史登记：`n      当初判断"后端无 group 会话、需先定语义与种子"是对的，前提核查后确认 **schema 早已支持 group**（无需迁移）
 - [x] J3 ✅ **已裁定（审核 44）：不要求**`n      `PUBLIC_WEB_FRONTEND_DEPLOYMENT: NOT REQUIRED FOR CURRENT ANDROID 1:1 SCOPE``n      理由：最终产品对象是 Android 1:1 复现；Capacitor 前端打进 APK + APK 指向线上 Node/PG 后端`n      已经是合法的"独立前后端"——"前后端独立"≠"前端必须同时作为网站托管"。`n      额外公开 Web 版会新增一整套非目标 surface（浏览器 TLS 信任 / CORS / OTP dev sink 暴露面 /`n      浏览器与 WebView 权限差异 / URL routing / 静态部署 + 安全审计）→ 明确记为 scope expansion，不做。`n      当前"上线"要求 = 已部署后端 + 指向该后端的 release APK + 真机端到端验证。
 - [x] J4 ✅ **已完成（审核 44 正式冻结为一等类别）**：已写入 PLAN.md`n      命名 `ENTRY REACHABILITY / USER-PATH REACHABILITY`，与 FUNCTIONAL/PERSISTENCE/CONFORMANCE/REGRESSION 并列`n      含定义、测试方式边界（直接设 hash 只能证明 destination functionality）、两个标准实例、4 条自查问句
       （WO#7 的 Gate 用"直接设 hash"进页面，恰好跳过"用户怎么走到那里" → 正是本次缺陷躲过所有 Gate 的原因）
