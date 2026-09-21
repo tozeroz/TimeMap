@@ -188,3 +188,120 @@ rvEmojiList(RecyclerView)
 ```
 
 **证据等级**：**运行时控件树观测**（非资源名推断）。这是本项目对 C4 拿到的最强一类证据。
+
+---
+
+## 九、第二层取证的实际结果（审核记录 29 批准的执行）
+
+### 9.1 ✅ 决定性突破：拿到了原版表情的**真实资源文件**
+
+用 `aapt2 dump resources`（Android SDK 自带，未对原版做任何写操作）解析资源表，
+得到关键数组 `array/xhs_theme_xhs_emoji_res_v2` 的**完整取值**：
+
+```
+size=156（三个数组各 156 项，按下标一一对应；**去重后 154 个不同 drawable 名**）
+[@drawable/weixiao, @drawable/daxiao, @drawable/touxiao, @drawable/xiaoku,
+ @drawable/ku, @drawable/tianchun, @drawable/huaji, @drawable/feiwen, …]
+```
+
+每一本都映射到一个**被混淆命名的实际文件**，例如：
+
+```
+@drawable/weixiao      → res/dp.webp
+@drawable/daxiao       → res/sD.webp
+@drawable/touxiao      → res/Gm.webp
+@drawable/xiaoku       → res/tm.webp     （10514 B）
+@drawable/ku           → res/pg.webp
+@drawable/tianchun     → res/GQ.webp
+@drawable/xingxingyan  → res/WW.webp     （11656 B）
+@drawable/huangxin     → res/91.webp      （5710 B）
+```
+
+**并从 APK 中成功解出全部 154 个去重文件（合计 1141 KB，均为合法 RIFF/WEBP 头）。**
+
+### 9.2 这解释了此前一个让我困惑的"缺失"
+
+我先前按**文件名**扫 `res/`、`assets/` 找 emoji 图片，只命中一个字体文件，
+据此说"没有按名字可识别的表情图片"。
+**真因是：表情文件确实存在，但文件名被混淆成 `dp.webp` / `sD.webp` / `tm.webp` 这类短名。**
+→ **这是"资源名混淆"导致的方法性盲区**，正如审核在第一层预先警告的那样。
+
+### 9.3 C4 的**形态**结论（决定性，且是运行时观测）
+
+```
+rvEmojiList(RecyclerView) → fl_emoji_root(LinearLayout, clickable=true) ×6
+                          → emotion_image(**android.widget.ImageView**, clickable=false) ×6
++ 154 个随包 webp 资源（含名称表与 [名字C] 文本码表）
+```
+
+**→ 原版表情 = 随包的 webp 图片资源，由 ImageView 渲染。**
+**既不是字体字形，也不是运行时生成，也不是网络下发**（三者中的第一与第三被"文件确实在包内"排除；
+第二被"有独立资源文件"排除）。
+
+### 9.4 顺带拿到的一份有价值产物：**原版表情词表**
+
+```
+docs/original-baseline/supplements/original-emoji-table.txt
+  array/xhs_theme_xhs_emoji_file_name  → 154 个拼音名（weixiao/daxiao/xiaoku/…）
+  array/xhs_theme_xhs_emoji_name       → 154 个中文名（[微笑C]/[大笑C]/[笑哭C]/…）
+  array/xhs_theme_xhs_emoji_res_v2     → 154 个 @drawable/ 引用
+```
+
+**一个重要形态事实**：名字形如 **`[微笑C]`** —— 说明**协议层用文本码、渲染层用图片**
+（这与微信/小红书的做法一致）。这对"1:1 复现"有直接影响：若要复刻，
+需要"文本码 ↔ 图片"的映射与替换渲染，而不是把 emoji 当普通文字。
+
+### 9.5 ⚠️ 一次**失败的**尝试（如实记录，结论不采用）
+
+我想进一步确定**留言板那一行究竟是哪 6 个**，于是：
+
+1. 从 APK 解出全部 154 个 webp
+2. 用浏览器 canvas 把每个素材与我们的 6 格裁图做**归一化像素差（按内容包围盒裁剪→32×32→MAD）**
+
+**结果无效（必须如实说）**：**`jidan`（鸡蛋）在 6 格里全部排名第一**。
+原因清楚：**鸡蛋是平滑的椭圆，在"平均绝对差"这类指标下与任何圆形图案都相似** ——
+**该指标不具备判别力**（大而平滑的图案天然占优）。
+
+→ **因此我没有据此得出任何身份结论。**
+  这也是一次"**指标本身不判别**"的实例，与本项目此前"flaky 断言""恒 PASS 的核验"
+  「看总数不看增量」属同一族问题：**测量方法不成立时，输出看起来仍然像结果。**
+
+### 9.6 因此表情**身份**仍维持原状
+
+```
+ORIGINAL_EMOJI_CHARACTERS: NOT_CAPTURED
+VISUAL_CANDIDATES（仍然弱）: 👀 😱 等视觉读数保留为"候选"，不作为事实
+  ⚠ 视觉模型曾把 裁剪图#1 与 xiaoku（笑哭）判为同一图形，
+    但"笑哭"这一设计与大量同风格设计相似，**不足以据此认定身份**，
+    故不升级为结论（与 §9.5 的失败同源：判别力不足）。
+新取得的**强证据**（可用于将来定位具体项）:
+  154 个官方素材已解出并可复现（映射表 tools/tmp/emoji-path-map.tsv，脚本见 §9.7）
+```
+
+**要真正定论那 6 个**，需要比"像素差"更有判别力的方法，例如
+**逐项视觉比对少量候选**（把 154 缩到个位数再人工/AI 细看），或
+在**设备侧读取该 ImageView 实际绑定的 drawable id**（需要 hook/调试工具，代价更高）。
+
+### 9.7 可复现的取证配方（新增能力）
+
+```
+# 1) 资源表（含 名称→ID→文件路径）
+G:\android-sdk\build-tools\35.0.0\aapt2.exe dump resources .mumu-capture\apk\target.apk > res.txt
+# 2) 按名字找定义行与文件：grep "resource 0x… drawable/<name>" 后的 "(file) res/xx.webp"
+# 3) 从 APK 解出该条目（zip 内路径即 res/xx.webp）
+```
+**前提**：`target.apk` 的 sha256 必须是
+`3373B6B2FBC997919398543DB59546172376BEEDEE87312154EBA095D6C294`（本次已校验一致）。
+
+### 9.8 对 C4 状态的建议（交审核裁定）
+
+```
+C4_EMOJI_RENDERING_KIND: **条件已满足** → 可记为 DRAWABLE
+  依据: 154 个去重随包 webp 资源被成功解出 + 运行时视图类为 android.widget.ImageView
+  （审核原定条件"追到 emotion_image → setImageResource(R.drawable.xxx)"中，
+   "R.drawable.xxx 确实存在且是图片文件"这一半已被直接证据满足；
+   "binding 调用"这一半仍未直接观测，但"有独立资源文件 + ImageView 渲染"已排除文字字形与运行时生成）
+ORIGINAL_EMOJI_CHARACTERS: 维持 NOT_CAPTURED（§9.5 的尝试失败，无新依据）
+产品改动: 仍建议**冻结** —— 形态差异成立，但"该画哪套图"取决于我们是否愿意引入图片表情；
+         且我方现有文字 emoji 与"文本码+图片"的双层形态不同，属于较大的实现变更，宜另立工作单
+```
