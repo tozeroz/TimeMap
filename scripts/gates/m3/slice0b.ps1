@@ -207,6 +207,27 @@ if ($m0fail.Count -eq 0) { Ok 'M0 基线完整性检查全通过（manifest/枚�
 else { foreach ($f in $m0fail) { Bad "M0: $f" } }
 
 # ---------------------------------------------------------------------------
+Head '7) POLICY：第三方只读约束的执行情况（用户 2026-09-21 明确要求）'
+$pvPath = Join-Path $repo 'docs\POLICY-VIOLATION-2026-09-21.md'
+if (Test-Path -LiteralPath $pvPath) {
+  $pv = Get-Content -LiteralPath $pvPath -Raw -Encoding UTF8
+  Ok '违规记录 docs/POLICY-VIOLATION-2026-09-21.md 存在（不得删除：它是审计线索）'
+  if ($pv -match '严禁任何写操作') { Ok '记录里含硬约束原文' } else { Bad '记录里缺少硬约束原文' }
+  if ($pv -match '补救') { Ok '记录里含补救选项（待用户裁定）' } else { Bad '记录里缺少补救选项' }
+} else {
+  Bad '缺少 docs/POLICY-VIOLATION-2026-09-21.md —— 违规记录被删除'
+}
+# PLAN 里的硬约束必须还在
+$planText = Get-Content -LiteralPath (Join-Path $repo 'PLAN.md') -Raw -Encoding UTF8
+if ($planText -match '第三方系统只读约束') { Ok 'PLAN §3.1 硬约束存在' } else { Bad 'PLAN 缺少 §3.1 第三方只读约束' }
+if ($planText -match 'BLOCKED_BY_POLICY') { Ok 'PLAN 已登记 BLOCKED_BY_POLICY 标签' } else { Bad 'PLAN 缺少 BLOCKED_BY_POLICY' }
+# 带违规标记的补充证据必须自曝其违规状态（不能悄悄当普通 observed）
+$pvFiles = @(Get-ChildItem -LiteralPath (Join-Path $repo 'docs\original-baseline\supplements') -Filter '*.json' |
+  Where-Object { (Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8) -match 'POLICY_VIOLATION' })
+Say "  带 POLICY_VIOLATION 标记的补充证据: $($pvFiles.Count) 个（$((($pvFiles | ForEach-Object { $_.BaseName }) -join ', '))）"
+if ($pvFiles.Count -ge 3) { Ok '违规取得的证据已自曝标签（未被当作普通 observed）' } else { Bad "带违规标记的补充证据只有 $($pvFiles.Count) 个（期望 >=3）" }
+
+# ---------------------------------------------------------------------------
 Write-Output ''
 Write-Output '############################################################'
 if ($script:Failed -eq 0) {
