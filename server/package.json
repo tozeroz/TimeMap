@@ -7,6 +7,7 @@
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
+    "test:shutdown": "node tests/run-shutdown-race.mjs",
     "dev": "node --experimental-strip-types src/index.ts"
   },
   "dependencies": {

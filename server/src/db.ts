@@ -248,6 +248,29 @@ export function createDb(cfg: AppConfig): Db {
    */
   let inflight: Promise<DbStatus> | null = null
 
+  /**
+   * 进程正在关闭 —— 用它**消除 shutdown 竞态**。
+   *
+   * 修的是一个真实缺陷（2026-09-22）：停机日志里出现过
+   *   `[migrate] TERMINAL failure (no retry, human action required): Cannot use a pool after calling end on the pool`
+   * 并伴随 `[health] ready: true -> false (state=terminal)`。
+   *
+   * 机理：shutdown 会依次 `app.close()` → `db.close()` → `pool.end()`；
+   * 若此刻后台重试定时器或 `/api/ready` 探测正在 `refreshOnce()` 内部，
+   * 它的 `pool.query` 就会在 pool 已 end 之后抛出 "Cannot use a pool after calling end on the pool"。
+   * 该错误**不匹配任何 transient 模式** → 被 classifyMigrationError 判为 **terminal**
+   * → 打出一条"需要人工介入"的严重告警并翻转健康状态。
+   *
+   * 危害不是崩溃（进程本来就在退出），而是**把一次正常、有意的停机记成严重故障**，
+   * 从而误导运维 —— 这正是本项目一直在防的"假信号"类问题。
+   *
+   * 两处一起才是完整修法：
+   *   ① 本标志：关闭开始后**不再发起**新的 refresh；
+   *   ② close() 中先 `await inflight`：**等已在飞的 refresh 收尾**再 end pool
+   *      —— 只加 ① 不足以覆盖"已经在飞行中"的那一次。
+   */
+  let closing = false
+
   async function refreshOnce(): Promise<DbStatus> {
     const up = await (async () => {
       try {
@@ -288,6 +311,13 @@ export function createDb(cfg: AppConfig): Db {
   }
 
   async function refresh(): Promise<DbStatus> {
+    /**
+     * 关闭中：直接返回当前状态，**不碰 pool**。
+     * 否则会撞上 "Cannot use a pool after calling end on the pool" 并被误判为 terminal
+     * （见上面 `closing` 的注释）。
+     */
+    if (closing) return { ...state }
+
     /**
      * 终态短路：进入 terminal 之后**不再重试迁移**。
      * 否则 /api/ready 每被探测一次就会重跑一次注定失败的迁移 ——
@@ -347,6 +377,19 @@ export function createDb(cfg: AppConfig): Db {
     },
 
     async close(): Promise<void> {
+      /**
+       * 顺序很重要（见 `closing` 的注释）：
+       *   ① 先置 closing → 之后**不会再有新的** refresh 发起；
+       *   ② 再等在飞的那一次 refresh 收尾 → 它不会在 pool.end() 之后还在查询；
+       *   ③ 最后才 end pool。
+       * 老写法只有第 ③ 步，于是"已 in-flight 的 refresh" 会撞上已关闭的 pool，
+       * 抛出 "Cannot use a pool after calling end on the pool" 并被误判为 terminal。
+       */
+      closing = true
+      if (inflight) {
+        // 吞掉错误：关闭路径上不该因为一次 refresh 失败而中断（它也已经不再重要）
+        await inflight.catch(() => undefined)
+      }
       await pool.end()
     },
   }

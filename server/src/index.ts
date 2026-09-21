@@ -1970,9 +1970,30 @@ async function main() {
 
   let migrateTimer: NodeJS.Timeout | null = null
 
+  /**
+   * 健康心跳的句柄 —— **必须放在外层**，好让 shutdown 能清掉它。
+   *
+   * 修的是一个真实缺陷（2026-09-22）：原来 `heartbeat` 是下方 async IIFE 内的**局部变量**，
+   * shutdown 只清了 `migrateTimer`，于是：
+   *   SIGTERM → `app.close()`（会等在飞请求，可能耗时数秒）→ 此窗口内心跳触发
+   *   → `db.refresh()` → 撞上已经 `pool.end()` 的 pool
+   *   → 抛 "Cannot use a pool after calling end on the pool"
+   *   → 不匹配任何 transient 模式 → 被判 terminal
+   *   → 打出 `[migrate] TERMINAL failure (no retry, human action required)` + `[health] ready: true -> false`
+   * 把一次**正常停机**记成了"需要人工介入的严重故障"，误导运维。
+   *
+   * 双层防护（缺一不可）：
+   *   ① 这里：shutdown 时 clear 掉心跳 → 关闭过程中**不再发起**新的 refresh；
+   *   ② db.ts 的 `closing` 标志 + close() 中 `await inflight`
+   *      → 覆盖"心跳恰好在 clear 之前已经发起"的那一次。
+   */
+  let heartbeatTimer: NodeJS.Timeout | null = null
+
   const shutdown = async (signal: string) => {
     console.log(`[shutdown] ${signal}`)
+    // 先停掉两个定时器，再关连接 —— 顺序反了就会重现上面那个假警报
     if (migrateTimer) clearInterval(migrateTimer)
+    if (heartbeatTimer) clearInterval(heartbeatTimer)
     await app.close().catch(() => undefined)
     await db.close().catch(() => undefined)
     process.exit(0)
@@ -2071,7 +2092,9 @@ async function main() {
      * 这个心跳同时负责"故障时降级"与"恢复时自愈"，代价是每 10 秒一次 select 1。
      */
     let wasReady = st.ready
-    const heartbeat = setInterval(() => {
+    // 赋给**外层**变量（不是局部 const），这样 shutdown 能 clearInterval 它 ——
+    // 局部变量会让心跳在关机窗口内继续跑，引发那个假警报（见 heartbeatTimer 的注释）。
+    heartbeatTimer = setInterval(() => {
       void db.refresh().then((s) => {
         if (s.ready !== wasReady) {
           console.log(`[health] ready: ${wasReady} -> ${s.ready} (state=${s.state})`)
@@ -2079,7 +2102,7 @@ async function main() {
         }
       })
     }, 10_000)
-    heartbeat.unref?.()
+    heartbeatTimer.unref?.()
   })()
 }
 
