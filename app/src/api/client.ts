@@ -61,6 +61,21 @@ export interface ApiMediaRef {
   id: string
   width: number | null
   height: number | null
+  /**
+   * 媒体 MIME。**语音气泡靠它判定渲染类型**，而不是靠"宽度为 null"去猜
+   * （那种推断在图片尺寸解析失败时也会得到 null，会误判成语音）。
+   * 服务端自 M5 WO#5 起在消息读模型里返回它。
+   */
+  mime: string | null
+  /**
+   * 语音时长（毫秒），仅音频有值。
+   *
+   * ⚠ 这个字段**必须来自服务端持久化的值**，不能在客户端"重新下载音频再解码"得到：
+   * MediaRecorder 产出的是 live/流式 WebM，**文件头不含 duration**，
+   * `<audio>.duration` 读到的是 null（WO#5 探针 P10 实测）。
+   * 因此刷新后要显示时长，只能靠这个字段。
+   */
+  durationMs: number | null
 }
 
 /**
@@ -160,6 +175,10 @@ export interface ApiUploadedMedia {
   /** 幂等重放分支不返回宽高（服务端只回 id/storageKey/mime/scope）→ 所以允许 null */
   width: number | null
   height: number | null
+  /** 服务端判定的 MIME（按**内容**探测的结果，不是我们声明的） */
+  mime: string | null
+  /** 语音时长回显：便于断言"服务端存下的就是我测到的那个值" */
+  durationMs: number | null
 }
 
 /**
@@ -183,11 +202,27 @@ export interface ApiUploadedMedia {
 export async function uploadMedia(
   file: File | Blob,
   purpose: 'post' | 'chat',
+  /**
+   * 语音时长（毫秒）。**仅音频需要传**，且服务端会强制：
+   * audio/webm 必须带正时长、image/* 禁止带。（审核记录 35）
+   *
+   * 为什么由客户端算而不是服务端从文件里读：见 `ApiMediaRef.durationMs` 的注释
+   * （live/WebM 文件头不含 duration）。调用方应当用**单调时钟**计时
+   * （`performance.now()` 差），而不是 `audio.duration`。
+   */
+  durationMs?: number,
 ): Promise<ApiResult<ApiUploadedMedia>> {
   const form = new FormData()
   form.append('file', file)
   form.append('purpose', purpose)
   form.append('uploadRequestId', crypto.randomUUID())
+  if (durationMs !== undefined) {
+    // 只接受正整数；非法值在这里就拦掉，避免把明显错误的值发给服务端再换回 400
+    if (!Number.isSafeInteger(durationMs) || durationMs <= 0) {
+      return { ok: false, reason: `非法时长: ${String(durationMs)}` }
+    }
+    form.append('durationMs', String(durationMs))
+  }
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS)
@@ -203,9 +238,24 @@ export async function uploadMedia(
       return { ok: false, reason: `HTTP ${res.status}: ${text.slice(0, 200)}`, status: res.status }
     }
     try {
-      const v = JSON.parse(text) as { id: string; width?: number | null; height?: number | null }
+      const v = JSON.parse(text) as {
+        id: string
+        width?: number | null
+        height?: number | null
+        mime?: string | null
+        durationMs?: number | null
+      }
       if (!v?.id) return { ok: false, reason: '上传响应里没有 id' }
-      return { ok: true, value: { id: v.id, width: v.width ?? null, height: v.height ?? null } }
+      return {
+        ok: true,
+        value: {
+          id: v.id,
+          width: v.width ?? null,
+          height: v.height ?? null,
+          mime: v.mime ?? null,
+          durationMs: v.durationMs ?? null,
+        },
+      }
     } catch {
       return { ok: false, reason: '上传响应不是合法 JSON' }
     }
@@ -263,6 +313,33 @@ export async function postThreadImageMessage(
   return postThreadMessage(threadId, {
     body: IMAGE_MESSAGE_BODY,
     kind: 'image',
+    mediaId,
+  })
+}
+
+/**
+ * 语音消息的正文。
+ *
+ * 与 `IMAGE_MESSAGE_BODY` 同理：服务端要求 `body` 非空（否则 `bad_body`），
+ * 所以发纯语音也得带一句正文；界面在 `kind='voice'` 且 media 非空时**渲染语音气泡而不渲染它**，
+ * 只在"媒体取不到"的降级场景露出来 —— 那时显示「[语音]」比空白好。
+ */
+export const VOICE_MESSAGE_BODY = '[语音]'
+
+/**
+ * 发一条语音消息：把已经上传好的音频 mediaId 挂到消息上（两步里的第二步）。
+ *
+ * 为什么时长不在这里传：时长属于**媒体**（`media.duration_ms`，由 `uploadMedia` 写入），
+ * 消息只是引用媒体。因此发消息这一步不需要、也不接受 durationMs —— 保持"消息=引用"的模型，
+ * 避免同一份时长出现两个可能不一致的来源。
+ */
+export async function postThreadVoiceMessage(
+  threadId: string,
+  mediaId: string,
+): Promise<ApiResult<ApiSentMessage>> {
+  return postThreadMessage(threadId, {
+    body: VOICE_MESSAGE_BODY,
+    kind: 'voice',
     mediaId,
   })
 }

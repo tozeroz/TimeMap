@@ -3,13 +3,15 @@ import {
   fetchMediaBlobUrl,
   getThreadMessages,
   postThreadImageMessage,
+  postThreadVoiceMessage,
   relativeTime,
   uploadMedia,
   type ApiMessage,
 } from '../api/client'
 import { getSession } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
-import { IconBack, IconEmoji, IconImage, IconMore, IconPlus } from '../components/icons'
+import { IconBack, IconEmoji, IconImage, IconMic, IconMore, IconPlus } from '../components/icons'
+import { RecorderError, formatDuration, startRecording, type RecorderSession } from '../native/recorder'
 import { goBack } from '../router'
 import './chat.css'
 
@@ -62,6 +64,102 @@ function MediaImage({ mediaId, alt }: { mediaId: string; alt: string }) {
   if (failed) return <span className="bubble__mediaFail">图片不可用</span>
   if (!url) return <span className="bubble__mediaLoading">图片加载中…</span>
   return <img className="bubble__media" src={url} alt={alt} data-media-id={mediaId} />
+}
+
+/**
+ * 语音消息气泡（M5 WO#5）。
+ *
+ * 三点刻意的设计：
+ *
+ * ① **时长来自 prop（服务端持久化的 media.duration_ms），不来自音频本身**。
+ *    MediaRecorder 产出的是 live/流式 WebM，文件头不含 duration，
+ *    `<audio>.duration` 读到 null（探针 P10 实测）——
+ *    所以"刷新后仍显示时长"只能靠服务端那个字段，**不能**等音频下载完再解码。
+ *    这也是为什么气泡在音频还没加载时就能显示时长。
+ *
+ * ② **音频字节用与图片同一条鉴权链路取**（authenticated fetch → blob URL）。
+ *    语音是 private 媒体，服务端要做会话 + 可见性判定；
+ *    直接把 URL 给 `<audio src>` 无法附加 Authorization 头 —— 与 MediaImage 同理。
+ *
+ * ③ **点击播放/暂停**，播放中显示不同图标；卸载时 revoke blob URL。
+ */
+function VoiceMessage({
+  mediaId,
+  durationMs,
+  mine,
+}: {
+  mediaId: string
+  durationMs: number | null
+  mine: boolean
+}) {
+  const [url, setUrl] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const urlRef = useRef<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setUrl(null)
+    setFailed(false)
+    setPlaying(false)
+    void (async () => {
+      const r = await fetchMediaBlobUrl(mediaId)
+      if (!alive) {
+        if (r.ok) URL.revokeObjectURL(r.value)
+        return
+      }
+      if (r.ok) {
+        urlRef.current = r.value
+        setUrl(r.value)
+      } else {
+        setFailed(true)
+      }
+    })()
+    return () => {
+      alive = false
+      if (urlRef.current) {
+        URL.revokeObjectURL(urlRef.current)
+        urlRef.current = null
+      }
+    }
+  }, [mediaId])
+
+  function toggle() {
+    const a = audioRef.current
+    if (!a) return
+    if (a.paused) void a.play()
+    else a.pause()
+  }
+
+  if (failed) return <span className="bubble__mediaFail">语音不可用</span>
+
+  return (
+    <button
+      type="button"
+      className={`voice ${mine ? 'voice--me' : 'voice--peer'}`}
+      onClick={toggle}
+      aria-label={playing ? '暂停语音' : '播放语音'}
+      data-media-id={mediaId}
+      // data-duration-ms 是给真机断言用的锚点：让"界面显示的时长 == 服务端存的值"可机读校验
+      data-duration-ms={durationMs ?? ''}
+    >
+      <span className={`voice__icon ${playing ? 'voice__icon--playing' : ''}`} aria-hidden>
+        {playing ? '❚❚' : '▶'}
+      </span>
+      <span className="voice__dur">{formatDuration(durationMs)}</span>
+      {url && (
+        <audio
+          ref={audioRef}
+          src={url}
+          preload="metadata"
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => setPlaying(false)}
+        />
+      )}
+    </button>
+  )
 }
 
 /**
@@ -174,6 +272,118 @@ export function ChatScreen({ id }: { id: string }) {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // M5 WO#5：语音消息（按下录音 → 松手发送）
+  //
+  // 几条刻意的边界：
+  //   · **时长用单调时钟**（recorder.ts 里 performance.now()）——见 recorder.ts 文件头
+  //   · **拒绝权限时只提示，不走上传也不发消息**（验收 ⑦a）：
+  //     这里 `startRecording()` 抛错就 return，绝不会产生任何 /api/media 或 /messages 请求
+  //   · 松手太快导致 blob 为空 → recorder 会抛错，同样不发（不产生"空语音"）
+  //   · 本设备（MuMu）录制时**不弹系统授权框**（实测），因此代码不依赖弹框，
+  //     只处理"成功 / 失败"两条路 —— 真机弹框时这条路径同样成立
+  // -------------------------------------------------------------------------
+  const [recording, setRecording] = useState(false)
+  /** 录制中已过秒数（用于按钮上的计时显示） */
+  const [recordSec, setRecordSec] = useState(0)
+  const sessionRef = useRef<RecorderSession | null>(null)
+  const tickRef = useRef<number | null>(null)
+
+  const stopTick = useCallback(() => {
+    if (tickRef.current !== null) {
+      window.clearInterval(tickRef.current)
+      tickRef.current = null
+    }
+  }, [])
+
+  // 卸载时务必中止录音，否则麦克风会被一直占用
+  useEffect(
+    () => () => {
+      stopTick()
+      sessionRef.current?.abort()
+      sessionRef.current = null
+    },
+    [stopTick],
+  )
+
+  async function onRecordStart() {
+    if (recording || busy !== '') return
+    setSendErr('')
+    try {
+      const s = await startRecording()
+      sessionRef.current = s
+      setRecording(true)
+      setRecordSec(0)
+      stopTick()
+      tickRef.current = window.setInterval(() => {
+        const ms = sessionRef.current?.elapsedMs() ?? 0
+        setRecordSec(Math.floor(ms / 1000))
+      }, 200)
+    } catch (e) {
+      sessionRef.current = null
+      setRecording(false)
+      stopTick()
+      const kind = e instanceof RecorderError ? e.kind : 'failed'
+      // 权限被拒 / 无设备 / 不支持 / 其它 —— 给出**明确**原因，不用一句"出错了"糊过去
+      const msg =
+        kind === 'permission_denied'
+          ? '没有麦克风权限，无法录音（请在系统设置里允许本应用使用麦克风）'
+          : kind === 'no_device'
+            ? '找不到可用的麦克风'
+            : kind === 'unsupported'
+              ? '当前环境不支持录音'
+              : `录音启动失败：${(e as Error).message}`
+      setSendErr(msg)
+      // ⚠ 到这里为止没有发起任何网络请求 —— 这正是验收 ⑦a 要断言的行为
+    }
+  }
+
+  /** 松手：停止并发送 */
+  async function onRecordEnd() {
+    const s = sessionRef.current
+    if (!s) return
+    sessionRef.current = null
+    stopTick()
+    setRecording(false)
+
+    let rec
+    try {
+      rec = await s.finish()
+    } catch (e) {
+      setSendErr(`录音失败：${(e as Error).message}`)
+      return
+    }
+
+    setBusy('uploading')
+    try {
+      // ★ 时长随上传一起持久化（服务端对 audio 强制要求它，缺了就 400）
+      const up = await uploadMedia(rec.blob, 'chat', rec.durationMs)
+      if (!up.ok) {
+        setSendErr(`发送失败：语音上传未成功（${up.reason}）`)
+        return
+      }
+      setBusy('posting')
+      const sent = await postThreadVoiceMessage(id, up.value.id)
+      if (!sent.ok) {
+        setSendErr(`发送失败：消息未发出（${sent.reason}）`)
+        return
+      }
+      await loadMessages()
+    } finally {
+      if (mounted.current) setBusy('')
+    }
+  }
+
+  /** 取消（例如指针移出按钮）：丢弃这段录音，不发 */
+  function onRecordCancel() {
+    const s = sessionRef.current
+    if (!s) return
+    sessionRef.current = null
+    stopTick()
+    setRecording(false)
+    s.abort()
+  }
+
   return (
     <Screen
       header={
@@ -197,6 +407,12 @@ export function ChatScreen({ id }: { id: string }) {
           {busy !== '' && (
             <div className="chatbar__status" role="status">
               {busy === 'uploading' ? '图片上传中…' : '发送中…'}
+            </div>
+          )}
+          {/* 录音中：显示已录秒数（让"按住"这件事有可见反馈） */}
+          {recording && (
+            <div className="chatbar__status" role="status">
+              {`录音中 ${recordSec}s · 松手发送`}
             </div>
           )}
           {/* 失败：显式红色文案，不静默 */}
@@ -235,6 +451,34 @@ export function ChatScreen({ id }: { id: string }) {
               />
               <IconImage size={22} />
             </label>
+            {/*
+              语音入口：**按住说话**（pointerdown 开始录音 / pointerup 松手发送）。
+
+              为什么用 pointer 事件而不是 mousedown/touchstart 二选一：
+              pointer 事件在触摸与鼠标下统一触发，且 `pointercancel` 覆盖"手指滑出/被系统打断"
+              这类必须中止录音的情形（否则麦克风会一直占着）。
+              注册 pointercancel/pointerleave 都调用 onRecordCancel，宁可丢弃也不发出半段音频。
+            */}
+            <button
+              className={`iconbtn chatbar__mic ${recording ? 'chatbar__mic--rec' : ''}`}
+              aria-label="按住说话"
+              data-recording={recording ? 'true' : 'false'}
+              disabled={busy !== ''}
+              onPointerDown={(e) => {
+                e.preventDefault()
+                void onRecordStart()
+              }}
+              onPointerUp={(e) => {
+                e.preventDefault()
+                void onRecordEnd()
+              }}
+              onPointerCancel={onRecordCancel}
+              onPointerLeave={() => {
+                if (recording) onRecordCancel()
+              }}
+            >
+              <IconMic size={22} />
+            </button>
             <button className="iconbtn" aria-label="更多">
               <IconPlus size={22} />
             </button>
@@ -275,6 +519,21 @@ export function ChatScreen({ id }: { id: string }) {
                     // 撤回：只显示一句说明。服务端也把 media 清空了，
                     // 所以这里不存在"界面隐藏但图还在"的可能
                     <span className="bubble__revoked">消息已撤回</span>
+                  ) : m.kind === 'voice' && m.media.length > 0 ? (
+                    /*
+                      语音：渲染成语音气泡（时长 + 播放/暂停）。
+                      ⚠ 判定条件用 **kind === 'voice'**（服务端字段），
+                        不用"宽度为 null"之类的推断 —— 那在图片尺寸解析失败时也会为 null，会误判。
+                      时长取 `mm.durationMs`（服务端持久化），见 VoiceMessage 的注释。
+                    */
+                    m.media.map((mm) => (
+                      <VoiceMessage
+                        key={mm.id}
+                        mediaId={mm.id}
+                        durationMs={mm.durationMs}
+                        mine={mine}
+                      />
+                    ))
                   ) : m.kind === 'image' && m.media.length > 0 ? (
                     m.media.map((mm) => <MediaImage key={mm.id} mediaId={mm.id} alt="图片消息" />)
                   ) : (

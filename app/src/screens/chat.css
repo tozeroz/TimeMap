@@ -162,3 +162,69 @@
   font-style: italic;
   color: var(--c-text-3);
 }
+
+/* ===========================================================================
+   M5 WO#5：语音消息气泡
+   =========================================================================== */
+
+/*
+  为什么是「图标 + 时长」这一种形态（而不是波形条）：
+  原版语音气泡的结构是 `voiceContainerView → voice_msg_ll → 播放控件 + TextView(voice_msg_text)`
+  （见 docs/m5/WO5-PLAN-voice-message.md §2.2，来自 APK 布局 dump），
+  即"一个播放控件 + 一段文字"。**时长就是那段文字**。
+  波形的具体形态（宽度是否随时长变化、动画样式）**目前没有行为证据**，
+  所以这里只做**已被证据支持的部分**，不凭惯例发明（同理于"上滑取消"被明确排除在 Phase 1 之外）。
+*/
+.voice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 84px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 指向"自己发的"时图标镜像，与气泡方向一致（原版左右两套布局的语义） */
+.voice--me {
+  flex-direction: row-reverse;
+}
+
+.voice__icon {
+  font-size: 12px;
+  line-height: 1;
+  width: 16px;
+  text-align: center;
+}
+
+.voice__dur {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 录音中：按钮变醒目，让"正在录"这件事有明确视觉反馈 */
+.chatbar__mic--rec {
+  color: var(--c-danger, #e2374a);
+  animation: micPulse 1s ease-in-out infinite;
+}
+
+@keyframes micPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* 尊重"减少动态效果"偏好：关掉脉冲，只保留颜色变化 */
+@media (prefers-reduced-motion: reduce) {
+  .chatbar__mic--rec {
+    animation: none;
+  }
+}

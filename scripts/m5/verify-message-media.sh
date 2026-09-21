@@ -9,7 +9,15 @@
 #   A3 **挂别人的私有 media → 400 media_not_owned，且一行都不写**（越权，最容易漏的一条）
 #   A4 挂 scope='public' 的 media → 400 media_not_private（跨 scope）
 #   A5 挂不存在的 media id → 400 media_not_found
-#   A6 带了 mediaId 但 kind≠image → 400 media_requires_image_kind
+#   A6 带了 mediaId 但 kind 不能承载媒体（text）→ 400 media_requires_media_kind
+#      ⚠️ 本断言在 M5 WO#5（语音）时**有意更新过**，不是被改松：
+#         · 原错误码 media_requires_image_kind 的语义是"带媒体就必须是图片消息"；
+#           放开语音后正确语义是"kind 必须能承载媒体（image|voice）"，
+#           故更名为 media_requires_media_kind。
+#         · **拒绝行为未变**：text + mediaId 依然 400，且仍不写任何行（见 A9）。
+#         · 客户端的契约只依赖 400 + 明确 reason，不按此字符串分支（已核对 app/src 无引用）。
+#         · 更细的 kind↔mime 相容性（voice+图片 / image+音频）由 WO#5 的
+#           verify-voice-negative.sh A4.4/A4.5 覆盖。
 #   A7 传数组 mediaIds[] / 非字符串 mediaId → 400 bad_media_id（**不接受数组**）
 #   A8 非法 uuid 字符串 → 400 bad_media_id
 #   A9 **同事务**：让 media 校验失败 → 断言 messages 表里没有多出任何行
@@ -142,12 +150,16 @@ C="$(printf '%s' "$R" | tail -1)"; B="$(printf '%s' "$R" | head -1)"
 printf '%s' "$B" | grep -q 'media_not_found' && ok "错误码明确 media_not_found" || bad "错误码不是 media_not_found：$B"
 
 echo
-echo "=== A6. 带 mediaId 但 kind=text → 400 media_requires_image_kind ==="
+echo "=== A6. 带 mediaId 但 kind=text → 400 media_requires_media_kind ==="
 R="$(curl -s -m 20 -w '\n%{http_code}' "${AUTH_A[@]}" -X POST "$BASE/api/threads/$THREAD/messages" \
   -H 'Content-Type: application/json' -d "{\"body\":\"自称文本\",\"kind\":\"text\",\"mediaId\":\"$MA\"}")"
 C="$(printf '%s' "$R" | tail -1)"; B="$(printf '%s' "$R" | head -1)"
 [ "$C" = "400" ] && ok "kind=text + mediaId → 400" || bad "期望 400，实际 $C（$B）"
-printf '%s' "$B" | grep -q 'media_requires_image_kind' && ok "错误码明确 media_requires_image_kind" || bad "错误码不符：$B"
+# M5 WO#5：错误码由 media_requires_image_kind 更名为 media_requires_media_kind（语义泛化，
+# 见本文件头部 A6 说明）。这里断言**精确的新码** —— 不用"新旧皆可"，因为放宽匹配
+# 就等于偷偷放松契约（本项目纪律：门禁要能失败，且不要为了通过而放宽）。
+# 若将来有人把它改回旧名，这条会 FAIL —— 那是**正确的**，因为那是一次未登记的契约变更。
+printf '%s' "$B" | grep -q 'media_requires_media_kind' && ok "错误码明确 media_requires_media_kind" || bad "错误码不符（期望 media_requires_media_kind）：$B"
 
 echo
 echo "=== A7. **传数组 mediaIds[] / 非字符串 mediaId → 400 bad_media_id**（修订 1 的核心）==="

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import multipart, { type MultipartFile } from '@fastify/multipart'
 import Fastify from 'fastify'
+import { probeAudioWebm } from './audioProbe.ts'
 import { probeImage } from './imageProbe.ts'
 import {
   createRateLimiter,
@@ -1147,6 +1148,32 @@ export function buildServer(deps: ServerDeps) {
       return { error: 'bad_purpose', allowed: ['post', 'chat'] }
     }
 
+    /**
+     * 语音时长（毫秒）—— **Phase 1 必需字段**，且**必须由客户端提供**。
+     *
+     * 为什么不能从文件里读出来：MediaRecorder 产出的是"live/流式" WebM，
+     * **文件头不含 duration**，`<audio>` 不 seek 时拿到 null/Infinity（WO#5 探针 P10 实测）。
+     * 因此客户端用**单调时钟**（performance.now()）在录音时计时后上传，服务端只做校验与存储。
+     *
+     * 校验规则（审核记录 35 给定，**不静默忽略错误 metadata**）：
+     *   audio/webm → durationMs **必需**，且为正整数
+     *   image/*    → durationMs **禁止出现**（带了就是自相矛盾的载荷 → 400）
+     * 缺失与非法都直接 400，不"猜一个值"也不"忽略掉"。
+     */
+    const durationRaw = (data.fields?.durationMs as { value?: string } | undefined)?.value
+    let durationMs: number | null = null
+    if (durationRaw !== undefined) {
+      if (!/^[0-9]{1,10}$/.test(durationRaw.trim())) {
+        reply.code(400)
+        return { error: 'bad_duration_ms', reason: 'must_be_positive_integer', got: durationRaw.slice(0, 32) }
+      }
+      durationMs = Number(durationRaw.trim())
+      if (!Number.isSafeInteger(durationMs) || durationMs <= 0) {
+        reply.code(400)
+        return { error: 'bad_duration_ms', reason: 'must_be_positive', got: durationRaw.slice(0, 32) }
+      }
+    }
+
     const buf = await data.toBuffer()
     if (buf.length === 0) {
       reply.code(400)
@@ -1158,12 +1185,50 @@ export function buildServer(deps: ServerDeps) {
     }
 
     // ③ 按**内容**判类型（不信任 Content-Type 与扩展名）
-    const probe = probeImage(new Uint8Array(buf))
-    if (!probe.ok) {
-      reply.code(400)
-      return { error: 'not_an_image', reason: probe.reason }
+    //    分流：先按图片探（既有路径，一字不改其行为），不是图片再按 WebM 容器探。
+    const u8 = new Uint8Array(buf)
+    const imgProbe = probeImage(u8)
+
+    /** 本次上传被判定为什么媒体种类 —— 决定 mime/宽高/时长的合法性 */
+    type Kind = { mime: string; ext: string; width: number | null; height: number | null; isAudio: boolean }
+    let kind: Kind
+
+    if (imgProbe.ok) {
+      kind = {
+        mime: imgProbe.mime,
+        ext: imgProbe.mime === 'image/png' ? 'png' : imgProbe.mime === 'image/jpeg' ? 'jpg' : 'webp',
+        width: imgProbe.width,
+        height: imgProbe.height,
+        isAudio: false,
+      }
+    } else {
+      const audProbe = probeAudioWebm(u8)
+      if (!audProbe.ok) {
+        reply.code(400)
+        // 两个探测器的原因都给出，便于定位（图片原因沿用原字段名，保持向后兼容）
+        return { error: 'not_an_image', reason: imgProbe.reason, audioReason: audProbe.reason }
+      }
+      kind = { mime: audProbe.mime, ext: 'webm', width: null, height: null, isAudio: true }
     }
-    const ext = probe.mime === 'image/png' ? 'png' : probe.mime === 'image/jpeg' ? 'jpg' : 'webp'
+
+    /*
+      ③b durationMs ↔ 媒体种类的一致性（审核记录 35 要求"不静默忽略错误 metadata"）
+        · 音频必须带正时长 —— 否则 DB 的 media_mime_duration_consistent 会拒绝，
+          但**要在写文件之前就拒**，避免留下"文件已落盘但没有 DB 行"的 orphan。
+        · 图片不许带时长 —— 同理，属于自相矛盾的载荷。
+      注意：这两条与迁移 010 的 DB 约束**意图相同**，这里是更早的一道闸：
+      DB 约束是最后防线（防服务层写错），这里防的是"用户输入错误"并且不产生垃圾文件。
+    */
+    if (kind.isAudio && durationMs === null) {
+      reply.code(400)
+      return { error: 'missing_duration_ms', reason: 'audio_requires_duration' }
+    }
+    if (!kind.isAudio && durationMs !== null) {
+      reply.code(400)
+      return { error: 'unexpected_duration_ms', reason: 'duration_only_for_audio', mime: kind.mime }
+    }
+
+    const ext = kind.ext
     const sha256 = createHash('sha256').update(buf).digest('hex')
 
     try {
@@ -1228,9 +1293,9 @@ export function buildServer(deps: ServerDeps) {
 
         // ④ 文件已就位，再写 DB 行
         await client.query(
-          `insert into media (id, owner_user_id, scope, storage_key, mime, bytes, width, height, sha256, upload_request_id)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [id, s.user.userId, scope, storageKey, probe.mime, buf.length, probe.width, probe.height, sha256, uploadRequestId],
+          `insert into media (id, owner_user_id, scope, storage_key, mime, bytes, width, height, sha256, upload_request_id, duration_ms)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [id, s.user.userId, scope, storageKey, kind.mime, buf.length, kind.width, kind.height, sha256, uploadRequestId, durationMs],
         )
         inserted = true
         // 提交即释放共享锁：提交之前备份的排他锁进不来，提交之后它才可以开始
@@ -1284,10 +1349,12 @@ export function buildServer(deps: ServerDeps) {
       return {
         id,
         storageKey,
-        mime: probe.mime,
+        mime: kind.mime,
         bytes: buf.length,
-        width: probe.width,
-        height: probe.height,
+        width: kind.width,
+        height: kind.height,
+        // 语音：回显时长，便于客户端断言"存进去的就是我测到的那个值"
+        durationMs,
         scope,
       }
     } catch (err) {
@@ -1458,9 +1525,17 @@ export function buildServer(deps: ServerDeps) {
         media: unknown
       }>(
         `select m.id, m.sender_id, u.display_name as sender_name, m.body, m.kind, m.created_at, m.deleted_at,
-                -- 图片消息的媒体引用（只给 id 与尺寸；客户端用 /api/media/:id 取图）
+                -- 消息的媒体引用。除 id 与尺寸外，**语音还需要 mime 与 duration_ms**：
+                --   · mime   → 客户端据此决定渲染成图片气泡还是语音气泡（不能靠"宽度为 null"来猜）
+                --   · duration_ms → **时长必须来自这里**。MediaRecorder 产出的 live/WebM 文件头
+                --     不含 duration（探针 P10 实测 <audio>.duration === null），
+                --     所以"刷新后仍能显示时长"只能靠持久化的这个字段，
+                --     绝不能指望重新下载音频再解码得到（那也违背"一条消息的展示不该依赖整段音频"）。
                 coalesce((
-                  select json_agg(json_build_object('id', md.id, 'width', md.width, 'height', md.height) order by mm.position)
+                  select json_agg(json_build_object(
+                           'id', md.id, 'width', md.width, 'height', md.height,
+                           'mime', md.mime, 'durationMs', md.duration_ms
+                         ) order by mm.position)
                     from message_media mm join media md on md.id = mm.media_id
                    where mm.message_id = m.id
                 ), '[]'::json) as media
@@ -1572,10 +1647,22 @@ export function buildServer(deps: ServerDeps) {
       reply.code(400)
       return { error: 'bad_media_id', reason: 'bad_format' }
     }
-    // 带了图却不是图片消息 → 自相矛盾的载荷，直接拒（不写任何行）
-    if (mediaId !== null && kind !== 'image') {
+    /*
+      带了媒体却不是"媒体类消息" → 自相矛盾的载荷，直接拒（不写任何行）。
+
+      M5 WO#5 之前这里写的是 `kind !== 'image'`（即"带媒体就必须是图片消息"）。
+      放开语音后，正确的形式是"**kind 与媒体的 mime 类必须相容**"：
+        image → 媒体必须是 image/*
+        voice → 媒体必须是 audio/*
+        text  → **不允许**带媒体（本篇消息没有可承载媒体的语义）
+      kind 与 mime 的精确匹配要拿到 media 行才知道，因此这里先做**形状级**判断
+      （哪些 kind 允许带媒体），mime 级判断放在事务内（见下面的 mediaId 校验段）。
+      ⚠ 必须保留原行为：`text + mediaId` 仍要 400 —— 否则就是把 WO#2 已收紧的
+        contract 又放松了（Gate 里有对应回归断言）。
+    */
+    if (mediaId !== null && kind !== 'image' && kind !== 'voice') {
       reply.code(400)
-      return { error: 'media_requires_image_kind', kind }
+      return { error: 'media_requires_media_kind', kind, allowed: ['image', 'voice'] }
     }
 
     const client = await db.pool.connect()
@@ -1614,8 +1701,9 @@ export function buildServer(deps: ServerDeps) {
       //   因此"存在"就等于"有效"。将来若引入失效语义，必须在这里补一条判断，
       //   并且要让 GET /api/media/:id 共用同一个 predicate（防权限漂移，审核记录 15 P0-A）。
       if (mediaId !== null) {
-        const m = await client.query<{ owner_user_id: string; scope: string }>(
-          'select owner_user_id, scope from media where id = $1',
+        const m = await client.query<{ owner_user_id: string; scope: string; mime: string }>(
+          // 一并取 mime：下面的 kind ↔ mime 相容性判断需要它（M5 WO#5）
+          'select owner_user_id, scope, mime from media where id = $1',
           [mediaId],
         )
         const row = m.rows[0]
@@ -1623,6 +1711,23 @@ export function buildServer(deps: ServerDeps) {
           await client.query('rollback')
           reply.code(400)
           return { error: 'media_not_found', mediaId }
+        }
+        /*
+          ★ kind ↔ mime 相容性（M5 WO#5 泛化原来的"必须是图片"）
+
+          为什么必须在**这里**判而不是只发形状检查：形状检查只能知道 kind 是 image 还是 voice，
+          不知道这个 media 的实际类型。若只做形状检查，`kind='voice'` + 一张 **image/png** 就能过，
+          结果是一条"语音消息"里挂着图片 —— 客户端会去按音频解析而拿到 PNG，属于语义错误。
+          （这正是 WO#4 被驳回时审核点出的形态："看起来一个东西、发出去另一个东西"。）
+
+          分类用 mime 前缀而不是具体枚举，这样将来 DB 白名单扩了（例如第二种音频格式），
+          这里不需要跟着改；DB 的 media_mime_allowed 才是"到底允许哪些"的权威。
+        */
+        const wantPrefix = kind === 'image' ? 'image/' : 'audio/'
+        if (!row.mime.startsWith(wantPrefix)) {
+          await client.query('rollback')
+          reply.code(400)
+          return { error: 'media_kind_mismatch', kind, mediaMime: row.mime, expectedPrefix: wantPrefix }
         }
         if (row.scope !== 'private') {
           // 公共动态图不能挂进私聊。DB 层的复合外键本来也会拒，

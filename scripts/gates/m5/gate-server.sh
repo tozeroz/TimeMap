@@ -158,20 +158,64 @@ printf '#   %-34s %s\n' "info login_challenges" "$(BSQL 'select count(*) from lo
 printf '#   %-34s %s\n' "info messages / media / board_notes" \
   "$(BSQL 'select count(*) from messages') / $(BSQL 'select count(*) from media') / $(BSQL 'select count(*) from board_notes')"
 
+# ---------------------------------------------------------------- 4. 语音消息（WO#5 Phase 1）
+step "4. 语音消息负向断言（WO#5 Phase 1，审核记录 35 §八）"
+VN="$DIR/verify-voice-negative.sh"
+VN_OUT=''
+if [ -f "$VN" ]; then
+  VN_OUT="$(bash "$VN" 2>&1)"
+  printf '%s\n' "$VN_OUT" | grep -E '^(  PASS|  FAIL|  FATAL|VOICE_NEGATIVE)' | sed 's/^/    /'
+  if printf '%s' "$VN_OUT" | grep -q 'VOICE_NEGATIVE_ASSERTIONS: PASS'; then
+    setk M5_VOICE_NEGATIVE_ASSERTIONS PASS
+  else
+    setk M5_VOICE_NEGATIVE_ASSERTIONS FAIL; FAILED=1
+  fi
+  # 逐条抽查**具体错误码**是否真的出现 —— 防止"因错误的原因通过"
+  # （教训：本脚本第一版的 fixture 是坏的，A4.1 拿到的是 not_an_image 而不是 missing_duration_ms，
+  #   断言"通过了"但其实没测到目标行为。）
+  # ⚠ 全部用 ASCII 错误码，不用中文 —— 中文会被 esbuild 转义成 \uXXXX 造成假阴性
+  for pair in 'A4.1:missing_duration_ms' 'A4.2:unexpected_duration_ms' 'A4.3:audioReason' 'A4.4:media_kind_mismatch' 'A4.5:media_kind_mismatch'; do
+    tag="${pair%%:*}"; code="${pair##*:}"
+    if printf '%s' "$VN_OUT" | grep -qE "PASS ${tag}.*${code}"; then
+      setk "M5_VOICE_${tag//./_}" PASS
+    else
+      setk "M5_VOICE_${tag//./_}" "FAIL(未看到 ${code})"; FAILED=1
+    fi
+  done
+else
+  setk M5_VOICE_NEGATIVE_ASSERTIONS NOT_RUN; FAILED=1
+  for t in A4_1 A4_2 A4_3 A4_4 A4_5; do setk "M5_VOICE_${t}" NOT_RUN; done
+  echo "    （找不到 $VN）"
+fi
+
+# 语音的**表结构**键：白名单含 audio/webm + MIME↔duration 一致性约束存在（迁移 009/010）
+VS="$(BSQL "select pg_get_constraintdef(oid) from pg_constraint where conname='media_mime_allowed'")"
+VD="$(BSQL "select pg_get_constraintdef(oid) from pg_constraint where conname='media_mime_duration_consistent'")"
+if printf '%s' "$VS" | grep -q "audio/webm"; then
+  setk M5_VOICE_MEDIA_MIME_WHITELIST PASS
+else
+  setk M5_VOICE_MEDIA_MIME_WHITELIST "FAIL(白名单未含 audio/webm)"; FAILED=1
+fi
+if printf '%s' "$VD" | grep -q "audio/webm" && printf '%s' "$VD" | grep -q "duration_ms"; then
+  setk M5_VOICE_MIME_DURATION_CONSISTENT PASS
+else
+  setk M5_VOICE_MIME_DURATION_CONSISTENT "FAIL(缺 MIME↔duration 一致性)"; FAILED=1
+fi
+
 # ---------------------------------------------------------------- 汇总
 echo
 echo "# ----------------------------------------------------------------"
 echo "# M5 分层结果"
 P_FAIL=0
-for k in M5_MEDIAID_STRICT_REJECT M5_TMP_SELFHEAL M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT; do
+for k in M5_MEDIAID_STRICT_REJECT M5_TMP_SELFHEAL M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT M5_VOICE_MEDIA_MIME_WHITELIST M5_VOICE_MIME_DURATION_CONSISTENT; do
   [ "${KEY[$k]}" = "PASS" ] || P_FAIL=1
 done
 printf '#   %-12s %s\n' "PERSISTENT" "$([ $P_FAIL -eq 0 ] && echo PASS || echo FAIL)"
-printf '#   %-12s %s\n' "STAGE" "$([ "${KEY[M5_UNATTACHED_TTL_GC]}" = "PASS" ] && echo PASS || echo FAIL)"
+printf '#   %-12s %s\n' "STAGE" "$([ "${KEY[M5_UNATTACHED_TTL_GC]}" = "PASS" ] && [ "${KEY[M5_VOICE_NEGATIVE_ASSERTIONS]}" = "PASS" ] && echo PASS || echo FAIL)"
 printf '#   %-12s %s\n' "REGRESSION" "$([ "${KEY[M5_MEDIAID_STRICT_REJECT]}" = "PASS" ] && echo PASS || echo FAIL)"
 echo '#'
-for k in M5_MEDIA_MESSAGE_API M5_MEDIAID_STRICT_REJECT M5_UNATTACHED_TTL_GC M5_TMP_SELFHEAL M5_BOARD_NOTES M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT; do
-  printf '#   %-26s %s\n' "$k" "${KEY[$k]}"
+for k in M5_MEDIA_MESSAGE_API M5_MEDIAID_STRICT_REJECT M5_UNATTACHED_TTL_GC M5_TMP_SELFHEAL M5_BOARD_NOTES M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT M5_VOICE_MEDIA_MIME_WHITELIST M5_VOICE_MIME_DURATION_CONSISTENT M5_VOICE_NEGATIVE_ASSERTIONS M5_VOICE_A4_1 M5_VOICE_A4_2 M5_VOICE_A4_3 M5_VOICE_A4_4 M5_VOICE_A4_5; do
+  printf '#   %-34s %s\n' "$k" "${KEY[$k]}"
 done
 echo
 echo "# M5_SERVER_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
@@ -189,17 +233,31 @@ echo "# M5_SERVER_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
 # ⚠️ 分列写明（审核记录 27 强制）：**不得**合并成"真人触摸完整 E2E"之类的说法 ——
 #    前者说的是"产品路径通了"（这是 WO#2 的命题），
 #    后者说的是"Android 输入层分发也走通了"（本次用 CDP 注入触摸，**未验证**）。
-echo "# M5_OVERALL: WO1_WO2_WO3_ALL_CLOSED（审核记录 29）"
+echo "# M5_OVERALL: WO1_WO2_WO3_CLOSED + WO5_PHASE1_IMPLEMENTED_AWAITING_REVIEW"
 echo "#   WO#1 board_notes functional/privacy:  CLOSED"
 echo "#   WO#2 chat image send path:            CLOSED"
-echo "#   WO#3 sender presentation:             FIXED/VERIFIED → CLOSED"
-echo "#     WO3_DEVICE_GEOMETRY: PASS  WO3_SERVER_IDENTITY_ORACLE: PASS  WO3_REGRESSION: PASS"
-echo "#     VALID AUTHENTICATED CHAT PATH:    VERIFIED"
-echo "#     meId===null defensive fallback:   SOURCE-VERIFIED / RUNTIME: NOT_EVALUATED（不得写成 PASS）"
-echo "#   tab deviation:                        RETRACTED（原'4 vs 3'系只数节点未看 bounds 的误判）"
-echo "#   C4 emoji rendering kind:              UNRESOLVED / FROZEN（审核记录 29 批准做静态使用链取证）"
+echo "#   WO#3 sender presentation:             FIXED/VERIFIED -> CLOSED"
+echo "#     VALID AUTHENTICATED CHAT PATH:      VERIFIED"
+echo "#     meId===null defensive fallback:     SOURCE-VERIFIED / RUNTIME: NOT_EVALUATED（不得写成 PASS）"
+echo "#   WO#5 voice message Phase 1:            IMPLEMENTED（服务端 + 客户端 + 真机 E2E）"
+echo "#     VOICE_MESSAGE_RECORD_AND_SEND:      PASS（真机：media 201 / message 201 / mime=audio/webm）"
+echo "#     VOICE_BUBBLE_DURATION_PERSISTED:    PASS（UI 显示值 == 服务端 media.duration_ms，同一条媒体）"
+echo "#     VOICE_DURATION_WITHIN_1S:           PASS（|记录-按住| <= 1000ms）"
+echo "#     VOICE_SURVIVES_RELOAD:              PASS（刷新后仍显示时长，不重新下载音频）"
+echo "#     VOICE_PERMISSION_DENIED_CODEPATH:   PASS（桩触发 NotAllowedError：明确提示 + 0 上传 + 0 消息 + 0 幽灵气泡）"
+echo "#     VOICE_PERMISSION_DENIED_SYSTEM_E2E: NOT_EVALUATED（本设备无法构造系统拒绝，见 PROBE2 §九）"
+echo "#     VOICE_TO_TEXT:                      NOT_IMPLEMENTED（不可复刻：依赖对方 ASR 服务；不冒充）"
+echo "#   tab deviation:                        RETRACTED"
+echo "#   C4 emoji rendering kind:              CONFIRMED=image-based / exact-6-assets NOT_CAPTURED"
+echo "#     WO#4 emoji structural change:       DEFERRED_BY_MISSING_BINDING_EVIDENCE（审核记录 32）"
 echo "#   NATIVE_FILE_PICKER_PRODUCT_PATH:     PASS"
 echo "#   SYSTEM_PICKER_SELECTION:             PASS"
 echo "#   WEBVIEW_FILE_DELIVERY:               PASS"
 echo "#   ANDROID_INPUTDISPATCHER_ENTRY_TOUCH: NOT_EVALUATED（CDP 注入触摸，非物理输入分发）"
-echo "#   FILE_INPUT_POST_SELECTION_E2E:       PASS"exit "$([ "$FAILED" -eq 0 ] && echo 0 || echo 1)"
+echo "#   FILE_INPUT_POST_SELECTION_E2E:       PASS"
+
+# ⚠ exit 必须在**独立一行**。
+#   本文件曾经把它拼在上一行 echo 的末尾（缺换行），bash 把 "exit" 当成了 echo 的又一个参数，
+#   于是 exit **从未执行** → gate 永远返回 0，**失败了也不报错**（"不可能失败的门禁"）。
+#   这是一个真实的 GATE_DEFECT（已修）；勿再把它并回上一行。
+exit "$([ "$FAILED" -eq 0 ] && echo 0 || echo 1)"
