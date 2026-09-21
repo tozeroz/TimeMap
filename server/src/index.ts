@@ -1657,7 +1657,28 @@ export function buildServer(deps: ServerDeps) {
       reply.code(400)
       return { error: 'cannot_leave_note_to_self' }
     }
-    const b = req.body as { body?: unknown } | undefined
+    const b = req.body as Record<string, unknown> | undefined
+    // 严格拒绝"伪造发送者"字段（审核记录 18，口径选择 **strict reject**，而不是静默忽略）。
+    //
+    // 为什么"忽略"不够：静默忽略会把接口契约模糊化 —— 调用方提交了一个无效字段
+    // 却收到 201，会误以为这个参数生效了（实际作者来自 session，与它无关）；
+    // 更危险的是将来若有人把 from_user_id 误接进业务逻辑（例如直接当插入值用），
+    // 忽略式实现不会报错、只会**静默改变行为**，这类偏差在线上极难定位。
+    // 契约上这个参数根本不该存在，所以只要**出现**就 400：
+    // 用 hasOwnProperty 判断"字段存在"，与取值是否有效无关 ——
+    // 即使提交的值恰好等于 session 用户，也一律拒绝（存在本身即违约）。
+    const FORGED_SENDER_FIELDS = ['from_user_id', 'fromUserId', 'sender_id', 'senderId'] as const
+    const forged = FORGED_SENDER_FIELDS.filter(
+      (k) => b !== undefined && b !== null && Object.prototype.hasOwnProperty.call(b, k),
+    )
+    if (forged.length > 0) {
+      reply.code(400)
+      return {
+        error: 'from_user_id_not_accepted',
+        fields: forged,
+        hint: 'author 永远来自 session',
+      }
+    }
     const text = typeof b?.body === 'string' ? b.body.trim() : ''
     if (!text || text.length > 200) {
       reply.code(400)

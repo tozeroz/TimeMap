@@ -99,18 +99,27 @@ printf '%s' "$RA" | grep -q '"emptyText":"可以给同学留言噢"' && ok "返�
 
 echo
 echo
-echo "=== B8 客户端**不能**提交 from_user_id（伪造发送者必须无效）==="
+echo "=== B8 客户端**不能**提交 from_user_id（伪造发送者必须被明确拒绝）==="
 # 审核记录 18 明确要求：当前用户永远来自 session，不允许客户端提交 from_user_id。
-# 做法：用**丙**的会话去发，同时在 body 里谎称 from_user_id 是甲 ——
-# 若实现正确，留言的发送者仍然是**丙**（session 才是权威），伪造字段被完全忽略。
+# 口径选择：**strict reject**（HTTP 400），而不是静默忽略 ——
+# 忽略会把接口契约模糊化：调用方提交了无效字段却收到 201，会误以为参数生效；
+# 将来若有人误把该字段接进业务逻辑，忽略式实现不会报错、只会静默改变行为。
+# 做法：用**丙**的会话去发，body 里谎称 from_user_id 是甲 ——
+# 契约上该参数根本不该存在，所以即使值与 session 一致也必须 400，且**一行都不许写库**。
 PSQL "delete from board_notes where from_user_id='$ID_C' or to_user_id='$ID_C'" >/dev/null
-R="$(curl -s -m 10 -X POST "$BASE/api/board-notes/$ID_B" \
+R8="$(curl -s -m 10 -w '\n%{http_code}' -X POST "$BASE/api/board-notes/$ID_B" \
   -H 'Content-Type: application/json' -H "Authorization: Bearer $T_C" \
-  -d "{\"body\":\"伪造发送者测试\",\"from_user_id\":\"$ID_A\",\"fromUserId\":\"$ID_A\"}")"
+  -d "{\"body\":\"伪造发送者测试\",\"from_user_id\":\"$ID_A\"}")"
+CODE8="$(printf '%s' "$R8" | tail -1)"; BODY8="$(printf '%s' "$R8" | head -1)"
+[ "$CODE8" = "400" ] && ok "带 from_user_id 提交 → **400**（strict reject，不是 201/静默忽略）" \
+  || bad "期望 400，实际 $CODE8（$(printf '%s' "$BODY8" | head -c 120)）"
+printf '%s' "$BODY8" | grep -q 'from_user_id_not_accepted' \
+  && ok "响应体含 from_user_id_not_accepted（拒绝原因对调用方可见）" \
+  || bad "响应体缺少 from_user_id_not_accepted：$(printf '%s' "$BODY8" | head -c 120)"
 NFAKE="$(PSQL "select count(*) from board_notes where from_user_id='$ID_A' and body='伪造发送者测试'")"
 NC="$(PSQL "select count(*) from board_notes where from_user_id='$ID_C' and body='伪造发送者测试'")"
-[ "$NFAKE" = "0" ] && ok "**伪造的 from_user_id 没有被采纳**（没有以甲的名义写入）" || bad "伪造成功：以甲的名义写了 $NFAKE 条"
-[ "$NC" = "1" ] && ok "留言的发送者是**会话用户丙**（session 才是权威）" || bad "发送者不是会话用户（丙的记录 $NC 条）"
+[ "$NFAKE" = "0" ] && ok "**没有以甲的名义写入任何行**（伪造身份未生效，count=0）" || bad "伪造成功：以甲的名义写了 $NFAKE 条"
+[ "$NC" = "0" ] && ok "**也没有以会话用户丙的名义写入**（拒绝发生在写入之前，count=0）" || bad "拒绝不彻底：仍以丙的名义写了 $NC 条"
 
 echo
 echo "=== B9 第三方**构造两个都不是我的 ID** 也读不到 ==="
