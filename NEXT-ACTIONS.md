@@ -79,11 +79,35 @@
 
 ---
 
-## E. 本轮新发现的清理项（非阻塞，但不该忘）
+## E. auth hygiene（**已按审核记录 39 重写** —— 审核明确反对"总数上界"做法，我采纳）
 
-- [ ] E1 **sessions / login_challenges 行累积**：gate 的 info 行显示 `sessions=122`、`login_challenges=100`。
-      成因疑为"每次登录建一行 session、每次请求验证码建一行 challenge，而测试反复登录"。
-      需要查明：① 是否有过期清理（TTL GC）；② 若没有，是否应纳入 cleanup CLI。
-      ⚠ 这是**数据卫生**问题（不影响正确性），但会持续膨胀。
-- [ ] E2 `MP5_BASELINE_*` 的 info 行建议加一条 `sessions`/`login_challenges` 的**期望上界**提示，
-      否则"残留累积"永远只是被打印、不会被发现（本项目一贯原则：**只打印不判定 = 假信号**）。
+> 审核原话要点：`sessions=122` 可能是"120 条早已过期的垃圾"，也可能是"122 条仍合法的活跃 session"
+> —— **这两个语义完全不同，总行数不是正确的 invariant**。
+
+- [ ] E1 **先做 `AUTH_HYGIENE_AUDIT`（查状态分布，不先做清理）**
+      ```
+      sessions:          active / expired / revoked / age distribution
+      login_challenges:  pending-valid / expired / consumed / age distribution
+      ```
+      依据 schema 已有语义（`sessions.expires_at`/`revoked_at`、`login_challenges.expires_at`/`consumed_at`）
+- [ ] E2 **冻结 retention 语义**，界定"**确定已经死亡的数据**"：
+      `expired session older than retention grace` / `revoked session older than retention grace` /
+      `expired challenge older than retention grace` / `consumed challenge older than retention grace`
+      → cleanup eligible
+      ⚠ **active session / still-valid challenge 绝不按总数删除**
+- [ ] E3 **独立 `cleanup-auth`**（不塞进 media cleanup —— 避免把媒体生命周期与认证生命周期
+      绑成一个破坏半径很大的工具）。沿用既有纪律：dry-run 默认 / 显式 `--apply` / 分类计数 /
+      DB 错误时 fail closed。报告字段：
+      `expiredSessions / revokedSessions / expiredChallenges / consumedChallenges /`
+      `activeSessions / pendingChallenges`
+- [ ] E4 **Gate 只查"死数据"，不查总数**：
+      `STALE_EXPIRED_SESSIONS = 0`、`STALE_CONSUMED_CHALLENGES = 0`
+      或允许明确 retention window：`expired_at < now - 24h → 必须不存在`
+      ⚠ **不要写 `sessions < 50`**。总行数只保留为**次级** trend/warning
+      （INFO active_sessions=… / WARN total unusually high），**不作产品 PASS/FAIL 唯一依据**
+
+## F. WO#6（已提交审核，等裁定）
+- [ ] F1 `docs/m5/WO6-PLAN-tabbar-vertical-layout.md`：tab 项 **横排 → 竖排**（原版为图标在上、文字在下）
+      证据：dump bounds（图标 y=[1746,1795]、文字 y=[1829,1868]，不重叠）+ 截图视觉（两条独立来源）+
+      我方 DOM 实测（icon y=1035、label y=1037，重叠 → 横排）
+- [ ] F2 FAB 可见直径：**两种像素方法均自判 INVALID** → 记为候选，等审核指定有效方法（不凭猜改）
