@@ -120,19 +120,57 @@ else
   echo "    （找不到 $BN）"
 fi
 
+# ---------------------------------------------------------------- 5. 基线完整性
+step "5. 共享库基线完整性（种子是否完好 / 盘库是否一致）"
+# 为什么要这一段：多个子代理在不同时间跑过验证，各建临时账号。
+# 若基线被悄悄污染，之后**每次**计数类断言失败都要先排除"是不是库被污染了"。
+#
+# ⚠️ 刻意区分两类，不混为一谈：
+#   **阻塞项（必须恒成立）**：种子账号完好、盘库一致（无 orphan / unattached）
+#   **仅报告（当前因残留而偏高，不判 FAIL）**：users / sessions / login_challenges 计数
+# 理由：把"users==3"也设成阻塞，会让 gate 因为一个**已知排队中的清理项**长期变红 ——
+#       而**恒红的 gate 会被忽略，等于没有 gate**（本轮刚论证过这一点）。
+BSQL() { PGPASSWORD="$(cat /srv/campus/.db_password)" psql -h 127.0.0.1 -U campus -d campus -Atc "$1" 2>&1; }
+SEED_N="$(BSQL "select count(*) from users where phone_e164 in ('+8613800000001','+8613800000002','+8613800000003')")"
+if [ "$SEED_N" = "3" ]; then
+  setk M5_BASELINE_SEED_INTEGRITY PASS
+else
+  setk M5_BASELINE_SEED_INTEGRITY "FAIL（种子账号 $SEED_N/3）"; FAILED=1
+fi
+
+# 盘库一致性：cleanup 的 dry-run 不应报出 orphan / unattached
+CD_OUT=''
+if [ -f /srv/campus/server/dist/cleanup.mjs ]; then
+  CD_OUT="$(cd /srv/campus/server && UPLOAD_ROOT=/srv/campus/uploads \
+    DATABASE_URL="postgres://campus:$(cat /srv/campus/.db_password)@127.0.0.1/campus" \
+    node dist/cleanup.mjs --json 2>&1 | head -c 600)"
+fi
+if printf '%s' "$CD_OUT" | grep -q '"orphans":\[\]' && printf '%s' "$CD_OUT" | grep -q '"unattached":\[\]'; then
+  setk M5_BASELINE_STORAGE_CONSISTENT PASS
+else
+  setk M5_BASELINE_STORAGE_CONSISTENT "FAIL（dry-run 报出 orphan 或 unattached）"; FAILED=1
+fi
+
+# 仅报告（不参与判定）
+printf '#   %-34s %s\n' "info users 总数" "$(BSQL 'select count(*) from users')（种子 3；偏高说明有验证残留，见清理队列）"
+printf '#   %-34s %s\n' "info sessions" "$(BSQL 'select count(*) from sessions')"
+printf '#   %-34s %s\n' "info login_challenges" "$(BSQL 'select count(*) from login_challenges')"
+printf '#   %-34s %s\n' "info messages / media / board_notes" \
+  "$(BSQL 'select count(*) from messages') / $(BSQL 'select count(*) from media') / $(BSQL 'select count(*) from board_notes')"
+
 # ---------------------------------------------------------------- 汇总
 echo
 echo "# ----------------------------------------------------------------"
 echo "# M5 分层结果"
 P_FAIL=0
-for k in M5_MEDIAID_STRICT_REJECT M5_TMP_SELFHEAL; do
+for k in M5_MEDIAID_STRICT_REJECT M5_TMP_SELFHEAL M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT; do
   [ "${KEY[$k]}" = "PASS" ] || P_FAIL=1
 done
 printf '#   %-12s %s\n' "PERSISTENT" "$([ $P_FAIL -eq 0 ] && echo PASS || echo FAIL)"
 printf '#   %-12s %s\n' "STAGE" "$([ "${KEY[M5_UNATTACHED_TTL_GC]}" = "PASS" ] && echo PASS || echo FAIL)"
 printf '#   %-12s %s\n' "REGRESSION" "$([ "${KEY[M5_MEDIAID_STRICT_REJECT]}" = "PASS" ] && echo PASS || echo FAIL)"
 echo '#'
-for k in M5_MEDIA_MESSAGE_API M5_MEDIAID_STRICT_REJECT M5_UNATTACHED_TTL_GC M5_TMP_SELFHEAL M5_BOARD_NOTES; do
+for k in M5_MEDIA_MESSAGE_API M5_MEDIAID_STRICT_REJECT M5_UNATTACHED_TTL_GC M5_TMP_SELFHEAL M5_BOARD_NOTES M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT; do
   printf '#   %-26s %s\n' "$k" "${KEY[$k]}"
 done
 echo
