@@ -515,9 +515,11 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [x] WO13.7 ✅ 方法教训已入注释：坏 glob（`Select-String -Path 'dir\**\*.tsx'` 不递归）
       会给出"零命中"，而零命中极易被误读成"不存在"
 - [x] WO13.8 ✅ 审核 54 的推广：**零命中只有在搜索范围被证明完整后才有证据价值**
-- [ ] WO13.9 ⬅ **等审核裁定 2 项**：① 服务器资源是根因层问题（396MB + PG max_connections=15），
-      本轮只修了"等待策略"，是否调整 PG 配置/扩容？② MeScreen 自身仍显示 mock 的 me.name/me.avatar，
-      是否单开一单？
+- [x] WO13.9 ✅ 审核 55 已裁定：① **驳回**我"资源是根因层"的断言 —— **DO NOT** 提高
+      max_connections 或加 swap 当作"修复"（在 396MB 机器上反而可能加剧内存压力）；
+      改为**单独立案**做 cold-start / resource pressure 调查（见 WO14.0）。
+      已确认的只是**机制**：重启后 readiness 可能约 176s 为 false，在其之前放行流量就会失败。
+      ② MeScreen 的 mock 身份 → 单开下一单 **WO14**，且**优先于 Map**
 
 ### ⭐ WO11.13-f 结案方向：机制已确认（Round 263）
 - [x] WO11.13-f ✅ **机制已确认**（不再称"未定位"）：
@@ -572,3 +574,56 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       · **零命中只有在搜索范围被证明完整后才有证据价值**（坏 glob 会给出假零命中）
 
       ② MeScreen 自身仍显示 mock 的 me.name/me.avatar 是否单开一单
+
+### ⭐ WO14 计划立项（审核 55 指定，**优先于 Map**）
+- [ ] WO14.1 **先 inventory，不要直接改**。逐字段查：
+      `field → current source → /api/auth/me 是否已有权威来源 → reload/relogin 语义 →
+       ProfileEdit 修改后是否同步 → 是否仅 mock 呈现 → wire / placeholder / hide`
+      已知起点：`app/src/screens/MeScreen.tsx` 用 `me.name` / `me.avatar`（mock）
+- [ ] WO14.2 Gate 至少含：
+      `ME_IDENTITY_FROM_SESSION` ／ `ME_DISPLAY_NAME_CONSISTENCY` ／
+      `PROFILE_EDIT_TO_ME_CONTINUITY`（**关键**：改完昵称回「我的」必须显示新值）／
+      `ME_AVATAR_PLACEHOLDER` ／ `NO_MOCK_SELF_IDENTITY`
+- [ ] WO14.3 头像：无权威来源就继续**首字 placeholder**，**不加列**（与 WO#12/WO#13 同一冻结）
+- [ ] WO14.4 理由（审核 55）：MeScreen 是**主导航真实 surface**，身份却来自 mock；
+      WO#13 已让它通往真实 ProfileEdit → 若不同步，会产生**新的跨页面 identity inconsistency**
+- [ ] WO14.5 做完 WO14 再做 **MapScreen**
+
+### ⭐ Cross-cutting（审核 55 指定，独立跟踪）
+- [ ] X1 **`CORS_CLIENT_METHOD_COVERAGE` Gate**（⭐ 修正我原先的过强提议）：
+      我提议的是"每个已注册方法都必须在 allow-methods 里" —— 审核 55 判为**过强**：
+      将来可能有"server route exists but intentionally not callable from WebView/browser"，
+      强迫入表会**无意扩大暴露面**。
+      **正确的不变量**：**每一个被 WebView/browser 客户端实际调用的 method**
+      都必须通过**真实 CORS preflight contract**。
+      实现要点：先建 `frontend API operations → method → path → 是否需要预检`，
+      再对每种实际浏览器 method 发真实 OPTIONS
+      （`Origin: <app origin>` + `Access-Control-Request-Method` + `Access-Control-Request-Headers:
+        authorization,content-type`），验证：2xx/204 ／ allow-origin 合法 ／
+      **allow-methods 含所请求方法** ／ **allow-headers 含所请求的非简单头**。
+      → 以后新增 PUT/PATCH/DELETE/带自定义头的 POST，只要客户端真会调用就自动进 Gate。
+      现有 `check-cors-methods.sh` 是**近似版**（registered ⊆ allow-methods），需按上述改写。
+- [ ] X2 **把破坏性自愈测试从常规回归拆出**（审核 55 指出比"240s 够不够"更重要）：
+      常规 M5 regression **不应该每次都重启正在服务的 backend**、制造接近 3 分钟的不可用窗口。
+      → 拆为 **`DESTRUCTIVE_SELF_HEAL_GATE`**，要求显式 maintenance / exclusive execution；
+        普通 server regression 尽量**不** restart 服务。
+- [ ] X3 **`BACKEND_COLD_START / RESOURCE_PRESSURE INVESTIGATION`**（独立运维案；**不要**先调参数）：
+      DO NOW（记录事实，不先改配置）：
+        · 启动期间的**精确 DB 连接错误 / SQLSTATE**
+        · 失败时刻 `pg_stat_activity` 状态与计数
+        · 应用连接池 max 与**所有** gate/test 的并发 DB 客户端
+        · `MemAvailable`、swap-in/out、OOM / journal 信号
+      ⚠️ 判据纪律：`free` 小 ≠ 内存不可用（要看 MemAvailable）；swap 已用 ≠ 证明当次 DB unreachable 由 swap 导致；
+        `max_connections=15` 且 used=10 很紧，但**要有实际 SQLSTATE/connection error 才能说是连接耗尽**。
+
+### ⭐ 状态表述更正（审核 55，Long-standing 间歇故障）
+- [x] 把原先的 `ROOT_CAUSE UNKNOWN` 改为更精确的两条：
+      `PREMATURE_POST_RESTART_TRAFFIC_MECHANISM: CONFIRMED`
+      `HISTORICAL_05:19:37_EVENT: CONSISTENT WITH THIS MECHANISM BUT NOT FORENSICALLY PROVEN`
+      （审核 55：已找到足以指导工程修复的机制，**旧事件没必要为"100% 归因"继续考古**）
+
+### ⭐ 本轮最值得保留的方法论（审核 55）
+- [x] **`SERVER_API_PASS ≠ BROWSER_CLIENT_REACHABLE`**：
+      服务端 API 验证通过只证明**协议端点自身**工作；只要真实客户端还隔着
+      **CORS、WebView origin、构建产物与运行状态**，就**不能替代客户端 E2E**。
+

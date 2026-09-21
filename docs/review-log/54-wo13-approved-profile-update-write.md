@@ -170,7 +170,16 @@ PROFILE_EDIT_FAKE_SAVE: HIGH / M5 BLOCKING
 ## 四、待审核裁定（本单之后）
 
 ```
-① 服务器资源是**根因层**问题（396MB 内存 + PG max_connections=15）；
+① ⚠️ **【已被审核 55 更正，我原来的断言不成立】**
+   我原先写的是"服务器资源是**根因层**问题（396MB 内存 + PG max_connections=15）"。
+   审核 55 明确驳回：free / swap / loadavg / max_connections 只能说明资源预算**紧张**，
+   **不足以单独证明** 176 秒冷启动的根因；而且在只有约 396MB RAM 的机器上
+   贸然提高 `max_connections` **反而可能加剧内存压力**。
+   裁定：**DO NOT** blindly raise max_connections / add more swap as "the fix"；
+   改为**单独立案**做 cold-start / resource pressure 调查（见 §二）。
+   已确认的只是**机制**：重启后 readiness 可能约 176s 为 false，
+   在 `/api/ready=200` 之前放行流量就会失败（固定等待、只看 liveness 的等待都无效）。
+   详见 `docs/review-log/55-wo13-closed-and-three-methodology-corrections.md` §二。
    本轮只修了"等待策略"，未改 PG 配置或扩容 —— 属运维决策，请裁定是否调整。
 ② MeScreen 自身仍显示 mock 的 me.name / me.avatar（与 WO#13 同类的"身份来自 mock"），
    但不在 WO#13 批准范围内 → 是否单开一单？
