@@ -157,3 +157,30 @@ com.kairuotu.campus:id/tv_user_tag_name            ← 标签里的用户名
 - 实现该 tab 前需要先只读观察其**交互模型与内容来源**，
   否则会做出一个"看起来有 4 个 tab、但第一个 tab 语义不对"的实现 ——
   那属于**用存在性掩盖语义差异**，正是本项目一直在防的。
+---
+
+## 附三：board 页差异清单的**收敛结果**（2026-09-21，替代附二里的 4 条）
+
+附二登记的 C1–C4 四条差异，经**只读观察复核**后收敛为：**2 条撤销 / 1 条策略阻断 / 1 条成立**。
+以本节为准（附二保留作为"当时的初判"，便于追溯我错在哪）。
+
+| 原编号 | 初判（附二） | 复核后 | 依据（可复核产物） |
+|---|---|---|---|
+| C1 | 缺返回按钮（原版有返回+关闭两个） | **撤销** —— `ivClose` 的 bounds [42,91][84,133] **完全落在** `iv_back` [28,77][98,147] 内、且 `ivClose` `clickable=false`，很可能是"一个可点击容器 + 内部图标"，**不是两个按钮** | `raw-dumps/board-ivback-{before,after}.xml` |
+| C2 | 缺留言总数 | **撤销** —— `tvTotalComment` 的可见文本就是标题「留言」 | 同上 |
+| C3 | 缺下拉刷新 | **BLOCKED_BY_POLICY** —— 该断言需**非空留言板**才能评估；空态下刷新本就可能被禁用；而造非空必须**发留言＝写操作＝禁止** | `raw-dumps/board-refresh-{before,mid,after}.xml`（三份均为空态） |
+| C4 | 表情是图片而非文字 emoji | **成立（DEVIATION）**，实现方式待审核裁定（复刻图像 vs 先做 image-based structure） | `raw-dumps/message-board-dump.xml`（`emotion_image`）+ `raw-dumps/emoji-row-crop.png` + 像素主色测量 |
+
+### 这张表本身就是一条教训的量化
+
+四条初判里：**两条错在"照 `resource-id` 的名字写结论"**（`ivClose` 被当成"关闭按钮"、
+`tvTotalComment` 被当成"总数"）、一条**合规做不了**、只有一条真的成立。
+如果按初判直接开工，会做出**两个原版并不存在的控件**，同时漏掉真正成立的 C4。
+
+审核那句原则因此被写进纪律：**不要把 `resource-id` 的名字当成行为 contract。**
+
+### 仍待审核裁定的两项
+
+1. C4 的实现方式：**复刻 6 个图标图像** vs **先完成 image-based structure**
+2. `force-stop` 替代规则是否够严（我已经默认改为**不主动干预原版 App**，
+   改为"先把自己 Activity 拉回前台，否则 abort"，force-stop 降级为显式开关）
