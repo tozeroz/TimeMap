@@ -1565,12 +1565,49 @@ export function buildServer(deps: ServerDeps) {
         return { error: 'not_found' }
       }
       const row = r.rows[0]!
+
+      /*
+        M5 WO#9B 层 A（blocker ①，审核记录 49 批准）：
+        AT 面板需要**权威的成员列表** —— 不能从消息 sender / seed / mock / 本地缓存反推。
+
+        ## 边界（审核 49 明确要求，逐条落实）
+         · 只返回**最小身份字段** `{ id, displayName }` ——
+           **不顺手暴露 phone 等无关数据**（面板只需要"显示谁"，不需要联系方式）
+         · `memberCount` 必须与 `members.length` **一致**（Gate 会顺手校验）
+         · 权限沿用本接口既有语义：成员 200 ／ 非成员 404（不区分"不存在"与"无权"）
+
+        ## ⚠️ 顺序
+         当前**没有原版成员排序规则的证据**，所以**顺序不得写成 conformance contract**。
+         这里按 display_name 排序**只是为了结果稳定**（同一份数据每次返回顺序一致，
+         便于 Gate 做集合与配对比较），并在此显式声明它是**我方选择**而非原版规则。
+      */
+      const members = await db.pool.query<{ id: string; display_name: string }>(
+        `select u.id, u.display_name
+           from thread_members tm
+           join users u on u.id = tm.user_id
+          where tm.thread_id = $1
+          order by u.display_name, u.id`,
+        [id],
+      )
+      const memberList = members.rows.map((m) => ({ id: m.id, displayName: m.display_name }))
+      const memberCount = Number.parseInt(row.member_count, 10)
+      // 一致性自检：两者由**不同查询**得到，若将来有人改了其中一处，这里能立刻暴露
+      if (memberList.length !== memberCount) {
+        reply.code(500)
+        return {
+          error: 'member_count_mismatch',
+          memberCount,
+          membersLength: memberList.length,
+        }
+      }
+
       return {
         id: row.id,
         kind: row.kind,
         title: row.title,
-        memberCount: Number.parseInt(row.member_count, 10),
+        memberCount,
         peerName: row.peer_name,
+        members: memberList,
       }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)

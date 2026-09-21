@@ -333,3 +333,22 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       并把改前 FAIL 证据用**最终键名**重采
 - [x] K2.9 ✅ 自查出并修掉 3 处"断言不可靠"：① 恒 FAIL 的同义反复 ② 占位探针+错 IP
       ③ **MIXED 断言因 `cannot_mention_self` 而"因为错误原因通过"**（诊断脚本已入库）
+### K2 进展（Round 260 收尾）
+- [x] K2.10 ✅ **审核 49：WO9B APPROVED TO IMPLEMENT**（两个 blocker 均被接受）
+- [x] K2.11 ✅ **层 B 已完成**：迁移 `011_mentions_all`（applied=11/11）+ 接口语义 + 读模型
+      → `MENTIONS_ALL_SEMANTICS: PASS`（**25 条断言**，含两条**自然对照变量**敏感度验证）
+- [x] K2.12 ✅ **校验顺序按审核 49 冻结清单重排**（这是一处**真实代码缺陷**）：
+      我原把"互斥检查"放在事务前 → **非成员**同时带双字段会拿到 400（冲突）而不是 404，
+      违反冻结顺序。已改为：事务前**只做类型检查**；语义检查（kind 策略 + 互斥）全部进事务、
+      **排在成员判定之后**。并新增 Gate `5b)`：非成员 + 双字段 → 必须 **404**（实测 PASS）
+- [x] K2.13 ✅ **Blocker ① 后端契约已完成并核验**：`GET /api/threads/:id` 返回
+      `members: [{id, displayName}]` → `MEMBER_SOURCE_CONTRACT: PASS`（15 条断言）
+      含审核 49 点名边界：只含最小身份字段（**无 phone**）、`memberCount == members.length`、
+      成员集合 == DB `thread_members`、非成员 404、**顺序不作为 conformance**
+- [ ] K2.14 ⬅ **下一步：层 A UI**（AT 面板）
+      · 底部弹层（全屏遮罩可点关闭 + 底部锚定）/ 关闭控件 / 标题「选择提醒的人」16sp bold 居中
+      · 「所有人」项（行高 88dp、图标 56dp、标签 16sp、图文间距 12dp）
+      · 成员平铺（**不渲染** section header）+ 空态/失败态（**受控 stub**，标 CLIENT_CODEPATH）
+      · 入口位置 = 我方设计选择（`AT_PANEL_TRIGGER: ORIGINAL_BEHAVIOR NOT_EVALUATED`）
+      · 选中状态：**composer chip/state**（**不得**写进 message body）+ 成功清除／失败保留／可取消
+      · 然后重采层 A 的改前 FAIL 与改后 PASS

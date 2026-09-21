@@ -161,10 +161,29 @@ export interface ApiMessage {
  * 刷新/深链会丢，且客户端可以随便改。页面标题应当来自服务端（与列表同一批字段）。
  * 访问控制与 `getThreadMessages` 完全一致（非成员/不存在一律 404，服务端刻意不区分）。
  */
-export async function getThread(
-  threadId: string,
-): Promise<ApiResult<Omit<ApiThread, 'lastMessage'>>> {
-  return request<Omit<ApiThread, 'lastMessage'>>(`/api/threads/${encodeURIComponent(threadId)}`)
+/**
+ * 会话详情（M5 WO#9B 层 A）。
+ *
+ * `members` 是 **AT 面板的唯一权威成员来源**（blocker ①，审核记录 49 批准）：
+ * 面板**不得**从消息 sender / seed / mock / 本地缓存反推成员。
+ *
+ * 边界（审核 49）：
+ *   · 只含**最小身份字段** `{ id, displayName }` —— 服务端**不**返回 phone 等无关数据
+ *   · 服务端保证 `memberCount === members.length`（不一致时服务端自己 500，不会静默给错数）
+ *   · ⚠️ **顺序不是 conformance**：当前没有原版成员排序规则的证据，
+ *     服务端按 displayName 排序只是为了结果稳定；前端**不得**把顺序当契约来断言。
+ */
+export interface ApiThreadDetail {
+  id: string
+  kind: string
+  title: string | null
+  memberCount: number
+  peerName: string | null
+  members: Array<{ id: string; displayName: string }>
+}
+
+export async function getThread(threadId: string): Promise<ApiResult<ApiThreadDetail>> {
+  return request<ApiThreadDetail>(`/api/threads/${encodeURIComponent(threadId)}`)
 }
 
 export async function getThreads(): Promise<ApiResult<{ items: ApiThread[] }>> {
