@@ -283,3 +283,18 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [x] J4 ✅ **已完成（审核 44 正式冻结为一等类别）**：已写入 PLAN.md`n      命名 `ENTRY REACHABILITY / USER-PATH REACHABILITY`，与 FUNCTIONAL/PERSISTENCE/CONFORMANCE/REGRESSION 并列`n      含定义、测试方式边界（直接设 hash 只能证明 destination functionality）、两个标准实例、4 条自查问句
       （WO#7 的 Gate 用"直接设 hash"进页面，恰好跳过"用户怎么走到那里" → 正是本次缺陷躲过所有 Gate 的原因）
 - [x] J5 ✅ **已完成**：`docs/m5/UI-DATA-SOURCE-INVENTORY.md`（26 屏逐屏登记 + 可复现盘点命令 + 维护规则）`n      纯 api 5 ／ 分区或混合 4 ／ **纯 mock 10** ／ 静态 7；P1 顺序 GroupChat→FeedList→UserProfile→Map`n      ⚠️ 特别标注 ProfileEditScreen：**写路径却纯 mock**（假成功），与本次修的"mock id 漏进真实 API"同类
+---
+
+## K. Round 258 后续（WO#9/10 登记）
+
+- [ ] K1 **WO#9A 群聊垂直切片**：`docs/m5/WO9A-PLAN-group-conversation-slice.md`（**已提交审核待批准**）
+      前提核查结论：**后端 schema 已支持 group**（`kind CHECK IN ('direct','group')`、成员表无上限无角色、
+      `title` 可空）→ 无需迁移，主要是**造种子 + 前端接真实 API + Gate**
+- [ ] K2 **WO#9B AT 面板 / @所有人**：在 WO#9A 的真实群会话之上做
+      （AT 面板的结构证据已就绪：`docs/m5/EVIDENCE-at-panel-structure.md`；
+       `mentions_all` 数据模型设计已就绪）——**不与 WO#9A 混成一个 Gate**
+- [ ] K3 **WO#10 MessageScreen 剩余 mock 区块接线**：邀请卡的学校/学院/年级/头像、
+      「更多同学」+ 好友申请（后端无推荐/好友申请能力）。需要先补 profile 字段与推荐接口
+- [ ] K4 按 `docs/m5/UI-DATA-SOURCE-INVENTORY.md` 的 P 顺序继续接线：
+      FeedListScreen（P2）→ UserProfileScreen（P3）→ MapScreen（P4）
+      ⚠️ 其中 **ProfileEditScreen 是"写路径"却纯 mock**（假成功），建议提前
