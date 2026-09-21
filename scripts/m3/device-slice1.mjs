@@ -228,10 +228,25 @@ if (mode === 'composer') {
     finish('COMPOSER')
   }
   await tapAt(btn.x, btn.y)
-  await wait(600)
+  /*
+    用**轮询**等弹层出现，而不是固定 600ms。
+    原因（FAIL 2 直接观测得到的结论）：弹层是带动画的全屏浮层，
+    点下去确实会打开（实测点击后 sheetExists=true、文字「× 回复 @Lemy 发布」），
+    但 600ms 落在临界区间 —— 慢一点就还没渲染出来，断言读到的是详情页正文。
+    固定等待是"把机器快慢当常量"；轮询才是"等到条件成立或超时"。
+  */
+  let sheetText = ''
+  for (let i = 0; i < 20; i++) {
+    sheetText = (await evaluate(`(() => { const s = document.querySelector('.feed__replySheet'); return s ? s.innerText : '' })()`)) ?? ''
+    if (sheetText) break
+    await wait(200)
+  }
   const t = await bodyText()
-  if (/回复 @/.test(t)) ok(`回复弹层标题是「${(t.match(/回复 @[^ ]+/) ?? [''])[0]}」（原版实测形态）`)
-  else bad(`回复弹层没有「回复 @昵称」标题（实际: ${t.slice(0, 120)}）`)
+  if (/回复 @/.test(sheetText || t)) {
+    ok(`回复弹层标题是「${((sheetText || t).match(/回复 @\S+/) ?? [''])[0]}」（原版实测形态）`)
+  } else {
+    bad(`回复弹层没有「回复 @昵称」标题（弹层文字: '${sheetText}'，页面: ${t.slice(0, 80)}）`)
+  }
 
   const ph = await evaluate(`(() => { const el = document.querySelector('.feed__replyInput'); return el ? el.placeholder : null })()`)
   if (ph === '留下我的回复...') ok('回复输入框占位是「留下我的回复...」（区别于主帖评论的「留下我的评论...」）')
