@@ -110,3 +110,62 @@ MSGS1="$(PSQL "select count(*) from messages where thread_id='$THREAD'")"
 **在拿到这个数据之前不得改产品**——这正是本项目一直在坚持的
 "先分类、再动手"，也是我在同一份对话里已经违反过三次的纪律
 （pitch/gap、坐标基准、判别点），这次我在写文件时就发现并改正了。
+---
+
+## 八、静态读码决定性结论：**H1（产品缺陷）被否证**
+
+我读了 `server/src/index.ts` 里该 handler 的实际控制流（行号来自当前源码）：
+
+```
+1572: await client.query('begin')
+1597: // 校验 mediaId（全部通过才写；任一条不过 → rollback + 4xx，一行都不写）
+1605: if (mediaId !== null) {            ← 校验块
+1612-1614: media_not_found  → rollback + return 404
+1619-1621: media_not_private → rollback + return 400
+1627-1629: media_not_owned  → rollback + return 400
+1634: insert into messages (...)        ← **在所有媒体校验之后**
+1647-1650: insert into message_media (...)   ← 仅当 mediaId 非空
+1653: await client.query('commit')
+1657: catch → rollback
+```
+
+而**形状类检查（`bad_media_id`：数组/非字符串/格式错；`media_requires_image_kind`）
+全部发生在 1572 的 `begin` 之前**（1553-1566），因此那些路径**根本不在事务里、也不会写任何行**。
+
+**结论**：
+- 所有媒体**语义**校验都在事务内、且在 `insert into messages` 之前；失败一律 `rollback`。
+- 因此**不存在"H1：校验失败却写了消息"的产品路径** —— **H1 否证**。
+- **H2（测试工件问题）成为主要解释**：那第 3 条消息来自脚本自身
+  （重复发送、上一轮残留、或脚本里另有一条成功请求）。
+
+## 九、因此 A9 的 FAIL 应归为 **GATE_DEFECT**，修脚本不改产品
+
+按本项目的缺陷分类：
+
+```
+MESSAGE_MEDIA_RESULT: FAIL
+  A9 同事务计数不符（期望 2 / 实际 3）
+  分类: GATE_DEFECT（测试脚本自身）
+  依据: 静态读码证明产品在"媒体校验失败"路径上不可能写行（见 §八）
+```
+
+**要修的是脚本**：在开头断言"会话起始为空"、并在 A9 处**打印**该会话全部消息明细
+（`id/body/kind/created_at`），这样第三条是什么会一目了然。
+
+## 十、我这一轮两次纠正自己的判断，值得记
+
+1. 最初把标题写成"**发现真实缺陷**" → 读到断言原文后改为"**尚未定性**"；
+2. 随后**静态读码**直接把 H1 否证、定位为 H2/GATE_DEFECT。
+
+**两次都是"先给结论、后用证据修正"**，只是这次发生在我自己写文档的过程中、
+而不是提交给审核之后。同一模式在本会话已出现四次（pitch/gap、坐标基准、判别点、这次的定性）；
+**共同点都是"证据还没读全就下判断"**。
+
+## 十一、修正后的 WO#2 状态
+
+```
+WO#2 后端:
+  MESSAGE_MEDIA_RESULT: FAIL  → 分类为 GATE_DEFECT（脚本问题）
+  实现侧结论: 主体正确（形状检查/语义检查/事务边界/清理都通过或静态可证）
+  待做: 修脚本（开头断言空、A9 打印明细）后重跑；再跑 cleanup 侧的 TTL GC 验证
+```
