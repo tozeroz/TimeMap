@@ -145,6 +145,28 @@ export function feedWithMine(mocks: FeedPost[]): FeedPost[] {
   return [...localOnly, ...serverPosts, ...mocks]
 }
 
+/**
+ * **权威信息流**：本地待同步的 + 服务器返回的 —— **不含 mock**。
+ *
+ * 为什么单独有一个函数（M3 Slice 1，审核记录 07 的降级边界）：
+ *   "已迁移页面：正常在线状态 API = authoritative source；
+ *    离线降级最多允许 last successful API snapshot/cache；
+ *    不能 API 失败 → 塞一份 synthetic mock → UI 看起来仍然像在线成功。"
+ *
+ * 校园页已经迁到真实 API，所以在线时不能再把 mock 混进来 —— 否则会出现"双真源"：
+ * 同一个列表里既有真实数据又有假数据，且用户无法分辨。
+ * 未迁移的页面继续用 feedWithMine（mock 允许存在），迁移完一页就换一页。
+ */
+export function feedAuthoritative(): FeedPost[] {
+  const serverIds = new Set(serverPosts.map((p) => p.id))
+  const map = readLinks()
+  const localOnly = read().filter((p) => {
+    const sid = map[p.id]
+    return !sid || !serverIds.has(sid)
+  })
+  return [...localOnly, ...serverPosts]
+}
+
 /** 按 id 找帖子（本地 → 服务器 → 预置内容） */
 export function findPost(id: string, mocks: FeedPost[]): FeedPost | undefined {
   return (

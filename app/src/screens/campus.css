@@ -314,3 +314,35 @@
   padding: 18px 0 6px;
   margin: 0;
 }
+
+/* ===========================================================================
+   M3 Slice 1：校园页的离线/错误态
+   在线时 API 是权威数据源（不再混 mock）；离线只降级到最后成功快照并明确标注；
+   既无网络也无快照 → 「网络错误 + 刷新」（与原版一致）。
+   =========================================================================== */
+.campus__offline {
+  margin: 10px 16px 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--c-surface-sunken);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--c-text-2);
+}
+
+.campus__error {
+  padding: 80px 24px;
+  text-align: center;
+  color: var(--c-text-2);
+  font-size: 15px;
+}
+
+.campus__retry {
+  margin-top: 14px;
+  padding: 8px 22px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: #111;
+  color: #fff;
+  font-size: 14px;
+}

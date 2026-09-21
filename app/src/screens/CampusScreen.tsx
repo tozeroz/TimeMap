@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { listPosts, toFeedPost } from '../api/client'
+import { listPosts, readSnapshot, toFeedPost } from '../api/client'
 import { BigTitle, Screen } from '../components/Shell'
 import { IconChatBubble, IconComment, IconHeart, IconSearch } from '../components/icons'
-import { campusInfo, posts, schools, type FeedPost } from '../data/mock'
-import { feedWithMine, setServerPosts, subscribeMyPosts } from '../data/store'
+// 注意：这里**不再** import mock 的 `posts` —— 校园页已迁移到真实 API，
+// 在线时 API 是权威数据源（审核记录 07 的降级边界：已迁移页面不得混入 synthetic mock）。
+import { campusInfo, schools, type FeedPost } from '../data/mock'
+import { feedAuthoritative, setServerPosts, subscribeMyPosts } from '../data/store'
 import { navigate } from '../router'
 import './campus.css'
 
@@ -148,25 +150,37 @@ export function CampusScreen() {
   const [school, setSchool] = useState(campusInfo.name)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [likedIds, setLikedIds] = useState<Record<string, boolean>>({})
-  // 真实数据：服务器帖子（权威副本）+ 本地未同步的帖子 + 预置 mock 内容
-  const [feed, setFeed] = useState<FeedPost[]>(() => feedWithMine(posts))
-
-  useEffect(() => subscribeMyPosts(() => setFeed(feedWithMine(posts))), [])
-
   /**
-   * 拉服务器帖子。
-   * 为什么失败时只 warn 不出错：真机上网络随时可能断，这时候应该继续显示本地和预置内容，
-   * 而不是把校园页变成一片空白（原版在这里是「网络错误 + 刷新」，但那是它自己没做离线兜底）。
+   * 信息流状态（M3 Slice 1 收紧）：
+   *   在线 → **API 是权威数据源**（不再混入 mock，避免"双真源"）
+   *   离线 → 只降级到**最后一次成功的 API 快照**，并明确标注
+   *   既无网络也无快照 → 显示「网络错误 + 刷新」（原版在这点上的行为就是这个）
    */
+  const [feed, setFeed] = useState<FeedPost[]>(() => readSnapshot<FeedPost[]>('feed')?.value ?? [])
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'offline' | 'error'>(() =>
+    readSnapshot<FeedPost[]>('feed') ? 'offline' : 'loading',
+  )
+
+  useEffect(() => subscribeMyPosts(() => setFeed(feedAuthoritative())), [])
+
   useEffect(() => {
     let alive = true
     void (async () => {
       const result = await listPosts()
       if (!alive) return
       if (result.ok) {
-        setServerPosts(result.value.map(toFeedPost))
+        const postsFromServer = result.value.map(toFeedPost)
+        setServerPosts(postsFromServer)
+        // 只在**成功**时写快照 —— 快照永远是"曾经真实成功过的响应"
+        writeFeedSnapshot(feedAuthoritative())
+        setFeed(feedAuthoritative())
+        setPhase('ready')
       } else {
-        console.warn('[campus] 获取帖子失败，降级显示本地内容：', result.reason)
+        // 失败时**不塞 mock**：有快照就显示快照，没有就如实报错
+        const snap = readSnapshot<FeedPost[]>('feed')
+        setFeed(snap?.value ?? [])
+        setPhase(snap ? 'offline' : 'error')
+        console.warn('[campus] 拉取帖子失败：', result.reason)
       }
     })()
     return () => {
@@ -186,15 +200,48 @@ export function CampusScreen() {
       }
       scroll
     >
+      {phase === 'offline' && (
+        <p className="campus__offline">
+          离线：显示的是最后一次成功获取的服务器数据（非本地假数据），可能不是最新
+        </p>
+      )}
+
+      {phase === 'error' && (
+        <div className="campus__error">
+          <p>网络错误</p>
+          <button
+            className="campus__retry"
+            onClick={() => {
+              setPhase('loading')
+              void (async () => {
+                const r = await listPosts()
+                if (r.ok) {
+                  setServerPosts(r.value.map(toFeedPost))
+                  writeFeedSnapshot(feedAuthoritative())
+                  setFeed(feedAuthoritative())
+                  setPhase('ready')
+                } else {
+                  setPhase('error')
+                }
+              })()
+            }}
+          >
+            刷新
+          </button>
+        </div>
+      )}
+
       <div className="campus__grid">
         {feed.map((p) => (
           <PostCard key={p.id} post={p} liked={likedIds[p.id]} onLike={setLikedIds} />
         ))}
-        <p className="campus__end">
-          已加载全部 · {campusInfo.posts} 条动态
-          <br />
-          {school} · {campusInfo.members} 位同学
-        </p>
+        {phase === 'ready' && (
+          <p className="campus__end">
+            已加载全部 · {feed.length} 条动态
+            <br />
+            {school}
+          </p>
+        )}
       </div>
 
       {switcherOpen && (
@@ -209,4 +256,16 @@ export function CampusScreen() {
       )}
     </Screen>
   )
+}
+
+/** 信息流快照（只在 API 成功时写；见 readSnapshot 的说明） */
+function writeFeedSnapshot(list: FeedPost[]): void {
+  try {
+    localStorage.setItem(
+      'campus.demo.snapshot.v1:feed',
+      JSON.stringify({ at: Date.now(), value: list }),
+    )
+  } catch {
+    /* 容量满/隐私模式：快照是"最好有" */
+  }
 }

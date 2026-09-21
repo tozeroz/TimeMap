@@ -61,8 +61,16 @@ export default function App() {
       {tab === 'me' && <MeScreen />}
       {tab === 'map' && <MapScreen />}
 
-      {root === 'feed' && <FeedDetailScreen id={param ?? 'p1'} />}
-      {root === 'comments' && <CommentsScreen id={param ?? 'p1'} />}
+      {/*
+        详情页的 id 取法（M3 Slice 1 修正的真实 bug）：
+        之前只读路径段 param，而应用自己的跳转用的是 query：
+        `navigate('feed', { id })` → `#/feed?id=<uuid>` → param 永远是 undefined
+        → 落到默认值 'p1' → **点任何帖子进去看到的都不是那条帖子**。
+        现在两种形式都认：先看 query.id，再看路径段；都没有就传空串，
+        由页面显示"未指定"(而不是拿一个 mock 默认值假装成功)。
+      */}
+      {root === 'feed' && <FeedDetailScreen id={route.query.id ?? param ?? ''} />}
+      {root === 'comments' && <CommentsScreen id={route.query.id ?? param ?? ''} />}
       {root === 'message' && <MessageScreen />}
       {root === 'chat' && <ChatScreen id={param ?? 't1'} />}
       {root === 'board' && <BoardScreen />}

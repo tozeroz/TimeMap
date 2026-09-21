@@ -238,3 +238,99 @@ export function toFeedPost(p: ApiPost): FeedPost {
     createdAt: relativeTime(p.createdAt),
   }
 }
+
+// ===========================================================================
+// M3 Slice 1：帖子详情 / 评论 / 回复
+//
+// 1:1 依据（原版实测，见 docs/m3/MODEL-VALIDATION.md §2.7）：
+//   - 评论区**内联**在动态详情里；顶层评论各自带一层「回复列表」（嵌套渲染）
+//   - 回复行渲染为「<作者> 回复 <目标> · <时间>」+ 正文
+//   - 「评论 N」的计数**把回复也算进去**
+// ===========================================================================
+
+export interface ApiComment {
+  id: string
+  body: string
+  authorId: string | null
+  author: string
+  createdAt: string
+  parentId: string | null
+  /** 回复的目标昵称（来自 parent_id 指向的那条评论的作者）；顶层评论为 null */
+  replyTo: string | null
+}
+
+export interface ApiCommentNode extends ApiComment {
+  replies: ApiComment[]
+}
+
+export interface ApiPostDetail {
+  id: string
+  author: string
+  authorId: string | null
+  body: string
+  place: string | null
+  createdAt: string
+  /** **含回复**的总数（原版「评论 N」的口径） */
+  commentCount: number
+  likeCount: number
+}
+
+/** 帖子详情。404 会返回 ok:false + status 404，调用方可据此显示"已删除" */
+export async function getPost(id: string): Promise<ApiResult<ApiPostDetail>> {
+  const r = await request<ApiPostDetail>(`/api/posts/${encodeURIComponent(id)}`)
+  if (r.ok) writeSnapshot(`post:${id}`, r.value)
+  return r
+}
+
+/** 评论树：顶层评论 + replies（每条 reply 自带 replyTo） */
+export async function getComments(id: string): Promise<ApiResult<{ items: ApiCommentNode[]; total: number }>> {
+  const r = await request<{ items: ApiCommentNode[]; total: number }>(
+    `/api/posts/${encodeURIComponent(id)}/comments`,
+  )
+  if (r.ok) writeSnapshot(`comments:${id}`, r.value)
+  return r
+}
+
+/** 发评论或回复：带 parentId 就是回复。**需要登录**（作者由服务端会话决定） */
+export async function createComment(
+  postId: string,
+  body: string,
+  parentId?: string,
+): Promise<ApiResult<ApiComment>> {
+  const r = await request<ApiComment>(`/api/posts/${encodeURIComponent(postId)}/comments`, {
+    method: 'POST',
+    body: parentId ? { body, parentId } : { body },
+  })
+  return r
+}
+
+// ---------------------------------------------------------------------------
+// 「最后一次成功的 API 快照」缓存
+//
+// 审核记录 07 对离线降级的边界：
+//   已迁移页面：正常在线时 **API = 权威数据源**；离线时**最多**降级到最后一次成功的 API 快照。
+//   不能做：API 失败 → 塞一份 synthetic mock → UI 看起来仍然像在线成功。
+// 所以这里**只在 API 成功时写入**，失败时读出来的也永远是"某次真实成功过的响应"。
+// ---------------------------------------------------------------------------
+
+const SNAPSHOT_PREFIX = 'campus.demo.snapshot.v1'
+
+function writeSnapshot(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(`${SNAPSHOT_PREFIX}:${key}`, JSON.stringify({ at: Date.now(), value }))
+  } catch {
+    // 容量满或隐私模式：快照是"最好有"，写不进去不影响在线路径
+  }
+}
+
+export function readSnapshot<T>(key: string): { at: number; value: T } | null {
+  try {
+    const raw = localStorage.getItem(`${SNAPSHOT_PREFIX}:${key}`)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { at: number; value: T }
+    if (!parsed || typeof parsed.at !== 'number') return null
+    return parsed
+  } catch {
+    return null
+  }
+}
