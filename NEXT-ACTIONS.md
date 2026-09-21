@@ -457,7 +457,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       · 另修 App.tsx 的 `route.query.id ?? 'u1'`（又一处 mock id 回落）
       → 设备 Gate **12 条断言全 PASS**；敏感度两条（均：突变→被抓→恢复→PASS）
 - [x] WO12.6 ✅ 断言的偶然 PASS 已消除：头像改用"**头像元素**是首字占位"判据（不再用"整页 imgCount==0"）
-- [ ] WO12.7 ⬅ **等审核裁定**：WO#12 是否可写 **PASS / CLOSED**；并请确认对
+- [x] WO12.7 ✅ 审核 54 已裁定：**WO#12: PASS / CLOSED**；敏感度②的键名分工（由 INVALID_PROFILE_ID_NO_FALLBACK 捕获）**已被接受**
       「抓它的是 INVALID_PROFILE_ID_NO_FALLBACK 而非审核点名的 NO_MOCK_IDENTITY」这一分工差异是否接受
       （两条断言测不同表面：前者测坏输入用例、后者测有效资料页）
 - [x] WO12.8 ✅ **已由 WO#13 承接**：ProfileEditScreen 的字段级 inventory 与"假写成功"确认已完成（见 WO13.1）
