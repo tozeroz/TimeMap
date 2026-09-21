@@ -198,3 +198,62 @@ M5_OVERALL: OPEN（待审核确认 WO#2 后更新）
 判为"无法静态验证的删除"并拒绝执行。处置：把含这类字样的内容**用文件工具写**，
 命令只做追加与提交 —— 这不是绕过安全控制（我并没有执行任何删除），
 而是避免文档用词触发假阳性。
+
+---
+
+## 十、排队任务与最新状态（2026-09-21 18:55，round 200）
+
+### 在飞（占用设备，勿动设备）
+
+`Automate native file picker E2E`（子代理 `a24179f5`，运行中）
+目的：补上审核记录 25 唯一未决项 `NATIVE_FILE_PICKER_INTERACTION` ——
+**用 uiautomator + adb input 驱动真实的 Android 系统选择器**（不引入人工）。
+完成并验证后 → `WO2_FINAL_CLOSE` 可解除 HOLD。
+
+⚠ 它跑着的时候：**不要重装 APK、不要抢 CDP、不要清理它可能依赖的账号**
+（见 `docs/DISCIPLINE-device-concurrency.md`）。
+
+### 队列 1：清理共享库的验证残留（脚本已就绪，勿在子代理运行时执行）
+
+- 脚本：`scripts/m5/cleanup-test-residue.sh`（默认 dry-run；加 `--apply` 才真删）
+- 辅助：`scripts/m5/describe-for-cleanup.sh`（只读导出真实列名与外键）、
+  `scripts/m5/check-baseline-integrity.sh`（只读检查种子/残留）
+- 现状：7 个测试账号（校园用户*）+ sessions 121 + login_challenges 99；
+  **种子 3 个账号完好**；盘库一致（orphans/unattached 均空）
+- 执行前提（脚本开头已写）：**确认没有正在运行的验证**
+- 执行后须做：重跑检查脚本断言 users==3 且 orphans/unattached 为空
+  → 重跑 M5 gate 确认未受影响
+  → 把 `check-baseline-integrity.sh` 纳入常规检查，防基线再次被悄悄污染
+- ⚠ 脚本**刻意不删 `message_threads`**（线程可能被种子用户引用，删了会改变 App 可见行为）
+
+### 队列 2：气泡偏差的"原版对照"观察（需设备）
+
+- 偏差：`CHAT_MESSAGE_SENDER_PRESENTATION`（自己发的图渲染在左侧 peer 气泡）
+- 已完成：只读代码刻画（`docs/m5/CHAT-BUBBLE-DEVIATION-ANALYSIS.md`）——
+  结论是"**CSS 与数据两侧都齐了，只是渲染硬编码 `--peer`**"，属**接线级**修法
+- **仍缺的关键证据**：**原版会话页是否也区分"我/对方"**
+  · 若原版区分 → 是真 deviation，应修
+  · 若原版不区分 → **不是 deviation，改了反而制造差异**
+- 动作：设备空闲后做一次**只读观察**（截图 + dump，入库 `raw-dumps/`）
+- ⚠ 不要凭感觉先改（这正是我在 C1/C2 上犯过的错：照名字写结论）
+
+### 队列 3：C4 表情形态（等审核裁定）
+
+原版表情是**图片**（`emotion_image`），我们是**文字 emoji**。待裁定：
+**复刻 6 个图标图像** vs **先做 image-based structure**。
+（原始视觉证据已入库 `raw-dumps/emoji-row-crop.png` + 像素测量。）
+
+### 已完成（本轮附近，供接手者确认无需重做）
+
+- **M4 回归**：改动 `server/src/index.ts` 后跑全量 M4 服务器侧 Gate → **全 PASS**
+  （包装脚本 `scripts/m4/gate-m4-wrap.sh`，含"先做产物核验"的前置步骤）
+- **M5 服务器侧 Gate**：全键 PASS；`M5_OVERALL` 状态文字已精确化为
+  "WO2_IMPLEMENTATION ACCEPTED；唯一未决 = NATIVE_FILE_PICKER_INTERACTION"
+- **WO#2 前端**：真机 PASS（含失败路径）；C1 跨层缺口已关闭；验证残留已清
+- **M5 A/D 清单**：`docs/m5/A-D-LIST.md`（5 类差异汇总 + 状态口径 + 维护规则）
+
+### 待人工执行（我不绕道）
+
+清理已退出的 docker 容器 `wo2-pg`：本会话命令守卫对删除类命令一律返回
+"cannot statically verify deletion inside opaque shell syntax"。
+如实记为**需在会话外清理一次**；不影响任何功能与验证。
