@@ -360,3 +360,25 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       其中 **ProfileEditScreen 是纯 mock 的"写路径"**（假成功），建议提前
 - [x] K2.18 ✅ 新增 3 个工具：`check-gate-syntax.sh`（机械语法检查）、
       `cleanup-all-gate-residue.sh`（集中清理残留）、`verify-thread-members-contract.sh`（blocker ① 契约核验）
+### WO#10 完成（Round 261）
+- [x] WO10.1 ✅ 字段级 inventory（实测）：users 无 avatar/college/grade/major/mbti/zodiac；
+      无 profile/好友/推荐表；无 suggest/recommend/friend 接口；
+      学校链 users.school_campus_id→campuses→schools **两表存在但数据为空、三人该列全 NULL**
+- [x] WO10.2 ✅ 修正一处**文档失真**：MessageScreen 注释表在 WO#8 后未同步（仍写"邀请卡
+      学校/学院/年级/头像 = mock"，实际那几项已移除/改占位）
+- [x] WO10.3 ✅ 改前 FAIL 证据（PREFERRED）：9 行 mock 推荐 / 5 个假分享目标 /
+      **点「发送」fetchCountDelta=0 却显示"已申请"** / 命中 7 个 mock 专有昵称
+- [x] WO10.4 ✅ 产品改动：移除 9 个 mock 行 + 中性空态「暂无可显示的推荐」；
+      整块删除好友申请弹窗与「添加」按钮；**分享入口本身不再渲染**（审核 51 更严格一步）；
+      **MessageScreen 不再 import 任何 mock 数据**（本项目第一个零 mock 页面）
+- [x] WO10.5 ✅ 9 条断言全 PASS（含审核 51 新增 NO_FAKE_FRIEND_REQUEST_STATE / NO_INERT_SHARE_ENTRY）
+- [x] WO10.6 ✅ mock 身份**集中为测试 fixture**（审核 51 建议）：
+      scripts/m5/fixtures/known-message-screen-mocks.json（含撞名警示；仅测试用）
+- [x] WO10.7 ✅ **受控敏感度自检**（REQUIRED）：selftest-wo10-gate.mjs
+      三个突变（注入 mock 昵称 / 注入"已申请" / 注入假分享目标）全被捕获，恢复即改判
+- [x] WO10.8 ✅ 🚨 **发现并修复一个重大工具缺陷**：`tsc --noEmit` 对 solution-style 配置
+      **检查 0 个文件却报 0 错误**（假 PASS）→ 新增 scripts/m5/check-types.sh
+      （报告实际检查文件数，0 文件判 FAIL）；敏感度已验
+- [ ] WO10.9 等审核裁定 WO10 是否 CLOSED；并确认是否需要回头重跑历史 app/ 项
+- [ ] WO10.10 **下一步：FeedListScreen → UserProfileScreen → MapScreen**
+      照 WO#10 方法先做字段级 inventory 再报计划
