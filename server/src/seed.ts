@@ -160,11 +160,27 @@ export async function runSeed(client: PoolClient): Promise<SeedResult> {
   })
 
   // ---- comments ----
+  // 顶层评论 1 条。
   await put('comments', 'dddddddd-0001-4001-8001-000000000001', {
     post_id: P.p1,
     author_id: U.lemy,
     parent_id: null,
     body: '这句话我很喜欢。',
+    created_at: T0,
+  })
+
+  /*
+    回复 1 条（parent_id 指向上面那条）。
+    M3 Slice 1 观察到原版的评论区是「顶层评论 + 嵌套回复」结构（MODEL SUPPORTED /
+    PRESENTATION EXPANDED），且「评论 N」的计数**把回复也算进去**。
+    种子里补这一条，是为了让这条语义在我们的 demo 里有真实数据可演示与可验证 ——
+    否则层级结构只能靠临时手工造数据，回归时容易漏。
+  */
+  await put('comments', 'dddddddd-0002-4001-8001-000000000002', {
+    post_id: P.p1,
+    author_id: U.azur,
+    parent_id: 'dddddddd-0001-4001-8001-000000000001',
+    body: '同感，尤其是最后一句。',
     created_at: T0,
   })
 
@@ -305,7 +321,7 @@ function hashSpecs(): HashSpec[] {
     },
     {
       table: 'comments',
-      ids: ['dddddddd-0001-4001-8001-000000000001'],
+      ids: ['dddddddd-0001-4001-8001-000000000001', 'dddddddd-0002-4001-8001-000000000002'],
       cols: [
         'id::text',
         'post_id::text',
@@ -425,7 +441,7 @@ export async function resetSeed(client: PoolClient): Promise<void> {
   ])
   await del('message_threads', ['ffffffff-0001-4001-8001-000000000001'])
   await del('likes', ['eeeeeeee-0001-4001-8001-000000000001', 'eeeeeeee-0002-4002-8002-000000000002'])
-  await del('comments', ['dddddddd-0001-4001-8001-000000000001'])
+  await del('comments', ['dddddddd-0001-4001-8001-000000000001', 'dddddddd-0002-4001-8001-000000000002'])
   await del('media', [M.m1, M.m2])
   await del('posts', [P.p1, P.p2, P.p3])
   await del('places', ['cccccccc-0001-4001-8001-000000000001'])

@@ -32,6 +32,7 @@ import { createDevSink, type DevSink } from './devSink.ts'
 const BODY_MAX = 500
 const PLACE_MAX = 60
 const DISPLAY_MAX = 40
+const COMMENT_MAX = 500
 const LIST_LIMIT = 50
 
 /** POST /api/posts 只接受这两个字段，多一个就 400 */
@@ -567,9 +568,239 @@ export function buildServer(deps: ServerDeps) {
     }
   })
 
+  // -------------------------------------------------------------------------
+  // 帖子详情 / 评论 / 回复（M3 Slice 1）
+  //
+  // 1:1 依据（原版实测，见 docs/m3/MODEL-VALIDATION.md §2.7 与 supplements/comment-detail.json）：
+  //   - 评论区**内联**在动态详情里，顶层评论各自带一个"回复列表"（嵌套渲染，EXPANDED）
+  //   - 每条评论都有独立的「回复」入口；回复编辑器标题是「回复 @某人」
+  //   - 回复行渲染为：「<作者> 回复 <目标> · <时间>」+ 正文
+  //     → 目标来自**独立的 reply_target 字段**，不是把 @某人 拼进正文
+  //   - **「评论 N」把回复也算进去**：发一条回复后计数从 1 变 2
+  //     → 计数 = 顶层评论 + 全部子回复
+  //   - 回复可以再被回复（子回复行也有「回复」按钮）
+  //     → parent_id 可指向任意一条评论；展示时**归到同一顶层评论下**，
+  //       每条回复自带 replyTo 说明它回的是谁（与实测的平面嵌套一致）
+  // -------------------------------------------------------------------------
+
+  interface CommentRow {
+    id: string
+    root_id: string
+    parent_id: string | null
+    depth: number
+    body: string
+    created_at: Date
+    author_id: string | null
+    author_name: string
+    reply_to_name: string | null
+  }
+
+  /** 取某帖的评论树：顶层评论 + 各自的全部后代（递归 CTE 一次查完，避免 N+1） */
+  async function loadComments(postId: string): Promise<{
+    items: Array<Record<string, unknown>>
+    total: number
+  }> {
+    /**
+     * 递归 CTE 把每条评论归到它的**顶层祖先**（root_id）。
+     * `t.depth < 20` 是防御性上限：正常插入不可能形成环（parent 必须已存在），
+     * 但真出现异常数据时不能让查询无限递归下去。
+     */
+    const r = await db.pool.query<CommentRow>(
+      `with recursive tree as (
+         select c.id, c.id as root_id, c.parent_id, 0 as depth
+           from comments c
+          where c.post_id = $1 and c.parent_id is null
+         union all
+         select c.id, t.root_id, c.parent_id, t.depth + 1
+           from comments c
+           join tree t on c.parent_id = t.id
+          where t.depth < 20
+       )
+       select t.id, t.root_id, t.parent_id, t.depth,
+              c.body, c.created_at, c.author_id,
+              coalesce(u.display_name, po.author_name, '匿名') as author_name,
+              pu.display_name as reply_to_name
+         from tree t
+         join comments c on c.id = t.id
+         join posts po on po.id = c.post_id
+         left join users u on u.id = c.author_id
+         left join comments pc on pc.id = c.parent_id
+         left join users pu on pu.id = pc.author_id
+        order by t.root_id, t.depth, c.created_at, t.id`,
+      [postId],
+    )
+
+    const byRoot = new Map<string, Record<string, unknown>>()
+    const order: string[] = []
+    for (const row of r.rows) {
+      const base = {
+        id: row.id,
+        body: row.body,
+        authorId: row.author_id,
+        author: row.author_name,
+        createdAt: row.created_at.toISOString(),
+      }
+      if (row.depth === 0) {
+        const node = { ...base, parentId: null, replyTo: null, replies: [] as unknown[] }
+        byRoot.set(row.id, node)
+        order.push(row.id)
+      } else {
+        const root = byRoot.get(row.root_id)
+        // 理论上不会缺（顶层一定先于后代被读到）；缺了就跳过，不让结构错乱
+        if (!root) continue
+        ;(root.replies as unknown[]).push({
+          ...base,
+          parentId: row.parent_id,
+          // 「回复 <目标>」的目标：来自 parent_id 指向的那条评论的作者
+          replyTo: row.reply_to_name,
+        })
+      }
+    }
+
+    return { items: order.map((id) => byRoot.get(id)!), total: r.rows.length }
+  }
+
+  /** 帖子详情：帖子本身 + 两个计数（评论计数含回复，点赞计数来自 likes 表） */
+  app.get('/api/posts/:id', async (req, reply) => {
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    try {
+      const pr = await db.pool.query<PostRow>(
+        `select id, author_name, author_id, body, place, created_at
+           from posts where id = $1`,
+        [id],
+      )
+      const post = pr.rows[0]
+      if (!post) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      const cr = await db.pool.query<{ n: string }>(
+        'select count(*)::text as n from comments where post_id = $1',
+        [id],
+      )
+      const lr = await db.pool.query<{ n: string }>(
+        'select count(*)::text as n from likes where post_id = $1',
+        [id],
+      )
+      return {
+        id: post.id,
+        author: post.author_name,
+        authorId: post.author_id,
+        body: post.body,
+        place: post.place,
+        createdAt: post.created_at.toISOString(),
+        commentCount: Number.parseInt(cr.rows[0]?.n ?? '0', 10),
+        likeCount: Number.parseInt(lr.rows[0]?.n ?? '0', 10),
+      }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  /** 评论树：顶层评论各带 replies（每条 replies 里带 replyTo） */
+  app.get('/api/posts/:id/comments', async (req, reply) => {
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    try {
+      const exists = await db.pool.query('select 1 from posts where id = $1', [id])
+      if (!exists.rowCount) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      const { items, total } = await loadComments(id)
+      return { items, total }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  /** 发评论或回复：author 一律来自会话；parentId 可选（给了就是回复） */
+  app.post('/api/posts/:id/comments', async (req, reply) => {
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') return unauthorized(reply)
+
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+
+    const payload = (req.body ?? {}) as Record<string, unknown>
+    // strict schema：只允许 body / parentId，多一个字段就 400（与发帖同一原则）
+    const extra = Object.keys(payload).filter((k) => !['body', 'parentId'].includes(k))
+    if (extra.length) {
+      reply.code(400)
+      return { error: 'invalid_payload', details: [`不支持字段: ${extra.join(', ')}（作者由服务端会话决定）`] }
+    }
+    const body = typeof payload.body === 'string' ? payload.body.trim() : ''
+    const parentId = typeof payload.parentId === 'string' ? payload.parentId.trim() : ''
+    if (!body) {
+      reply.code(400)
+      return { error: 'invalid_payload', details: ['body 不能为空'] }
+    }
+    if (body.length > COMMENT_MAX) {
+      reply.code(400)
+      return { error: 'invalid_payload', details: [`body 不能超过 ${COMMENT_MAX} 字`] }
+    }
+    if (parentId && !/^[0-9a-f-]{36}$/i.test(parentId)) {
+      reply.code(400)
+      return { error: 'invalid_payload', details: ['parentId 不是合法 id'] }
+    }
+
+    try {
+      const pr = await db.pool.query('select 1 from posts where id = $1', [id])
+      if (!pr.rowCount) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      if (parentId) {
+        // 被回复的评论必须存在**且属于同一篇帖子** —— 否则就会跨帖挂载
+        const pp = await db.pool.query('select 1 from comments where id = $1 and post_id = $2', [
+          parentId,
+          id,
+        ])
+        if (!pp.rowCount) {
+          reply.code(400)
+          return { error: 'invalid_payload', details: ['parentId 不属于该帖子'] }
+        }
+      }
+      const cr = await db.pool.query<{ id: string; created_at: Date }>(
+        `insert into comments (id, post_id, author_id, parent_id, body)
+         values ($1, $2, $3, $4, $5)
+         returning id, created_at`,
+        [randomUUID(), id, s.user.userId, parentId || null, body],
+      )
+      const row = cr.rows[0]!
+      reply.code(201)
+      return {
+        id: row.id,
+        body,
+        authorId: s.user.userId,
+        author: s.user.displayName,
+        createdAt: row.created_at.toISOString(),
+        parentId: parentId || null,
+      }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
   return app
 }
-
 /**
  * 会话 token 的库内表示（与 M2 一致：只存 SHA-256，不存明文）。
  *

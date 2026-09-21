@@ -311,9 +311,23 @@ export function createDb(cfg: AppConfig): Db {
 
     noteFailure(err) {
       const kind = classifyMigrationError(err)
-      // 只有在"本来是就绪的"情况下才降级：终态就该保持终态
-      if (state.state !== 'terminal') {
-        state.state = kind === 'transient' ? 'retryable' : 'terminal'
+      /**
+       * **只有连接层错误才降级就绪状态**。
+       *
+       * 这里踩过一个坑（Slice 1 的评论查询写错别名时暴露）：
+       * 原来把任何非连接错误都标成 terminal 并置 ready=false，
+       * 结果**一条业务 SQL 写错就把全局就绪状态打成终态，所有业务路由全 503** ——
+       * 一个本该只影响单个请求的产品缺陷被放大成了全站不可用，
+       * 而且 ready=false 之后连"哪条路由坏了"都看不出来（全是 503）。
+       *
+       * 语义上必须分清：
+       *   - transient（PG 连不上/超时）→ 这是**可用性问题**，降级 ready，让业务路由统一 503；
+       *   - terminal（SQL 写错、约束冲突等）→ 这是**代码缺陷**，只应让该请求返回 500，
+       *     就绪状态（"能不能服务"）不受影响。
+       * terminal 的"不再重试迁移"只适用于**迁移路径**（见 refresh()），不适用于请求路径。
+       */
+      if (kind === 'transient' && state.state !== 'terminal') {
+        state.state = 'retryable'
         state.lastError = (err as Error).message
         state.ready = false
       }
