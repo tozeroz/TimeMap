@@ -108,3 +108,36 @@ app/src/components/TabBar.tsx:2,28  import { getSession } from '../api/session'
                     → 截图对照原版 raw-dumps/original-chat/...-scroll-newer.png
                     → 重跑 M5 gate
 ```
+---
+
+## 附二：更正——`.chat__row--me` **早已存在**（我的规格猜错了）
+
+我在本规格 §一.3 写的是：
+
+> `.chat__row--me` **未见**（现有 `.chat__row` / `.chat__row--peer`）→ **很可能需要补**
+
+**实际它存在**（`app/src/screens/chat.css:15`）：
+
+```css
+.chat__row {            /* 行 8  */
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 100%;
+}
+.chat__row--me {        /* 行 15 */
+  flex-direction: row-reverse;
+}
+```
+
+**我为什么会写错**：我此前只 grep 了 `.bubble--me` 与 `.chat__row--peer`，
+**看到 `--peer` 就以为 `--me` 不存在**，没有再单独确认一次。
+→ 又一次是"**检索不完整却下了结论**"（与"只数节点不看坐标"同类的变体）。
+
+**好的一面**：实现者没有盲从规格去加一条重复的 `.chat__row--me`
+（若加了，会出现两条同名规则，后一条覆盖前一条 —— 将来极难排查）。
+**这说明规格里写"很可能需要补"这种不确定表述时，执行者的独立核对起了保护作用。**
+
+**更正后的结论**：本次修复**只需改 `ChatScreen.tsx` 的接线**，
+**CSS 无需改动**（两侧样式 —— `.bubble--me` 与 `.chat__row--me` —— 本就齐备，
+只是从未被使用）。
