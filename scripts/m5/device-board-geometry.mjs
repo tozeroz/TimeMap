@@ -74,7 +74,11 @@ const out = await ev(`(() => {
     rowLeft: Math.round(document.querySelector('.board__emojis').getBoundingClientRect().left * 100) / 100,
     firstItemLeft: Math.round(first.left * 100) / 100,
     rowPaddingLeft: csRow.paddingLeft,
-    rowPaddingBottom: csRow.paddingBottom
+    rowPaddingBottom: csRow.paddingBottom,
+    // C5: 我们侧的实际渲染底色与圆角（原版实测为无底色，见 FINDING-board-emojis §十五）
+    itemBackground: cs.backgroundColor,
+    itemBorderRadius: cs.borderRadius,
+    itemFontSize: cs.fontSize
   })
 })()`)
 

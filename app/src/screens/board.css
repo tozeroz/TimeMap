@@ -108,12 +108,21 @@
   padding-bottom: 8px;
 }
 
+/*
+  C5 修正：**去掉灰色圆片**。
+  证据（两侧都用可复算方法测过，见 docs/conformance/FINDING-board-emojis.md §十五）：
+    · 原版：在首项 bounding box 内采样「圆内也非字形」的点，全部为纯白 (255,255,255)
+      → **没有底色块**（既非圆角方块也非圆形 chip），就是白底上的字形
+    · 我们（实测渲染值）：background-color = rgb(242,243,245)、border-radius = 999px
+      → 每个表情后面有一个可见的浅灰圆片，与原版不符
+  故 background 置为 transparent、并去掉 border-radius。
+  （保留 :active 的反馈色：原版是否有点按反馈**未测得**，故不改它，只改静态形态。）
+*/
 .board__emoji {
   flex: 0 0 auto;
   width: 40px;
   height: 40px;
-  border-radius: var(--r-pill);
-  background: var(--c-surface-sunken);
+  background: transparent;
   font-size: 16px;
   line-height: 1;
 }
