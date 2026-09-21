@@ -22,6 +22,39 @@
   margin-top: 4px;
 }
 
+/* 验证码行的"重新获取"（带倒计时） */
+.login__resend {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-divider);
+  font-size: 13px;
+  color: var(--c-text-2);
+  background: transparent;
+}
+
+.login__resend:disabled {
+  color: var(--c-text-3);
+  opacity: 0.7;
+}
+
+.login__error {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--c-danger);
+}
+
+/*
+  没有短信通道的如实提示（SMS_GATEWAY_NOT_INTEGRATED）。
+  只在服务端明确返回 delivery=dev-sink 时出现 —— 不假装"已发送到你的手机"。
+*/
+.login__devhint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--c-text-3);
+}
+
 .login__prefix {
   font-size: 17px;
   font-weight: 600;

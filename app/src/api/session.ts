@@ -22,6 +22,8 @@ export interface SessionUser {
   id: string
   handle: string
   displayName: string
+  /** M3 起身份是手机号（E.164）；M2 的 handle+password 已退休 */
+  phone?: string | null
 }
 
 export interface Session {

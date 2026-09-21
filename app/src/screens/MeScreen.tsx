@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { logout } from '../api/client'
+import { getSession } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { Drawer } from '../components/Drawer'
 import {
@@ -16,6 +18,7 @@ import './me.css'
 /** 个人页：对齐原版 —— 纯白底、无多余模块，中部只有「拍下眼前的风景」+ 提示气泡 */
 export function MeScreen() {
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [session, setSession] = useState(() => getSession())
 
   return (
     <Screen
@@ -76,6 +79,43 @@ export function MeScreen() {
             <IconChevronRight size={14} />
           </button>
         </div>
+      </section>
+
+      {/*
+        登录状态区（M3 Slice 0B）。
+        原版不登录也能浏览（M0 基线里个人页显示的是一个本地默认账号，没有登录提示），
+        所以这里**不强制**跳登录；只在未登录时给一个明确的入口。
+        这个入口同时是设备 E2E 的真实 UI 路径 —— 审核记录 08 要求
+        「冷启动 → 无 session → 登录入口页」必须走真实点击，而不是改 hash 或注入会话。
+      */}
+      <section className="me__auth">
+        {session ? (
+          <>
+            <span className="me__authWho">
+              已登录 {session.user.displayName}
+              {session.user.phone ? ` · ${session.user.phone}` : ''}
+            </span>
+            <button
+              className="me__authBtn"
+              onClick={async () => {
+                await logout()
+                setSession(getSession())
+              }}
+            >
+              退出登录
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="me__authWho">未登录</span>
+            <button
+              className="me__authBtn me__authBtn--primary"
+              onClick={() => navigate('loginselect')}
+            >
+              登录 Campus
+            </button>
+          </>
+        )}
       </section>
 
       {/* 语音动态条（原版个人页实测存在「我的第一条语音」卡片） */}

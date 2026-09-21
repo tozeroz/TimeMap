@@ -110,12 +110,42 @@ export function createPost(input: {
   return request<ApiPost>('/api/posts', { method: 'POST', body: input })
 }
 
-/** 登录：成功后把会话写进本地 */
-export async function login(handle: string, password: string): Promise<ApiResult<SessionUser>> {
-  const r = await request<{ token: string; expiresAt: string; user: SessionUser }>('/api/auth/login', {
+/**
+ * 请求登录验证码（M3 Slice 0B）。
+ *
+ * 原版登录是「手机号 + 短信验证码」，所以公开登录入口只有这一条；
+ * M2 的 handle+password 已按审核裁定退休（服务端 /api/auth/login 会返回 410）。
+ *
+ * 返回里的 `delivery` 说明码是怎么送出去的：本项目**没有接入短信通道**，
+ * 所以是 `dev-sink`（服务器上一个只有运维能读的目录），报告里标注
+ * SMS_GATEWAY_NOT_INTEGRATED —— 这不等于"登录功能已完成"。
+ */
+export interface RequestCodeResult {
+  ok: true
+  phone: string
+  expiresAt: string
+  delivery: string
+  delivery_note: string
+}
+
+export async function requestLoginCode(phone: string): Promise<ApiResult<RequestCodeResult>> {
+  const r = await request<Omit<RequestCodeResult, 'ok'>>('/api/auth/request-code', {
     method: 'POST',
-    body: { handle, password },
+    body: { phone },
   })
+  if (!r.ok) return r
+  return { ok: true, value: { ok: true, ...r.value } }
+}
+
+/** 校验验证码并签发会话；成功后把会话写进本地 */
+export async function verifyLoginCode(
+  phone: string,
+  code: string,
+): Promise<ApiResult<SessionUser>> {
+  const r = await request<{ token: string; expiresAt: string; user: SessionUser }>(
+    '/api/auth/verify-code',
+    { method: 'POST', body: { phone, code } },
+  )
   if (!r.ok) return r
   setSession({ token: r.value.token, expiresAt: r.value.expiresAt, user: r.value.user })
   return { ok: true, value: r.value.user }

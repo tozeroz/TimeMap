@@ -149,3 +149,42 @@
   font-weight: 500;
   white-space: nowrap;
 }
+
+/*
+  登录状态区（M3 Slice 0B）。
+  原版不登录也能浏览，所以这里只是个人页上的一个状态行 + 入口，不做成强制拦截。
+*/
+.me__auth {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 16px 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--c-surface-sunken);
+}
+
+.me__authWho {
+  font-size: 13px;
+  color: var(--c-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me__authBtn {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-divider);
+  background: transparent;
+  font-size: 13px;
+  color: var(--c-text-2);
+}
+
+.me__authBtn--primary {
+  border-color: transparent;
+  background: #111;
+  color: #fff;
+}
