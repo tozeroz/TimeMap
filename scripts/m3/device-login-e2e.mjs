@@ -261,21 +261,23 @@ function fail(msg) {
 }
 
 /**
- * 统一退出路径：**先关 WebSocket 再 exit**。
+ * 统一退出路径：先尽力关掉 WebSocket，再**同步** exit。
  *
- * 为什么必须这样：在 Windows 上不关 WebSocket 直接 process.exit 会偶发打印
- *   Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
- * 这条 stderr 会被调用方（PowerShell 的 2>&1）混进输出，
- * 把本来正常的 JSON / 标记行污染掉 —— 表现成"登录失败"，其实登录是成功的。
- * 这是运行环境的行为，不是产品缺陷；按环境噪声处理掉即可。
+ * 两个教训叠在一起，值得写清楚：
+ *  1) **不能是异步**：曾经写成 `await wait(150)` 再 exit，于是 `void shutdown(0)`
+ *     不阻止后续代码执行 —— mode 块跑完继续往下走，撞到最后的「未知模式」分支，
+ *     正常的成功路径反而以退出码 1 结束（session 模式就是这样被误判的）。
+ *     一个"退出"的工具如果不同步，就不再是退出。`fail()` 也踩过同一个坑。
+ *  2) 仍然先 ws.close()：Windows 上不关 WebSocket 直接 exit 会偶发打印
+ *     `Assertion failed: ... UV_HANDLE_CLOSING`，那条 stderr 会污染调用方的解析。
+ *     尽力关一下即可；解析侧也不能依赖"输出一定干净"（已按"只挑像 JSON 的行"处理）。
  */
-async function shutdown(code) {
+function shutdown(code) {
   try {
     ws.close()
   } catch {
     /* 已关闭 */
   }
-  await new Promise((r) => setTimeout(r, 150))
   process.exit(code)
 }
 
@@ -305,6 +307,53 @@ if (mode === 'reset') {
   if (left !== 0) fail(`本地存储未清空，仍有 ${left} 项`)
   record('清理本地存储', '已清空（会话前提：无 session）')
   console.log('\nDEVICE_LOGIN_RESET OK')
+  void shutdown(0)
+}
+
+if (mode === 'coldreset') {
+  /*
+    "Web 应用冷启动 + 无会话"这个前提，必须在一个步骤里做完并且**当场校验**。
+
+    为什么另立一个模式（踩过的坑）：
+    原来在 helper 里的顺序是「CDP 清空存储 → 立刻 adb force-stop → 重启 → 再查会话」。
+    两个问题叠加：
+      1) **刷盘竞态**：清空之后马上杀进程，Chromium 来不及把 localStorage 变更落盘，
+         重启后旧存储（含上几轮留下的会话）又回来了 → prepare 报"本地仍存在会话"；
+      2) **旧调试目标**：重启后的"再查会话"可能仍连在重启前的页面上，读到"已清空"，
+         把问题掩盖成通过。
+    现在的顺序：清空 → 等刷盘 → **页面 reload**（模块状态与内存都重来）
+    → 重连调试目标 → **在同一个上下文里当场校验为空**。
+    这样既不依赖 force-stop，也不会被旧目标骗过。
+  */
+  await evaluate(`localStorage.clear(); sessionStorage.clear()`)
+  // 等 Chromium 落盘（清空后立刻做别的动作容易读到旧值）
+  await wait(1200)
+
+  // 页面 reload = Web 应用的冷启动；之后必须重连调试目标
+  await evaluate(`location.reload()`)
+  await wait(2500)
+  await connect()
+
+  // 当场校验：重试若干次，只有明确读到 0 项才算通过
+  let left = null
+  for (let i = 0; i < 12; i++) {
+    const v = await evaluate(`Object.keys(localStorage).length`)
+    if (typeof v === 'number') {
+      left = v
+      if (v === 0) break
+      await evaluate(`localStorage.clear()`)
+      await wait(600)
+    }
+    await wait(300)
+  }
+  if (left === null) fail('无法确认本地存储是否已清空（读取始终失败）')
+  if (left !== 0) fail(`冷启动后本地存储仍有 ${left} 项`)
+
+  const sess = await evaluate(`localStorage.getItem('campus.demo.session.v1')`)
+  if (sess !== null) fail(`冷启动后本地仍有会话：${String(sess).slice(0, 40)}`)
+
+  record('冷启动（清空 + reload）', '已确认无 session')
+  console.log('\nDEVICE_LOGIN_COLDRESET OK')
   void shutdown(0)
 }
 

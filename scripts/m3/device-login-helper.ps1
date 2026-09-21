@@ -99,25 +99,17 @@ function Connect-DeviceLoggedIn {
   $phone = "138$(Get-Random -Minimum 10000000 -Maximum 99999999)"
   $webviewPid = Connect-DeviceCdp
 
-  # 1) 清本地存储（保证"无 session"前提）→ 真正冷启动
-  #    **必须校验 reset 的输出**：这一步失败的话，后面的 prepare 会报
-  #    "本地仍存在会话"，看起来像登录流程坏了，其实是清理没生效
-  #    （第一版 helper 没校验这一步，白排查了一轮）。
-  $resetOut = Run-HelperNode @('reset')
-  if ($resetOut -notmatch 'DEVICE_LOGIN_RESET OK') {
-    throw "本地存储清理失败（无 session 前提不成立）：`n$resetOut"
+  # 1) 冷启动 + 清空本地存储（**一个步骤里做完并当场校验**）
+  #    为什么不再用「清空 → force-stop → 重启 → 再查」：那两步会互相掩护 ——
+  #    清空后立刻杀进程，Chromium 来不及落盘，重启后旧会话又回来；
+  #    而"再查"若连到重启前的旧调试目标，反而读到"已清空"，把问题掩盖成通过。
+  #    coldreset 模式：清空 → 等落盘 → 页面 reload → 重连 → 当场断言为空。
+  $coldOut = Run-HelperNode @('coldreset')
+  if ($coldOut -notmatch 'DEVICE_LOGIN_COLDRESET OK') {
+    throw "冷启动（无会话前提）失败：`n$coldOut"
   }
-  $webviewPid = Restart-DeviceApp
-
-  # 重启后再确认一次：会话确实不存在
-  $preSession = $null
-  foreach ($line in (Run-HelperNode @('session') -split "`r?`n")) {
-    $t = $line.Trim()
-    if ($t.StartsWith('{') -and $t.EndsWith('}')) { $preSession = $t }
-  }
-  if ($preSession -and $preSession -ne '{}') {
-    throw "冷启动后本地仍有会话（前提不成立）：$preSession"
-  }
+  # 重新转发 CDP（reload 后页面目标可能变化）
+  $webviewPid = Connect-DeviceCdp
 
   # 2) 走真实 UI：个人页入口 → 协议弹窗 → 手机号页 → 请求验证码
   $prep = Run-HelperNode @('prepare', '--phone', $phone)
