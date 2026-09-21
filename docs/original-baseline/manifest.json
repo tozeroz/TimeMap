@@ -100,7 +100,10 @@
         "empty": "unknown",
         "loading": "not_reproducible",
         "error": "not_reproducible"
-      }
+      },
+      "supplements": [
+        "supplements/message-board.json"
+      ]
     },
     {
       "id": "poi-search",

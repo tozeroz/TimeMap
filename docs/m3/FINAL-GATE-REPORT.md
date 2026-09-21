@@ -1,9 +1,50 @@
 # M3 Final Gate 报告
 
-> 依据：审核记录 12（`M3 Slice 4 — CLOSED` / `M3 Final Gate — GO`，
-> 并批准 Final Gate 前做"非零距离 canonical seed"与"定向清理测试残留"两件事）
+> 依据：审核记录 12 + **13**（13 判定 `M3_FINAL_GATE: HOLD FOR TWO CLOSEOUTS`）
 > 完成时间：2026-09-21（Asia/Shanghai）
 > 跑法：`scripts/gates/m3/slice0b.ps1` 在当前 **HEAD** 上全量重跑
+
+## 〇、审核记录 13 的两项 closeout（已完成，销项）
+
+### closeout 1：同名地点歧义 —— **已修，并机械验证**
+
+审核要求：「只有候选地点唯一确定时才能自动写 `place_id`；0 个或 >1 个候选都必须保持 NULL」。
+
+原实现是 `select id from places where name = $1 limit 1` —— **随便挑一个**。
+这是一个**真实缺陷**：同名地点存在时会把动态挂到错误的地点，
+而且界面上看不出来（地点名一样，只是地址/坐标不同）。
+
+已改为 `limit 2` + 只在候选数 == 1 时绑定。新增机械用例（`verify-places.sh` F2 组）：
+
+```
+造 2 个同名地点 → 发帖 place="同名地点XXX"
+→ place_id = NULL        PASS
+→ place 文本保留          PASS
+→ 该帖不出现在任何一个同名地点的动态里   PASS
+→ 清理临时地点            PASS
+```
+
+### closeout 2：`board_notes` 模型结论 —— **已用只读证据判定（无需 scope reallocation）**
+
+M3 原始 SPEC 冻结的四个"必须给结论、不允许悬空"的模型问题里，第三个是
+message / group / **board_note** 三者的真实关系。此前只写了"待观察"。
+
+本轮**只读**取到证据（deep link 进入留言板 + 控件树 dump，**未发任何留言**）：
+
+```
+id/leaveMsgTip       「仅双方可见」
+id/tvNoComment       「可以给同学留言噢」
+id/et_comment_board  「留言仅双方可见」
+id/tvSendComment     「留言」
+id/rvEmojiList + id/fl_emoji_root ×7
+```
+
+**判定：SUPPORTED —— 留言板是「用户 ↔ 用户」的私密留言，不挂在帖子或地点上。**
+五条独立证据：①「仅双方可见」出现两次；②空态说"给**同学**留言"；
+③控件命名里没有任何 `post_id`/`place_id` 挂载点；④ deep link **不带参数**即可进入；
+⑤ 与我们既有建模自洽（`from_user_id`/`to_user_id` + `CHECK(from <> to)`）。
+
+因此**不需要**做 M3→M4 的 scope reallocation；`docs/m3/MODEL-VALIDATION.md` §2.8 已补完。
 
 ## 一、结论
 
@@ -22,9 +63,50 @@ M3_SLICE3_GATE_RESULT:  PASS
 M3_SLICE4_GATE_RESULT:  PASS
 ```
 
-**两层记账并存**（这一版新加的）：slice 回答"哪个切片过了"，
-layer 回答"**哪一类保证**还成立"。两者都需要 —— 只报 slice 会看不出
-"M3 的切片都过了、但 M1 的某个不变量已经坏了"这种情况。
+### ⚠️ 这个 PASS 的**语义边界**（审核记录 13 特别要求写清楚）
+
+`M3_FINAL_GATE_RESULT: PASS` 的含义是：
+**M3 定义范围内的 behavior recovery、数据模型验证、UI/API integration，
+以及在允许范围内的 conformance 已完成。**
+
+**不是**"22 个页面现在已全部严格 1:1"。明确仍未达成/未评估的有：
+
+- `OTP_UI_VISUAL_CONFORMANCE` = NOT_EVALUATED（后续验证码页视觉，BLOCKED_BY_ETHICS）
+- 原版评论写入的因果证据 = BLOCKED_BY_POLICY
+- 点赞切换 = BLOCKED_BY_POLICY
+- 发布后的反馈/跳转 = BLOCKED_BY_POLICY
+- `at-panel` 视觉一致性 = NOT_EVALUATED（CONFORMANCE_EVIDENCE_INADMISSIBLE）
+- `media-preview` 视觉一致性 = NOT_EVALUATED（CONFORMANCE_EVIDENCE_INADMISSIBLE）
+- 媒体上传/下发 = BLOCKED_BY_POLICY（且本来就属 M4）
+- 真实设备定位 = DEVIATION（demo 不申请定位权限，用校区坐标作参照）
+- 媒体链路整体属 M4
+
+### 两个覆盖率维度必须分开报（审核记录 13 的明确要求）
+
+```
+BASELINE_PAGE_COVERAGE（原版页面证据覆盖率）:
+  22 / 22 observed
+
+CONFORMANCE_EVIDENCE（一致性证据可用性）:
+  admissible:   poi-detail、login-select/sns、schools/校区、map、message、
+                feed-detail、发布页结构、点赞展示规则、message-board（本轮）
+  inadmissible: at-panel、media-preview、群聊页、comment-detail 的层级部分
+                （第三方写操作取得 → 仅设计线索）
+  blocked:      点赞切换、发布后反馈、评论写入的因果证据、原版 @ 提及关系
+                （BLOCKED_BY_POLICY）；验证码页视觉（BLOCKED_BY_ETHICS）
+```
+
+**为什么必须分开**：`22/22 observed` 说的是"原版 22 页我们都**看到过**"，
+**不等于**"22 页都有合规的 1:1 conformance evidence"。
+只报前者很容易在将来被误读成"完整一致性已验证"。
+
+### 距离相关的口径（审核记录 13 要求保持）
+
+```
+DISTANCE_FUNCTIONAL: PASS              （非零距离路径实测执行：距我1885公里）
+REAL_DEVICE_GEOLOCATION_CONFORMANCE: DEVIATION
+```
+不能因为非零 fixture 成功就消除"没有真实定位"这个偏差。
 
 ## 二、三层各查了什么
 
@@ -85,12 +167,13 @@ canonical 哈希随之显式更新：`66d96f09… → 4e7e4cc8…`
 |---|---|
 | baseline coverage（原版证据覆盖率） | `22 observed / 0 evidence-blocked`（Preflight 定案，本阶段未再变） |
 | integration coverage（实现与证据对齐） | 登录、帖子详情/评论/回复、点赞、发帖、地点详情 已对齐并各有断言 |
-| 模型验证（`docs/m3/MODEL-VALIDATION.md`） | `login-sns` SUPPORTED；`places` SUPPORTED；`schools` SUPPORTED（需校区子实体，已改）；`comments.parent_id` MODEL SUPPORTED / PRESENTATION EXPANDED；`message`/`group` 关系部分完成（`board_notes` 待观察） |
+| 模型验证（`docs/m3/MODEL-VALIDATION.md`） | `login-sns` SUPPORTED；`places` SUPPORTED；`schools` SUPPORTED（需校区子实体，已改）；`comments.parent_id` MODEL SUPPORTED / PRESENTATION EXPANDED；**`board_notes` SUPPORTED（用户对用户私密留言，只读证据判定，见 §〇 closeout 2）** —— 四个必答模型问题**全部有结论，无悬空** |
 | 政策 | 违规如实登记并已排除出一致性依据；`BLOCKED_BY_POLICY` 与 `BLOCKED_BY_ETHICS` 成为常设判定标签 |
 
 ## 五、遗留项（明确不隐藏）
 
-1. **`board_notes` 的真实关系**仍未观察 → 后续需要时按只读取证。
+1. ~~**`board_notes` 的真实关系**仍未观察~~ → **本轮已用只读证据判定为 SUPPORTED**
+   （见 §〇 closeout 2）。四个必答模型问题现已全部有结论。
 2. **`OTP_UI_VISUAL_CONFORMANCE`** = NOT_EVALUATED（BLOCKED_BY_ETHICS）：
    验证码页无原版证据，不声称与原件一致。
 3. **`at-panel` / `media-preview` 的视觉一致性** = NOT_EVALUATED

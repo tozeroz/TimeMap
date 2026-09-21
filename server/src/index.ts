@@ -564,15 +564,23 @@ export function buildServer(deps: ServerDeps) {
         M3 Slice 4：把地点文本**对到已知地点**（places.name 精确匹配）并写 place_id。
         为什么必须有这一步：原版 poi-detail 是"按地点聚合动态"，而聚合只能靠 place_id；
         只存文本 place 的话，地点详情页永远查不到"该地点的动态"。
-        匹配不上就保持 NULL —— 不伪造地点归属（与 author_id 同一原则：未知就是未知）。
+
+        **只有候选唯一时才自动绑定**（审核记录 13 的 closeout）：
+        同名地点存在时（0 个或 >1 个候选）一律保持 NULL —— 随便挑一个会把动态挂到错误的地点，
+        而且这种错误在界面上看不出来（地点名一样，只是地址/坐标不同）。
+        宁可 NULL（未知就是未知），也不要猜。
       */
       let placeId: string | null = null
       if (place) {
-        const pr = await db.pool.query<{ id: string }>(
-          'select id from places where name = $1 limit 1',
+        const matches = await db.pool.query<{ id: string }>(
+          'select id from places where name = $1 limit 2',
           [place],
         )
-        placeId = pr.rows[0]?.id ?? null
+        if (matches.rows.length === 1) {
+          placeId = matches.rows[0]!.id
+        }
+        // 0 个候选 → NULL（未知地点）
+        // 2 个及以上候选 → 仍然是 NULL（同名歧义，不猜）
       }
 
       // 作者完全来自服务端会话；author_name 存为快照（用户以后改名也保留当时的展示名）

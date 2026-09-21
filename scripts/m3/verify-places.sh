@@ -78,6 +78,34 @@ UNK_TEXT="$(PSQL "select coalesce(place,'(null)') from posts where id = '$UNK_ID
 [ "$UNK_TEXT" = "一个不存在的地点XYZ" ] && ok "未知地点的文本仍保留（不丢信息）" || bad "place 文本丢失：$UNK_TEXT"
 
 echo
+echo "=== F2. 同名歧义：存在两个同名地点时不得自动绑定 place_id（审核记录 13 的 closeout）==="
+DUP_NAME="同名地点$RANDOM$RANDOM"
+DUP_A="$(PSQL "insert into places (id, name, address, latitude, longitude) values (gen_random_uuid(), '$DUP_NAME', '同名A的地址', 31.1, 121.1) returning id")"
+DUP_B="$(PSQL "insert into places (id, name, address, latitude, longitude) values (gen_random_uuid(), '$DUP_NAME', '同名B的地址', 39.9, 116.3) returning id")"
+echo "  造了两个同名地点：$DUP_NAME"
+CNT="$(PSQL "select count(*) from places where name = '$DUP_NAME'")"
+[ "$CNT" = "2" ] && ok "确认库中存在 2 个同名候选" || bad "同名候选数异常：$CNT"
+
+R3="$(curl -s -m 10 -w '\n%{http_code}' "${AUTH[@]}" -X POST "$BASE/posts" \
+  -H 'Content-Type: application/json' -d "{\"body\":\"$MARK 同名歧义\",\"place\":\"$DUP_NAME\"}")"
+C3="$(printf '%s' "$R3" | tail -1)"; B3="$(printf '%s' "$R3" | head -n -1)"
+[ "$C3" = "201" ] && ok "同名地点也能发帖（不因此报错）" || bad "期望 201，实际 $C3"
+AMB_ID="$(jget "$B3" id)"
+AMB_PLACE_ID="$(PSQL "select coalesce(place_id::text,'(null)') from posts where id = '$AMB_ID'")"
+if [ "$AMB_PLACE_ID" = "(null)" ]; then
+  ok "同名歧义时 place_id 保持 NULL（没有随便挑一个）"
+else
+  bad "同名歧义却绑定了 place_id=$AMB_PLACE_ID（把动态挂到了不确定的地点）"
+fi
+AMB_TEXT="$(PSQL "select coalesce(place,'(null)') from posts where id = '$AMB_ID'")"
+[ "$AMB_TEXT" = "$DUP_NAME" ] && ok "同名地点的文本仍保留" || bad "place 文本丢失：$AMB_TEXT"
+IN_A="$(curl -s -m 10 "$BASE/places/$DUP_A" | grep -c "$AMB_ID")"
+IN_B="$(curl -s -m 10 "$BASE/places/$DUP_B" | grep -c "$AMB_ID")"
+[ "$IN_A" = "0" ] && [ "$IN_B" = "0" ] && ok "该帖没有出现在任何一个同名地点的动态里" || bad "该帖被挂到了某个不确定的同名地点下"
+PSQL "delete from places where id in ('$DUP_A','$DUP_B')" >/dev/null
+ok "临时同名地点已清理"
+
+echo
 echo "=== G. 清理 ==="
 PSQL "delete from posts where body like 'M3-SLICE4-%'" >/dev/null
 LEFT="$(PSQL "select count(*) from posts where body like 'M3-SLICE4-%'")"

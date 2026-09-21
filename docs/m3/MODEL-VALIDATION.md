@@ -12,7 +12,7 @@
 | 1 | `login-sns` 真实身份语义 | Slice 0A | **SUPPORTED（已冻结）** | **手机号 + 短信验证码**；无密码、无第三方 SNS；固定 +86；协议未勾选走弹窗而非禁用。详见 `docs/m3/SLICE0-LOGIN-SEMANTICS.md` |
 | 2 | `places` / `schools` 建模 | Evidence Preflight | **部分完成**（见下） | `places` SUPPORTED；`schools` **SUPPORTED 但需要修订**（校区子实体） |
 | 3 | `comments.parent_id` | Slice 1 | **SUPPORTED（已解决）** | **MODEL: SUPPORTED / PRESENTATION: EXPANDED**，见 2.7 |
-| 4 | `message` / `group` / `board_note` 关系 | 消息/群/留言观察 | **部分完成** | group 与 chat 已观察（同构、共用会话模型）；`board_note` 待观察 |
+| 4 | `message` / `group` / `board_note` 关系 | 消息/群/留言观察 | **已完成** | group 与 chat 已观察（同构、共用会话模型）；**`board_notes` 已判定：用户对用户私密留言（SUPPORTED）**，见 2.8 |
 
 ### 1.1 Slice 0A 带来的**契约层**问题（需审核确认）
 
@@ -90,9 +90,52 @@ posts.school_campus_id → campuses(id)            -- 动态归属到某个"校�
 | **消息需要"提及"关系** | @ 面板标题「选择提醒的人」+ 首项「所有人」 | `messages` 目前只有 body，**缺少提及关系** → M4 实现群聊写入时必须补（见 2.6） |
 | **消息需要类型与媒体引用** | 图片消息是 `id/chatImageCardView`，点开进 `ChatMediaPreviewActivity` | `messages` 只有 text，**缺少 kind + media 引用** → M4 补 |
 
-### 2.5 `board_notes` 与三者的关系 —— PENDING
+### 2.5 `board_notes` 与 message / group 的关系 —— **已完成（SUPPORTED）**
 
-Preflight 未打开留言板（`message-board`）。按审核要求，这一条要在「消息/群/留言真实入口观察」时给出结论。
+见 2.8（M3 原始必答假设 #4，已用只读证据判定）。
+
+### 2.8 `board_notes` —— **用户对用户私密留言（SUPPORTED）**
+
+**这是 M3 原始必答的假设 #4**，此前一直挂着"部分完成 / 待观察"。
+本轮用**只读**证据（未发任何留言）判定完毕：
+
+进入方式：deep link `campusx://messageBoard`（**不带参数可进** → 本身就是线索）
+Activity：`com.kairuotu.feed.messageboard.MessageBoardActivity`
+
+```
+id/tvTotalComment  标题「留言」
+id/leaveMsgTip     副标题「仅双方可见」
+id/tvNoComment     空态「可以给同学留言噢」
+id/et_comment_board 输入框，提示「留言仅双方可见」
+id/tvSendComment   发送按钮「留言」
+id/rvEmojiList + id/fl_emoji_root ×7   表情行恰好 7 个
+```
+
+**判定：SUPPORTED —— 留言板是「用户 ↔ 用户」的私密留言，不挂在帖子或地点上。**
+
+五条独立证据：
+
+1. 「仅双方可见」出现**两次**（顶部 `leaveMsgTip` + 输入框 `et_comment_board`）
+   → 双边私密语义被重复强调，不是公开内容；
+2. 空态文案是「可以给**同学**留言噢」→ 对象是**一个用户**，不是地点/帖子；
+3. 控件命名里**没有任何挂载点**：`leaveMsgTip` / `layout_comment_board` /
+   `et_comment_board` / `tvSendComment` —— 找不到 `post_id` / `place_id` 之类的痕迹；
+4. deep link **不带参数**即可进入 → 它是"与我相关的留言板"，不是某个帖子/地点的子页；
+5. 与我们既有建模自洽：`board_notes(from_user_id, to_user_id)` + `CHECK(from_user_id <> to_user_id)`
+   ——「给同学留言」且「仅双方可见」正好对应"两个不同用户之间"。
+
+**明确 NOT_SUPPORTED 的三种理解**（避免以后有人按它们改模型）：
+- ❌ 留言板挂在帖子上
+- ❌ 留言板挂在地点上
+- ❌ 留言板是公开的
+
+顺带得到三条可对齐的展示事实：表情行 **7 个**、空态文案「可以给同学留言噢」、
+发送按钮文案是「留言」而不是「发送」。
+
+**BLOCKED_BY_POLICY**：留一条留言以观察发送后的渲染（气泡样式/时间格式）——
+那是写操作，禁止；改在自建 demo 里造数验证。
+
+证据：`supplements/message-board.json`、`.mumu-capture/m3-board/board-ui.xml`
 
 ### 2.7 `comments.parent_id` —— **MODEL: SUPPORTED / PRESENTATION: EXPANDED**（Slice 1 解决）
 
