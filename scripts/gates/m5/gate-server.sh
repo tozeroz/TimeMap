@@ -87,10 +87,34 @@ else
 fi
 
 # ---------------------------------------------------------------- 3. .tmp 自愈
-step "3. 上传根目录 .tmp 的启动自愈（persistent invariant）"
+# ⚠️⭐ 本节是**破坏性**的：verify-tmp-selfheal.sh 会
+#      `systemctl restart campus-backend.service` + 清空 uploads/.tmp，
+#   而实测这台机器重启后**可能要约 176 秒才 ready**（见 review-log 55 §二），
+#   即：跑一次就制造一段"接近 3 分钟不可服务"的窗口。
+#
+#   审核记录 55 的裁定（比"240 秒够不够"更重要）：
+#     「常规 M5 regression gate **不应该每次都把正在服务的 backend 重启**、
+#       并制造接近 3 分钟的不可用窗口。
+#      建议把 TMP_SELFHEAL / restart test 从普通无副作用 regression 路径拆出为
+#       **DESTRUCTIVE_SELF_HEAL_GATE**，要求显式 maintenance / exclusive execution；
+#       普通 server regression 尽量**不** restart 服务。」
+#
+#   本节的实现遵循它：
+#     · 默认（常规回归）→ **不跑**，记 `SKIPPED_DESTRUCTIVE`，**且不置 FAILED**
+#     · 只有显式 `M5_ALLOW_DESTRUCTIVE=1`（由 scripts/m5/run-destructive-gate.sh
+#       在**持有 Gate 互斥锁**的前提下传入）才真跑
+#     ⚠️ `SKIPPED_DESTRUCTIVE` **绝不等同于 PASS** —— 汇总里它单独一行显示
+#        "DESTRUCTIVE SKIPPED"，不允许任何地方把它当通过。
+step "3. 上传根目录 .tmp 的启动自愈（**破坏性**；默认跳过）"
 TH="$DIR/verify-tmp-selfheal.sh"
 TH_OUT=''
-if [ -f "$TH" ]; then
+if [ "${M5_ALLOW_DESTRUCTIVE:-0}" != "1" ]; then
+  setk M5_TMP_SELFHEAL SKIPPED_DESTRUCTIVE
+  echo "    SKIPPED_DESTRUCTIVE：本节会**重启后端**并清空 uploads/.tmp，"
+  echo "      故常规回归默认不跑（审核记录 55）。要跑："
+  echo "        bash scripts/m5/run-destructive-gate.sh   # 需持 Gate 互斥锁"
+  echo "      ⚠️ 本项**不是 PASS**，只是未执行。"
+elif [ -f "$TH" ]; then
   TH_OUT="$(bash "$TH" 2>&1)"
   printf '%s\n' "$TH_OUT" | grep -E '^(SELF_HEAL|ABORT)' | sed 's/^/    /'
   if printf '%s' "$TH_OUT" | grep -q 'SELF_HEAL_PASS'; then
@@ -328,10 +352,18 @@ echo "# M5 分层结果"
 P_FAIL=0
 # 认证卫生的四条"死数据=0"也进 PERSISTENT 层（它们是长期契约：死数据不该堆积超过 grace）
 # ⚠ 注意：这四条是**状态型**不变量，不是总数上界（总数只作 INFO/WARN，见第 6 节注释）
-for k in M5_MEDIAID_STRICT_REJECT M5_TMP_SELFHEAL M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT M5_VOICE_MEDIA_MIME_WHITELIST M5_VOICE_MIME_DURATION_CONSISTENT M5_AUTH_STALE_EXPIRED_SESSIONS M5_AUTH_STALE_REVOKED_SESSIONS M5_AUTH_STALE_EXPIRED_CHALLENGES M5_AUTH_STALE_CONSUMED_CHALLENGES; do
+#
+# ⚠️⭐ M5_TMP_SELFHEAL **已从本列表移出**（审核记录 55）：
+#    它由**破坏性**测试（重启后端）验证，常规回归默认跳过 →
+#    若仍留在这里，"跳过"会被算成 PERSISTENT FAIL（或反过来被当成 PASS，两者都错）。
+#    现在它单独一行显示真实取值，且**SKIPPED_DESTRUCTIVE 绝不等于 PASS**。
+for k in M5_MEDIAID_STRICT_REJECT M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT M5_VOICE_MEDIA_MIME_WHITELIST M5_VOICE_MIME_DURATION_CONSISTENT M5_AUTH_STALE_EXPIRED_SESSIONS M5_AUTH_STALE_REVOKED_SESSIONS M5_AUTH_STALE_EXPIRED_CHALLENGES M5_AUTH_STALE_CONSUMED_CHALLENGES; do
   [ "${KEY[$k]}" = "PASS" ] || P_FAIL=1
 done
 printf '#   %-12s %s\n' "PERSISTENT" "$([ $P_FAIL -eq 0 ] && echo PASS || echo FAIL)"
+# 破坏性层（独立一行；不参与上面的累计，但**FAIL 时已经置过 FAILED=1**）
+SELFHEAL_V="${KEY[M5_TMP_SELFHEAL]:-NOT_RUN}"
+printf '#   %-12s %s\n' "DESTRUCTIVE" "$SELFHEAL_V$([ "$SELFHEAL_V" = "SKIPPED_DESTRUCTIVE" ] && echo '（本次未跑：常规回归不重启服务；要跑见 run-destructive-gate.sh）')"
 printf '#   %-12s %s\n' "STAGE" "$([ "${KEY[M5_UNATTACHED_TTL_GC]}" = "PASS" ] && [ "${KEY[M5_VOICE_NEGATIVE_ASSERTIONS]}" = "PASS" ] && [ "${KEY[M5_VOICE_LIFECYCLE]}" = "PASS" ] && echo PASS || echo FAIL)"
 printf '#   %-12s %s\n' "REGRESSION" "$([ "${KEY[M5_MEDIAID_STRICT_REJECT]}" = "PASS" ] && echo PASS || echo FAIL)"
 echo '#'
@@ -340,6 +372,14 @@ for k in M5_MEDIA_MESSAGE_API M5_MEDIAID_STRICT_REJECT M5_UNATTACHED_TTL_GC M5_T
 done
 echo
 echo "# M5_SERVER_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
+# ⚠️⭐ 必须显式声明"破坏性层这次没跑"，否则 PASS 会被读成"全部都验过了"。
+#    审核记录 55：常规回归**不应**重启正在服务的 backend；
+#    但"没跑"与"跑过且通过"是**两种不同的事实**，不得混同。
+if [ "${KEY[M5_TMP_SELFHEAL]}" = "SKIPPED_DESTRUCTIVE" ]; then
+  echo "#   ⚠️ 本次为**常规回归**：DESTRUCTIVE_SELF_HEAL **未执行**（不是 PASS）。"
+  echo "#      该项（重启后端 + .tmp 自愈）需显式执行：bash scripts/m5/run-destructive-gate.sh"
+  echo "#      —— 它要求持有 Gate 互斥锁（exclusive execution）。"
+fi
 # ⚠️ 与 M4 同口径：这个 key **不是**"M5 整体完成"。
 #    当前精确状态（审核记录 25 的裁定）：
 #      WO2_BACKEND / APP_UPLOAD_SEND_RENDER / FAILPATH / RELOAD_PERSISTENCE / CROSS_LAYER_C1：全 PASS
