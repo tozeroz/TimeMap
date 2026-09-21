@@ -125,6 +125,37 @@ app/src/screens/FeedListScreen.tsx:17-20
 | 顶部 `campusInfo.name` / `.region` | mock | ⚠️ `schools(id,name,region)` 表**存在但为空**；`users.school_campus_id` **全为 NULL** | 见 §四.4 |
 | 刷新按钮的行为 | mock（冒充成功） | ✅ 有真实接口 | **改成真实请求**；失败则停在失败态 |
 
+## 一之二、⚠️ **入口溯源**：FeedListScreen 只能经 **demo 脚手架**到达
+
+实测（`scripts/m5/diagnose-feedlist-entry.mjs` + `diagnose-feedlist-path.mjs`）：
+
+```
+FeedListScreen 的路由是 #/feedlist，其**唯一**入径是：
+  MeScreen（个人页 #/me）
+    → 左上角「三横线」→ Drawer
+      → Drawer 末尾「更多功能」       ← ⚠️ **demo 脚手架**
+        → #/more → 「校园圈」（to: 'feedlist'）
+          → #/feedlist
+
+证据（app/src/components/Drawer.tsx）：
+  行 19 注释：「末尾额外保留一个「更多功能」入口，用于访问 demo 的其余页面（**非原版内容，单独标注**）」
+  行 46-54：该按钮类名 `drawer__item--demo`，内部渲染 `<span className="drawer__badge">demo</span>`
+
+→ 即：**这个页面的可达性来自一处自述为"非原版"的脚手架**。
+  按 ENTRY REACHABILITY 纪律（审核记录 44），这条链**不构成忠实可达性**：
+  它能证明"页面本身能打开"，但**不能**证明"原版用户能从真实入口走到它"。
+
+冻结论断：
+  FEED_ENTRY_PROVENANCE: DEMO_SCAFFOLD
+  ORIGINAL_FEED_ENTRY:   NOT_EVALUATED（原版这一页的真实入口尚未取证）
+
+⚠️ 这**不**否定本单的价值：FeedListScreen 的内容本身对应原版实测界面
+  （文件头注释记录了"无网络/无登录时进入就是「网络错误」页"这一模拟器实测结果），
+  而它当前整页是 mock —— 接线本身仍然是必要的。
+  但**入口的忠实性**属于另一件事，应另立工作单（需要先取证原版入口），
+  且本单的 Gate **不得**把"demo 脚手架可达"写成"用户可达"。
+```
+
 ## 二、方案（分层，与 WO#8 会话列表同法）
 
 ```
