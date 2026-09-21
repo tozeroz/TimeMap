@@ -89,3 +89,41 @@ C2 原判: 缺留言总数
 1. **每修掉一项就更新本表**（把 `DEVIATION` 改成 `FIXED` 并附证据），不要只改 finding 文档
 2. **撤销的项保留**（`WITHDRAWN`），并写清"我原来错在哪" —— 这个项目里错误的判断链比结论更有教学价值
 3. 新增项必须带 `raw_evidence`（可复核产物），否则只能进"线索"不能进本表
+
+---
+
+## 四、证据分层命名规范（审核记录 25 强制要求，**永久有效**）
+
+背景：WO#2 的端到端证据实际上分成**两层**，历史上曾被笼统写成"真机 PASS"，
+让读者以为"用户从真实入口选图"这条路径已验证过。审核明确要求**永久分列**：
+
+```
+FILE_INPUT_POST_SELECTION_E2E    WebView 已获得 File 对象之后的完整产品链路
+                                 （DOM.setFileInputFiles → input change → 上传 → 发消息
+                                   → 重拉列表 → blob 渲染 → 重载后仍在）
+                                 状态: PASS
+
+NATIVE_FILE_PICKER_INTERACTION   真实点击选图入口 → 系统 picker 真的出现
+                                 → 在 picker 里选了一张图 → WebView 真的收到 File
+                                 状态: 见最新执行结果（可自动化性已由
+                                       docs/m5/G3-PICKER-AUTOMATABLE-PROVEN.md 证明）
+```
+
+### 规则
+
+1. **任何报告、Gate 输出、账本条目都不得把这两层合并**成"真实用户完整选图 E2E"之类的说法
+2. 引用其中一层时必须**点名是哪一层**（例如"`FILE_INPUT_POST_SELECTION_E2E` PASS"）
+3. 若某次验证只覆盖了第二层的一部分（例如 picker 出现但未成功选图），
+   **必须写明覆盖到哪一步**，而不是给一个笼统的 PASS/FAIL
+4. 这条规则的**目的**是防止"看起来完整的证据集"——
+   本项目已多次吃过"措辞不精确 → 后来者误判"的亏
+
+### 同类措辞不精确的历史案例（都是本人犯的，保留以便对照）
+
+| 案例 | 不精确的写法 | 精确的写法 |
+|---|---|---|
+| 表情行几何 | "间距 112px"（那是 pitch） | `EMOJI_ITEM_PITCH: 112px` + `EMOJI_INTER_ITEM_GAP: 42px` |
+| WO#2 收口 | "真机 PASS"（含混两层） | 分列两个 key（本规范） |
+| board_notes 收口 | "Slice 1 收口"（把功能闭环与页面一致性混在一起） | `FUNCTIONAL: CLOSED` / `CONFORMANCE: OPEN` |
+
+**共同点**：不精确的措辞把"已验证的范围"说得比实际更大。
