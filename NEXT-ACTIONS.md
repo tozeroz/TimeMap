@@ -111,3 +111,51 @@
       证据：dump bounds（图标 y=[1746,1795]、文字 y=[1829,1868]，不重叠）+ 截图视觉（两条独立来源）+
       我方 DOM 实测（icon y=1035、label y=1037，重叠 → 横排）
 - [ ] F2 FAB 可见直径：**两种像素方法均自判 INVALID** → 记为候选，等审核指定有效方法（不凭猜改）
+---
+
+## E1 结果（2026-09-22 01:27，只读审计已完成）
+
+```
+sessions 总数 130：
+  active(未撤销未过期) = **94**      ← 大部分是**合法活跃会话**
+  expired(未撤销)      = 0
+  revoked              = 36
+  交叉表：not_revoked/valid = 94 ；revoked/valid = 36 ；**没有任何 expired**
+  age: <1h = 16，1h..1d = 114 ；会话有效期全部 >=7 天（故无过期行，库年轻）
+  每用户会话数: max=113, avg=65, users=2（测试反复登录所致）
+
+login_challenges 总数 108：
+  consumed       = 103
+  expired-pending = 5
+  valid-pending   = 0
+  交叉表：consumed/expired = 103 ；not_consumed/expired = 5
+  age: <1h = 16，1h..1d = 92 ；有效期全部 1..10 分钟
+  attempts 全为 0（无暴力尝试堆积）
+
+清理候选（仅统计，未删除）：
+  grace=1h  → revoked session 36 ；consumed challenge 87 ；expired challenge 92 ；expired session 0
+  grace=1d  → 全部为 0（库龄 < 1 天）
+  grace=7d  → 全部为 0
+
+绝不误删集合：active sessions = 94 ；valid pending challenges = 0
+外键：**没有任何表引用 sessions / login_challenges** → 删除不破坏引用完整性
+```
+
+### ⭐ 这份审计**直接证实了审核的反对意见**
+
+审核说"总行数不是 invariant"——数据完全支持：
+```
+sessions 总数 130，其中 **94 条是 active 合法会话**。
+→ 任何形如 "sessions < 50" 的门禁都会**误报**；
+→ 任何"按总数清理"的做法都会**删掉合法会话**。
+```
+所以 Gate 只能用 `STALE_EXPIRED_SESSIONS = 0` / `STALE_CONSUMED_CHALLENGES = 0` 这类
+**状态型**不变量（E4），总数只作次级 warning。
+
+### 待办调整
+- [ ] E2 retention 语义冻结：需定 **retention grace 值**（我建议默认 24h、可配 `--grace-hours`）。
+      理由：当前 grace=1d 时候选为 0，说明现有数据都是"近 24h 内产生的"，
+      设 24h 既不会误删活跃数据、又能约束长期膨胀。
+      ⚠ 但**过期的 sessions 目前为 0**（TTL ≥7 天），所以本工具短期只会清 challenges。
+- [ ] E3 独立 cleanup-auth（dry-run 默认 / --apply / 分类计数 / DB 错误 fail-closed）
+- [ ] E4 Gate：STALE_EXPIRED_SESSIONS=0 与 STALE_CONSUMED_CHALLENGES=0；总数只作 WARN
