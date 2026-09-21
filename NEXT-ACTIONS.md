@@ -398,3 +398,16 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [ ] WO11.7 ⬅ **等审核裁定**：批准范围／**授权删除 20 条测试残留**／入口忠实性归属／
       name+region 处置／`/api/posts` 匿名可读口径
 - [ ] WO11.8 裁定后实施：只读接线 + 数据清理（先 pg_dump 备份 + 先打印将删内容）
+### 忠实度审计与 KNOWN_DEVIATION 登记（Round 261 收尾）
+- [x] AUDIT.1 ✅ **发现流程缺陷**：Gate 长期未做"对照原版基线逐条核对 title/interactions/navigation"，
+      导致 feed-list 的 3 处偏差从未被捕获（基线文件一直在仓库里，screens/ 下 24 个屏）
+- [x] AUDIT.2 ✅ 逐屏核对：feed-list（3 处偏差）／message（顶部三项**一致**，推荐区+分享面板为**有意后撤**）
+      ／group（与 xml dump 一致；⭐基线 known_unknowns 明列"@面板入口位置未知"**独立佐证** WO#9B 的 NOT_EVALUATED）
+      ／at-panel（baseline 为空；**补齐**此前未记录的"搜索框有无"→ dump 中无 EditText/无"搜索"）
+- [x] AUDIT.3 ✅ 产出 `docs/m5/FIDELITY-GAP-AUDIT-closed-screens-vs-baseline.md`
+- [x] AUDIT.4 ✅ 产出 `docs/m5/KNOWN-DEVIATIONS.md`：D-001~D-003（有意后撤，含恢复条件）
+      + L-001~L-003（原版本身未观察到的范围限制）；并写明"**已完成 ≠ 与原版一致**"的禁止说法
+- [x] AUDIT.5 ✅ PLAN.md 新增纪律：① Gate 必须含"基线逐条核对"层 ② 基线缺失须显式记录
+      ③ 后撤须登记 KNOWN_DEVIATION ④ **把现象写成缺陷前先查是否已有解释**（我同一轮两次急着定性）
+- [ ] AUDIT.6 ⬅ 等裁定：feed-list 的 3 处偏差**并入 WO#11 一起修**（建议）
+- [ ] AUDIT.7 后续每个 WO 的 Gate 都要按新纪律加"基线核对"层
