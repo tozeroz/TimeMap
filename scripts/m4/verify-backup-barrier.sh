@@ -45,9 +45,16 @@ HOLDER=$!
 sleep 1.5   # 等它真的拿到锁
 
 # 窗口内尝试共享锁（与业务侧同一把锁、同一个调用形态），lock_timeout 2 秒
-IN_WINDOW="$("${PCDB[@]}" -c "set local lock_timeout='2s'" -c "begin" -c "select pg_advisory_xact_lock_shared($KEY)" -c "commit" 2>&1 || true)"
+# ⚠ SET LOCAL 必须在 BEGIN **之后**（上一版写成 begin 之前，报
+#   "SET LOCAL can only be used in transaction blocks"，于是超时没生效、
+#   请求一直阻塞到排他锁释放后才成功 —— 那其实说明屏障在正确工作，
+#   是我的断言写法错了。这个坑值得留在注释里。）
+S_WINDOW=$(date +%s%N)
+IN_WINDOW="$("${PCDB[@]}" -c "begin" -c "set local lock_timeout='2s'" -c "select pg_advisory_xact_lock_shared($KEY)" -c "commit" 2>&1 || true)"
+E_WINDOW=$(date +%s%N)
+BLOCK_MS=$(( (E_WINDOW - S_WINDOW) / 1000000 ))
 printf '%s' "$IN_WINDOW" | grep -qiE 'lock timeout|canceling statement' \
-  && ok "**窗口内共享锁请求被阻塞并超时（进不来）**：$(printf '%s' "$IN_WINDOW" | head -c 80)" \
+  && ok "**窗口内共享锁请求被阻塞并超时（进不来，阻塞 ${BLOCK_MS}ms）**：$(printf '%s' "$IN_WINDOW" | head -c 60)" \
   || bad "窗口内共享锁竟然拿到了（屏障无效）：$(printf '%s' "$IN_WINDOW" | head -c 120)"
 
 wait $HOLDER 2>/dev/null || true
