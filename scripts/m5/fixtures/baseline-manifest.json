@@ -316,8 +316,76 @@
       ]
     },
 
-    "at-panel": {
-      "baseline_file": "docs/original-baseline/screens/at-panel/baseline.json",
+    "user-profile": {
+      "baseline_file": null,
+      "baseline_evidence_strength": "**无可用基线** —— docs/original-baseline/screens/ 下只有 trident-me = 「我的」tab，**不是**他人主页",
+      "claims_explanation": "按纪律 ② 显式记录\"该屏无可用基线\"，本屏**不做任何与原版一致的主张**（审核记录 53：ORIGINAL_USER_PROFILE_BASELINE: UNAVAILABLE）",
+      "claims": [
+        {
+          "id": "ORIGINAL_USER_PROFILE_CONFORMANCE",
+          "claim": "他人主页与原版一致",
+          "evidence": "**无基线**（screens/ 下没有他人主页目录）",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "即使本屏全部 Gate PASS，也只能声称：authoritative identity wiring / authoritative data semantics / fake interactions removed 三项；**不得**声称 1:1 reproduced",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "USER_PROFILE_IDENTITY_FROM_ROUTE",
+          "claim": "从路由进入后显示的身份 == 被点作者本人",
+          "evidence": "**设备实测**（gate-wo12）：点真实作者「Lemy」→ 资料页显示「Lemy」（改前显示 mock u1「蒸柿煮捞呆」）；urlUuid == /api/users/:id 返回的 id",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#12）：解析 u:<uuid> → canonical UUID → GET /api/users/:id 取权威昵称",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#12"
+        },
+        {
+          "id": "NO_MOCK_IDENTITY_FALLBACK",
+          "claim": "unknown / malformed user id → 明确不可用态；**NEVER** 回落到另一个用户",
+          "evidence": "**设备实测**（gate-wo12）：三种坏输入（无 id / 非法形状 / 不存在的 uuid）全部 state=unavailable、shownName=null、mockHit=[]；敏感度：注入 mock 回落 → INVALID_PROFILE_ID_NO_FALLBACK FAIL",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#12）。同时移除了 App.tsx 里 `route.query.id ?? 'u1'` 这处 mock 回落",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#12",
+          "_frozen_principle": "审核记录 53：该原则适用于**以后所有** identity surface"
+        },
+        {
+          "id": "USER_POSTS_SOURCE",
+          "claim": "TA 的动态来自**服务端** authorId 过滤（而非客户端 filter）",
+          "evidence": "**实测**（verify-wo12-server-extensions.sh）：GET /api/posts?authorId= 返回数量与 DB 一致；非法 authorId → 400 bad_author_id；**设备实测** uiIds 集合 == API ids 集合",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#12）：新增服务端只读 filter；客户端用 listPosts(authorId)",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#12",
+          "_frozen_principle": "审核记录 53：客户端过滤在分页后会静默变成\"不完整但看起来完整\""
+        },
+        {
+          "id": "PROFILE_DM_DESTINATION",
+          "claim": "「私信」要么通向**真实** direct 会话，要么不可用；**绝不**制造 mock thread id",
+          "evidence": "**实测**：peerId 与 DB 另一成员 id 一致（机械验证）；0 匹配时不渲染按钮而显示静态不可用说明；敏感度：注入 t1 → PROFILE_DM_NO_MOCK_THREAD_ID FAIL",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#12）：按 peerId 精确匹配已有 direct 会话；无匹配则 hide/unavailable",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#12",
+          "_frozen_principle": "审核记录 53：peerId **不**回答\"从没聊过的人怎样建会话\"；后者无经过验证的能力时不得假成功"
+        },
+        {
+          "id": "FOLLOW_CAPABILITY",
+          "claim": "「关注」是否为真实能力",
+          "evidence": "**设备实测**（改前）：纯 useState 假成功 —— fetchDelta=0 却显示\"已关注\"。无 follow 模型/接口",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "已移除该控件（WO#12）—— 审核 53：FOLLOW_CAPABILITY: NOT_IMPLEMENTED → no clickable fake follow control",
+          "work_order": null,
+          "deviation_id": null
+        }
+      ]
+    },
+
+    "at-panel": {      "baseline_file": "docs/original-baseline/screens/at-panel/baseline.json",
       "baseline_evidence_strength": "baseline.json **内容为空**（所有 states not_reproducible、interactions/navigation 为空）；另有 recovered-m3-ui.xml",
       "claims_explanation": "该 baseline 的 blocked_reason = \"deep link 无法直达；需要群聊上下文\"，其 known_unknowns 三项逐一处置如下",
       "claims": [

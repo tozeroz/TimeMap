@@ -509,6 +509,61 @@ export function buildServer(deps: ServerDeps) {
   })
 
   // -------------------------------------------------------------------------
+  // 用户（最小只读身份查询 —— M5 WO#12，审核记录 53 批准）
+  // -------------------------------------------------------------------------
+
+  /*
+    ## 为什么需要它
+      WO#12 修的是"点真实作者却显示成另一个 mock 用户"的**假身份**缺陷。
+      修完之后，"他人主页"要显示**真实昵称**，就必须有一个**按 user id 查权威资料**的入口 ——
+      而此前路由清单里没有任何 /api/users/:id（只有 /api/auth/me 返回"自己"）。
+
+    ## 边界（审核记录 53 明确冻结）
+      · **只返回两个字段**：`{ id, displayName }`
+        —— **不**顺手把 phone / campus / 学院 / 年级之类放进来（那些要么没有权威来源，
+           要么属于不该对任意登录用户暴露的信息）。
+      · 未知 id → **404 `not_found`**（与既有"不区分不存在与无权"的口径一致）
+      · 形状非法（非 uuid）→ 404（与其它 :id 端点同一处理：不做"格式错误 vs 不存在"的区分，
+        避免把"id 空间里有哪些值"变成可探测的）
+
+    ## 为什么它不是"为了 UI 临时造数据"
+      displayName 已经通过帖子作者（/api/posts 的 author）与群成员（/api/threads/:id 的 members[]）
+      向用户展示过，所以它**本来就是可展示的**；本接口只是提供一个
+      "按 user identity 稳定查询"的权威读模型，不引入新的数据类别。
+  */
+  app.get('/api/users/:id', async (req, reply) => {
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(404)
+      return { error: 'not_found' }
+    }
+    /*
+      与 /api/posts 同一档：**不要求登录**（该接口本身就是公开帖子里已展示过的信息）。
+      但会话解析仍要走一遍，以便 DB 不可用时给出**可重试的 503**，而不是把
+      "数据库挂了"伪装成"这个用户不存在"（那会让客户端做出错误的降级决定）。
+    */
+    const sess = await resolveSession(req.headers.authorization)
+    if (sess.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    try {
+      const r = await db.pool.query<{ id: string; display_name: string }>(
+        'select id, display_name from users where id = $1',
+        [id],
+      )
+      const row = r.rows[0]
+      if (!row) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      // 只这两个字段（审核 53：当前阶段只允许这两个）
+      return { id: row.id, displayName: row.display_name }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  // -------------------------------------------------------------------------
   // 帖子
   // -------------------------------------------------------------------------
 
@@ -518,6 +573,30 @@ export function buildServer(deps: ServerDeps) {
     const sess = await resolveSession(req.headers.authorization)
     if (sess.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
     const meId = sess.kind === 'ok' ? sess.user.userId : null
+
+    /*
+      ---- M5 WO#12：可选的 `authorId` 过滤（审核记录 53 批准的最小 read extension）----
+
+      ## 为什么必须放在**服务端**而不是客户端过滤
+        客户端 `posts.filter(p => p.authorId === id)` 只有在 `/api/posts` **永远返回完整全集**
+        时才等价于"TA 的全部动态"。一旦列表加了分页/limit，客户端过滤会**静默变成**
+        "不完整但看起来完整"——而用户无法察觉。服务端过滤没有这个问题。
+
+      ## 形状检查放在**连库之前**（与既有 mediaId 的处理同一纪律）
+        `authorId` 必须是合法 uuid；非法 → **400 `bad_author_id`**（显式拒绝，不静默忽略：
+        静默忽略会让调用方拿到"全部帖子"却以为是"某人的帖子"）。
+        合法 uuid 但该用户没有帖子 → 200 + `items: []`（这是诚实的空结果，不是错误）。
+    */
+    const authorIdRaw = (req.query as { authorId?: unknown } | undefined)?.authorId
+    let authorId: string | null = null
+    if (authorIdRaw !== undefined) {
+      if (typeof authorIdRaw !== 'string' || !/^[0-9a-f-]{36}$/i.test(authorIdRaw)) {
+        reply.code(400)
+        return { error: 'bad_author_id', got: typeof authorIdRaw === 'string' ? authorIdRaw : typeof authorIdRaw }
+      }
+      authorId = authorIdRaw
+    }
+
     try {
       const r = await db.pool.query<
         PostRow & { like_count: string; comment_count: string; liked_by_me: boolean; images: unknown }
@@ -541,9 +620,10 @@ export function buildServer(deps: ServerDeps) {
                    where pm.post_id = p.id and m.scope = 'public'
                 ), '[]'::json) as images
            from posts p
+          where ($3::uuid is null or p.author_id = $3::uuid)
           order by p.created_at desc, p.id desc
           limit $1`,
-        [LIST_LIMIT, meId],
+        [LIST_LIMIT, meId, authorId],
       )
       return {
         items: r.rows.map((row) => ({
@@ -1460,6 +1540,7 @@ export function buildServer(deps: ServerDeps) {
         last_kind: string | null
         last_at: Date | null
         peer_name: string | null
+        peer_id: string | null
       }>(
         `select t.id, t.kind, t.title,
                 (select count(*) from thread_members tm2 where tm2.thread_id = t.id)::text as member_count,
@@ -1473,6 +1554,16 @@ export function buildServer(deps: ServerDeps) {
                 -- 群里返回 peerName 只是"某个别的成员"——那是**误导性字段**，将来一定会被误用
                 -- （例如把群聊行显示成某个成员的名字）。群聊行的显示名应取 t.title，
                 -- 因此这里用 case 在 SQL 层挡掉。
+                --
+                -- M5 WO#12：**同时**返回 peer_id（审核记录 53 批准）。
+                --   为什么不能只用 peerName 定位"我与 TA 的会话"：displayName 可能重名/改名，
+                --   拿名字当身份是错的。peer_id 回答的是"已有 direct 会话里，对方是谁"，
+                --   这是可机械验证的（== thread_members 中除我之外的另一成员 id）。
+                --   ⚠️ 两个字段**必须来自同一行**：因此用**同一 order by** 的两个子查询，
+                --      而不是"分别取第一个" ——那可能在极端情况下指向不同成员，造成
+                --      "名字与 id 不是同一个人"这种最难查的错误。
+                --   ⚠️ 它**不**回答"从没聊过的人点私信该怎样建会话" —— 那是另一个问题，
+                --      WO#12 对"零匹配会话"的处置是 hide/unavailable，不猜、不造。
                 case when t.kind = 'direct' then (
                   select u.display_name
                     from thread_members tm3
@@ -1480,7 +1571,15 @@ export function buildServer(deps: ServerDeps) {
                    where tm3.thread_id = t.id and tm3.user_id <> $1
                    order by u.display_name
                    limit 1
-                ) else null end as peer_name
+                ) else null end as peer_name,
+                case when t.kind = 'direct' then (
+                  select tm4.user_id
+                    from thread_members tm4
+                    join users u2 on u2.id = tm4.user_id
+                   where tm4.thread_id = t.id and tm4.user_id <> $1
+                   order by u2.display_name
+                   limit 1
+                ) else null end as peer_id
            from message_threads t
            join thread_members me on me.thread_id = t.id and me.user_id = $1
            left join lateral (
@@ -1502,6 +1601,10 @@ export function buildServer(deps: ServerDeps) {
           memberCount: Number.parseInt(row.member_count, 10),
           // 列表行的显示名：group 用 title；direct 用对方昵称（见上面 SQL 的注释）
           peerName: row.peer_name,
+          // M5 WO#12（审核 53 批准）：direct 会话里"对方是谁"的**权威身份**。
+          // 用途：他人主页的「私信」要跳到"我与 TA 的会话"，靠 peerName 匹配不可靠
+          // （重名/改名），必须按 id 匹配。群聊恒为 null（没有"对方"这个概念）。
+          peerId: row.peer_id,
           lastMessage: row.last_body === null ? null : { body: row.last_body, kind: row.last_kind, createdAt: row.last_at?.toISOString() ?? null },
         })),
       }

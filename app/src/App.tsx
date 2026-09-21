@@ -118,7 +118,16 @@ export default function App() {
       {root === 'loginselect' && <LoginSelectScreen />}
       {root === 'upgrade' && <UpgradeDialog />}
       {root === 'more' && <MoreScreen />}
-      {root === 'user' && <UserProfileScreen id={route.query.id ?? 'u1'} />}
+      {/*
+        M5 WO#12：**去掉了 `?? 'u1'` 这个 mock 回落**。
+        原来没有 id 时会渲染 mock 的 u1 —— 那是"查不到就展示另一个人"的典型，
+        审核记录 53 冻结的原则是：
+            unknown / malformed user id → 明确的不可用态
+            **NEVER** → 回落到另一个用户
+        因此这里把 undefined 原样传下去，由 UserProfileScreen 的 parseUserId
+        判为"不可解析" → 显示不可用态（且**不发任何请求**，也不显示任何用户）。
+      */}
+      {root === 'user' && <UserProfileScreen id={route.query.id ?? ''} />}
       {root === 'account' && <AccountScreen />}
       {root === 'verify' && <VerifyScreen />}
       {root === 'privacy' && <PrivacyScreen />}

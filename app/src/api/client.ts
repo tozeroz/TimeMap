@@ -138,6 +138,17 @@ export interface ApiThread {
    * group 会话该字段为 null（用 `title`）。
    */
   peerName: string | null
+  /**
+   * direct 会话里**对方是谁**的权威身份（M5 WO#12 新增，审核记录 53 批准）。
+   *
+   * 为什么需要：他人主页的「私信」要跳到"我与 TA 的会话"，
+   * 而**按 peerName 匹配不可靠**（可能重名、可能改名）。必须按 id 匹配。
+   * group 会话该字段恒为 null（群里没有"对方"这个概念，与 peerName 同一处置）。
+   *
+   * 它**只**回答"已有 direct 会话中对方是谁"，**不**回答
+   * "从没聊过的人点私信该怎样建会话" —— 后者 WO#12 的处置是 hide/unavailable，不猜不造。
+   */
+  peerId: string | null
   lastMessage: ApiThreadLastMessage | null
 }
 
@@ -529,10 +540,37 @@ async function request<T>(
 }
 
 /** 取帖子列表（最新的在最前）；匿名可读 */
-export function listPosts(): Promise<ApiResult<ApiPost[]>> {
-  return request<{ items: ApiPost[] }>('/api/posts').then((r) =>
+export function listPosts(authorId?: string): Promise<ApiResult<ApiPost[]>> {
+  /*
+    M5 WO#12：可选的 `authorId` → **服务端**过滤（不是客户端 filter）。
+    为什么必须服务端过滤（审核记录 53）：客户端 `items.filter(...)` 只有在
+    `/api/posts` 永远返回完整全集时才等价于"TA 的全部动态"；一旦加页/limit，
+    它会**静默变成**"不完整但看起来完整"，而用户无法察觉。
+    服务端过滤没有这个隐患，因此这里把过滤条件交给服务端。
+  */
+  const q = authorId ? `?authorId=${encodeURIComponent(authorId)}` : ''
+  return request<{ items: ApiPost[] }>(`/api/posts${q}`).then((r) =>
     r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
   )
+}
+
+/**
+ * 按 id 查用户的最小权威资料（M5 WO#12 新增，审核记录 53 批准）。
+ *
+ * 契约：成功只返回 `{ id, displayName }` 两个字段 —— 服务端**刻意**不返回
+ * phone / campus / 学院 / 年级 等（那些要么没有权威来源，要么不该对任意登录用户暴露）。
+ * 未知 id 或形状非法 → 服务端 404。
+ *
+ * 为什么需要它：修掉"点真实作者却显示成另一个 mock 用户"之后，
+ * "他人主页"要显示**真实昵称**就必须有一个按 user identity 查的权威入口。
+ */
+export interface ApiUserIdentity {
+  id: string
+  displayName: string
+}
+
+export function getUser(id: string): Promise<ApiResult<ApiUserIdentity>> {
+  return request<ApiUserIdentity>(`/api/users/${encodeURIComponent(id)}`)
 }
 
 /**
