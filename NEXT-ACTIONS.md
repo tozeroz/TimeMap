@@ -113,10 +113,10 @@
       （INFO active_sessions=… / WARN total unusually high），**不作产品 PASS/FAIL 唯一依据**
 
 ## F. WO#6（已提交审核，等裁定）
-- [ ] F1 `docs/m5/WO6-PLAN-tabbar-vertical-layout.md`：tab 项 **横排 → 竖排**（原版为图标在上、文字在下）
+- [x] F1 ✅ **已完成**（审核 40 批准后实施）：`app/src/components/tabbar.css` 的 `.tabbar__item` 改为 column（图标在上、文字在下 + 交叉轴居中）`n      设备 Gate `scripts/m5/gate-wo6-tabbar-orientation.mjs`：**改前 FAIL**（stackGap=-18~-20、alignDelta=28~30.6）→ **改后 PASS**（stackGap=5、alignDelta=0）；`n      含导航回归（校园→#/campus、地图→#/map）、FAB/栏高不变；视觉核对亦确认三项均为竖排
       证据：dump bounds（图标 y=[1746,1795]、文字 y=[1829,1868]，不重叠）+ 截图视觉（两条独立来源）+
       我方 DOM 实测（icon y=1035、label y=1037，重叠 → 横排）
-- [ ] F2 FAB 可见直径：**两种像素方法均自判 INVALID** → 记为候选，等审核指定有效方法（不凭猜改）
+- [x] F2 ✅ **已按审核 40 挂起**：`FAB_VISIBLE_DIAMETER: NOT_MEASURED_RELIABLY` / `PRODUCT_CHANGE: NONE`；`n      未来可选方法 = 「已知中心 + 径向边缘拟合」（审核给定，含残差报告要求），本轮**不投入**
 ---
 
 ## E1 结果（2026-09-22 01:27，只读审计已完成）

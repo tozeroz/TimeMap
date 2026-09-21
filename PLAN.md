@@ -848,3 +848,79 @@ bash 把 `exit` 当成 `echo` 的又一个参数 → **exit 从未执行 → gat
   （missing_duration_ms / unexpected_duration_ms / media_kind_mismatch …）。
 · 聚合器要交叉检查每条断言行里是否出现**预期错误码字面**，防"因错误原因通过"。
 ```
+
+
+
+---
+
+# 📏 测量清单（2026-09-22 冻结，审核记录 40 认可）
+
+## 一、比较两个数之前，必须确认**五条都成立**
+
+```
+1. definition 相同        —— 两边说的确实是同一个量
+2. unit 相同              —— 设备 px ≠ CSS px（本设备 dpr=1.75，14 dev px = 8 CSS px）
+3. coordinate frame 相同  —— relative ≠ absolute
+4. **semantic box 相同**  —— clickable node bounds ≠ visible bar bounds
+                            （2026-09-22 新补，见下方案例）
+5. sampling / method 有判别力 —— 无效测量比没有测量更危险
+```
+
+### 案例库（每条都是本项目真实踩过的）
+
+| # | 踩过的坑 | 违反哪条 | 后果 |
+|---|---|---|---|
+| 1 | 用 `pitch` 当 `gap` | 1 definition | 表情行间距结论错误 |
+| 2 | relative 与 absolute 坐标混用 | 3 coordinate frame | 位置结论错误 |
+| 3 | 原版可点区 171 dev px 与我方可见栏 102 dev px 直接比，怀疑"差 1.7 倍" | **4 semantic box** | 差点去改一个本来就一致的栏高 |
+| 4 | 阈值 12 没写单位；原版实测 8 CSS px（=14 dev px） | 2 unit | 若按 device px 则**原版自己都不合格** |
+| 5 | 逐行颜色占比 / 深色外接矩形 测 FAB 直径 | 5 method | 两次都得出荒谬数字，已标 INVALID |
+
+> **第 4 条（semantic box）** 由审核记录 40 点名补入：
+> "不同 semantic box 不能直接比较，**即使它们单位相同**。"
+
+---
+
+# 🖼️ 截图类证据的强制前置：**先确认前台是哪个 App**
+
+（2026-09-22 新增，来自我本轮真实踩到的坑）
+
+## 事故经过
+
+WO#6 改完 CSS 后我做截图式视觉验证，把截图交给视觉模型问"底部栏是什么形态"，
+得到回答："这是**聊天输入栏**，最右侧有黑色圆形 + 按钮"。
+我一度以为是我方 tab 栏渲染不对；继续查才发现：
+
+```
+mCurrentFocus = Window{... com.**kairuotu.campus**/...GroupChatActivity}   ← **原版 App 在前台**
+可见文本: 'GroupForEvidence(1)' / '10:24' / '@' / '发消息…'
+```
+
+**我方 demo（`com.campusx.demo`）当时在后台**，CDP 挂在它的 WebView 上（所以 DOM 测量是真实有效的），
+但 `adb screencap` 拍到的是**前台的原版 App**。
+
+## 为什么会这样
+
+之前的只读观察把原版 App 留在了前台；我以为"CDP 连着我方 WebView"就等于"我方在前台"——
+**这两件事是独立的**。而且设备健康探针当时报
+`DEVICE_HEALTH FAIL: A 输入未送达; B 屏幕未重绘`
+—— 那正是"屏幕停在一个静态页面上"的信号，我当时没把它和"前台不是我方"联系起来。
+
+## 纪律（写死）
+
+```
+任何截图类证据，在采集之前必须：
+  ① adb shell dumpsys window | grep mCurrentFocus
+     → 确认焦点窗口的包名**就是**我们这次要观测的那个
+  ② 若前台不是目标 App：用 am start -n <目标包>/<目标Activity> 把它带到前台
+     ⚠ **绝不**用 force-stop 去停止原版（既有纪律：默认不对原版做 force-stop）
+  ③ 采集后再核一次 mCurrentFocus，确认采集期间没有被切走
+  ④ 若用 CDP 测量，**另**确认 CDP 目标 URL 与预期页面一致
+     —— CDP 连着 ≠ 那个页面/那个 App 在前台
+```
+
+## 本次事故的正确产物（顺便得到的真实收获）
+
+那个"黑色圆形 + 按钮"其实是对**原版群聊输入栏**的真实观察 —— 不是坏数据，
+只是**答非所问**。它说明原版群聊 composer 右侧有一个黑色圆形 + 按钮，
+可作为**未来 chat composer 呈现比对**的候选证据（与 WO#6 无关，另行登记）。
