@@ -30,10 +30,10 @@ observed: 自己发的图片消息渲染在左侧 peer 气泡里
           需要先只读观察原版在这方面的表现，再决定实现（**不要凭感觉加区分**）
 ```
 
-### 2. 底部 tab 数量与「校园广场」的呈现模型 — **DEVIATION**
+### 2. 底部 tab 数量与「校园广场」的呈现模型 — **WITHDRAWN（2026-09-21 20:54 撤销）**
 
 ```
-observed: 原版底部是 4 项（校园广场 / <账号昵称> / 校园 / 地图），我们只有 3 项
+observed: ~~原版底部是 4 项~~ → **错误**：看 bounds 才知「校园广场」在**顶部区**(y≈130)，三个 tab 在底部区(y≈1829)。原版底部 = **3 个文字 tab**（自定义名称6/校园/地图）+ 右侧圆形发布按钮，**与我们一致**
 证据:     docs/original-baseline/raw-dumps/board-observation-1.xml
 补充:     该 tab 指向的页面**不是列表式 feed，而是拼贴照片墙（collage）**：
           collageView + view_image_container + view_user_tag（图片上的作者标签）
@@ -79,7 +79,7 @@ C2 原判: 缺留言总数
 已修:   表情行几何（项数/宽/pitch/边界）、底色、字号
 成立:   C4 表情形态（图片 vs 文字）—— 待裁定实现方式
 成立:   CHAT_MESSAGE_SENDER_PRESENTATION（自己消息渲染在 peer 气泡）
-成立:   底部 tab 4 vs 3 + 校园广场的 collage 呈现模型
+撤销:   底部 tab 4 vs 3（实为**误数**：把顶部栏目当成了底部 tab；我们的 3 tab + FAB 发布按钮与原版一致）
 阻断:   C3 下拉刷新（BLOCKED_BY_POLICY）
 撤销:   C1 顶部按钮、C2 留言总数（被只读观察推翻）
 ```
@@ -150,3 +150,23 @@ NATIVE_FILE_PICKER_INTERACTION   真实点击选图入口 → 系统 picker 真�
            原版不区分   → **撤销该偏差**
            控件树不足以判定 → 保持 UNRESOLVED，**不得强行判"是/否"**
 ```
+---
+
+## 五、tab 区结论（2026-09-21 20:54 定稿，撤销该偏差）
+
+```
+底部文字 tab 数     原版 3（自定义名称6/校园/地图）   我们 3（我/校园/地图）        ✅ 一致
+底部发布按钮        原版有（圆形 +）                 我们有 tabbar__fab→publish   ✅ 一致
+校园广场呈现模型    原版两列瀑布流拼贴 + 作者标签      我们 column-count:2 瀑布流   ✅ 一致
+顶部「校园广场 ▼」  原版有（点后出现「搜索其他学校」）  我们有 switcher（注释即指原版）✅ 一致
+```
+
+**证据**（两侧都看）：
+- 原版：`raw-dumps/board-observation-1.xml` 的 **bounds**（校园广场 y=130–157；三 tab y=1829–1868）
+  + `screens/original-sweep/01-trident.png` 的视觉读图
+- 我们：`TabBar.tsx`（navigate('me'/'campus'/'map') + `tabbar__fab`→'publish'）、
+  `campus.css`（`column-count: 2`）、`CampusScreen.tsx`（switcher 注释指出原版行为）
+
+**教训（第四次同型错误的变体）**：我此前**只数了 dump 里的文字个数**就断定"原版 4 个底部 tab"，
+**没有看 bounds**。→ 已并入纪律：
+**凡涉及"有几个 / 在哪一类"的结论，必须看 bounds / 层级，不能只数名字。**
