@@ -18,10 +18,24 @@ import './board.css'
  * 隐私模型：只有**双方**能读到（服务端强制）。第三方拿到对方 user id 也只会得到空列表，
  * 而且返回 200 而不是 403 —— 不泄漏"这两人之间有没有留言"。
  *
- * ⚠ 已知缺口（如实记录，不在本文件里蒙混过去）：
- *   只读证据记录原版**表情行恰好 7 个**，而 mock 里的 boardEmojis 现在是 **6 个**。
- *   这属于**视觉/结构一致性**的偏差，需要回到证据文件确认第 7 个是什么再补，
- *   不能凭印象编一个。因此本轮**不声称**表情行与原版一致。
+ * ⚠ 已知缺口（如实记录，不在本文件里蒙混过去）
+ *
+ * 1) 【已解决 —— 此处原为过期结论，2026-09-21 更正】
+ *    本注释曾写「只读证据记录原版**表情行恰好 7 个**，而 boardEmojis 是 6 个」。
+ *    那是**照一条不可复算的旧记录下的判断**，它一度导致实现被错误地改成 7 个。
+ *    回到可复核产物后确认：**原版就是 6 项** ——
+ *      · `raw-dumps/message-board-dump.xml` 里 `emotion_image` 出现 **6** 次（可复算）
+ *      · 且若存在第 7 项，按恒定 112 间距应位于 x=693..763，实测不存在
+ *      · `docs/conformance/FINDING-board-emojis.md`: `ORIGINAL_TOTAL_EMOJI_COUNT: 6`
+ *    → **项数这一条已经对齐**（我们 6 项、原版 6 项）。
+ *
+ * 2) 【仍未对齐，且属于结构层】形态不同：
+ *    原版表情项在控件树里是 **`android.widget.ImageView`**（渲染随包 webp 图片），
+ *    而这里把 emoji **字符**当文字直接渲染（`{e}`）。
+ *    → 已按审核记录 30 收口：`C4_EMOJI_RENDERING_KIND: CONFIRMED — image-based`；
+ *      结构层修复**已解冻**并另立 WO#4
+ *      （`docs/m5/WO4-PLAN-emoji-rendering-structure.md`）。
+ *      **具体用哪 6 张图仍未捕获**（`C4_EXACT_6_ASSETS: NOT_CAPTURED`），不得凭印象选。
  */
 export function BoardScreen({ peerId }: { peerId: string }) {
   const [notes, setNotes] = useState<ApiBoardNote[]>([])
