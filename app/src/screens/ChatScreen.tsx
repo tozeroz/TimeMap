@@ -7,6 +7,7 @@ import {
   uploadMedia,
   type ApiMessage,
 } from '../api/client'
+import { getSession } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack, IconEmoji, IconImage, IconMore, IconPlus } from '../components/icons'
 import { goBack } from '../router'
@@ -81,6 +82,17 @@ export function ChatScreen({ id }: { id: string }) {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [err, setErr] = useState('')
   const [draft, setDraft] = useState('')
+
+  /**
+   * 当前用户 id —— 判断「这条消息是不是我发的」（M5：自己发的消息必须靠右）。
+   *
+   * 为什么用 getSession() 而不是新造一套：会话本来就有现成存放处（api/session.ts），
+   * MeScreen / TabBar 也都是这么读的。这里沿用**同一模式**（挂载时读一次），
+   * 不引入新的订阅机制 —— 会话变化时这些屏幕本来就都会重新挂载。
+   *
+   * 字段名以 `SessionUser` 为准：`getSession()?.user?.id`。
+   */
+  const [meId] = useState<string | null>(() => getSession()?.user?.id ?? null)
 
   /**
    * 发图状态。
@@ -241,22 +253,38 @@ export function ChatScreen({ id }: { id: string }) {
       {state === 'ready' && messages.length === 0 && <p className="chat__state">还没有消息</p>}
       {state === 'ready' && (
         <div className="chat">
-          {messages.map((m) => (
-            <div key={m.id} className="chat__row chat__row--peer" data-message-id={m.id}>
-              <div className="bubble bubble--peer">
-                {m.revoked ? (
-                  // 撤回：只显示一句说明。服务端也把 media 清空了，
-                  // 所以这里不存在"界面隐藏但图还在"的可能
-                  <span className="bubble__revoked">消息已撤回</span>
-                ) : m.kind === 'image' && m.media.length > 0 ? (
-                  m.media.map((mm) => <MediaImage key={mm.id} mediaId={mm.id} alt="图片消息" />)
-                ) : (
-                  <span className="bubble__text">{m.body}</span>
-                )}
-                <span className="bubble__time">{relativeTime(m.createdAt)}</span>
+          {messages.map((m) => {
+            /*
+              自己发的消息靠右、对方的靠左。
+              依据：原版会话页里**自己发的那条**气泡落在右半（x=[625,975]，屏宽 1080）、
+              头像贴最右（x=[989,1052]）—— 见 docs/m5/CHAT-SENDER-PRESENTATION-CONFIRMED.md。
+              此前这里硬编码 `--peer`，把「我发的」也画在左边，是真实偏差。
+
+              ⚠ `meId` 为 null（未登录 / 读不到会话）时 `mine` 恒为 false → 降级成 `--peer`（原行为）。
+              绝不能写成 `meId === null || ...` 之类把所有人都当成「我」。
+            */
+            const mine = meId !== null && m.senderId === meId
+            return (
+              <div
+                key={m.id}
+                className={`chat__row ${mine ? 'chat__row--me' : 'chat__row--peer'}`}
+                data-message-id={m.id}
+              >
+                <div className={`bubble ${mine ? 'bubble--me' : 'bubble--peer'}`}>
+                  {m.revoked ? (
+                    // 撤回：只显示一句说明。服务端也把 media 清空了，
+                    // 所以这里不存在"界面隐藏但图还在"的可能
+                    <span className="bubble__revoked">消息已撤回</span>
+                  ) : m.kind === 'image' && m.media.length > 0 ? (
+                    m.media.map((mm) => <MediaImage key={mm.id} mediaId={mm.id} alt="图片消息" />)
+                  ) : (
+                    <span className="bubble__text">{m.body}</span>
+                  )}
+                  <span className="bubble__time">{relativeTime(m.createdAt)}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </Screen>
