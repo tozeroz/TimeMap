@@ -21,7 +21,7 @@
 - 在 `message-board-dump.xml` 中检索 `fl_emoji_root`：**出现 6 次**
 - 该节点所在容器 `rvEmojiList` 的 class 是 `androidx.recyclerview.widget.RecyclerView`
 - 检索 `text` 与 `content-desc` 中属于 emoji 码位（U+1F300–U+1FAFF、U+2600–U+27BF）的字符：**0 个**
-- `board-observation-1.xml` 中底部 tab 的 label：`校园广场` / `自定义名称6` / `校园` / `地图`（4 项）
+- `board-observation-1.xml` 中底部 tab 的 label：`自定义名称6` / `校园` / `地图`（**3 项**）`n  ⚠️ 原写"含「校园广场」共 4 项"是**误数**（未读 bounds）：`校园广场` 在 `[28,130][116,157]` 属**顶部标题区**，2026-09-22 更正
 
 ## 三、conclusion（冻结口径 —— 注意 NOT_EVALUATED 与 PASS 是不同事实）
 
@@ -45,7 +45,7 @@ EMOJI_SPACING:              NOT_EVALUATED     ← 旧记录提到 112px，但无
 | 可见项数 6 | `boardEmojis` 取 6 项 | ✅ 已实现（`28f715e`，从错误的 7 回退） |
 | 总数未评估 | **不得**据此声称"表情行与原版一致" | 遵守：`mock.ts` 注释已标明 |
 | 字符未采集 | **不得**声称字符一致；不得为凑字符而改实现 | 遵守：注释标明 `NOT_CAPTURED` |
-| tab 4 项 | 我们只有 3 项 → **deviation** | ✅ 已登记（`3a7fda4`），实现另立一单 |
+| ~~tab 4 项~~ → **原版 3 项** | 与我方 3 项**一致** | ✅ **deviation 已撤销**（2026-09-22，误数：把顶部标题当成 tab） |
 
 ## 五、本 finding 暴露并已被采纳的两条纪律
 

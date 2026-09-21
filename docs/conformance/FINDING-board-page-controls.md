@@ -75,7 +75,7 @@ tvSendComment          发送按钮
 
 | 位置 | 差异 | 证据 |
 |---|---|---|
-| 底部 tab | 原版 4 项（含「校园广场」），我们 3 项；且该页是 collage 照片墙 | `board-observation-1.xml` |
+| 底部 tab | 原版 **3 项**，我们 **3 项 → 一致**（原写"4 项含校园广场"已撤销：那是顶部标题）；该页是 collage 照片墙 | `board-observation-1.xml` |
 | 留言板顶部 | 缺「返回」按钮 | 本 finding C1 |
 | 留言板 | 缺留言总数 | 本 finding C2 |
 | 留言板 | 缺下拉刷新 | 本 finding C3 |
