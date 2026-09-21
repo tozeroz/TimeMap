@@ -53,7 +53,7 @@ fi
 echo
 echo "=== c) 库是否回到基线（对照 19:09:46 的快照）==="
 # 基线（E2E 之前）：messages 4 / media 7 / message_media 1 / users 10
-declare -A BASE=([messages]=4 [media]=7 [message_media]=1 [users]=10)
+# 基线已更正为**纯种子基线**（2026-09-21 19:31 清理后；此前那份 users=10/messages=4 是**被污染的基线**）declare -A BASE=([messages]=2 [media]=2 [message_media]=0 [users]=3)
 for T in messages media message_media users; do
   NOW=$(PSQL "select count(*) from $T")
   WANT="${BASE[$T]}"
