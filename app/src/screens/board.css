@@ -123,7 +123,17 @@
   width: 40px;
   height: 40px;
   background: transparent;
-  font-size: 16px;
+  /*
+    C6 修正：字号 16px → 24px（依据见 FINDING-board-emojis §十七）。
+    原版墨迹外接（非白像素的 bounding box，设备 px ÷1.75 = CSS px）：
+      #3 实心爱心 40x40 设备px → **22.9 CSS px**，且**恰好填满整个 40 CSS px 的盒子**
+      #6 "+1"    35x35 → 20.0      #1/#2 笑脸 42x39 → 24.0x22.3
+    即在原版里，一个实心字形的墨迹就跨越 ~23 CSS px —— 而 16px 字号下 emoji 墨迹只有约 14 CSS px。
+    因此按最实心的那个字形（爱心）定：em ≈ 23~26 CSS px，取 **24px**。
+    ⚠ 残余不确定：墨迹/em 的确切比例取决于字体，故 24px 是**据测量的最优估计**，不是精确复原值。
+    ⚠ 若 C4 最终裁定"改为图片形态"，本项随之失效（届时以图片尺寸为准）。
+  */
+  font-size: 24px;
   line-height: 1;
 }
 
