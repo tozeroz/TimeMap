@@ -1,0 +1,82 @@
+# Conformance finding：留言板页的控件清单与我们的差异
+
+> 时间：2026-09-21 17:56（Asia/Shanghai）
+> 写法遵循审核记录 21 确立的链：`raw_evidence → observation → conclusion → implementation impact`
+
+## 一、raw_evidence
+
+`docs/original-baseline/raw-dumps/message-board-dump.xml`
+（`am start -a VIEW -d campusx://messageBoard com.kairuotu.campus` → `uiautomator dump` → `adb pull`；**纯只读**）
+
+## 二、observation：该页的完整控件清单
+
+```
+top_bg                 顶部背景
+iv_back                返回按钮（← 左箭头）
+icBgShadow             阴影
+ivClose                关闭按钮（×）
+tvTotalComment         留言总数（文本）
+leaveMsgTip            留言提示文本
+refreshLayout          下拉刷新容器
+tvNoComment            空态文案
+line_comment_top       顶部分隔线
+layout_comment_board   留言板主体容器
+rvEmojiList            表情列表（RecyclerView）
+fl_emoji_root          单个表情项（×6）
+emotion_image          表情图片（**注意：是 image**）
+et_comment_board       输入框
+tvSendComment          发送按钮
+```
+
+页面可见文字（全部）：`留言` / `仅双方可见` / `可以给同学留言噢` / `留言仅双方可见`
+`content-desc`：**全为空**
+
+## 三、conclusion（逐条，含强度）
+
+| # | 事实 | 强度 |
+|---|---|---|
+| C1 | 顶部**同时存在返回（`iv_back`）与关闭（`ivClose`）两个控件** | strong（控件 id 直接可见） |
+| C2 | 页面存在**留言总数**控件 `tvTotalComment` | strong |
+| C3 | 页面存在**下拉刷新**容器 `refreshLayout` | strong |
+| C4 | 表情项内部是 **`emotion_image`（图片）**，不是文本字形 | strong |
+| C5 | `content-desc` 全空 | strong（全树扫描） |
+| C6 | 可见文案集合 = {留言, 仅双方可见, 可以给同学留言噢, 留言仅双方可见} | strong |
+
+### C4 解释了一个悬案
+
+此前 `EMOJI_CHARACTERS` 一直记 `NOT_CAPTURED`，我当时的解释是"可访问性树里没有表情字符"。
+**现在有了结构性原因：表情本身就是图片（`emotion_image`），不是文字。**
+所以：
+- 想拿到具体表情**不可能靠 dump**，只能靠**读图片资源**或**人工辨认截图**（后者属弱证据）；
+- 这也意味着**我们的实现用文字 emoji（`😂` 等）在形态上就与原版不同** ——
+  原版是**图片**。这是一个新发现的、可复算的差异。
+
+## 四、implementation impact（对照我们的实现）
+
+| # | 原版 | 我们 | 判定 |
+|---|---|---|---|
+| C1 | 返回 + 关闭 | **只有关闭**（`IconClose`） | **DEVIATION（缺返回）** |
+| C2 | 有留言总数 | **没有渲染计数** | **DEVIATION（缺计数）** |
+| C3 | 有下拉刷新 | 没有 | **DEVIATION（缺下拉刷新）** |
+| C4 | 表情是**图片** | 用**文字 emoji** | **DEVIATION（形态不同）** |
+| C6 | 四条文案 | 四条文案一致 | 一致 ✅（已在设备端 5 条断言覆盖） |
+
+### 处置建议（本轮只登记，不实现）
+
+- 四项都是**可复算**的差异（有原始产物），符合"可驱动实现"的门槛。
+- 但**不要一次性全做**：其中 C3（下拉刷新）涉及数据刷新语义、C2（计数）涉及计数口径
+  （是留言总数还是双方各自的条数？**dump 只能证明"有这个控件"，不能证明口径**）——
+  口径不清就实现，属于**用存在性冒充语义**。
+- 下一轮应针对 C2/C3 **再取一次只读观察**确定口径（例如进入一个有留言的账号看这个数字），
+  再决定怎么实现。
+- C1（返回按钮）与 C4（图片表情）口径清楚，可优先做。
+
+## 五、已登记的 deviation 汇总（避免散落）
+
+| 位置 | 差异 | 证据 |
+|---|---|---|
+| 底部 tab | 原版 4 项（含「校园广场」），我们 3 项；且该页是 collage 照片墙 | `board-observation-1.xml` |
+| 留言板顶部 | 缺「返回」按钮 | 本 finding C1 |
+| 留言板 | 缺留言总数 | 本 finding C2 |
+| 留言板 | 缺下拉刷新 | 本 finding C3 |
+| 留言板表情 | 原版是图片、我们是文字 emoji | 本 finding C4 |
