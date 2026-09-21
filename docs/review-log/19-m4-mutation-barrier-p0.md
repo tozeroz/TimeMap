@@ -127,3 +127,59 @@ BACKUP_MUTATION_BARRIER:             PASS   （真新增）
 3. 重跑 M4 存储 gate + M3 完整 regression → 提交审核请求 M4 CLOSE
 4. board_notes 的 `from_user_id` 改为 **strict reject（400）** 并改断言
 5. 用**只读观察**核实原版表情入口数量（7 个？）
+
+---
+
+## 七、实现进展与备份侧锁的具体做法（本轮）
+
+### 已完成
+
+- **`server/src/mutationBarrier.ts` 已创建**（本轮）：
+  `MEDIA_MUTATION_LOCK_KEY`、`acquireMediaMutationLock(client)`（事务级共享锁 +
+  `lock_timeout`）、`isBarrierTimeout(err)`。
+  刻意用**事务级** `pg_advisory_xact_lock_shared` 而不是会话级：
+  事务结束即释放，**不存在"忘记 unlock 导致永久锁死"**这条漏子。
+  并写明强度边界：它约束的是**遵循同一把锁的业务写路径**；
+  直接连库的手工改数据不受约束（管理面操作，不在业务路径上）。
+
+- **业务侧接入已交给子代理执行**（media INSERT / cleanup GC / 其它 media 写路径），
+  要求：已在事务里就地取锁、不在事务里则包成事务、锁超时返回 **503 + Retry-After**
+  （语义是"稍后重试"而不是"出错了"）、**读取路径一律不加锁**。
+
+### 备份侧排他锁的做法（设计已定，待实现）
+
+`scripts/m4/backup-restore-joint.sh` 里现在是：line 86 `pg_dump` → line 90 `tar`。
+要把这两步**放进同一个排他锁窗口**。
+
+**做法：用单个 psql 会话持有锁，并在锁内用 `\!` 执行 shell 步骤**
+
+```bash
+KEY=1295258177   # 与 mutationBarrier.ts 的 MEDIA_MUTATION_LOCK_KEY 必须一致
+steps="$GEN/.barrier-steps.sh"
+cat > "$steps" <<'STEPS'
+PGPASSWORD="$(cat /srv/campus/.db_password)" pg_dump -Fc -h 127.0.0.1 -U campus -d campus -f "$GEN/database.dump"
+tar --zstd -cf "$GEN/uploads.tar.zst" -C "$UPLOADS" public private 2>/dev/null
+STEPS
+PGPASSWORD="$(cat /srv/campus/.db_password)" psql -h 127.0.0.1 -U campus -d campus -q <<SQL
+select pg_advisory_lock($KEY);
+\! bash $steps
+select pg_advisory_unlock($KEY);
+SQL
+```
+
+为什么可行：`pg_advisory_lock` 是**会话级**的，而 `\!` 只在同一个 psql 会话内执行 shell，
+会话不退出锁就一直有效 —— 于是 dump 与 archive **都在排他窗口内**完成。
+（业务侧用**事务级**共享锁，备份侧用**会话级**排他锁，两者配合正确：
+共享锁挡不住排他锁的申请，排他锁会等待已持有的共享锁释放、并阻塞新的共享锁。）
+
+`lock_timeout` 在备份侧**不要设得太短**（备份本身要时间），
+但业务侧的 `lock_timeout` 要短（5 秒）以便快速返回 503。
+
+### 竞争条件测试（Gate 必做，下轮实现）
+
+1. 后台起一个"持有排他锁 N 秒"的任务（模拟备份窗口）
+2. 在窗口内**并发**发起 upload 与 revoke，断言：
+   - 它们**没有**在窗口内完成（阻塞至超时 → 503，或阻塞到窗口结束）
+3. 窗口结束后，同样的写操作**必须成功** —— 证明不是永久锁死（这条最关键，
+   否则"屏障"可能只是把功能弄坏了）
+4. 断言 dump 与 archive **都在窗口内**（用时间戳或日志证明）
