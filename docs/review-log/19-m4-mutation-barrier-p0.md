@@ -1,0 +1,129 @@
+# 审核记录 19：M4 仍差 1 个 P0（真正的备份 mutation barrier），其余全部接受
+
+> 审核方：ChatGPT web（远程独立审核）；时间：2026-09-21 17:00（Asia/Shanghai）
+
+## 一、已接受的（明确 CLOSED）
+
+> 你补交的 ②③④⑤ 我全部接受：
+> - 双向 row↔file 恢复校验：CLOSED
+> - restore 后私有授权行为：CLOSED
+> - cleanup DB-down fail-closed：CLOSED
+> - pixel / dimensions bound：CLOSED
+> 而且新 Gate 真正抓出了上传测试留下 orphan 的根因，这说明这些 closeout 不是形式检查。
+
+## 二、① 被判"名实不符"——这是本轮唯一的 P0
+
+审核的原话要点：
+
+> 你现在证明的是"备份开始前状态一致"……它证明的是 **pre-backup consistency check**。
+> 它没有阻止下面这个时序：
+> ```
+> A2 检查通过
+>   ↓
+> pg_dump 开始/完成
+>   ↓
+> 此时用户上传一张新图 → DB row + file 都成功
+>   ↓
+> uploads.tar 开始 → tar 包含新文件，但 pg_dump 不包含新 DB row
+> ```
+> 或者：
+> ```
+> pg_dump 完成 → 某条消息撤回 / media mutation → media archive
+> ```
+> 于是数据库和媒体 archive 分别都"内部正确"，但**不属于同一个逻辑时刻**。
+
+**这个批评是对的，而且我的命名确实夸大了保证强度。**
+我证明的"两侧一致"是**某一时刻**而**不是**"备份窗口内的一致性"——
+两者是不同性质：前者是"快照干净"，后者是"窗口冻结"。
+我把前者写成了 BACKUP_CONSISTENCY_BARRIER，属于**保证强度被夸大**——
+这正是本项目一直在防的那类问题（把弱证据当强证据），只不过这次出在我自己的命名上。
+
+## 三、要做的修改（审核给的方案）
+
+### 1. 改名（保留原断言，不删）
+
+现有 A2 改名为 `PRE_BACKUP_CROSS_REFERENCE_INTEGRITY`
+（它本身是有价值的断言，只是名字不该叫 barrier）。
+
+### 2. 新增真正的 mutation barrier + 竞争条件测试
+
+**备份期间**：
+- 禁止：media upload、media delete/GC、**message revoke 中影响 media live state 的动作**、
+  其它会新增/删除/改变 media reference 的写操作
+- 允许：普通读取
+
+**顺序**：进入 barrier → `pg_dump` → archive uploads → manifest/hash → 释放 barrier
+
+**允许的实现形式**（审核原话："关键不是实现形式"）：
+- PostgreSQL advisory lock，且**业务 mutation 也必须共同遵守**
+- 或 应用 maintenance flag + DB lock
+
+**Gate 必须制造竞争条件**：
+```
+backup barrier active
+→ 并发 upload/revoke 尝试
+→ 不得在 DB dump 与 media archive 之间完成
+→ barrier 解除后写操作恢复
+```
+
+### 3. 新增 key
+
+```
+PRE_BACKUP_CROSS_REFERENCE_INTEGRITY: PASS   （原 ① 改名）
+BACKUP_MUTATION_BARRIER:             PASS   （真新增）
+```
+
+### 4. 补完后重跑（当前 HEAD）
+
+`M4_STORAGE_GATE_RESULT` + M3 完整 regression + M4 三层
+→ 审核预计可直接判 **M4 — ACCEPTED / CLOSED**，且**不需要重审 A/B/C**。
+
+## 四、我的实现设计（下单前先写清，避免边做边改）
+
+**机制选择：PostgreSQL advisory lock（共享/排他）**
+
+- 备份进程：`pg_advisory_lock(KEY)` —— **排他**
+- 影响 media generation 的业务写：`pg_advisory_lock_shared(KEY)` —— **共享**
+- 语义正好：排他等待已有共享释放并阻塞新共享 → 备份窗口内写操作无法进入；
+  备份结束后自动放行。普通读取**不加锁**，不受影响。
+- 为什么选它而不是"应用 flag"：advisory lock 是**数据库层**的，
+  不依赖"每个写路径都记得检查 flag"——后者一旦有人新写一个接口忘了检查就漏了。
+  这与本项目"防线要放在数据库层"的既有纪律一致（同 scope 复合外键那次）。
+
+**要加锁的具体写入点**（必须逐一定位，不能漏）：
+1. `POST /api/media` 的 INSERT 段
+2. `dist/cleanup.mjs` 的删除段（GC）
+3. 撤回消息（`update messages set deleted_at`）—— 因为它会改变 media 的 live state
+4. 未来任何"改变 media 引用"的接口（在 Gate 里加注释提醒）
+
+**竞争条件测试**（Gate 内执行，必须真的竞争）：
+1. 起一个后台任务：进入 barrier（拿排他锁）、`sleep` 数秒、再释放
+2. 在 barrier 持有期间，**并发**发起 upload 与 revoke，断言：
+   - 它们**没有**在 barrier 窗口内完成（阻塞或被明确拒绝）
+3. 释放 barrier 后，同样的写操作**必须成功**（证明不是永久锁死）
+4. 断言 barrier 本身的时序：dump 与 archive 都在 barrier 内完成
+
+**风险与取舍（先写明，避免自欺）**：
+- 锁超时要设（`lock_timeout`），否则一个慢备份会把写入挂死；
+  超时应返回 **503 + 明确错误**，而不是无限等待
+- 单机 demo 下"排他锁 + 共享锁"足够；审核也明确说不需要分布式 snapshot
+- 测试时间不能太长（否则 M4 gate 变慢），barrier 窗口控制在数秒
+
+## 五、M5 相关裁定（同一条回复里）
+
+- **推进方式确认**：M4 关闭后，按 `docs/AUDIT-M0-M4.md` 作为 Verified Baseline **逐项销项**
+- **board_notes 确认为第一单**；我新增的两条机械断言都要做，并且：
+  > 客户端提交 from_user_id → 400 / ignored-by-contract；**我更偏向 strict reject**
+  —— 即：**改成明确拒绝（400）**，而不只是"忽略"。这是一处行为变更，要改实现 + 改断言。
+- 他们另外列出的要求包括"真机空态、占位、**7 个表情入口**、App restart 后仍来自服务器"
+  —— 注意：审核也写了 **7 个**。这与我在证据文件里查不到 emoji 字段的矛盾仍未解决，
+  需要**回到原版只读观察**去数（只读，允许），不能再靠记忆。
+- **Voice 确认保持 backlog**，不承诺为 Work Order #2；优先继续 A 类与可缩小的 D 类。
+
+## 六、下一步（按优先级）
+
+1. **实现 backup mutation barrier**（advisory lock + 四个写入点 + 竞争条件测试）← 唯一阻塞 M4 关账的项
+2. 改名为 `PRE_BACKUP_CROSS_REFERENCE_INTEGRITY`，新增 `BACKUP_MUTATION_BARRIER`
+3. 重跑 M4 存储 gate + M3 完整 regression → 提交审核请求 M4 CLOSE
+4. board_notes 的 `from_user_id` 改为 **strict reject（400）** 并改断言
+5. 用**只读观察**核实原版表情入口数量（7 个？）
