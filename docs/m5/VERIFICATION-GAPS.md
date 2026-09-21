@@ -58,3 +58,22 @@ C5 去底色 / C6 字号 24px：已用 CDP 实测渲染值确认
 
 G1 正是这一类：**我为了让脚本更合规而改了它，但没验证改完之后它还能工作**。
 把它显式列出来，是为了不让它变成"完成度看起来 100%、实际有洞"的那一类。
+
+### G3 补充（2026-09-21 19:00 只读实测）：可自动化性的**证据增强了**
+
+```
+com.android.documentsui            ← 已安装（pm list packages 实测）
+com.android.providers.media.module ← 已安装
+```
+
+即系统文件选择器是**标准 AOSP DocumentsUI**（RecyclerView 体系），
+**不是** SurfaceView 型 —— 后者才无法被 uiautomator 读控件树。
+
+→ 因此对 `NATIVE_FILE_PICKER_INTERACTION` 的预期从"**可能**可自动化"
+  提升为"**大概率**可自动化"。
+→ 并且给出了一条判据：**若在飞的子代理报 `NOT_AUTOMATABLE`，
+  它必须给出反证**（例如贴出 picker 的 dump 为空、或说明其实现为 SurfaceView）。
+  仅凭"我没点通"不足以判定不可自动化 —— 那可能是它的实现方式问题。
+
+另（只读）：观察时前台是 `app.lawnchair/.LawnchairLauncher`（启动器），
+说明该子代理**当时不在 picker 流程中**（不是正在交互的中间态）。
