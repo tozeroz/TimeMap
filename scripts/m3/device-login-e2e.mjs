@@ -245,7 +245,38 @@ function record(name, detail) {
 function fail(msg) {
   console.error(`  FAIL ${msg}`)
   console.log(`\nDEVICE_LOGIN_RESULT FAIL`)
+  /*
+    fail() **必须同步停止**。
+    曾经改成 `void shutdown(1)`（异步等 150ms 再 exit），结果 fail 之后代码继续往下跑，
+    输出里会同时出现「FAIL 本地仍存在会话」和「已确认本地没有会话」这种自相矛盾的行 ——
+    一个"停止执行"的工具被改成异步之后就不再是停止。
+    所以这里：先尽力关掉 WebSocket（减少退出时的断言噪声），再同步 exit。
+  */
+  try {
+    ws.close()
+  } catch {
+    /* 已关闭 */
+  }
   process.exit(1)
+}
+
+/**
+ * 统一退出路径：**先关 WebSocket 再 exit**。
+ *
+ * 为什么必须这样：在 Windows 上不关 WebSocket 直接 process.exit 会偶发打印
+ *   Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+ * 这条 stderr 会被调用方（PowerShell 的 2>&1）混进输出，
+ * 把本来正常的 JSON / 标记行污染掉 —— 表现成"登录失败"，其实登录是成功的。
+ * 这是运行环境的行为，不是产品缺陷；按环境噪声处理掉即可。
+ */
+async function shutdown(code) {
+  try {
+    ws.close()
+  } catch {
+    /* 已关闭 */
+  }
+  await new Promise((r) => setTimeout(r, 150))
+  process.exit(code)
 }
 
 // ---------------------------------------------------------------------------
@@ -274,7 +305,7 @@ if (mode === 'reset') {
   if (left !== 0) fail(`本地存储未清空，仍有 ${left} 项`)
   record('清理本地存储', '已清空（会话前提：无 session）')
   console.log('\nDEVICE_LOGIN_RESET OK')
-  process.exit(0)
+  void shutdown(0)
 }
 
 if (mode === 'nav') {
@@ -286,12 +317,12 @@ if (mode === 'nav') {
   if (h !== `#/${to}`) fail(`导航到 #/${to} 失败，当前 ${h}`)
   record('导航', `#/${to}`)
   console.log('\nDEVICE_LOGIN_NAV OK')
-  process.exit(0)
+  void shutdown(0)
 }
 
 if (mode === 'dump') {
   console.log(await bodyText())
-  process.exit(0)
+  void shutdown(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -367,7 +398,7 @@ if (mode === 'prepare') {
   record('请求验证码', '已发出，验证码输入框已出现')
 
   console.log(`\nDEVICE_LOGIN_PREPARE OK  (phone=${phone})`)
-  process.exit(0)
+  void shutdown(0)
 }
 if (mode === 'complete') {
   if (!phone || !code) fail('complete 需要 --phone 与 --code')
@@ -442,7 +473,7 @@ if (mode === 'complete') {
   record('服务端身份', `/api/auth/me → 200，身份含 +86${phone}`)
 
   console.log(`\nDEVICE_LOGIN_COMPLETE OK`)
-  process.exit(0)
+  void shutdown(0)
 }
 
 if (mode === 'restart') {
@@ -456,7 +487,38 @@ if (mode === 'restart') {
   if (me.status !== 200) fail(`重启后 /api/auth/me 期望 200，实际 ${me.status}`)
   record('重启后会话', `/api/auth/me → 200（${me.body.slice(0, 80)}）`)
   console.log(`\nDEVICE_LOGIN_RESTART OK`)
-  process.exit(0)
+  void shutdown(0)
+}
+
+if (mode === 'session') {
+  // 读回当前会话（给 device-login-helper.ps1 用）。
+  // 只输出 JSON，不打印别的 —— 调用方按"最后一行像 JSON 的内容"解析。
+  //
+  // 退出前必须 **ws.close()**：在 Windows 上不关 WebSocket 直接 process.exit
+  // 会打印 `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)`，
+  // 那条 stderr 会被调用方的 2>&1 混进输出、把 JSON 污染掉
+  // （helper 第一版就因此解析失败，虽然登录其实成功了）。
+  const raw = await evaluate(`localStorage.getItem('campus.demo.session.v1')`)
+  const payload = raw
+    ? (() => {
+        const s = JSON.parse(raw)
+        return {
+          Token: s.token ?? null,
+          DisplayName: s.user?.displayName ?? null,
+          Phone: s.user?.phone ?? null,
+          ExpiresAt: s.expiresAt ?? null,
+        }
+      })()
+    : {}
+  console.log(JSON.stringify(payload))
+  await new Promise((r) => setTimeout(r, 50))
+  try {
+    ws.close()
+  } catch {
+    /* 已关闭 */
+  }
+  await new Promise((r) => setTimeout(r, 150))
+  void shutdown(0)
 }
 
 if (mode === 'logout') {
@@ -487,7 +549,7 @@ if (mode === 'logout') {
   record('旧 token', `/api/auth/me → 401（会话已在服务端撤销）`)
 
   console.log('\nDEVICE_LOGIN_LOGOUT OK')
-  process.exit(0)
+  void shutdown(0)
 }
 
 fail(`未知模式: ${mode}（可用: reset / nav / dump / prepare / complete / restart / logout）`)
