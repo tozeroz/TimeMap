@@ -238,3 +238,74 @@ adb shell appops set com.campusx.demo RECORD_AUDIO deny
 ```
 
 测试后必须 `appops set com.campusx.demo RECORD_AUDIO allow` 还原，避免留下污染状态。
+
+---
+
+## 九、拒绝路径测试结果：**本设备无法构造拒绝态 → NOT_EVALUATED（环境限制）**
+
+> 时间：2026-09-21 23:19
+
+### 9.1 命令形式的坑（先记，避免后人重踩）
+
+```
+adb shell appops ...              → /system/bin/sh: appops: inaccessible or not found
+                                    （MuMu 精简掉了 /system/bin/appops）
+adb shell cmd appops ...          → **可用**  ← 正确形式
+```
+
+### 9.2 测试过程与结果
+
+```
+1) cmd appops set com.campusx.demo RECORD_AUDIO deny
+   → 生效确认: "RECORD_AUDIO: **deny**; time=+2m47s…"   ✓ 状态确实被改成 deny
+
+2) 触发 getUserMedia({audio:true})
+   → **ok:true, 33ms, trackCount=1, readyState=live**
+   → P5–P9 全部照常 PASS（blob 9354 字节、audio/webm、可解码）
+
+3) 还原: cmd appops set com.campusx.demo RECORD_AUDIO allow
+   → 还原确认: "RECORD_AUDIO: **allow**; time=+3s86ms ago"   ✓ 污染已清除
+```
+
+### 9.3 结论（**不得写成 PASS**）
+
+```
+VOICE_PERMISSION_DENIED_PATH:  **NOT_EVALUATED**
+原因: AppOps 的 deny **已生效**，但 WebView 仍成功取得音轨
+      → 本设备的音频输入是**虚拟设备**（观察到 sampleRate=16000、
+        echoCancellation/noiseSuppression 等参数，且 MuMu 模拟器无真实麦克风硬件），
+        **未对该 op 施加限制**
+性质: **ENVIRONMENT 限制**，不是产品缺陷，也不是"拒绝处理写对了"
+→ 因此**不能**用它证明"拒绝时我们处理正确"
+```
+
+### 9.4 对 WO#5 验收标准 ⑦ 的影响（**必须调整，不能含糊**）
+
+原验收 ⑦ 是：
+
+```
+VOICE_PERMISSION_DENIED: PASS
+  ⑦ 拒绝麦克风权限时有明确提示，不出现"发送了空音频"这样的静默失败
+```
+
+**但本设备无法构造"拒绝"**，所以这条**在本环境不可验收**。三种处置（建议，交审核裁定）：
+
+| 方案 | 做法 | 代价 |
+|---|---|---|
+| **A（建议）** | 把 ⑦ 拆成两条：<br>`⑦a 拒绝时的**代码路径**：用 JS 层桩（stub getUserMedia 抛 NotAllowedError）验证我们的错误处理与"零上传、零消息"`<br>`⑦b 真实的系统拒绝：NOT_EVALUATED（本设备无法构造，属环境限制）` | ⑦a 测的是**我们的代码**，不是平台；须如实标注这一区别 |
+| B | 只在真机上测 ⑦ | 需要真机，当前不可得 |
+| C | 放弃 ⑦ | 会留下"静默失败"风险未覆盖 —— 不推荐 |
+
+→ 我倾向 **A**：把"平台能否构造拒绝"与"我们代码在拒绝时是否表现正确"**分开标注**，
+   并用桩覆盖后者。这与本项目"NOT_EVALUATED ≠ PASS"的纪律一致。
+
+### 9.5 顺带确认："零上传、零消息"目前是**平凡成立**的
+
+拒绝路径里那条"zero upload → zero message"，在当前阶段**平凡成立**，但**不足以作为证据**：
+
+```
+本次探针**从未调用产品的上传/发消息路径**（只在 WebView 里跑原始 JS 取 blob、测解码），
+因此"没有上传、没有消息"是必然的，**不能证明"我们的拒绝处理正确"**。
+→ 要真正验证 ⑦a，必须在**产品代码存在之后**，用桩让 getUserMedia 抛错，
+  再断言：界面有明确提示、且**没有**发出任何 `/api/media` 或 `/messages` 请求。
+```
