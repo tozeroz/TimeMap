@@ -88,17 +88,30 @@
   flex: 0 0 auto;
 }
 
+/*
+  表情行几何来自只读证据（不是凭感觉调的）：
+    docs/original-baseline/raw-dumps/message-board-dump.xml 实测（设备 px）
+      item 宽 70 / 左边界 pitch 112 / 由此得 gap 42
+    设备 density = 280 → dpr 1.75（adb shell wm density）
+    换算成 CSS px（WebView 里 1 CSS px ≈ 1dp）：
+      宽 70/1.75 = 40px   pitch 112/1.75 = 64px   gap 42/1.75 = 24px
+    ⚠ 术语：112 是 **pitch**，不是 gap。若照 CSS gap 写 112 会做错 —— 见
+      docs/conformance/FINDING-board-emojis.md §八（审核记录 22 的纠正）。
+  原先这里是 gap 8px / 宽 34px，与原版差得较多（gap 少 16px）。
+  另外：原版 6 项在 1080 设备 px 整屏下右边界只到 651、**剩 429px 不用滚动**，
+  所以这里保留 overflow-x: auto 只是防御（数据若变多才需要），正常不该出现滚动条。
+*/
 .board__emojis {
   display: flex;
-  gap: 8px;
+  gap: 24px;
   overflow-x: auto;
   padding-bottom: 8px;
 }
 
 .board__emoji {
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--r-pill);
   background: var(--c-surface-sunken);
   font-size: 16px;
