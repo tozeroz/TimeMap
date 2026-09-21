@@ -48,7 +48,7 @@ observed: ~~原版底部是 4 项~~ → **错误**：看 bounds 才知「校园�
 | 项数 / 宽 / pitch / 首末边界 | **FIXED** | 6 项、70 / 112（设备 px）逐项与原版吻合；CSS 40px + gap 24px，设备实测确认 |
 | 底色（C5） | **FIXED** | 原版无底色（像素采样圆内点亦纯白）；我们原有灰色圆片 → 已改为 transparent |
 | 字号（C6） | **FIXED** | 16px → 24px（据实心字形墨迹外接的**直接测量**；估计值，残余不确定已标注） |
-| **字符与形态（C4）** | **形态已确证：DRAWABLE（审核记录 29 批准取证，见 `docs/m5/C4-FORENSICS-RESULT.md`）** | 此前依据节点 id `emotion_image` 判为"原版是图片"。**但那是照 id 名字下判断**（本项目已因此在 C1/C2 栽过两次），且视觉读图显示边缘特征更像**字体渲染**。两份证据冲突 → 降为 UNRESOLVED，见 `docs/m5/C4-EVIDENCE-CONFLICT.md`。**决定性检验（渲染对比）待做。** |
+| **字符与形态（C4）** | **已收口（审核记录 30）：`C4_EMOJI_RENDERING_KIND: CONFIRMED — ImageView / image-based`；`C4_EXACT_6_ASSETS: NOT_CAPTURED`（停止投入）** | 此前依据节点 id `emotion_image` 判为"原版是图片"。**但那是照 id 名字下判断**（本项目已因此在 C1/C2 栽过两次），且视觉读图显示边缘特征更像**字体渲染**。两份证据冲突 → 降为 UNRESOLVED，见 `docs/m5/C4-EVIDENCE-CONFLICT.md`。**决定性检验（渲染对比）待做。** |
 
 ### 4. 留言板下拉刷新（C3） — **BLOCKED_BY_POLICY**
 

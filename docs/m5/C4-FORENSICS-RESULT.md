@@ -305,3 +305,106 @@ ORIGINAL_EMOJI_CHARACTERS: 维持 NOT_CAPTURED（§9.5 的尝试失败，无新�
 产品改动: 仍建议**冻结** —— 形态差异成立，但"该画哪套图"取决于我们是否愿意引入图片表情；
          且我方现有文字 emoji 与"文本码+图片"的双层形态不同，属于较大的实现变更，宜另立工作单
 ```
+
+---
+
+## 十、正式收口（审核记录 30）：**三层结论** + 两处措辞收紧 + 一次方法无效标记
+
+### 10.1 C4 的正式状态（**不再是整体 UNRESOLVED**）
+
+```
+C4_EMOJI_RENDERING_KIND:                 CONFIRMED — ImageView / image-based
+C4_EMOJI_ASSET_SYSTEM:                   CONFIRMED — packaged drawable/WebP emoji corpus exists
+C4_BOARD_ROW_PACKAGED_DRAWABLE_BINDING:  STRONGLY_SUPPORTED
+                                         DIRECT_BINDING NOT CAPTURED
+C4_EXACT_6_ASSETS:                       NOT_CAPTURED
+                                         STOP INVESTIGATION unless decisive low-cost evidence appears
+PRODUCT IMPACT:                          UNFREEZE structure-level fix
+                                         KEEP exact-asset selection frozen
+```
+
+**仍缺的那一跳**（因此不写最强版本）：
+
+```
+message-board adapter → emotion_image → xhs_theme_xhs_emoji_res_v2[index]
+```
+
+→ 正确表述是"**原版是 image-based（确证）**" + "**留言板那 6 格绑定 154 个中的哪几个（未捕获）**"，
+   而**不是**"那 6 格确定绑定到某六张具体 webp"。
+
+### 10.2 ⚠️ 措辞收紧之一：我在 §9.3 写的"排除"过强
+
+§9.3 我写："**排除**：字体字形 / 运行时生成位图 / 网络下发"。
+
+**审核指出这过强，应改为**：
+
+```
+可以排除: 字体**直接**渲染（运行节点确实是 ImageView，不是文字控件）✓
+不能排除（只是被**强烈削弱**）:
+  · 字体 → runtime bitmap → ImageView
+  · 网络 image → ImageView
+理由: 单靠 ImageView 这两条理论上仍可能存在；
+      但"完整专门命名的 emoji drawable table + 154 个包内 WebP"使它们
+      **非常不经济** —— 是"强烈削弱"，不是"逻辑上完全排除"。
+```
+→ **审核说明这不影响 C4 产品判断，只影响证据措辞**；但按本项目纪律，措辞就是证据的一部分。
+
+### 10.3 ⚠️ 措辞收紧之二：`[微笑C]` 不能直接推出线上协议
+
+§9.4 我写"协议层用文本码、渲染层用图片"。**审核指出这仍稍强**：
+
+```
+可以支持: 资源体系里**存在"文本标识 ↔ drawable"的映射模型**
+不能推出: 线上消息协议**一定**发送这个文本码
+  → 真正的 persistence / wire format 需以后从**自有实现设计**
+    或更多原版只读证据确认
+```
+→ §9.4 里"协议层用文本码"这一句**降级为"资源体系存在该映射模型"**。
+
+### 10.4 ✅ 一次**方法无效**的正式标记（审核特别肯定的一点）
+
+§9.5 记录的失败尝试，现按审核要求标记：
+
+```
+INVALID IDENTIFICATION METHOD
+DO NOT USE FOR CONFORMANCE CLAIM
+  方法: 归一化像素差（内容包围盒裁剪 → 32×32 → MAD）
+  失效证据: jidan（鸡蛋）在 6 格中全部排名第一 —— 平滑椭圆与该指标天然相容
+  处置: 其输出**不得**用于任何 conformance 断言
+```
+
+**审核特别肯定了我没有在指标坏掉时挑 top-1 当答案**：
+
+> 非常重要的是你没有："虽然指标明显坏了，但先挑 top-1 当答案。"
+
+→ 保留 `EXACT_BOARD_EMOJI_ASSETS: NOT_CAPTURED`；
+   视觉候选（😂 / 🤩? / 💛? / 👀 / 😱 / +1）**仅作 hypothesis，不进入产品改动**。
+
+**重新打开该问题的条件**（只在这类低成本决定性路径出现时）：
+
+```
+· 静态代码直接追到 adapter 的 resource-index binding
+· runtime 能只读获取 ImageView 当前 drawable / resource id
+· 某个 layout / data binding XML 直接暴露资源引用
+```
+
+### 10.5 产品影响：结构层**解冻**（审核修改了它此前"完全冻结"的意见）
+
+> 现在已经明确知道**当前 text-glyph abstraction 是错的**，
+> 而这个差异**不依赖"那六张究竟是哪六张"**。
+
+**拟定 WO#4 Emoji Rendering Structure**（只解决结构性）：
+
+```
+· 文字 emoji → image element
+· 6 项
+· **现有已设备验证正确的横向几何保持不变**（首项 21 / 宽 70 / pitch 112 / 末项 651）
+· 点击选择行为保持不变
+· 协议层仍使用文本 emoji code / token
+· **暂不选择六张具体原版 WebP 来替换**
+最终: EMOJI_RENDERING_STRUCTURE: PASS    EXACT_ASSET_CONFORMANCE: NOT_EVALUATED
+```
+
+⚠ 但按审核的**优先级提示**："审计表里若还有**明确已证实的产品 deviation**，
+其优先级**高于**继续研究 exact emoji asset identity。"
+→ 因此 WO#4 之前，先扫一遍 `docs/AUDIT-M0-M4.md` 第三节，看有没有更高优先级的已证实 deviation。
