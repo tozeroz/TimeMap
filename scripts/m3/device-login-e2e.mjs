@@ -401,12 +401,34 @@ if (mode === 'prepare') {
    * 走**真实 UI 路径**进入登录页（审核记录 08：不得用改 hash 或注入会话代替）。
    * 原版不登录也能浏览（M0 基线里个人页是本地默认账号、没有登录提示），
    * 所以登录入口放在个人页，而不是冷启动就拦。
+   *
+   * **点击必须重试**（踩过的坑）：coldreset 之后 `document.body` 很快就有内容，
+   * 但 React 这时可能**还没挂上事件处理器** —— 点击会被丢掉，
+   * 页面停在校园页，断言就报「个人页未显示「未登录」」。
+   * 那不是产品缺陷，而是"页面对了、时刻不对"。
+   * 修法：点一下看 hash 有没有变，没变就再点（最多 4 次）。
    */
-  const tab = await centerOf('.tabbar__item', undefined)
+  let tab = null
+  for (let i = 0; i < 10 && !tab; i++) {
+    tab = await centerOf('.tabbar__item', undefined)
+    if (!tab) await wait(400)
+  }
   if (!tab) fail('找不到底部导航')
-  await tapAt(tab.x, tab.y)
-  await wait(900)
+
+  let onMe = false
+  for (let attempt = 1; attempt <= 4 && !onMe; attempt++) {
+    await tapAt(tab.x, tab.y)
+    await wait(1000)
+    const h = await hash()
+    onMe = typeof h === 'string' && h.startsWith('#/me')
+    if (!onMe) {
+      record('点击未生效，重试', `第 ${attempt} 次点击后 hash=${h}`)
+      // 重新取一次坐标：布局可能仍在稳定中
+      tab = (await centerOf('.tabbar__item', undefined)) ?? tab
+    }
+  }
   text = await bodyText()
+  if (!onMe) record('个人页 hash', String(await hash()))
   if (!text.includes('未登录')) fail(`个人页未显示「未登录」，实际: ${text.slice(0, 160)}`)
   record('个人页', '显示「未登录」+ 登录入口')
 
