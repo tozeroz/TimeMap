@@ -131,6 +131,8 @@ step "5. 共享库基线完整性（种子是否完好 / 盘库是否一致）"
 # 理由：把"users==3"也设成阻塞，会让 gate 因为一个**已知排队中的清理项**长期变红 ——
 #       而**恒红的 gate 会被忽略，等于没有 gate**（本轮刚论证过这一点）。
 BSQL() { PGPASSWORD="$(cat /srv/campus/.db_password)" psql -h 127.0.0.1 -U campus -d campus -Atc "$1" 2>&1; }
+# cleanup-auth CLI 需要 DSN；口令只在服务器本地（不进 git），因此从同一个文件读
+DSN="postgres://campus:$(cat /srv/campus/.db_password)@127.0.0.1/campus"
 SEED_N="$(BSQL "select count(*) from users where phone_e164 in ('+8613800000001','+8613800000002','+8613800000003')")"
 if [ "$SEED_N" = "3" ]; then
   setk M5_BASELINE_SEED_INTEGRITY PASS
@@ -239,19 +241,70 @@ else
   echo "    （找不到 $VL）"
 fi
 
+# ---------------------------------------------------------------- 6. 认证数据卫生（E4，审核记录 39）
+# ⚠️ 本节的**不变量设计**直接落实审核记录 39 的反对意见：
+#   **总行数不是 invariant** —— E1 审计已证：sessions 130 条里 **94 条是 active 合法会话**。
+#   因此这里只查"**确定已经死亡**"的四类是否为 0（**状态型**不变量）；
+#   总数只作 INFO，异常偏高只作次级 WARN，**绝不**作为 PASS/FAIL 依据。
+#   （否则会重演"按总数清理/判红"的误伤：清掉或判红 94 条合法会话。）
+step "6. 认证数据卫生（死数据=0 才算过；总数只作次级信息）"
+if [ -f /srv/campus/server/dist/cleanup-auth.mjs ]; then
+  AH_JSON="$(cd /srv/campus/server && DATABASE_URL="$DSN" node dist/cleanup-auth.mjs --json --grace-hours 24 2>&1)"
+  printf '%s\n' "$AH_JSON" | sed 's/^/    /'
+  ahget() {
+    printf '%s' "$AH_JSON" | python3 -c "
+import sys, json
+try:
+    print(json.load(sys.stdin).get('$1', 'ERR'))
+except Exception:
+    print('ERR')" 2>/dev/null
+  }
+  AH_ES="$(ahget expiredSessions)"; AH_RS="$(ahget revokedSessions)"
+  AH_EC="$(ahget expiredChallenges)"; AH_CC="$(ahget consumedChallenges)"
+
+  # ---- 状态型不变量（这四条才是真 invariant）----
+  if [ "$AH_ES" = "0" ]; then setk M5_AUTH_STALE_EXPIRED_SESSIONS PASS
+  else setk M5_AUTH_STALE_EXPIRED_SESSIONS "FAIL(过期>24h 的会话 $AH_ES 条未清)"; FAILED=1; fi
+  if [ "$AH_RS" = "0" ]; then setk M5_AUTH_STALE_REVOKED_SESSIONS PASS
+  else setk M5_AUTH_STALE_REVOKED_SESSIONS "FAIL(撤销>24h 的会话 $AH_RS 条未清)"; FAILED=1; fi
+  if [ "$AH_EC" = "0" ]; then setk M5_AUTH_STALE_EXPIRED_CHALLENGES PASS
+  else setk M5_AUTH_STALE_EXPIRED_CHALLENGES "FAIL(过期>24h 的挑战 $AH_EC 条未清)"; FAILED=1; fi
+  if [ "$AH_CC" = "0" ]; then setk M5_AUTH_STALE_CONSUMED_CHALLENGES PASS
+  else setk M5_AUTH_STALE_CONSUMED_CHALLENGES "FAIL(消费>24h 的挑战 $AH_CC 条未清)"; FAILED=1; fi
+
+  # ---- 只报告、**不参与判定** ----
+  printf '#   %-34s %s\n' "info active_sessions" "$(ahget activeSessions)（合法活跃；本工具**不删**它们）"
+  printf '#   %-34s %s\n' "info valid_pending_challenges" "$(ahget pendingChallenges)"
+  TOTAL_S="$(BSQL 'select count(*) from sessions')"
+  if [ "$TOTAL_S" -gt 5000 ] 2>/dev/null; then
+    printf '#   %-34s %s\n' "WARN total_sessions" "$TOTAL_S 偏高（**次级提示**，非 PASS/FAIL 依据）"
+  else
+    printf '#   %-34s %s\n' "info total_sessions" "$TOTAL_S（仅趋势；**不作判定依据** —— 总行数不是 invariant）"
+  fi
+else
+  setk M5_AUTH_STALE_EXPIRED_SESSIONS NOT_RUN
+  setk M5_AUTH_STALE_REVOKED_SESSIONS NOT_RUN
+  setk M5_AUTH_STALE_EXPIRED_CHALLENGES NOT_RUN
+  setk M5_AUTH_STALE_CONSUMED_CHALLENGES NOT_RUN
+  FAILED=1
+  echo "    （找不到 /srv/campus/server/dist/cleanup-auth.mjs —— 先重新部署）"
+fi
+
 # ---------------------------------------------------------------- 汇总
 echo
 echo "# ----------------------------------------------------------------"
 echo "# M5 分层结果"
 P_FAIL=0
-for k in M5_MEDIAID_STRICT_REJECT M5_TMP_SELFHEAL M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT M5_VOICE_MEDIA_MIME_WHITELIST M5_VOICE_MIME_DURATION_CONSISTENT; do
+# 认证卫生的四条"死数据=0"也进 PERSISTENT 层（它们是长期契约：死数据不该堆积超过 grace）
+# ⚠ 注意：这四条是**状态型**不变量，不是总数上界（总数只作 INFO/WARN，见第 6 节注释）
+for k in M5_MEDIAID_STRICT_REJECT M5_TMP_SELFHEAL M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT M5_VOICE_MEDIA_MIME_WHITELIST M5_VOICE_MIME_DURATION_CONSISTENT M5_AUTH_STALE_EXPIRED_SESSIONS M5_AUTH_STALE_REVOKED_SESSIONS M5_AUTH_STALE_EXPIRED_CHALLENGES M5_AUTH_STALE_CONSUMED_CHALLENGES; do
   [ "${KEY[$k]}" = "PASS" ] || P_FAIL=1
 done
 printf '#   %-12s %s\n' "PERSISTENT" "$([ $P_FAIL -eq 0 ] && echo PASS || echo FAIL)"
 printf '#   %-12s %s\n' "STAGE" "$([ "${KEY[M5_UNATTACHED_TTL_GC]}" = "PASS" ] && [ "${KEY[M5_VOICE_NEGATIVE_ASSERTIONS]}" = "PASS" ] && [ "${KEY[M5_VOICE_LIFECYCLE]}" = "PASS" ] && echo PASS || echo FAIL)"
 printf '#   %-12s %s\n' "REGRESSION" "$([ "${KEY[M5_MEDIAID_STRICT_REJECT]}" = "PASS" ] && echo PASS || echo FAIL)"
 echo '#'
-for k in M5_MEDIA_MESSAGE_API M5_MEDIAID_STRICT_REJECT M5_UNATTACHED_TTL_GC M5_TMP_SELFHEAL M5_BOARD_NOTES M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT M5_VOICE_MEDIA_MIME_WHITELIST M5_VOICE_MIME_DURATION_CONSISTENT M5_VOICE_NEGATIVE_ASSERTIONS M5_VOICE_A4_1 M5_VOICE_A4_2 M5_VOICE_A4_3 M5_VOICE_A4_4 M5_VOICE_A4_5 M5_VOICE_LIFECYCLE M5_VOICE_LC_A_TTL_DELETE M5_VOICE_LC_A_INFLIGHT_KEEP M5_VOICE_LC_B_REF_KEEP M5_VOICE_LC_C_503 M5_VOICE_LC_C_ZERO_DB M5_VOICE_LC_C_RECOVER; do
+for k in M5_MEDIA_MESSAGE_API M5_MEDIAID_STRICT_REJECT M5_UNATTACHED_TTL_GC M5_TMP_SELFHEAL M5_BOARD_NOTES M5_BASELINE_SEED_INTEGRITY M5_BASELINE_STORAGE_CONSISTENT M5_VOICE_MEDIA_MIME_WHITELIST M5_VOICE_MIME_DURATION_CONSISTENT M5_VOICE_NEGATIVE_ASSERTIONS M5_VOICE_A4_1 M5_VOICE_A4_2 M5_VOICE_A4_3 M5_VOICE_A4_4 M5_VOICE_A4_5 M5_VOICE_LIFECYCLE M5_VOICE_LC_A_TTL_DELETE M5_VOICE_LC_A_INFLIGHT_KEEP M5_VOICE_LC_B_REF_KEEP M5_VOICE_LC_C_503 M5_VOICE_LC_C_ZERO_DB M5_VOICE_LC_C_RECOVER M5_AUTH_STALE_EXPIRED_SESSIONS M5_AUTH_STALE_REVOKED_SESSIONS M5_AUTH_STALE_EXPIRED_CHALLENGES M5_AUTH_STALE_CONSUMED_CHALLENGES; do
   printf '#   %-34s %s\n' "$k" "${KEY[$k]}"
 done
 echo
@@ -270,8 +323,8 @@ echo "# M5_SERVER_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
 # ⚠️ 分列写明（审核记录 27 强制）：**不得**合并成"真人触摸完整 E2E"之类的说法 ——
 #    前者说的是"产品路径通了"（这是 WO#2 的命题），
 #    后者说的是"Android 输入层分发也走通了"（本次用 CDP 注入触摸，**未验证**）。
-echo "# M5_OVERALL: WO1_WO2_WO3_CLOSED + WO5_PHASE1_IMPLEMENTED_AWAITING_FINAL_CLOSE"
-echo "#   （WO5_PHASE1_IMPLEMENTATION: ACCEPTED；FINAL_CLOSE 待审核记录 37 的 3 条 lifecycle 结果确认）"
+echo "# M5_OVERALL: WO1_WO2_WO3_WO5_CLOSED + AUTH_HYGIENE_DONE; WO4_DEFERRED"
+echo "#   （审核记录 39：WO5_PHASE1: PASS / CLOSED —— 3 条 audio lifecycle 已补齐）"
 echo "#   WO#1 board_notes functional/privacy:  CLOSED"
 echo "#   WO#2 chat image send path:            CLOSED"
 echo "#   WO#3 sender presentation:             FIXED/VERIFIED -> CLOSED"
