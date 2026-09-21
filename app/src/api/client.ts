@@ -45,6 +45,28 @@ export interface ApiPost {
   likeCount?: number
   commentCount?: number
   likedByMe?: boolean
+  /** M4：帖子的公图片（只含 id 与尺寸；用 mediaUrl(id) 取图） */
+  images?: ApiMediaRef[]
+}
+
+/** M4：一张媒体资源的引用（只暴露 id 与尺寸，不含存储路径） */
+export interface ApiMediaRef {
+  id: string
+  width: number | null
+  height: number | null
+}
+
+/**
+ * M4：取媒体图片的**唯一入口**。
+ *
+ * 为什么所有图片都走 /api/media/:id 而不是直接拼静态路径：
+ *   - public 图：接口 302 到 /media/<key>，由 Nginx 静态下发（不经 Node）
+ *   - private 图：接口做会话 + 可见性判定后用 X-Accel-Redirect 让 Nginx 下发
+ * 客户端**用同一套 URL 形态**，不需要知道背后是哪条链路；
+ * 也避免把 storage_key 暴露给前端（以后换对象存储不用改客户端）。
+ */
+export function mediaUrl(id: string): string {
+  return `${API_ORIGIN}/api/media/${encodeURIComponent(id)}`
 }
 
 export type ApiResult<T> =
@@ -233,7 +255,10 @@ export function toFeedPost(p: ApiPost): FeedPost {
     id: p.id,
     author,
     text: p.body,
-    images: [],
+    // M4：帖子的真实图片。**这里此前是硬编码 `images: []`**，
+    // 所以列表卡片从来没显示过图（后端当时也没返回）。现在统一走 mediaUrl(id)：
+    // 公图 302 → Nginx 静态，私图 X-Accel，客户端不关心区别。
+    images: (p.images ?? []).map((m) => mediaUrl(m.id)),
     // M3 Slice 2：列表也用服务端计数（原版卡片上就有赞数/评论数）
     likes: p.likeCount ?? 0,
     comments: p.commentCount ?? 0,
