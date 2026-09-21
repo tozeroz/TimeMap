@@ -1,4 +1,50 @@
+import { createHash } from 'node:crypto'
+import { mkdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { deflateSync } from 'node:zlib'
 import type { PoolClient } from 'pg'
+
+/**
+ * 生成一个**结构合法的 PNG**（给定尺寸的纯色块）。
+ *
+ * 为什么要它：M4 起种子必须同时落实体文件，否则 media 行就是悬空引用
+ * （联合恢复演练的逐行核对会直接报"缺文件"）。
+ *
+ * 为什么手写而不是引依赖：服务器是 396MB 内存 + 单文件 esbuild 打包 + 无 node_modules，
+ * 而"一个纯色 PNG"用 zlib 就能拼出来（IHDR/IDAT/IEND 三个 chunk），
+ * 比引任何图片库都轻。真实上传的图片走的是 imageProbe + 客户端原始字节，与这里无关。
+ */
+function seedPng(width: number, height: number): Buffer {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  const crcTable: number[] = []
+  for (let n = 0; n < 256; n++) {
+    let c = n
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    crcTable[n] = c >>> 0
+  }
+  const crc32 = (buf: Buffer): number => {
+    let c = 0xffffffff
+    for (const b of buf) c = crcTable[(c ^ b) & 0xff]! ^ (c >>> 8)
+    return (c ^ 0xffffffff) >>> 0
+  }
+  const chunk = (type: string, data: Buffer): Buffer => {
+    const len = Buffer.alloc(4)
+    len.writeUInt32BE(data.length, 0)
+    const typeBuf = Buffer.from(type, 'ascii')
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])), 0)
+    return Buffer.concat([len, typeBuf, data, crc])
+  }
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(width, 0)
+  ihdr.writeUInt32BE(height, 4)
+  ihdr[8] = 8 // bit depth
+  ihdr[9] = 6 // RGBA
+  // 每行：1 字节 filter(0) + width * 4 字节像素（灰色，便于人眼识别为占位图）
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 4, 0x99)])
+  const raw = Buffer.concat(Array.from({ length: height }, () => row))
+  return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))])
+}
 
 /**
  * Seed（M2.5）。
@@ -177,41 +223,63 @@ export async function runSeed(client: PoolClient): Promise<SeedResult> {
   // M4 起 media 是**带 scope 的一等资源**（迁移 006）：
   //   - scope='public'：动态图片，Nginx 静态下发
   //   - 归属通过 post_media 关联（**复合外键钉死 scope**，跨 scope 引用结构上不可能）
-  // sha256 用固定的 64 位十六进制值（seed 是确定性的；真实上传时由服务端计算）。
-  const mediaRows: Array<[string, string, string, string, number, number, number]> = [
-    // [id, ownerUserId, storageKey, sha256, bytes, width, height]
-    [
-      M.m1,
-      U.anmoss,
-      '2026/09/seed-anmoss-1.webp',
-      'a1'.repeat(32),
-      184320,
-      1080,
-      1440,
-    ],
-    [
-      M.m2,
-      U.lemy,
-      '2026/09/seed-lemy-1.webp',
-      'b2'.repeat(32),
-      210944,
-      1080,
-      1350,
-    ],
-  ]
-  for (const [id, ownerId, key, sha, bytes, w, h] of mediaRows) {
-    await put('media', id, {
-      owner_user_id: ownerId,
+  //
+  // **顺序很重要**：先造出真实文件字节，再按文件算 sha256 与 bytes。
+  // 旧版是"先写死一个 sha256、再假定文件存在"，结果 DB 说有图、盘上取不到 ——
+  // 这正是 M4 联合恢复演练抓出来的悬空引用缺陷。
+  // 文件本身不参与 canonical 哈希（哈希只覆盖 DB 行），所以不影响种子口径。
+  interface SeedMedia { id: string; owner: string; key: string; png: Buffer; w: number; h: number }
+  const seedMedia: SeedMedia[] = [
+    { id: M.m1, owner: U.anmoss, key: '2026/09/seed-anmoss-1.png', w: 1080, h: 1440 },
+    { id: M.m2, owner: U.lemy, key: '2026/09/seed-lemy-1.png', w: 1080, h: 1350 },
+  ].map((m) => ({ ...m, png: seedPng(m.w, m.h) }))
+
+  for (const m of seedMedia) {
+    await put('media', m.id, {
+      owner_user_id: m.owner,
       scope: 'public',
-      storage_key: key,
-      mime: 'image/webp',
-      bytes,
-      width: w,
-      height: h,
-      sha256: sha,
-      upload_request_id: id, // seed 用同一个固定 id 作幂等键（确定性）
+      storage_key: m.key,
+      mime: 'image/png',
+      bytes: m.png.length,
+      width: m.w,
+      height: m.h,
+      sha256: createHash('sha256').update(m.png).digest('hex'),
+      upload_request_id: m.id, // seed 用同一个固定 id 作幂等键（确定性）
       created_at: T0,
     })
+  }
+
+  /*
+    种子也要**落实体文件**（M4 联合恢复演练抓出来的真实缺陷）。
+
+    问题：此前 seed 只往 media 表写行，storage_key 指向的文件根本不存在 ——
+    于是库里"说有图"、盘上"取不到"，正是整个 M4 设计要防的**悬空引用**。
+    上传接口用"先写文件、后写 DB 行"的顺序避免它；种子里同样必须成立。
+
+    做法：把上面已经生成好的 PNG 字节（与 DB 行的 sha256/bytes 同源）写到
+    uploads/public 下与 storage_key 相同的位置。
+    文件不参与 seed 的 canonical 哈希（哈希只覆盖 DB 行），所以这不改变种子口径。
+
+    注意：这是 best-effort —— 本地开发环境可能没有 /srv/campus/uploads，
+    此时只打印警告而不让 seed 失败（但会明确说"文件未写"，避免静默假成功）。
+  */
+  const uploadRoot = process.env.UPLOAD_ROOT ?? '/srv/campus/uploads'
+  let filesWritten = 0
+  const fileErrors: string[] = []
+  for (const m of seedMedia) {
+    const full = path.join(uploadRoot, 'public', m.key)
+    try {
+      await mkdir(path.dirname(full), { recursive: true, mode: 0o755 })
+      await writeFile(full, m.png, { mode: 0o644 })
+      filesWritten++
+    } catch (err) {
+      fileErrors.push(`${m.key}: ${(err as Error).message}`)
+    }
+  }
+  if (fileErrors.length === 0) {
+    console.log(`[seed] media 实体文件已写 ${filesWritten} 个（→ ${uploadRoot}/public/…）`)
+  } else {
+    console.log(`[seed] ⚠ media 文件有 ${fileErrors.length} 个未写入（DB 行已建，盘上会缺文件）：${fileErrors.join('; ')}`)
   }
   // 关联到帖子（public → 只能进 post_media）
   await put('post_media', 'eeeeeeee-0001-4001-8001-000000000001', {
