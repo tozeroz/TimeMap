@@ -409,7 +409,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       + L-001~L-003（原版本身未观察到的范围限制）；并写明"**已完成 ≠ 与原版一致**"的禁止说法
 - [x] AUDIT.5 ✅ PLAN.md 新增纪律：① Gate 必须含"基线逐条核对"层 ② 基线缺失须显式记录
       ③ 后撤须登记 KNOWN_DEVIATION ④ **把现象写成缺陷前先查是否已有解释**（我同一轮两次急着定性）
-- [ ] AUDIT.6 ⬅ 等裁定：feed-list 的 3 处偏差**并入 WO#11 一起修**（建议）
+- [x] AUDIT.6 ✅ **已完成**：feed-list 的 3 处偏差已在 WO#11 修完（标题「校园圈」/ 左上关闭 / 刷新真请求），设备 Gate 13 条全 PASS
 - [ ] AUDIT.7 后续每个 WO 的 Gate 都要按新纪律加"基线核对"层
 ### WO#11 完成（Round 262）
 - [x] WO11.7 ✅ 审核 52 裁定：**WO11: APPROVED TO IMPLEMENT**（且指出"五项其实上轮已裁定"，我不必再等）
@@ -427,7 +427,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [ ] ⚠️ WO11.13 **未定位的间歇故障（如实记录）**：首轮 server gate 报媒体段"登录失败"，单独跑即 PASS；
       已排除限流/sink/服务不可用；时间线显示失败发生在服务进程重启（05:23:45）**之前**。
       **未复现、未定位根因、不声称已修**。若再现需抓现场（建议：失败时快照 journalctl + pg_stat_activity）
-- [ ] WO11.14 下一步：**UserProfileScreen → MapScreen**（按审核 50 排序），照 WO#10/WO#11 方法先做字段级 inventory
+- [x] WO11.14 ✅ **已由 WO#12 承接**：UserProfileScreen 的字段级 inventory 与改前 FAIL 已完成（见 WO12.1/WO12.2）
 - [ ] AUDIT.7 后续每个 WO 的 Gate 都要按纪律加"基线逐条核对"层（manifest 已就位）
 ### WO#12 进展（Round 262 收尾）
 - [x] WO12.1 ✅ 字段级 inventory + **高严重度发现**：`UserProfileScreen.tsx:14` 的
