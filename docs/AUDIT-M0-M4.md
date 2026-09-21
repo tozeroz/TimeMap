@@ -73,3 +73,40 @@ CONFORMANCE_EVIDENCE:
 M5 若按"逐页与原版比对"推进，需要的正是第三节这张表：
 **哪些页可以声称一致、哪些必须标 NOT_EVALUATED、哪些是策略阻断**。
 把这三种状态混在一起，会重演"22/22 observed 被误读成 22/22 verified"的老问题。
+
+---
+
+## 附：M5 deviation 登记 —— 底部 tab 数量（2026-09-21）
+
+### 偏差
+
+| 项 | 原版（可复核 dump） | 我们的实现 | 结论 |
+|---|---|---|---|
+| tab 项数 | **4** | **3** | **DEVIATION** |
+| 具体项 | `校园广场` / `<当前账号昵称>` / `校园` / `地图` | `<当前账号昵称>` / `校园` / `地图` | 缺第一项「校园广场」 |
+
+### 证据链（按审核记录 21 要求的 `raw_evidence → observation → conclusion → impact`）
+
+- **raw_evidence**：`docs/original-baseline/raw-dumps/board-observation-1.xml`
+  （拉起原版后 uiautomator dump，纯只读；已入库可复核）
+  另有 `message-board-dump.xml` 同样可见 4 项
+- **observation**：dump 中底部 tab 的 label 依次为
+  「校园广场」「自定义名称6」「校园」「地图」共 4 项
+- **conclusion**：
+  - 原版底部 tab = **4 项**
+  - 第二项是**当前账号昵称**派生（本例昵称为「自定义名称6」）
+  - **旧结论"三项 / <昵称>、校园、地图"被 supersede** ——
+    该旧结论同样只有摘要、当年没有可复核产物
+- **implementation impact**：`app/src/components/TabBar.tsx` 目前只有 3 项
+  （昵称 / 校园 / 地图），**缺「校园广场」**。这是一个真实的 1:1 缺口。
+
+### 处置
+
+- **本轮只登记，不实现**：补一个 tab 涉及路由、页面归属、与既有
+  「校园」tab 的关系（原版「校园广场」与「校园」是两个不同 tab，我们只有一个）
+  —— 需要先只读观察「校园广场」页的内容与入口，才能确定它对应我们哪个页面
+  （很可能是我们的 feed 页，但不能凭猜）。
+- 实现应另立一单，并按 Gate 原则给出 `raw_evidence → … → impact` 链。
+- 本轮同时更新 `TabBar.tsx` 的注释：把"原版三个 tab"更正为
+  "原版四个 tab（含校园广场），我们目前 3 个，已登记 deviation"，
+  避免注释继续传播被 supersede 的旧结论。
