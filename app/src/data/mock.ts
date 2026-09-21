@@ -470,18 +470,24 @@ export const boardNotes: BoardNote[] = [
 
 /*
   留言板表情行。
-  **⚠ 数量存在证据冲突，尚未确定**（见 docs/m5/EMOJI-COUNT-CONFLICT.md）：
-    · 强证据（控件树 dump）：id/rvEmojiList 下 id/fl_emoji_root 出现 **7** 次，间距 112px
-    · 弱证据（截图 + 视觉读数）：可见 **6** 项（5 个 emoji + "+1"），且判断"未截断"
-  现暂取 7（依据强证据），但**不声称已确定** —— 两份证据不一致时应补证据，不是挑一个信。
-  解决路径：做一次新的只读 dump，保存原始 xml（含 bounds 与 content-desc）到仓库。
+  留言板表情行。**数量以可复核的原始 dump 为准 = 6 个**：
+    · docs/original-baseline/raw-dumps/message-board-dump.xml（deep link 只读进入留言板后 dump）
+      中 fl_emoji_root 出现 **6** 次。
+    · 更早的记录称"恰好 7 个"，但那份**原始产物从未入库、无法复核**；按证据纪律
+      **以可复核者为准**。该记录已于 2026-09-21 在 supplements/message-board.json 里更正。
+  教训：我曾据那条不可复核的记录把这里从 6 改成 7 —— 那等于**按错误记录改产品**，
+        会引入真实的一致性回归。发现问题后已回退为 6。
+  ⚠ **具体字符仍是 NOT_CAPTURED**：原始 dump 的 text/content-desc 里没有表情字符，
+    因此只能保证"6 个位置"，**不声称字符与原版一致**。
+  ⚠ 另：rvEmojiList 是 RecyclerView，uiautomator 只 dump **可见/已附着**的项，
+    所以"6"是**本次视口内**的计数；若该行可横向滚动，总数可能多于视口所见 —— 这一点尚无证据。
 
   ⚠ **但不声称具体是哪 7 个**：baseline.json 把"表情行的完整表情集合"列为**待补项**，
     也就是说**只有数量与间距有证据，具体字符没有采集**。
     因此前 6 个沿用既有值（它们来自更早的观察），第 7 个用 '🎉' 仅是占位，
     **不是证据支持的结论**；要声称字符一致，必须先做一次只读观察把 7 个字符都 dump 下来。
 */
-export const boardEmojis = ['😂', '👑', '❤️', '👀', '😱', '+1', '🎉']
+export const boardEmojis = ['😂', '👑', '❤️', '👀', '😱', '+1']
 
 export const dailyFeed = [
   { id: 'd1', title: '今天最想说的一句话', desc: '一句话记录今天', color: '#ffd9e8' },

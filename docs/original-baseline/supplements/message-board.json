@@ -15,7 +15,7 @@
       "id/refreshLayout [0,333][1080,1690]   留言列表区",
       "id/tvNoComment [440,977][640,1011]    空态「可以给同学留言噢」",
       "id/layout_comment_board [0,1690][1080,1920]  底部留言区",
-      "id/rvEmojiList + id/fl_emoji_root ×7  表情行（**恰好 7 个**）",
+      "id/rvEmojiList + id/fl_emoji_root 表情行（**数量曾记为 7，已被可复核 dump 推翻为 6**）",
       "id/et_comment_board [28,1802][1052,1892]  输入框，提示「留言仅双方可见」",
       "id/tvSendComment [912,1815][1038,1878]    发送按钮「留言」"
     ],
@@ -58,9 +58,9 @@
   },
   "additional_read_only_facts": [
     {
-      "fact": "表情行恰好 7 个表情",
-      "evidence": "id/rvEmojiList 下 id/fl_emoji_root 出现 7 次（间距 112px）",
-      "impact": "若实现表情行，数量与间距有依据",
+      "fact": "表情行数量：**原记录 7 个已被推翻**，2026-09-21 的可复核原始 dump 实测 fl_emoji_root 为 6 个（见 raw-dumps/message-board-dump.xml）；旧记录的原始产物未入库、无法复核",
+      "evidence": "raw-dumps/message-board-dump.xml 中 fl_emoji_root 出现 6 次（该 XML 已入库，可复核）。旧记录称 7 次且提及间距 112px，但原始产物未入库 —— **按证据纪律以可复核者为准**",
+      "impact": "若实现表情行，**数量以 6 为据**；间距 112px 仍待复核（无原始产物）；**具体表情字符在 text/content-desc 中均未采集 → NOT_CAPTURED**",
       "verdict": "SUPPORTED"
     },
     {
