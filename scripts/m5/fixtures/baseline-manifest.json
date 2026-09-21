@@ -406,7 +406,7 @@
           "status": "NOT_EVALUATED",
           "implementation_impact": "本页布局记为 **OUR CURRENT IMPLEMENTATION / not a conformance claim**；原注释里的『结构按原版实测』已按审核 54 降级（不为保住注释去推断存在过证据）",
           "work_order": null,
-          "deviation_id": null
+          "deviation_id": "L-008"
         },
         {
           "id": "ORIGINAL_INTEREST_DESTINATION",
@@ -415,7 +415,7 @@
           "status": "NOT_EVALUATED",
           "implementation_impact": "当前实现渲染为**不可点的行 + 「待核对」标注**（不再误路由到 ProfileEditScreen，也不再接旧的 mock 路由）—— 审核 54 冻结",
           "work_order": null,
-          "deviation_id": null
+          "deviation_id": "L-004"
         },
         {
           "id": "ORIGINAL_TAG_DESTINATION",
@@ -424,7 +424,7 @@
           "status": "NOT_EVALUATED",
           "implementation_impact": "同上（渲染为不可点行 + 待核对）",
           "work_order": null,
-          "deviation_id": null
+          "deviation_id": "L-005"
         },
         {
           "id": "ORIGINAL_BIO_DESTINATION",
@@ -433,7 +433,7 @@
           "status": "NOT_EVALUATED",
           "implementation_impact": "同上",
           "work_order": null,
-          "deviation_id": null
+          "deviation_id": "L-006"
         },
         {
           "id": "ORIGINAL_SCHOOL_DESTINATION",
@@ -442,7 +442,7 @@
           "status": "NOT_EVALUATED",
           "implementation_impact": "同上",
           "work_order": null,
-          "deviation_id": null
+          "deviation_id": "L-007"
         },
         {
           "id": "PROFILE_EDIT_SAVE_IS_REAL",
