@@ -138,7 +138,15 @@ done
 echo
 echo "# M5_SERVER_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
 # ⚠️ 与 M4 同口径：这个 key **不是**"M5 整体完成"。
-#    WO#2 的前端用户路径（App 侧选图→上传→发送）尚未完成，
-#    故 M5_OVERALL 在它通过之前保持 OPEN。
-echo "# M5_OVERALL: OPEN（WO#2 前端用户路径未完成；后端已 ACCEPTED）"
+#    当前精确状态（审核记录 25 的裁定）：
+#      WO2_BACKEND / APP_UPLOAD_SEND_RENDER / FAILPATH / RELOAD_PERSISTENCE / CROSS_LAYER_C1：全 PASS
+#      WO2_IMPLEMENTATION: ACCEPTED
+#      NATIVE_FILE_PICKER_INTERACTION: NOT_YET_VERIFIED  ← 唯一未决项
+#      WO2_FINAL_CLOSE: HOLD
+#    ⚠️ 且审核要求**永久分列**这两个 key，不得合并表述成"真实用户完整选图 E2E"：
+#      FILE_INPUT_POST_SELECTION_E2E   （DOM.setFileInputFiles 之后的完整产品链路）
+#      NATIVE_FILE_PICKER_INTERACTION  （真实点击入口 → 系统 picker → 选图 → WebView 收到 File）
+#    → 所以这里**不再**笼统写"前端用户路径未完成"（那会让人误以为前端没做完），
+#      而是点名唯一未决的那一格。
+echo "# M5_OVERALL: OPEN（WO2_IMPLEMENTATION ACCEPTED；唯一未决 = NATIVE_FILE_PICKER_INTERACTION）"
 exit "$([ "$FAILED" -eq 0 ] && echo 0 || echo 1)"
