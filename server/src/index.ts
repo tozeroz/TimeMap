@@ -1459,10 +1459,22 @@ export function buildServer(deps: ServerDeps) {
         last_body: string | null
         last_kind: string | null
         last_at: Date | null
+        peer_name: string | null
       }>(
         `select t.id, t.kind, t.title,
                 (select count(*) from thread_members tm2 where tm2.thread_id = t.id)::text as member_count,
-                lm.body as last_body, lm.kind as last_kind, lm.created_at as last_at
+                lm.body as last_body, lm.kind as last_kind, lm.created_at as last_at,
+                -- M5 WO#8：direct 会话的"对方昵称"。
+                -- 为什么需要它：会话列表要显示一行"跟谁在聊"，而 direct 会话的 t.title 是 NULL
+                -- （实测：ffffffff-…-001 的 title=NULL、成员 2 人）。没有它这一行就没名字可显示，
+                -- 列表会退化成"未命名会话"—— 那既不好用，也不符合原版（原版显示对方昵称）。
+                -- 取法：本会话里**除我以外**的第一个成员；group 会话不取（用 t.title）。
+                (select u.display_name
+                   from thread_members tm3
+                   join users u on u.id = tm3.user_id
+                  where tm3.thread_id = t.id and tm3.user_id <> $1
+                  order by u.display_name
+                  limit 1) as peer_name
            from message_threads t
            join thread_members me on me.thread_id = t.id and me.user_id = $1
            left join lateral (
@@ -1482,6 +1494,8 @@ export function buildServer(deps: ServerDeps) {
           kind: row.kind,
           title: row.title,
           memberCount: Number.parseInt(row.member_count, 10),
+          // 列表行的显示名：group 用 title；direct 用对方昵称（见上面 SQL 的注释）
+          peerName: row.peer_name,
           lastMessage: row.last_body === null ? null : { body: row.last_body, kind: row.last_kind, createdAt: row.last_at?.toISOString() ?? null },
         })),
       }

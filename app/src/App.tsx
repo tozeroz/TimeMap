@@ -72,7 +72,25 @@ export default function App() {
       {root === 'feed' && <FeedDetailScreen id={route.query.id ?? param ?? ''} />}
       {root === 'comments' && <CommentsScreen id={route.query.id ?? param ?? ''} />}
       {root === 'message' && <MessageScreen />}
-      {root === 'chat' && <ChatScreen id={param ?? 't1'} />}
+      {/*
+        M5 WO#8：会话路由的 id 解析（**修掉一个真实缺陷**）。
+
+        原来这里是：`<ChatScreen id={param ?? 't1'} />`
+          · 只读 **param（路径段）**，而应用自己的跳转走的是 **query**
+            （`navigate('chat', { id })` → `#/chat?id=<uuid>`）→ 永远取不到 → 落到兜底值
+          · 兜底值是 **mock 数据里的会话 id 't1'** —— 它会被当成真实参数
+            直接打到 `GET /api/threads/t1/messages`，服务端只能 404
+        📌 这与第 64-71 行注释里 M3 为 `feed` 修过的是**同一个 bug**（param vs query），
+           只是当时没有把 chat 一起修。
+
+        现在按审核记录 44 冻结的规范解析（**不制造第二套 URL 规范**）：
+            CANONICAL:     `#/chat?id=<uuid>`   ← 列表点击产生的形式（Gate 验证这个）
+            COMPATIBILITY: `#/chat/<uuid>`      ← 仍可解析（旧链接/深链不失效）
+            RESOLUTION:    query.id → path param → ''（missing state，**不发任何请求**）
+        ⚠️ 兜底值必须是**空串**，让 ChatScreen 进入 missing 并明确显示「未指定会话」；
+           **绝不**再回退到任何 mock id（那是"看起来成功"的假状态）。
+      */}
+      {root === 'chat' && <ChatScreen id={route.query.id ?? param ?? ''} />}
       {root === 'board' && <BoardScreen peerId={param ?? '22222222-2222-4222-8222-222222222222'} />}
       {root === 'daily' && <DailyScreen />}
       {root === 'poi' && <PoiSearchScreen />}

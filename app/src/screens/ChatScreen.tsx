@@ -17,6 +17,28 @@ import { RecorderError, formatDuration, startRecording, type RecorderSession } f
 import { goBack } from '../router'
 import './chat.css'
 
+/** 会话 id 的合法形状：UUID（服务端的 `id` 参数也按同一形状校验） */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * 判定一个路由传来的会话 id 属于哪一类（M5 WO#8）。
+ *
+ * 导出是为了**可以被单独测**：它决定"要不要发网络请求"，是这条路径上的关键分支。
+ *
+ * 三态（与 ChatScreen 的 state 一一对应）：
+ *   'missing' —— 空串/未提供 → 显示「未指定会话」，**不发请求**
+ *   'invalid' —— 非空但不是 UUID（例如 mock id 't1'）→ 显示「无效会话」，**不发请求**
+ *   'uuid'    —— 形状合法 → 正常加载（存在性/成员资格由服务端判定）
+ *
+ * 为什么把 'invalid' 单独拎出来：mock id 曾经从这里漏进真实 API。
+ * 只删掉那一个 't1' 是不够的（下一个 mock id 还会漏），要按**形状**拦住整类。
+ */
+export function classifyThreadId(id: string | null | undefined): 'missing' | 'invalid' | 'uuid' {
+  const v = (id ?? '').trim()
+  if (v === '') return 'missing'
+  return UUID_RE.test(v) ? 'uuid' : 'invalid'
+}
+
 /**
  * 私有媒体图片组件（M4 Slice A 的核心技术点）。
  *
@@ -179,7 +201,17 @@ function VoiceMessage({
  */
 export function ChatScreen({ id }: { id: string }) {
   const [messages, setMessages] = useState<ApiMessage[]>([])
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
+  /**
+   * 状态机（M5 WO#8 扩展了两个**不触网**的状态）。
+   *
+   * 为什么要单独区分 'missing' 与 'invalid'，而不是都走 'error'：
+   *   之前 `App.tsx` 的 chat 路由用 `param ?? 't1'` 兜底 —— 那个 't1' 是 **mock 数据里的会话 id**，
+   *   会被当成真实参数直接打到 `GET /api/threads/t1/messages` 上，服务端只能回 404，
+   *   用户看到的是"网络错误 / 这个会话不存在"，**看不出真正原因是路由给了个假 id**。
+   *   现在：id 形状不合法时**一次请求都不发**（Gate 断言：messagesRequestCount 必须为 0），
+   *   并明确告诉用户是哪一类问题。
+   */
+  const [state, setState] = useState<'loading' | 'ready' | 'error' | 'missing' | 'invalid'>('loading')
   const [err, setErr] = useState('')
   const [draft, setDraft] = useState('')
 
@@ -216,8 +248,23 @@ export function ChatScreen({ id }: { id: string }) {
   /**
    * 拉一次消息。抽成函数是因为**发完图要重拉**（否则新消息只在服务端，界面上看不见），
    * 而重拉必须和首次加载走完全同一条路径 —— 不能另写一份"发完图之后的我以为"。
+   *
+   * ⚠️ M5 WO#8：**先校验 id 形状，再决定要不要发请求**。
+   *   这不是"多余的前端校验"，而是这条路径上真实发生过的缺陷：
+   *   mock id `'t1'` 曾从这个入口漏进真实 API（服务端 404）。
+   *   服务端那边对非法 UUID 也会拒（`invalid` → 400），两边各拦一次不是重复：
+   *   前端拦的是"**根本不该发出去的请求**"，服务端拦的是"**任何来源的非法输入**"。
    */
   const loadMessages = useCallback(async () => {
+    const shape = classifyThreadId(id)
+    if (shape !== 'uuid') {
+      // 不触网：明确区分"没给 id"与"给了非法 id"
+      if (!mounted.current) return
+      setMessages([])
+      setErr(shape === 'missing' ? '未指定会话' : '无效会话')
+      setState(shape === 'missing' ? 'missing' : 'invalid')
+      return
+    }
     const r = await getThreadMessages(id)
     if (!mounted.current) return
     if (r.ok) {
@@ -447,6 +494,9 @@ export function ChatScreen({ id }: { id: string }) {
         />
       }
       footer={
+        // M5 WO#8：会话 id 不可用时**整条 composer 都不显示** ——
+        // 往一个"未指定/无效"的会话里打字发送没有任何意义，留着只会让用户白打一段字再失败。
+        (state === 'missing' || state === 'invalid') ? null : (
         <div className="chatbar__footer">
           {/* 发送中：状态行是**用户唯一能看出"点了有反应"**的地方 */}
           {busy !== '' && (
@@ -554,12 +604,29 @@ export function ChatScreen({ id }: { id: string }) {
             )}
           </div>
         </div>
+        )
       }
       scroll
     >
       {state === 'loading' && <p className="chat__state">加载中…</p>}
+      {/*
+        M5 WO#8：id 不可用时不显示「网络错误」—— 那不是网络问题，**一个请求都没发**。
+        必须让用户看到真实原因，否则"路由给了假 id"会被误读成"后端坏了"。
+      */}
+      {state === 'missing' && (
+        <div className="chat__state" data-state="missing">
+          <p>未指定会话</p>
+          <p className="chat__stateSub">请从「消息」列表里选择一个会话</p>
+        </div>
+      )}
+      {state === 'invalid' && (
+        <div className="chat__state" data-state="invalid">
+          <p>无效会话</p>
+          <p className="chat__stateSub">这个会话链接不正确</p>
+        </div>
+      )}
       {state === 'error' && (
-        <div className="chat__state">
+        <div className="chat__state" data-state="error">
           <p>网络错误</p>
           <p className="chat__stateSub">{err}</p>
         </div>

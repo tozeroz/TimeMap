@@ -19,6 +19,52 @@
   border-radius: var(--r-pill);
 }
 
+/*
+  M5 WO#8：头像占位（首字）。
+  为什么需要：真实的会话数据（GET /api/threads）**不提供头像**，
+  而用 mock 头像链接会立刻退化成"假数据"。首字占位是该数据源下**诚实**的呈现。
+  接线单（WO#10）若补上头像字段，再换成 <img>。
+*/
+.invite__avatar--ph,
+.row__avatar--ph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-surface-sunken);
+  color: var(--c-text-2);
+  font-size: 16px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+/* 会话列表的三态（加载中 / 失败 / 空）—— 都必须明确可见，不得静默 */
+.list__state {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--c-text-3);
+}
+
+.list__state[data-state='error'] p:first-child {
+  color: var(--c-danger, #e2374a);
+}
+
+.list__stateSub {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.list__retry {
+  margin-top: 10px;
+  padding: 6px 18px;
+  border: 1px solid var(--c-divider);
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  font-size: 13px;
+  color: var(--c-text);
+}
+
 .invite__title {
   font-size: 15px;
   font-weight: 700;

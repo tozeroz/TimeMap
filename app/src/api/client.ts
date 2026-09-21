@@ -130,6 +130,14 @@ export interface ApiThread {
   kind: string
   title: string | null
   memberCount: number
+  /**
+   * direct 会话的**对方昵称**（M5 WO#8 新增）。
+   *
+   * 为什么需要：direct 会话的 `title` 在库里的实测值是 `NULL`（成员 2 人），
+   * 而列表要显示"跟谁在聊"。没有这个字段，direct 行就没有名字可显示。
+   * group 会话该字段为 null（用 `title`）。
+   */
+  peerName: string | null
   lastMessage: ApiThreadLastMessage | null
 }
 
