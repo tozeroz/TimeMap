@@ -113,7 +113,7 @@
     {
       "id": "poi-detail",
       "title": "地点详情",
-      "target": "com.kairuotu.feed.poi.detail.PoiDetailActivity（真实入口，见 supplements/poi-detail.json）",
+      "target": "com.kairuotu.feed.poi.detail.PoiDetailActivity（真实入口：地图图钉照片 → 动态详情 → 点地点区）",
       "has_evidence": true,
       "states": {
         "normal": "observed",
@@ -208,7 +208,11 @@
         "loading": "not_reproducible",
         "empty": "not_applicable",
         "error": "unknown"
-      }
+      },
+      "supplements": [
+        "supplements/login-select.json"
+      ],
+      "recovered_at": "2026-09-21T10:39:54+08:00"
     },
     {
       "id": "login-sns",
@@ -220,7 +224,11 @@
         "loading": "not_reproducible",
         "empty": "not_applicable",
         "error": "unknown"
-      }
+      },
+      "supplements": [
+        "supplements/login-sns.json"
+      ],
+      "recovered_at": "2026-09-21T10:40:52+08:00"
     },
     {
       "id": "onboarding",
@@ -249,7 +257,7 @@
     {
       "id": "media-preview",
       "title": "图片预览",
-      "target": "com.kairuotu.chat.conversation.preview.media.ChatMediaPreviewActivity（真实入口，见 supplements/media-preview.json）",
+      "target": "com.kairuotu.chat.conversation.preview.media.ChatMediaPreviewActivity（真实入口：聊天里点图片消息）",
       "has_evidence": true,
       "states": {
         "normal": "observed",
@@ -265,7 +273,7 @@
     {
       "id": "at-panel",
       "title": "@面板",
-      "target": "com.kairuotu.chat.conversation.GroupAtPanelActivity（真实入口，见 supplements/at-panel.json）",
+      "target": "com.kairuotu.chat.conversation.GroupAtPanelActivity（真实入口：群聊输入框打 @）",
       "has_evidence": true,
       "states": {
         "normal": "observed",

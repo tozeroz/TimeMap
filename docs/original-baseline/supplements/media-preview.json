@@ -4,9 +4,7 @@
   "recovered_at": "2026-09-21T10:26:31+08:00",
   "recovered_by": "M3 Evidence Preflight",
   "method": "真实 UI 入口进入 + adb screencap（1080x1920 无损 PNG）+ uiautomator 控件树",
-
   "activity": "com.kairuotu.chat.conversation.preview.media.ChatMediaPreviewActivity",
-
   "recovery_entry": [
     "启动原版 app → 校园 tab → 右上「消息」气泡 → MessageActivity",
     "右上按钮 →「发起群聊」→ 输入群名 → 创建 → GroupChatActivity",
@@ -14,7 +12,6 @@
     "相册选择器（MaterialSelectActivity）里选图 → 选择器自带预览（MaterialPreviewActivity）→ 点「发送」",
     "图片以 id/chatImageCardView 出现在群聊消息里 → **点这张图片卡片** → ChatMediaPreviewActivity"
   ],
-
   "supersedes": {
     "file": "screens/media-preview/baseline.json",
     "field": "states.normal.status",
@@ -23,7 +20,6 @@
     "why_m0_missed": "M0 只有 deep link（campusx://chat/media-preview）；该 Activity 未注册外部 scheme，必然回落。且真实入口要求「聊天里存在图片消息」，M0 环境无聊天数据。",
     "m0_evidence_note": "M0 的 screens/media-preview/normal.png 保留不动。本次新增 recovered-m3.png。"
   },
-
   "observations": {
     "interactions": [
       "全屏图片查看（内容节点 content-desc =「图片」，铺满 [0,42][1080,1920]）",
@@ -48,14 +44,12 @@
       "是否支持双击放大 / 捏合缩放"
     ]
   },
-
   "ui_ids": {
     "note": "该 Activity 的控件只用 content-desc 暴露，没有 resource-id（与其它页面不同）",
     "close": "content-desc='关闭' [16,100][100,184]",
     "save": "content-desc='保存' [980,100][1064,184]",
     "image": "content-desc='图片' [0,42][1080,1920]"
   },
-
   "model_facts": [
     {
       "claim": "聊天图片消息与图片预览是两级：消息里是卡片，点开才进预览",
@@ -77,17 +71,16 @@
       "verdict": "NOT_A_MODEL_FACT"
     }
   ],
-
   "data_precondition_delta": {
     "changed": true,
     "detail": "为取得聊天图片上下文：授予 app 存储/相机权限、向模拟器相册放入 1 张测试图（/sdcard/Pictures/m3-test-image.png）、在群聊里发送 1 张图片。",
     "disclosure": "放入相册的图是本项目自己截的页面截图（非用户隐私数据）。该消息落在 app 自己的账号下；不影响 M0 冻结证据。"
   },
-
   "evidence": [
     "screens/media-preview/recovered-m3.png",
     "screens/chat/recovered-m3-entry.png（其真实入口：带图片消息的聊天页）"
   ],
-
-  "reporting_impact": "observed 19 → 22（三页全部恢复）；整体口径变为 observed 22 / evidence-blocked 0"
+  "reporting_impact": "observed 19 → 22（三页全部恢复）；整体口径变为 observed 22 / evidence-blocked 0",
+  "states_normal": "observed",
+  "recovered_target": "com.kairuotu.chat.conversation.preview.media.ChatMediaPreviewActivity（真实入口：聊天里点图片消息）"
 }

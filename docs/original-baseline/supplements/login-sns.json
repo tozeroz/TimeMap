@@ -1,0 +1,74 @@
+{
+  "screen_id": "login-sns",
+  "title": "手机号登录",
+  "recovered_at": "2026-09-21T10:40:52+08:00",
+  "recovered_by": "M3 Slice 0A（登录语义观察）",
+  "method": "deep link campusx://login/select → 走真实 UI 到手机号页 + adb screencap + uiautomator dump",
+
+  "activity": "com.kairuotu.account.login.activity.CampusSnsLoginActivity",
+
+  "recovery_entry": [
+    "deep link campusx://login/select → CampusLoginActivity",
+    "点 id/cl_phone_login（「登录 Campus」）→ 因未勾选协议弹出「请阅读并同意以下条款」",
+    "点 id/btn_agree（「同意并继续」）→ 进入 CampusSnsLoginActivity"
+  ],
+
+  "supersedes": {
+    "file": "screens/login-sns/baseline.json",
+    "field": "evidence（补充结构化证据）",
+    "from": "只有 normal.png（且含打码区域）",
+    "to": "增加 recovered-m3.png（同区域打码）+ recovered-m3-ui.xml（号码替换为 [redacted]）+ id/bounds 结构",
+    "why": "M0 已正确记录该页是手机号登录，但没有控件级结构；本轮补齐 resource-id 与精确 bounds，供 Slice 0B 实现对齐"
+  },
+
+  "observations": {
+    "interactions": [
+      "标题「输入手机号」",
+      "固定国家码「+86」（本次未观察到国家码选择器）",
+      "手机号输入框：id/phone_number（EditText）[225,449][1010,506]，聚焦时页面上下平移",
+      "主按钮：id/next_step「获取验证码」[347,618][732,702]",
+      "返回：id/btnBack [0,70][126,182]"
+    ],
+    "navigation": [
+      "「获取验证码」→ 验证码页（**本轮未观察，见下**）",
+      "返回 → 登录入口页"
+    ],
+    "persistence": [
+      "登录态持久化（未验证）"
+    ],
+    "known_unknowns_resolved": {
+      "身份体系": "手机号 + 短信验证码（无密码）",
+      "是否有第三方登录": "没有（全页仅 1 个 ImageView：手机图标）"
+    },
+    "known_unknowns_still_open": [
+      "验证码页结构（长度、倒计时、重发）",
+      "登录成功后的落地页与既有本地账号「自定义名称6」的关系"
+    ]
+  },
+
+  "ethically_blocked": {
+    "what": "验证码页",
+    "why": "手机号输入框预填了一个**真实手机号**；点「获取验证码」会给该号码**真发短信**。对第三方号码触发真实短信不可接受，故主动停止。",
+    "classification": "BLOCKED_BY_ETHICS（不是技术上做不到）",
+    "implication": "Slice 0B 的验证码页 UI 只能按「合理推断」实现，并标注为 unobserved —— 不得声称与原件一致"
+  },
+
+  "privacy_handling": {
+    "phone_redacted_in_png": true,
+    "redaction_box": { "x": 196, "y": 448, "width": 420, "height": 62 },
+    "same_box_as_m0": true,
+    "phone_redacted_in_xml": true,
+    "verified_by": "视觉模型复核：号码已不可读"
+  },
+
+  "ui_ids": {
+    "phone_number": "EditText [225,449][1010,506]",
+    "next_step": "「获取验证码」[347,618][732,702]",
+    "btnBack": "[0,70][126,182]"
+  },
+
+  "evidence": [
+    "screens/login-sns/recovered-m3.png",
+    "screens/login-sns/recovered-m3-ui.xml"
+  ]
+}

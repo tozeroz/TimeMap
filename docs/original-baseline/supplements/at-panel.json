@@ -4,16 +4,13 @@
   "recovered_at": "2026-09-21T10:23:52+08:00",
   "recovered_by": "M3 Evidence Preflight",
   "method": "真实 UI 入口进入 + adb screencap（1080x1920 无损 PNG）+ uiautomator 控件树",
-
   "activity": "com.kairuotu.chat.conversation.GroupAtPanelActivity",
-
   "recovery_entry": [
     "启动原版 app → 校园 tab → 右上「消息」气泡 → MessageActivity",
     "右上角按钮（id: btn_right_icon）→ 弹出菜单 → 选「发起群聊」",
     "对话框里输入群名 → 点「创建群聊」→ 进入 GroupChatActivity",
     "在群聊输入框（id: inputTextView）中**输入 @** → 自动弹出 GroupAtPanelActivity（底部弹层）"
   ],
-
   "supersedes": {
     "file": "screens/at-panel/baseline.json",
     "field": "states.normal.status",
@@ -22,7 +19,6 @@
     "why_m0_missed": "M0 只有 deep link（campusx://group/atPanel），而该 Activity 未注册外部 scheme，必然回落；且 @ 面板需要「群聊上下文 + 输入框中打 @」才会出现，M0 既无群聊也无该上下文。",
     "m0_evidence_note": "M0 的 screens/at-panel/normal.png 保留不动（deep link 失败的回落页证据）。本次新增 recovered-m3.png。"
   },
-
   "observations": {
     "interactions": [
       "**底部弹层**（不是全屏页、不是抽屉）：内容区从 y=933 起，占屏幕下半部分；上半部分是半透明遮罩（id: root 全屏 clickable，点为关闭）",
@@ -48,7 +44,6 @@
       "点成员后输入框里的 @ 文本格式（是否带 userId）"
     ]
   },
-
   "ui_ids": {
     "root": "全屏遮罩（clickable）[0,42][1080,1920]",
     "contentLayout": "弹层内容 [0,933][1080,1920]",
@@ -57,7 +52,6 @@
     "ivIcon": "首项图标（content-desc: 所有人）[28,1073][126,1171]",
     "tvName": "首项名称「所有人」[147,1103][1052,1141]"
   },
-
   "model_facts": [
     {
       "claim": "消息可以 @ 特定成员，且「@所有人」是特殊项（不是普通成员）",
@@ -80,17 +74,16 @@
       "note": "提醒实现时不要把 (N) 写进 name 字段"
     }
   ],
-
   "data_precondition_delta": {
     "changed": true,
     "detail": "为取得群聊上下文，本次创建了 1 个群（名称 GroupForEvidence）并在群内发送 1 条文本「@」与 1 张图片。M0 环境为「未登录 + 无群聊」。",
     "disclosure": "该群与消息是取证用数据，落在 app 自己的后端账号下，不影响 M0 冻结证据。"
   },
-
   "evidence": [
     "screens/at-panel/recovered-m3.png",
     "screens/group/recovered-m3-entry.png（其真实入口：群聊页）"
   ],
-
-  "reporting_impact": "observed 19 → 21（累计）；三页全部恢复后整体口径变为 observed 22 / evidence-blocked 0"
+  "reporting_impact": "observed 19 → 21（累计）；三页全部恢复后整体口径变为 observed 22 / evidence-blocked 0",
+  "states_normal": "observed",
+  "recovered_target": "com.kairuotu.chat.conversation.GroupAtPanelActivity（真实入口：群聊输入框打 @）"
 }

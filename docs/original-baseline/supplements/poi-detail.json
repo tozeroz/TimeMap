@@ -4,16 +4,13 @@
   "recovered_at": "2026-09-21T10:21:11+08:00",
   "recovered_by": "M3 Evidence Preflight",
   "method": "真实 UI 入口进入 + adb screencap（1080x1920 无损 PNG）+ uiautomator 控件树",
-
   "activity": "com.kairuotu.feed.poi.detail.PoiDetailActivity",
-
   "recovery_entry": [
     "启动原版 app（com.kairuotu.campus）",
     "底部导航 → 地图（tab 3，坐标 675,1810）",
     "地图上点「用户发布的照片图钉」的**照片缩略图**（不是地名文字）→ 进入 FeedDetailActivity",
     "在动态详情页点 **地点区**（resource-id: id/location_section）→ 进入 PoiDetailActivity"
   ],
-
   "supersedes": {
     "file": "screens/poi-detail/baseline.json",
     "field": "states.normal.status",
@@ -22,7 +19,6 @@
     "why_m0_missed": "M0 只用 deep link（campusx://feed/poi/detail）。本项目实测：app 的 campusx:// scheme 只注册了 MainActivity 与 DeepLinkActivity，PoiDetailActivity 等内部 Activity 外部不可达，因此 deep link 必然回落到 TridentActivity。真实入口是「动态详情 → 点地点」。",
     "m0_evidence_note": "M0 的 screens/poi-detail/normal.png 保留不动 —— 它是「deep link 失败后的回落页面」这一事实的证据。本次新增 recovered-m3.png，不覆盖历史。"
   },
-
   "observations": {
     "interactions": [
       "顶部：地点名（大号加粗）+ 右上分享按钮（content-desc: 分享，实际 id: id/iv_poi_detail_share）",
@@ -47,7 +43,6 @@
       "「距我」是服务端算还是客户端算（未验证）"
     ]
   },
-
   "ui_ids": {
     "tv_poi_name": "地点名 [28,500][978,566]",
     "iv_poi_detail_share": "分享 [992,500][1059,567]",
@@ -56,14 +51,12 @@
     "view_user_tag": "作者标签（clickable）[21,696][187,721]",
     "iv_poi_detail_dynamic_back": "返回 [14,88][112,186]"
   },
-
   "observed_content": {
     "poi_name": "达美乐比萨(广州萝岗万达广场)",
     "distance": "距我4公里",
     "address": "联和街道科丰路89号开创大道2707号万达广场负一层商场B1006铺",
     "user_tag": "食物语"
   },
-
   "model_facts": [
     {
       "claim": "places 需要坐标（用于计算「距我 N 公里」）",
@@ -90,17 +83,16 @@
       "verdict": "SUPPORTED"
     }
   ],
-
   "data_precondition_delta": {
     "changed": true,
     "detail": "本次为恢复证据而创建了数据：在群聊中发送 1 条文本消息与 1 张图片；并授予 app 存储/相机权限。M0 环境为「未登录 + 无聊天数据」。地点与动态数据是 app 本地已有的，未额外造数。",
     "disclosure": "只用于取证，不改动 app 业务数据语义；不影响 M0 已冻结的证据。"
   },
-
   "evidence": [
     "screens/poi-detail/recovered-m3.png",
     "screens/feed-detail/recovered-m3-entry.png（其真实入口：动态详情页）"
   ],
-
-  "reporting_impact": "observed 19 → 20（本页）；三页全部恢复后整体口径变为 observed 22 / evidence-blocked 0"
+  "reporting_impact": "observed 19 → 20（本页）；三页全部恢复后整体口径变为 observed 22 / evidence-blocked 0",
+  "states_normal": "observed",
+  "recovered_target": "com.kairuotu.feed.poi.detail.PoiDetailActivity（真实入口：地图图钉照片 → 动态详情 → 点地点区）"
 }

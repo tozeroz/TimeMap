@@ -40,16 +40,23 @@ for (const f of readdirSync(SUPP_DIR).filter((f) => f.endsWith('.json') && f !==
 
 // ---------------------------------------------------------------------------
 // 2. 更新 manifest：被补采的页面标记为 observed，并引用 supplement
+//
+// 注意：**只有当 supplement 显式声明 states_normal 时才改状态**，
+// 只有当它给出 recovered_target 时才覆盖 target。
+// 原因：不是每个 supplement 都意味着「M0 的进入方式错了」——
+// 例如 login-select / login-sns 的 deep link 本来就是可用的（M0 记录正确），
+// 它们的 supplement 只是补充控件级结构。早期版本无条件改写 target，会丢掉正确信息。
 // ---------------------------------------------------------------------------
 let recovered = 0
 for (const s of manifest.screens) {
   const sup = supplements.get(s.id)
   if (!sup) continue
-  s.states.normal = 'observed'
-  s.target = `${sup.doc.activity}（真实入口，见 ${sup.file}）`
+  const doc = sup.doc
+  if (doc.recovered_target) s.target = doc.recovered_target
+  if (doc.states_normal) s.states.normal = doc.states_normal
   s.supplements = [sup.file]
-  s.recovered_at = sup.doc.recovered_at
-  recovered++
+  s.recovered_at = doc.recovered_at
+  if (doc.states_normal === 'observed') recovered++
 }
 
 // ---------------------------------------------------------------------------

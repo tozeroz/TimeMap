@@ -9,10 +9,26 @@
 
 | # | 假设 | 解决时点 | 状态 | 结论与证据 |
 |---|---|---|---|---|
-| 1 | `login-sns` 真实身份语义 | Slice 0A | **PENDING** | 尚未观察（Preflight 未做登录） |
+| 1 | `login-sns` 真实身份语义 | Slice 0A | **SUPPORTED（已冻结）** | **手机号 + 短信验证码**；无密码、无第三方 SNS；固定 +86；协议未勾选走弹窗而非禁用。详见 `docs/m3/SLICE0-LOGIN-SEMANTICS.md` |
 | 2 | `places` / `schools` 建模 | Evidence Preflight | **部分完成**（见下） | `places` SUPPORTED；`schools` **SUPPORTED 但需要修订**（校区子实体） |
 | 3 | `comments.parent_id` | Slice 1 | **PENDING** | 尚未观察评论层级 |
 | 4 | `message` / `group` / `board_note` 关系 | 消息/群/留言观察 | **部分完成** | group 与 chat 已观察（同构、共用会话模型）；`board_note` 待观察 |
+
+### 1.1 Slice 0A 带来的**契约层**问题（需审核确认）
+
+M2 冻结的认证契约是 `handle + password`（已审核通过）。观察到的原版身份语义是**手机号 + 验证码**。
+这不是冲突，而是**机制层 vs 身份层**的区别：
+
+- **机制层**（token 签发/只存 hash/过期/撤销/限流/作者只能来自 session）—— 沿用 M2，不动；
+- **身份层**（用户用什么标识、如何证明）—— 原版是手机号 + 一次性验证码。
+
+若照原版做，需要在 M2 之上补：`users.phone`（唯一）、`login_codes`（手机号、**码的哈希**、有效期、是否已消费、尝试次数）。
+**这是 M2 冻结面之外的扩展，提交审核确认后再动手**（见 `SLICE0-LOGIN-SEMANTICS.md` 第七节）。
+
+另一个必须声明的限制：本 demo **没有短信通道**。可选方案里**固定万能验证码被否决**
+（等于在生产代码里留永久凭证，与审核记录 06 否掉 `dev-register` 的理由同类）。
+拟采用：服务端真实生成一次性验证码（随机/有效期/限流/一次性消费），投递降级为**服务端日志**，
+并显式标注 `SMS_GATEWAY_NOT_INTEGRATED`，**不得据此宣称"登录已完成"**。
 
 ## 二、Evidence Preflight 已产出的模型结论
 
