@@ -19,7 +19,6 @@ import { AnnounceScreen } from './screens/AnnounceScreen'
 import { SimpleScreen } from './screens/SimpleScreen'
 import { FeedListScreen } from './screens/FeedListScreen'
 import { PoiDetailScreen } from './screens/PoiDetailScreen'
-import { GroupChatScreen } from './screens/GroupChatScreen'
 import { MediaPreviewScreen } from './screens/MediaPreviewScreen'
 import { ScannerScreen } from './screens/ScannerScreen'
 import { LoginSelectScreen } from './screens/LoginSelectScreen'
@@ -100,7 +99,21 @@ export default function App() {
       {root === 'announce' && <AnnounceScreen />}
       {root === 'feedlist' && <FeedListScreen />}
       {root === 'poidetail' && <PoiDetailScreen id={route.query.id ?? param ?? ''} />}
-      {root === 'group' && <GroupChatScreen />}
+      {/*
+        M5 WO#9A：群聊走**同一个 ChatScreen**，只是换一个头部变体。
+
+        为什么不是另写一个群聊页：审核记录 45 明确要求
+        "**不要复制三套发送逻辑**到 GroupChatScreen；尽量复用已经通过 Gate 的消息渲染/composer 能力，
+         否则后面 direct/group 很快会产生两套行为"。
+        群聊与单聊在**消息读写、composer、媒体鉴权**上完全同构，
+        差异只在头部（群名/群头像/右侧入口）。
+        → 因此这里传入 variant="group"，由 ChatScreen 切换头部，
+          消息列表与 composer 全部复用同一份实现（WO#2/WO#5/WO#7 的 Gate 因此继续对群聊生效）。
+
+        id 的解析与 direct 完全一致：route.query.id → path param → ''（missing state）
+        ⚠️ 同样**不得**回退到任何 mock id。
+      */}
+      {root === 'group' && <ChatScreen id={route.query.id ?? param ?? ''} variant="group" />}
       {root === 'scanner' && <ScannerScreen />}
       {root === 'loginselect' && <LoginSelectScreen />}
       {root === 'upgrade' && <UpgradeDialog />}

@@ -148,21 +148,55 @@ for (const n of netList) {
 log('API_THREADS_ITEMS', apiItems.map((t) => ({ id: t.id, title: t.title, memberCount: t.memberCount })))
 
 const uiRows = await evaluate(`(() => {
-  const rows = [...document.querySelectorAll('[data-thread-id], button[data-thread-id]')]
-  if (rows.length) return { mode: 'data-attr', ids: rows.map(r => r.getAttribute('data-thread-id')), texts: rows.map(r => (r.innerText||'').replace(/\\n/g,' | ').slice(0,70)) }
+  const rows = [...document.querySelectorAll('[data-thread-id]')]
+  if (rows.length) {
+    return {
+      mode: 'data-attr',
+      ids: rows.map(r => r.getAttribute('data-thread-id')),
+      kinds: rows.map(r => r.getAttribute('data-thread-kind')),
+      texts: rows.map(r => (r.innerText||'').replace(/\\n/g,' | ').slice(0,70)),
+    }
+  }
   // 没有 data 属性时，退化为"可点会话行"的可见文本（用于收集证据，不用于通过判定）
   const btns = [...document.querySelectorAll('button')].filter(b => /相同学校|人$|\\d{2}:\\d{2}|昨天|周[一二三四五六日]/.test(b.innerText || ''))
-  return { mode: 'text-only', ids: [], texts: btns.map(b => (b.innerText||'').replace(/\\n/g,' | ').slice(0,70)) }
+  return { mode: 'text-only', ids: [], kinds: [], texts: btns.map(b => (b.innerText||'').replace(/\\n/g,' | ').slice(0,70)) }
 })()`)
 log('UI_ROWS', uiRows)
 
-// 有序集合精确比对（缺 data 属性即视为无法建立 identity continuity）
-const apiIdSet = apiItems.map((t) => String(t.id))
-const uiIdSet = uiRows && uiRows.ids ? uiRows.ids.map(String) : []
-const orderedMatch = apiIdSet.length > 0 && apiIdSet.length === uiIdSet.length && apiIdSet.every((v, i) => v === uiIdSet[i])
+/*
+  ## ⚠️ 本断言的两处精度修正（WO#9A 列出群会话后发现，**不是放松契约**）
+
+  加了群会话之后本 Gate 有两条断言 FAIL，但查证后**都不是产品回归**，而是断言没指明"测的是哪一行"：
+
+  ① `IDENTITY_CONTINUITY`：原版比较**全局有序** id 集合。
+     但我方「消息」列表是**按类型分组呈现**的（群在前、单聊在后，与原版列表的呈现一致），
+     而 `/api/threads` 是按"最后消息时间"排序 —— 两者全局顺序本来就**不应当**相等。
+     → 改为**按类型分别比较有序子集**：
+          UI 的群 id 有序列表 == API 的群 id 有序列表（同理 direct）。
+       这仍然完全保留审核 44 想要的"exact identity continuity"（不许多、不许少、不许换序），
+       只是不再要求"跨类型的全局顺序"与 API 一致（那会与分组呈现相冲突）。
+  ② `CLICK_ROUTE_CANONICAL` / `CLICK_SAME_UUID_200`：原来点"第一个 data-thread-id 的行"。
+     有群之后第一行是**群**，于是落到 #/group —— 而这两条断言本意是验 **direct** 聊天路径。
+     → 改为**显式点 `[data-thread-kind="direct"]` 的第一行**。
+       （群路径由 gate-wo9a-group-slice.mjs 负责，两条路径各自被精确断言。）
+*/
+const byKind = (arr, kind) => arr.filter((x) => x.kind === kind).map((x) => String(x.id))
+const apiGroups = byKind(apiItems, 'group')
+const apiDirects = byKind(apiItems, 'direct')
+const uiGroupsList = uiRows.ids.filter((_, i) => uiRows.kinds[i] === 'group').map(String)
+const uiDirectsList = uiRows.ids.filter((_, i) => uiRows.kinds[i] === 'direct').map(String)
+const sameOrder = (a, b) => a.length === b.length && a.every((v, i) => v === b[i])
+const orderedMatch =
+  apiGroups.length + apiDirects.length > 0 &&
+  sameOrder(apiGroups, uiGroupsList) &&
+  sameOrder(apiDirects, uiDirectsList)
 log('IDENTITY_CONTINUITY', {
-  apiCount: apiIdSet.length,
-  uiCount: uiIdSet.length,
+  apiGroupIds: apiGroups,
+  uiGroupIds: uiGroupsList,
+  apiDirectIds: apiDirects,
+  uiDirectIds: uiDirectsList,
+  groupsMatch: sameOrder(apiGroups, uiGroupsList),
+  directsMatch: sameOrder(apiDirects, uiDirectsList),
   uiMode: uiRows && uiRows.mode,
   orderedIdsMatch: orderedMatch,
 })
@@ -172,9 +206,14 @@ console.log('')
 console.log('=== 3) CLICK → CANONICAL ROUTE（#/chat?id=<uuid>）→ 同 UUID 的 messages 请求 ===')
 await evaluate(`window.__WO8NET__ = []`)
 const click = await evaluate(`(async () => {
-  const byAttr = document.querySelector('button[data-thread-id]')
+  /*
+    ⚠️ 必须**显式点 direct 行**（见文件上方"两处精度修正"的说明）：
+       原来的 "第一个 data-thread-id 行" 在加入群会话后会点到群行，
+       而本 Gate 验的是 **direct 聊天路径**（群路径由 gate-wo9a 负责）。
+  */
+  const byAttr = document.querySelector('[data-thread-kind="direct"][data-thread-id]')
   const target = byAttr || [...document.querySelectorAll('button')].filter(b => /相同学校|人$|\\d{2}:\\d{2}|昨天|周[一二三四五六日]/.test(b.innerText || ''))[0]
-  if (!target) return { clicked: false, why: '没有可点的会话行' }
+  if (!target) return { clicked: false, why: '没有可点的 direct 会话行' }
   const expectId = target.getAttribute ? target.getAttribute('data-thread-id') : null
   const label = (target.innerText || '').replace(/\\n/g, ' | ').slice(0, 70)
   target.click()
@@ -264,8 +303,12 @@ const v = {
   // 严格口径：无 id 时**不得发出任何 messages 请求**
   CHAT_ROUTE_NO_MOCK_FALLBACK: noIdMsgRequests.length === 0 ? 'PASS' : 'FAIL',
   detail: {
-    apiThreadCount: apiIdSet.length,
-    uiRowCount: uiIdSet.length,
+    apiThreadCount: apiItems.length,
+    uiRowCount: uiRows.ids.length,
+    apiGroupIds: apiGroups,
+    uiGroupIds: uiGroupsList,
+    apiDirectIds: apiDirects,
+    uiDirectIds: uiDirectsList,
     uiMode: uiRows && uiRows.mode,
     clickedHash: click && click.hash,
     routeId,

@@ -87,6 +87,8 @@ const P = {
 const M = {
   m1: 'bbbbbbbb-0001-4001-8001-000000000001',
   m2: 'bbbbbbbb-0002-4002-8002-000000000002',
+  /** M5 WO#9A：群聊里的图片消息所用媒体（scope=**private**，见群里第 3 条消息） */
+  m3: 'bbbbbbbb-0003-4003-8003-000000000003',
 } as const
 
 export interface SeedUser {
@@ -281,6 +283,53 @@ export async function runSeed(client: PoolClient): Promise<SeedResult> {
   } else {
     console.log(`[seed] ⚠ media 文件有 ${fileErrors.length} 个未写入（DB 行已建，盘上会缺文件）：${fileErrors.join('; ')}`)
   }
+
+  // ---------------------------------------------------------------------------
+  // 私聊（群内）图片媒体 —— M5 WO#9A
+  //
+  // 与公开媒体**分两个目录、两种访问控制**（审核记录 13 第 6 条，本项目最重的安全约束之一）：
+  //   public  → uploads/public/…  可被 Nginx 静态下发
+  //   private → uploads/private/… **没有静态入口**，只能经 GET /api/media/:id
+  //             走 session → can_read_media（会话成员判定）后由 X-Accel 内部重定向下发
+  // 种子必须与上传接口同构：**先写文件、再算 sha256/bytes**，否则 media 行就是悬空引用。
+  // ---------------------------------------------------------------------------
+  interface SeedChatMedia { id: string; owner: string; key: string; png: Buffer; w: number; h: number }
+  const seedChatMedia: SeedChatMedia[] = [
+    { id: M.m3, owner: U.anmoss, key: '2026/09/seed-group-anmoss-1.png', w: 1080, h: 1440 },
+  ].map((m) => ({ ...m, png: seedPng(m.w, m.h) }))
+
+  for (const m of seedChatMedia) {
+    await put('media', m.id, {
+      owner_user_id: m.owner,
+      scope: 'private',
+      storage_key: m.key,
+      mime: 'image/png',
+      bytes: m.png.length,
+      width: m.w,
+      height: m.h,
+      sha256: createHash('sha256').update(m.png).digest('hex'),
+      upload_request_id: m.id, // 与公开媒体同一套幂等键约定（确定性）
+      created_at: T0,
+    })
+  }
+
+  let chatFilesWritten = 0
+  const chatFileErrors: string[] = []
+  for (const m of seedChatMedia) {
+    const full = path.join(uploadRoot, 'private', m.key)
+    try {
+      await mkdir(path.dirname(full), { recursive: true, mode: 0o755 })
+      await writeFile(full, m.png, { mode: 0o644 })
+      chatFilesWritten++
+    } catch (err) {
+      chatFileErrors.push(`${m.key}: ${(err as Error).message}`)
+    }
+  }
+  if (chatFileErrors.length === 0) {
+    console.log(`[seed] 群聊媒体实体文件已写 ${chatFilesWritten} 个（→ ${uploadRoot}/private/…）`)
+  } else {
+    console.log(`[seed] ⚠ 群聊媒体文件有 ${chatFileErrors.length} 个未写入（DB 行已建，盘上会缺文件）：${chatFileErrors.join('; ')}`)
+  }
   // 关联到帖子（public → 只能进 post_media）
   await put('post_media', 'eeeeeeee-0001-4001-8001-000000000001', {
     post_id: P.p1,
@@ -356,6 +405,74 @@ export async function runSeed(client: PoolClient): Promise<SeedResult> {
     sender_id: U.anmoss,
     body: '在四楼靠窗这边。',
     created_at: T0,
+  })
+
+  // ---- 群会话（M5 WO#9A：群聊垂直切片的种子）----
+  //
+  // ## 为什么成员是 **2 人**、且**故意留一个非成员**
+  //   `thread_members` 没有成员数上限，schema 早已允许任意人数（见
+  //   scripts/m5/probe-group-support.sh 的实测）。但**种子刻意只用 2 人**，原因有二：
+  //     ① 库里有且只有 3 个用户（anmoss / Lemy / Azur冰弦）。若把 3 人都放进群，
+  //        就**没有第三方账号可当"非成员"**，`GROUP_MEMBERSHIP_DENIED` 那条授权断言
+  //        就永远验不了 —— 而那恰恰是本切片最重要的 Gate（详见审核记录 45）。
+  //     ② 没有任何证据说明"一个合法的群必须 ≥3 人"，
+  //        所以 Gate 也不该写 memberCount >= 3，而应写"等于种子里声明的成员数"。
+  //   → 成员 = {anmoss, Lemy}；**非成员 = Azur冰弦**（第三个现有用户）。
+  //
+  // ## 3 条消息的构成（覆盖两个 sender 方向 + 一个媒体读取样本）
+  //   ① Lemy 文本（自己）② anmoss 文本（对方）③ anmoss **图片**（对方 + 私聊媒体）
+  //   审核记录 45 明确：写路径的关账核心只定 **text**；媒体因此作为**已种子化**的读取样本，
+  //   由 Gate 验证"群成员能读到群内图片"，而**不是**把 WO#2 的整条证明重做一遍。
+  //
+  // ## 为什么图片媒体要写实体文件
+  //   与公开媒体同源的理由（见上方 seedMedia 注释）：只写 DB 行会造成**悬空引用**
+  //   （库里说"有图"、盘上取不到），M4 联合恢复演练抓过这个真实缺陷。
+  //   私聊媒体落在 uploads/**private**/，且**没有静态入口** —— 必须经
+  //   `GET /api/media/:id` 走会话 + can_read_media 鉴权（这正是要验的那条链）。
+  const groupThread = 'aaaaaaaa-0001-4001-8001-00000000000a'
+  await put('message_threads', groupThread, {
+    kind: 'group',
+    title: '计算机学院 2023 级',
+    created_at: T0,
+  })
+  await put('thread_members', 'aaaaaaaa-0002-4002-8002-00000000000b', {
+    thread_id: groupThread,
+    user_id: U.anmoss,
+    joined_at: T0,
+  })
+  await put('thread_members', 'aaaaaaaa-0003-4003-8003-00000000000c', {
+    thread_id: groupThread,
+    user_id: U.lemy,
+    joined_at: T0,
+  })
+  await put('messages', 'aaaaaaaa-0004-4004-8004-00000000000d', {
+    thread_id: groupThread,
+    sender_id: U.lemy,
+    body: '有人在图书馆吗？帮我占个位子。',
+    created_at: T0,
+  })
+  await put('messages', 'aaaaaaaa-0005-4005-8005-00000000000e', {
+    thread_id: groupThread,
+    sender_id: U.anmoss,
+    body: '在的，四楼靠窗这边还有空位。',
+    created_at: T0,
+  })
+  await put('messages', 'aaaaaaaa-0006-4006-8006-00000000000f', {
+    thread_id: groupThread,
+    sender_id: U.anmoss,
+    body: '[图片]',
+    kind: 'image',
+    created_at: T0,
+  })
+  // 群内图片消息 ↔ 私聊媒体 的关联
+  //   media_scope='private' 必须与 media.scope 一致 —— 复合外键
+  //   (media_id, media_scope) → media(id, scope) 会在**数据库层**拦住跨 scope 引用，
+  //   所以种子也不能"顺手"把公开媒体挂到聊天消息上（结构上就插不进去）。
+  await put('message_media', 'aaaaaaaa-0007-4007-8007-000000000010', {
+    message_id: 'aaaaaaaa-0006-4006-8006-00000000000f',
+    media_id: M.m3,
+    media_scope: 'private',
+    position: 0,
   })
 
   // ---- 留言板（来源 message-board「仅双方可见」）----

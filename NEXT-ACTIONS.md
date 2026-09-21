@@ -287,7 +287,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 
 ## K. Round 258 后续（WO#9/10 登记）
 
-- [ ] K1 **WO#9A 群聊垂直切片**：`docs/m5/WO9A-PLAN-group-conversation-slice.md`（**已提交审核待批准**）
+- [x] K1 ✅ **WO#9A 已实施并提交关账**（审核 45 批准 + 收紧）`n      设备 Gate 8 项全 PASS + 身份 3/3；授权矩阵 12 项全 PASS（含非成员**零 mutation**）`n      改前 FAIL 已取得（5 项）；回归：WO#8/WO#7/WO#6/M5 server 全 PASS
       前提核查结论：**后端 schema 已支持 group**（`kind CHECK IN ('direct','group')`、成员表无上限无角色、
       `title` 可空）→ 无需迁移，主要是**造种子 + 前端接真实 API + Gate**
 - [ ] K2 **WO#9B AT 面板 / @所有人**：在 WO#9A 的真实群会话之上做

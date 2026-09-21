@@ -30,6 +30,17 @@ import { writeFileSync } from 'node:fs'
 const OUT = 'G:\\demo map\\tools\\tmp\\wo9a-gate.json'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/*
+  种子口径（必须与 server/src/seed.ts 一致）。
+  ⚠️ 这三个常量**必须声明在最前面**：它们既用于中间的 identity 断言、也用于末尾的判定，
+     而 `const` 不提升（会被 TDZ 拦住）—— 我第一版把它们放在末尾，
+     结果 identity 那段报 `Cannot access 'SEED_GROUP_ID' before initialization`。
+*/
+const SEED_GROUP_ID = 'aaaaaaaa-0001-4001-8001-00000000000a'
+const SEED_GROUP_TITLE = '计算机学院 2023 级'
+/** 种子里该群声明的成员数（2 人）。**不是** >=3 —— 见审核记录 45 对 seed 口径的裁定 */
+const SEED_MEMBER_COUNT = 2
+
 const report = { startedAt: new Date().toISOString(), steps: [] }
 const log = (k, v) => {
   report.steps.push({ at: new Date().toISOString(), k, v })
@@ -172,6 +183,94 @@ const pageState = await evaluate(`(() => {
 })()`)
 log('GROUP_PAGE_STATE', pageState)
 
+// ---------- 5) GROUP_MESSAGE_IDENTITY：渲染出的每条消息的 sender 归属 ----------
+console.log('')
+console.log('=== 5) GROUP_MESSAGE_IDENTITY：消息归属是否与 API 的 senderId 一致 ===')
+/*
+  群聊页**不显示发送者昵称**（审核记录 45：无证据 → 不实现），
+  所以"身份"在 UI 上只能通过**对齐方向**体现：
+    我自己发的 → 靠右；对方发的 → 靠左
+  证据强度（审核记录 45 的原话口径）：
+    GROUP_OWN_MESSAGE_RIGHT:  **CONFIRMED**（原版群聊 dump 里自己的消息确实在右侧：
+                              userAvatarView x=[989,1052]、内容 x=[905,975]）
+    GROUP_PEER_MESSAGE_LEFT:  **CROSS_CONTEXT_REUSE / NOT_DIRECTLY_OBSERVED**
+                              （沿用 direct 会话的强证据；原版该群里没有别人的消息可观察）
+  本条断言的是"**归属与 API 一致**"，而不是"排布方向等于原版" ——
+  后者按上面的口径只能算跨场景沿用。
+*/
+const identity = await evaluate(`(async () => {
+  /*
+    身份 oracle（审核纪律：**用 /api/auth/me，不要用 localStorage/CSS 自证**）：
+      · token 从应用自己的会话存储里取（key = 'campus.demo.session.v1'，来自 api/session.ts）
+      · "我是谁"由**服务端**回答（GET /api/auth/me），而不是由我猜或由 DOM 推断
+    ⚠️ 我第一版这里猜错了 localStorage 的 key（猜成 campus.session），于是 meId=null，
+       断言 FAIL —— 而 DOM 的对齐其实完全正确。**是我的断言取身份的方式错了**，
+       不是产品错了。教训与"用 CSS/class 自证身份"同源：身份必须来自权威 oracle。
+  */
+  const raw = localStorage.getItem('campus.demo.session.v1') || ''
+  let tok = null
+  try { tok = JSON.parse(raw).token || null } catch {}
+  if (!tok) return { meId: null, why: 'no token in localStorage', rows: [] }
+  /*
+    ⚠️ 必须用**绝对 origin**。在 Capacitor WebView 里用相对路径 fetch('/api/auth/me')
+    会打到 WebView 自己的本地服务器（https://localhost），返回 index.html 且**状态码还是 200** ——
+    于是 json() 解析出 {} ，meId 变成 null，而看着像"服务端没返回 id"。
+    这个坑本项目**踩过第二次**（第一次是 WO#5 的语音 E2E），故这里写死绝对地址，
+    并在注释里点名，避免第三次。
+
+    ⚠️ 另外：本段是**模板字符串内部**，注释里**不能出现反引号** ——
+    我第一版在这里写了带反引号的 fetch(...)，直接把模板字符串提前闭合，
+    导致整个脚本 SyntaxError（"missing ) after argument list"）。
+    这个坑在给审核发消息时踩过多次，现在也踩进了自己的 Gate 脚本里，故记在这里。
+  */
+  const API = 'https://8.148.156.146'
+  const meRes = await fetch(API + '/api/auth/me', { headers: { authorization: 'Bearer ' + tok } })
+  const me = await meRes.json().catch(() => ({}))
+  const rows = [...document.querySelectorAll('[data-message-id]')]
+  return {
+    meId: me.id || null,
+    meStatus: meRes.status,
+    rows: rows.map((r) => {
+      const b = r.querySelector('.bubble') || r
+      const cls = b.className || ''
+      return {
+        id: r.getAttribute('data-message-id'),
+        mine: /--me\\b/.test(cls),
+        peer: /--peer\\b/.test(cls),
+      }
+    }),
+  }
+})()`)
+log('IDENTITY_DOM', identity)
+
+// 用 API 的那份消息做对照（同一 token、同一接口）
+const apiMsgs = await (async () => {
+  const r = await evaluate(`(async () => {
+    const raw = localStorage.getItem('campus.demo.session.v1') || ''
+    let tok = null
+    try { tok = JSON.parse(raw).token || null } catch {}
+    if (!tok) return null
+    // 同样必须用绝对 origin（理由见上面 /api/auth/me 处的注释）
+    const res = await fetch('https://8.148.156.146/api/threads/${SEED_GROUP_ID}/messages', { headers: { authorization: 'Bearer ' + tok } })
+    return await res.json()
+  })()`)
+  return r && r.items ? r.items : []
+})()
+log('IDENTITY_API', apiMsgs.map((m) => ({ id: m.id, senderId: m.senderId, kind: m.kind })))
+
+const meId = identity && identity.meId
+const domById = new Map((identity && identity.rows ? identity.rows : []).map((r) => [r.id, r]))
+let identityChecked = 0
+let identityOk = 0
+for (const m of apiMsgs) {
+  const d = domById.get(m.id)
+  if (!d) continue
+  identityChecked++
+  const shouldBeMine = !!meId && m.senderId === meId
+  if (shouldBeMine ? d.mine && !d.peer : d.peer && !d.mine) identityOk++
+}
+log('IDENTITY_RESULT', { meId, checked: identityChecked, ok: identityOk })
+
 // ---------- 判定 ----------
 const routeId = (() => {
   const h = click.hash || ''
@@ -192,30 +291,47 @@ const apiGroup = groupItems[0]
     ② 群名文本 == API 给的 group title（**不是**只要非空）
     ③ 有返回控件
     ④ 有群头像 + 右侧入口（按 dump 证据：chatAvatar 与 rightIcon 都是 clickable）
+  注：④ 只断言**结构存在**；两者的**目的地**记为 NOT_EVALUATED（原版行为无证据）。
+  （SEED_* 常量已上移到文件顶部 —— 见那里的注释说明 TDZ 的坑。）
 */
 const onGroupRoute = /^#\/group/.test(pageState.hash || '')
 const titleMatchesApi = !!(apiGroup && pageState.title && pageState.title.trim() === String(apiGroup.title || '').trim())
 const headerOk = onGroupRoute && titleMatchesApi && pageState.hasBack && pageState.hasAvatar && pageState.hasRightEntry
 
 const v = {
-  GROUP_THREAD_IN_API: apiGroup && apiGroup.memberCount >= 3 ? 'PASS' : 'FAIL',
+  GROUP_THREAD_IN_API: apiGroup && apiGroup.memberCount === SEED_MEMBER_COUNT ? 'PASS' : 'FAIL',
   MESSAGE_LIST_SHOWS_GROUP: uiGroupRows.length > 0 ? 'PASS' : 'FAIL',
   ENTRY_REACHES_GROUP: routeId && UUID_RE.test(routeId) && apiGroup && routeId === apiGroup.id ? 'PASS' : 'FAIL',
   GROUP_MESSAGES_FROM_API: msgReq && msgReq.status === 200 ? 'PASS' : 'FAIL',
-  GROUP_MESSAGE_IDENTITY: 'NOT_EVALUATED', // 需要页面渲染出 sender 才有意义；改后重评
-  UI_HEADER_CONFORMANCE: headerOk ? 'PASS' : 'FAIL',
+  /*
+    GROUP_MESSAGE_IDENTITY：页面上每条消息的**归属**必须与 API 的 senderId 一致。
+    判定口径 = "自己发的靠右、对方靠左"，其中：
+      GROUP_OWN_MESSAGE_RIGHT: CONFIRMED（原版群聊 dump 直接观察到）
+      GROUP_PEER_MESSAGE_LEFT: CROSS_CONTEXT_REUSE / NOT_DIRECTLY_OBSERVED
+    因此本条 = **身份一致性** PASS，不等价于"排布方向已与原版对齐"。
+  */
+  GROUP_MESSAGE_IDENTITY:
+    identityChecked > 0 && identityOk === identityChecked ? 'PASS' : 'FAIL',
+  GROUP_OWN_MESSAGE_RIGHT: 'CONFIRMED',
+  GROUP_PEER_MESSAGE_LEFT: 'CROSS_CONTEXT_REUSE / NOT_DIRECTLY_OBSERVED',
+  UI_HEADER_STRUCTURE: pageState.hasBack && pageState.hasAvatar && pageState.hasRightEntry ? 'PASS' : 'FAIL',
+  UI_HEADER_TITLE_MATCHES_API: titleMatchesApi ? 'PASS' : 'FAIL',
+  GROUP_BACK_NAVIGATION: pageState.hasBack ? 'PASS' : 'FAIL',
+  GROUP_AVATAR_DESTINATION: 'NOT_EVALUATED',
+  GROUP_RIGHT_ACTION: 'NOT_EVALUATED',
   detail: {
+    onGroupRoute,
     apiGroupCount: groupItems.length,
+    seedGroupFound: !!(apiGroup && apiGroup.id === SEED_GROUP_ID),
+    seedTitleMatches: !!(apiGroup && apiGroup.title === SEED_GROUP_TITLE),
     uiGroupRowCount: uiGroupRows.length,
     clickedHash: click.hash,
     routeId,
     expectGroupId: apiGroup ? apiGroup.id : null,
     messagesReqStatus: msgReq ? msgReq.status : null,
     groupNetworkCount: netAfter.length,
-    onGroupRoute,
     pageTitle: pageState.title,
     apiTitle: apiGroup ? apiGroup.title : null,
-    titleMatchesApi,
     hasBack: pageState.hasBack,
     hasAvatar: pageState.hasAvatar,
     hasRightEntry: pageState.hasRightEntry,
@@ -226,7 +342,10 @@ const KEYS = [
   'MESSAGE_LIST_SHOWS_GROUP',
   'ENTRY_REACHES_GROUP',
   'GROUP_MESSAGES_FROM_API',
-  'UI_HEADER_CONFORMANCE',
+  'GROUP_MESSAGE_IDENTITY',
+  'UI_HEADER_STRUCTURE',
+  'UI_HEADER_TITLE_MATCHES_API',
+  'GROUP_BACK_NAVIGATION',
 ]
 v.WO9A_DEVICE_GATE = KEYS.every((k) => v[k] === 'PASS') ? 'PASS' : 'FAIL'
 log('VERDICT', v)

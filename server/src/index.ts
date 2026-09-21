@@ -1468,13 +1468,19 @@ export function buildServer(deps: ServerDeps) {
                 -- 为什么需要它：会话列表要显示一行"跟谁在聊"，而 direct 会话的 t.title 是 NULL
                 -- （实测：ffffffff-…-001 的 title=NULL、成员 2 人）。没有它这一行就没名字可显示，
                 -- 列表会退化成"未命名会话"—— 那既不好用，也不符合原版（原版显示对方昵称）。
-                -- 取法：本会话里**除我以外**的第一个成员；group 会话不取（用 t.title）。
-                (select u.display_name
-                   from thread_members tm3
-                   join users u on u.id = tm3.user_id
-                  where tm3.thread_id = t.id and tm3.user_id <> $1
-                  order by u.display_name
-                  limit 1) as peer_name
+                -- 取法：本会话里**除我以外**的第一个成员。
+                -- M5 WO#9A：**只对 kind='direct' 计算**。群聊里没有"对方"这个概念，
+                -- 群里返回 peerName 只是"某个别的成员"——那是**误导性字段**，将来一定会被误用
+                -- （例如把群聊行显示成某个成员的名字）。群聊行的显示名应取 t.title，
+                -- 因此这里用 case 在 SQL 层挡掉。
+                case when t.kind = 'direct' then (
+                  select u.display_name
+                    from thread_members tm3
+                    join users u on u.id = tm3.user_id
+                   where tm3.thread_id = t.id and tm3.user_id <> $1
+                   order by u.display_name
+                   limit 1
+                ) else null end as peer_name
            from message_threads t
            join thread_members me on me.thread_id = t.id and me.user_id = $1
            left join lateral (
@@ -1498,6 +1504,73 @@ export function buildServer(deps: ServerDeps) {
           peerName: row.peer_name,
           lastMessage: row.last_body === null ? null : { body: row.last_body, kind: row.last_kind, createdAt: row.last_at?.toISOString() ?? null },
         })),
+      }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  /*
+    M5 WO#9A：**单个会话的元数据**。
+
+    为什么需要它：群聊页的顶部要显示**群名**，而群名是服务端数据。
+    可选做法只有两种：
+      (a) 从「消息」列表跳过来时把 title 塞进路由 query —— ❌ 那样群名就变成**客户端提供的数据**，
+          刷新/深链会丢，而且客户端可以随便改；一个"页面标题"不该是不可信输入。
+      (b) 页面自己按 id 取权威元数据 —— ✅ 本接口。
+    返回体与列表里的单项**同构**（同一批字段），避免出现两套会话表示。
+
+    访问控制与 `/api/threads/:id/messages` **完全一致**：
+      · id 形状不合法 → 404 not_found
+      · 不是成员 / 不存在 / 未登录 → **一律 404**（沿用既有"刻意不区分"的设计：
+        不让调用方从状态码区分"不存在"与"无权查看"）
+      · 未登录 → 401（这一条与 messages 接口一致：先判会话再判形状）
+  */
+  app.get('/api/threads/:id', async (req, reply) => {
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(404)
+      return { error: 'not_found' }
+    }
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') return unauthorized(reply)
+    try {
+      const r = await db.pool.query<{
+        id: string
+        kind: string
+        title: string | null
+        member_count: string
+        peer_name: string | null
+      }>(
+        `select t.id, t.kind, t.title,
+                (select count(*) from thread_members tm2 where tm2.thread_id = t.id)::text as member_count,
+                case when t.kind = 'direct' then (
+                  select u.display_name
+                    from thread_members tm3
+                    join users u on u.id = tm3.user_id
+                   where tm3.thread_id = t.id and tm3.user_id <> $1
+                   order by u.display_name
+                   limit 1
+                ) else null end as peer_name
+           from message_threads t
+           join thread_members me on me.thread_id = t.id and me.user_id = $1
+          where t.id = $2`,
+        [s.user.userId, id],
+      )
+      if (r.rows.length === 0) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      const row = r.rows[0]!
+      return {
+        id: row.id,
+        kind: row.kind,
+        title: row.title,
+        memberCount: Number.parseInt(row.member_count, 10),
+        peerName: row.peer_name,
       }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)

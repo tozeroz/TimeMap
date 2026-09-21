@@ -154,6 +154,19 @@ export interface ApiMessage {
   media: ApiMediaRef[]
 }
 
+/**
+ * 取**单个会话的元数据**（M5 WO#9A）。
+ *
+ * 为什么不让调用方把 title 通过路由传进来：那样群名就变成**客户端提供的数据** ——
+ * 刷新/深链会丢，且客户端可以随便改。页面标题应当来自服务端（与列表同一批字段）。
+ * 访问控制与 `getThreadMessages` 完全一致（非成员/不存在一律 404，服务端刻意不区分）。
+ */
+export async function getThread(
+  threadId: string,
+): Promise<ApiResult<Omit<ApiThread, 'lastMessage'>>> {
+  return request<Omit<ApiThread, 'lastMessage'>>(`/api/threads/${encodeURIComponent(threadId)}`)
+}
+
 export async function getThreads(): Promise<ApiResult<{ items: ApiThread[] }>> {
   return request<{ items: ApiThread[] }>('/api/threads')
 }

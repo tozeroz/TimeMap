@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchMediaBlobUrl,
+  getThread,
   getThreadMessages,
   postThreadImageMessage,
   postThreadTextMessage,
@@ -199,7 +200,7 @@ function VoiceMessage({
  * M5 WO#2 追加：**发图**。发图是两步（上传 → 发消息），两条链路都可能独立失败，
  * 所以这里的状态机按"哪一步"分开报错，不合并成一句模糊的「网络错误」。
  */
-export function ChatScreen({ id }: { id: string }) {
+export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: 'direct' | 'group' }) {
   const [messages, setMessages] = useState<ApiMessage[]>([])
   /**
    * 状态机（M5 WO#8 扩展了两个**不触网**的状态）。
@@ -244,6 +245,32 @@ export function ChatScreen({ id }: { id: string }) {
       mounted.current = false
     }
   }, [])
+
+  /**
+   * 群聊页需要的**会话元数据**（M5 WO#9A）。
+   *
+   * 只有 group 变体要它：群聊顶部要显示**群名**，而群名是服务端数据。
+   * 刻意**不**从「消息」列表把 title 塞进路由 query —— 那样群名就成了客户端提供的输入，
+   * 刷新/深链会丢，且客户端可以随便改。页面自己按 id 取权威元数据（getThread）。
+   *
+   * 访问控制与消息接口一致：非成员/不存在一律 404 → 这里表现为 meta 为 null，
+   * 页面沿用与消息相同的"不存在或无权查看"文案（不额外泄漏"它存在但你没权限"）。
+   */
+  const [meta, setMeta] = useState<{ title: string | null; memberCount: number; kind: string } | null>(null)
+  useEffect(() => {
+    if (variant !== 'group') return
+    const shape = classifyThreadId(id)
+    if (shape !== 'uuid') return // 形状不合法时**不发请求**（与 loadMessages 同一道防线）
+    let alive = true
+    void (async () => {
+      const r = await getThread(id)
+      if (!alive || !mounted.current) return
+      if (r.ok) setMeta({ title: r.value.title, memberCount: r.value.memberCount, kind: r.value.kind })
+    })()
+    return () => {
+      alive = false
+    }
+  }, [id, variant])
 
   /**
    * 拉一次消息。抽成函数是因为**发完图要重拉**（否则新消息只在服务端，界面上看不见），
@@ -485,11 +512,44 @@ export function ChatScreen({ id }: { id: string }) {
               <IconBack size={22} />
             </button>
           }
-          center="会话"
+          center={
+            variant === 'group' ? (
+              /*
+                群聊头部（M5 WO#9A）——按**原版群聊页 dump** 的可见结构复刻：
+                  leftIcon(返回) / chatAvatar(群头像) / title(群名) / rightIcon(右侧入口)
+                  y=[42,154]，title 文案就是纯群名（**不含成员数**）
+                来源：docs/original-baseline/screens/original-chat/20260921-205407-04-chat-open.xml
+
+                ⚠️ 证据边界（审核记录 45 明确要求，不许编假行为）：
+                  原版里 chatAvatar 与 rightIcon **都是 clickable 节点**，但**目的地/行为没有任何证据**
+                  （右侧很可能就是本单已排除的群管理）。
+                  → 这里**复刻可见结构，但不给它们编造行为**：渲染为**不可交互**的静态元素，
+                    并把两者记为：
+                      GROUP_AVATAR_DESTINATION: NOT_EVALUATED
+                      GROUP_RIGHT_ACTION:      NOT_EVALUATED / OUT_OF_SCOPE
+                  宁可"看起来少一个可点反馈"，也不要造一个点了没反应或跳错地方的假入口。
+              */
+              <div className="grp__head" data-group-header>
+                <span className="grp__avatar" data-group-avatar aria-hidden>
+                  {(meta?.title ?? '').trim().slice(0, 1) || '群'}
+                </span>
+                <span className="grp__title" data-group-title>
+                  {meta ? meta.title?.trim() || '未命名群聊' : '加载中…'}
+                </span>
+                <span className="grp__right" data-group-right aria-hidden>
+                  <IconMore size={20} />
+                </span>
+              </div>
+            ) : (
+              '会话'
+            )
+          }
           right={
-            <button className="iconbtn" aria-label="更多">
-              <IconMore size={20} />
-            </button>
+            variant === 'group' ? undefined : (
+              <button className="iconbtn" aria-label="更多">
+                <IconMore size={20} />
+              </button>
+            )
           }
         />
       }

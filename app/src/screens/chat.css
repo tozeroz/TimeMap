@@ -271,3 +271,63 @@
     animation: none;
   }
 }
+
+/* ===========================================================================
+   M5 WO#9A：群聊头部（按原版群聊页 dump 的可见结构复刻）
+   =========================================================================== */
+
+/*
+  证据（只读 dump，可复现）：
+    docs/original-baseline/screens/original-chat/20260921-205407-04-chat-open.xml
+      toolbar y=[0,154]，topLayout y=[42,154]      → 头部高 112 设备 px = 64 CSS px
+      leftIcon    x=[0,126]    y=[42,154]          → 宽 126 设备 px = 72 CSS px
+      chatAvatar  x=[137,207]  y=[63,133]          → 80×70 设备 px = **46×40 CSS px**
+      title       x=[221,954]  y=[77,120]          → 文本左起 221 设备 px = **126 CSS px**
+      rightIcon   x=[954,1080] y=[42,154]          → 宽 126 设备 px = 72 CSS px
+  换算系数：dump 里 plusBtn 声明 32dp、实测 56 设备 px、dpr 1.75 → dp 与 CSS px 同值。
+
+  ⚠️ 只复刻**可见结构**。原版的 chatAvatar / rightIcon 虽是 clickable 节点，
+     但目的地**无证据**，因此渲染为**不可交互**元素（见 ChatScreen 内注释）：
+       GROUP_AVATAR_DESTINATION: NOT_EVALUATED
+       GROUP_RIGHT_ACTION:      NOT_EVALUATED / OUT_OF_SCOPE
+  ⚠️ 群名右侧**没有成员数** —— 实测 title 文案就是纯群名，所以这里也不加。
+*/
+.grp__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0; /* 允许标题在窄屏被截断，而不是把头部撑破 */
+}
+
+.grp__avatar {
+  /* 46×40 CSS px ← 80×70 设备 px */
+  width: 46px;
+  height: 40px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-surface-sunken);
+  color: var(--c-text-2);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.grp__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 500;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grp__right {
+  flex: 0 0 auto;
+  color: var(--c-text-2);
+  display: inline-flex;
+  align-items: center;
+}
