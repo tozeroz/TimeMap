@@ -123,12 +123,20 @@ if (-not $SkipServer) {
 
   Emit-Section 'MIGRATION/API/VERTICAL_SLICE/SYSTEMD/NGINX/RESOURCE（stage=M2）' 'BACKEND_RESULT' `
     (Run-RemoteArgs (Join-Path $repo 'scripts\m1\verify-backend.sh') 'M2')
-  # 认证组：M2 冻结的 handle+password 契约已被审核记录 08 判定 **supersede**（原版没有密码登录），
-  # 因此这个位置改为调用 M3 的 phone+OTP 脚本（当前产品真相）。
-  # 旧的 scripts/m2/verify-auth.sh 已删除 —— 保留一套"测已退休契约"的断言只会误导。
-  # 注意这段历史：M2 关于密码/scrypt 的事实仍保留在 docs/review-log/06 与 docs/m2/ 里（审计历史）。
-  Emit-Section 'AUTH（M3 起为 phone+OTP；M2 的 password 契约已 supersede）' 'AUTH_OTP_RESULT' `
-    (Run-Remote (Join-Path $repo 'scripts\m3\verify-auth-otp.sh'))
+  # ===========================================================================
+  # 历史断言组（**只在 M2 修订上可复现**）—— 审核记录 08 的 CLOSEOUT_REQUIRED：
+  #   "preserve/recover historical M2 auth Gate reproducibility
+  #    without reintroducing password auth into the current product"
+  #
+  # verify-auth.sh 测的是 M2 冻结的 handle+password 契约。当前产品已退休那条路径
+  # （POST /api/auth/login → 410），所以：
+  #   - 这份脚本必须保留：它是 M2 阶段的审计产物，删掉就等于抹掉历史 Gate 的可复现性
+  #   - 但它只能对 **M2 修订** 运行（复现步骤见 docs/m3/CLOSEOUT-SLICE0B.md）
+  #   - 拿它跑当前部署会（正确地）失败 —— 那说明产品已前进，不是缺陷
+  # 当前产品的认证断言在 M3 的 Gate 里（scripts/gates/m3/slice0b.ps1 → verify-auth-otp.sh）。
+  # ===========================================================================
+  Emit-Section 'AUTH（历史断言：M2 的 handle+password 契约，仅 M2 修订可复现）' 'AUTH_RESULT' `
+    (Run-Remote (Join-Path $repo 'scripts\m2\verify-auth.sh'))
   Emit-Section 'SEED) convergent + canonical' 'SEED_RESULT' `
     (Run-Remote (Join-Path $repo 'scripts\m2\verify-seed.sh'))
   Emit-Section 'BACKUP) pg_dump -Fc + pg_restore 到全新库（四项对比）' 'BACKUP_DRILL_RESULT' `
