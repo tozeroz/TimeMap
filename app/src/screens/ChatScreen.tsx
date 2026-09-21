@@ -3,6 +3,7 @@ import {
   fetchMediaBlobUrl,
   getThreadMessages,
   postThreadImageMessage,
+  postThreadTextMessage,
   postThreadVoiceMessage,
   relativeTime,
   uploadMedia,
@@ -11,6 +12,7 @@ import {
 import { getSession } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack, IconEmoji, IconImage, IconMic, IconMore, IconPlus } from '../components/icons'
+import { IconSend } from '../components/icons-send'
 import { RecorderError, formatDuration, startRecording, type RecorderSession } from '../native/recorder'
 import { goBack } from '../router'
 import './chat.css'
@@ -273,6 +275,49 @@ export function ChatScreen({ id }: { id: string }) {
   }
 
   // -------------------------------------------------------------------------
+  // M5 WO#7：**文字消息发送路径**
+  //
+  // 此前这里没有它：draft 只绑定到 input 的 value/onChange，**从未被发送** ——
+  // 会话页能打字却发不出去。服务端 /api/threads/:id/messages 一直支持纯文本
+  // （gate 长期有「T1 纯文本 → 201」断言），缺的只是客户端入口。
+  //
+  // ## 关于"发送按钮什么时候出现"——**诚实的边界**
+  //
+  // 原版证据（静态 APK，可采信）：composer 布局声明了 sendBtn（56dp×36dp，ic_send_msg_btn），
+  // **默认 visibility=GONE**；ImInputBoxBinding 类与 sendBtn 字段名都在 dex 里
+  // （→ SEND_BTN_BINDING_EXISTS: STRONGLY_SUPPORTED），
+  // 但**读不到方法体**，所以"什么条件切换 VISIBLE/GONE"**未取证**：
+  //     COMPOSER_EXACT_VISIBILITY_STATE: NOT_EVALUATED
+  //
+  // 因此下面这条规则是**我方设计选择**，不是"与原版一致"的结论：
+  //     非空 draft → 显示发送按钮；空 draft → 不显示
+  // 它只是"从 layout 默认 GONE + 功能需要"推出的**最保守**做法。
+  // ⚠️ 尤其**没有**实现"有文字就隐藏 表情/加号"—— 那部分更没有证据（审核记录 42 明确不猜）。
+  // ⚠️ 也**没有**实现回车发送（ENTER_TO_SEND: DO NOT IMPLEMENT）。
+  // -------------------------------------------------------------------------
+  async function onSendText() {
+    const text = draft.trim()
+    // 空输入不发：与"空输入时不显示发送按钮"是同一条规则的两道保险
+    if (text === '' || busy !== '') return
+
+    setSendErr('')
+    setBusy('posting')
+    try {
+      const sent = await postThreadTextMessage(id, text)
+      if (!sent.ok) {
+        // ⚠️ 失败时**不清空 draft**：让用户能直接重试，不静默丢内容
+        setSendErr(`发送失败：消息未发出（${sent.reason}）`)
+        return
+      }
+      // 只有成功才清空输入框
+      if (mounted.current) setDraft('')
+      await loadMessages()
+    } finally {
+      if (mounted.current) setBusy('')
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // M5 WO#5：语音消息（按下录音 → 松手发送）
   //
   // 几条刻意的边界：
@@ -482,6 +527,31 @@ export function ChatScreen({ id }: { id: string }) {
             <button className="iconbtn" aria-label="更多">
               <IconPlus size={22} />
             </button>
+            {/*
+              M5 WO#7：**发送按钮**（文字消息的唯一可达入口）
+
+              原版证据（静态、可采信）：composer 布局声明了 sendBtn，
+              尺寸 56dp×36dp，图标为**黑色胶囊 + 白色纸飞机**
+              （矢量资源 res/JA.xml 的 pathData 已逐字抄进 IconSend 的注释里）。
+              这里按 56×36 **CSS px** 复刻（本设备 dp→CSS px 系数实测为 1：dump 里 plusBtn 声明
+              32dp、实测 56 设备 px、dpr 1.75 → 32dp = 32 CSS px，故 dp 与 CSS px 同值）。
+
+              ⚠️ **显示时机是我方设计选择**（`COMPOSER_EXACT_VISIBILITY_STATE: NOT_EVALUATED`）：
+                 原版 sendBtn 默认 GONE 是**布局默认值**，不等于"由 draft 是否为空驱动"。
+                 这里选"非空 draft 才显示"作为最保守做法，**不声称**与原版一致。
+              ⚠️ 也**不**实现"有文字时隐藏表情/加号"（无证据，审核记录 42 明确不猜）。
+            */}
+            {draft.trim() !== '' && (
+              <button
+                className="chatbar__send"
+                aria-label="发送"
+                data-testid="chatbar-send"
+                disabled={busy !== ''}
+                onClick={() => void onSendText()}
+              >
+                <IconSend size={20} />
+              </button>
+            )}
           </div>
         </div>
       }

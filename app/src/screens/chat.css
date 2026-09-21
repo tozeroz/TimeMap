@@ -206,6 +206,49 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ===========================================================================
+   M5 WO#7：发送按钮（文字消息入口）
+   =========================================================================== */
+
+/*
+  几何与配色按**原版矢量资源**复刻（不是估的）：
+    证据：drawable/ic_send_msg_btn → 混淆路径 res/JA.xml
+          <vector width="56dp" height="36dp" viewportWidth="56" viewportHeight="36">
+            path1 fillColor=#ff000000  → 黑色胶囊底（圆角 18 = 全高一半 → 完美胶囊）
+            path2 fillColor=#ffffffff  → 白色纸飞机
+  尺寸换算：本设备 dump 里 plusBtn 声明 32dp、实测 56 设备 px、dpr 1.75
+           → 32dp = 32 CSS px，即 **dp 与 CSS px 同值**，故直接取 56×36 CSS px。
+  圆角：18px = 36/2 → 胶囊形（由 IconSend 内部的 path1 画出来，这里只需给按钮留出同样尺寸）
+
+  ⚠️ 只做"尺寸/形状/配色"的复刻；
+     按钮**何时出现**属我方设计选择（原版可见性状态机未取证，见 ChatScreen 注释与 WO#7 提案）。
+*/
+.chatbar__send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 原版 56dp × 36dp */
+  width: 56px;
+  height: 36px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  /* 形状由 IconSend 的 path1 画出（黑色胶囊），故此处背景透明、不重复画圆角 */
+  background: transparent;
+  /* currentColor 供 IconSend 的 path1 使用 → 原版是纯黑 #000000 */
+  color: #000000;
+  cursor: pointer;
+}
+
+.chatbar__send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chatbar__send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
 /* 录音中：按钮变醒目，让"正在录"这件事有明确视觉反馈 */
 .chatbar__mic--rec {
   color: var(--c-danger, #e2374a);

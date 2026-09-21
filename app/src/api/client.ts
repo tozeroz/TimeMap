@@ -344,6 +344,28 @@ export async function postThreadVoiceMessage(
   })
 }
 
+/**
+ * 发一条**纯文本**消息（M5 WO#7）。
+ *
+ * 为什么此前没有它：WO#2 做了图片发送、WO#5 做了语音发送，
+ * 而"文字发送"这条路径**从未被任何工作单覆盖** —— 服务端 API 一直支持
+ * （gate 里长期有 `T1 纯文本 → 201` 断言），但**客户端 UI 没有任何入口**，
+ * 于是会话页能打字却发不出去。这是"垂直 slice 都绿、横向产品能力缺一块"的盲区，
+ * 审核记录 42 为此建议新增 `COMPOSER_CAPABILITY_COVERAGE` 检查。
+ *
+ * 边界（刻意）：
+ *   · **只发文本**：不带 mediaId（服务端对 `text + mediaId` 会 400，这正是既有契约）
+ *   · **不做回车发送**：审核记录 42 明确 `ENTER_TO_SEND: DO NOT IMPLEMENT`
+ *     （移动端 Enter 可能是换行 / IME action / 发送，原版行为未取证）
+ *   · body 由调用方 trim 后传入；这里不替调用方决定"空串怎么办"
+ */
+export async function postThreadTextMessage(
+  threadId: string,
+  body: string,
+): Promise<ApiResult<ApiSentMessage>> {
+  return postThreadMessage(threadId, { body, kind: 'text' })
+}
+
 // ===========================================================================
 // M5 Slice 1：留言板（对应原版 message-board）
 //
