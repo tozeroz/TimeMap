@@ -14,6 +14,7 @@ import {
 import { DEFAULT_CORS_ORIGINS, loadConfig } from './config.ts'
 import { createDb, type Db } from './db.ts'
 import { createDevSink, type DevSink } from './devSink.ts'
+import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts'
 
 /**
  * Campus 后端（M3 Slice 0B）。
@@ -213,6 +214,25 @@ export function buildServer(deps: ServerDeps) {
       reason: st.state,
       detail: st.lastError ?? (err as Error).message,
       migrations: { applied: st.applied, expected: st.expected },
+    }
+  }
+
+  /**
+   * 备份窗口（media mutation barrier）把写操作挡在门外时的统一响应。
+   *
+   * 刻意**不是 500**：这不是"出错了"，而是"现在不行、稍后重试就行"——
+   * 客户端（以及 Gate 的竞争条件测试）据此能区分"屏障生效"与"后端真的坏了"。
+   * Retry-After 取 5 秒，与 mutationBarrier 里的 lock_timeout 同一量级。
+   */
+  function backupBarrierUnavailable(reply: {
+    code: (n: number) => unknown
+    header: (k: string, v: string) => unknown
+  }) {
+    reply.code(503)
+    reply.header('retry-after', '5')
+    return {
+      error: 'backup_in_progress',
+      message: '媒体写入正处在备份窗口内，请稍后重试',
     }
   }
 
