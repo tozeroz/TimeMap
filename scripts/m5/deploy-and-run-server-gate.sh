@@ -40,7 +40,26 @@ bash 'G:\demo map\scripts\m5\check-server-artifact-provenance.sh' || {
 }
 
 echo
-echo "=== 3) 跑门禁并打印账本与结果 ==="
+echo "=== 3) ⭐ CORS 客户端方法契约（审核记录 55 的 X1）==="
+# 为什么放在**服务器侧**这条流程里：
+#   `check-cors-contract.sh` 必须发**真实预检**（OPTIONS + Origin + ACRM + ACRH），
+#   也就是必须在**能访问后端**的地方跑。它同时需要**客户端源码**来判断
+#   "客户端到底会调用哪些方法"（审核 55：不变量必须是"客户端实际调用的"，
+#    而不是"所有已注册路由的"）。
+# → 所以这里两件事：先把 client.ts 传成检查器约定的输入，再跑检查。
+scp -i "$KEY" -o BatchMode=yes 'G:\demo map\app\src\api\client.ts' "$HOST:/tmp/client-methods-input.txt" >/dev/null
+scp -i "$KEY" -o BatchMode=yes 'G:\demo map\scripts\m5\check-cors-contract.sh' "$HOST:/tmp/check-cors-contract.sh" >/dev/null
+CORS_OUT="$(ssh -i "$KEY" -o BatchMode=yes "$HOST" 'bash /tmp/check-cors-contract.sh')"
+printf '%s\n' "$CORS_OUT" | grep -E '客户端实际使用|method |PASS|FAIL|CORS_CLIENT_METHOD_COVERAGE' | sed 's/^/  /'
+if printf '%s' "$CORS_OUT" | grep -q 'CORS_CLIENT_METHOD_COVERAGE: PASS'; then
+  echo "  ✓ 客户端实际调用的每个 method 都通过真实预检契约"
+else
+  echo "  **FAIL** CORS 客户端方法契约不成立 —— 客户端会以「Failed to fetch」失败"
+  exit 1
+fi
+
+echo
+echo "=== 4) 跑门禁并打印账本与结果 ==="
 # ⚠️ 调用契约（这里原本是错的，记下来）：
 #   gate-m5.sh 的第一个参数是**脚本目录**（默认 /tmp/m5），**不是输出文件**。
 #   原实现写的是 `bash /tmp/gate-m5.sh /tmp/gate-current.txt` ——

@@ -7,7 +7,21 @@
 #   2. 让"当前状态"与"种子基线"不一致，后续排查时误导判断
 # 已发生的事实：前端子代理报告"服务端 DB 被并发写者重置过（users=11）"，
 # 而隔离验证当时显示 SEED_USERS=3 —— 差距需要解释。
+#
+# ⚠️ 环境守卫（2026-09-22 加）：本脚本**只能在服务器上跑**。
+#   原因：它依赖 `/srv/campus/.db_password` 与 `psql`。
+#   为什么必须显式挡：我把它误放进"本地检查聚合器"后，在 Windows 上跑它，
+#   输出的是满屏 `cat: /srv/campus/.db_password: No such file` + `psql: command not found` ——
+#   **失败原因与它要验证的性质毫无关系**。
+#   一个"因为错误的原因而红"的检查会训练人忽略红色，所以这里宁可**早退 + 说清**。
 set -u
+if [ ! -f /srv/campus/.db_password ] || ! command -v psql >/dev/null 2>&1; then
+  echo "ABORT 本脚本只能在服务器上运行（需要 /srv/campus/.db_password 与 psql）。" >&2
+  echo "      当前环境缺：$([ ! -f /srv/campus/.db_password ] && echo '/srv/campus/.db_password ')$(command -v psql >/dev/null 2>&1 || echo 'psql')" >&2
+  echo "      请先 scp 到服务器再执行：bash /tmp/check-baseline-integrity.sh" >&2
+  echo "      本地聚合器已把它移出（见 scripts/m5/check-all-local.sh 的文件头）。" >&2
+  exit 3
+fi
 PSQL() { PGPASSWORD="$(cat /srv/campus/.db_password)" psql -h 127.0.0.1 -U campus -d campus -Atc "$1" 2>&1; }
 
 echo "=== 1) 种子基线核对（canonical seed 里的账号应当都在）==="
