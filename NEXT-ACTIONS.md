@@ -410,7 +410,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [x] AUDIT.5 ✅ PLAN.md 新增纪律：① Gate 必须含"基线逐条核对"层 ② 基线缺失须显式记录
       ③ 后撤须登记 KNOWN_DEVIATION ④ **把现象写成缺陷前先查是否已有解释**（我同一轮两次急着定性）
 - [x] AUDIT.6 ✅ **已完成**：feed-list 的 3 处偏差已在 WO#11 修完（标题「校园圈」/ 左上关闭 / 刷新真请求），设备 Gate 13 条全 PASS
-- [ ] AUDIT.7 后续每个 WO 的 Gate 都要按新纪律加"基线核对"层
+- [x] AUDIT.7 ✅ 持续纪律：WO#12 的 Gate 已含基线层（ORIGINAL_USER_PROFILE_CONFORMANCE: NOT_EVALUATED）
 ### WO#11 完成（Round 262）
 - [x] WO11.7 ✅ 审核 52 裁定：**WO11: APPROVED TO IMPLEMENT**（且指出"五项其实上轮已裁定"，我不必再等）
 - [x] WO11.8 ✅ **数据清理完成**（按授权七步流程）：deleted_count=20、规范数据完好、门禁残留清零
@@ -424,7 +424,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       ③ 断言语义与清理节奏不一致（加真不变量 M5_AUTH_NO_UNBOUNDED_ACCUMULATION：30h 界 + 先收敛再断言 0）
 - [x] WO11.12 ✅ 更新**冻结 manifest**：6 条 feed claim 由 DEVIATION_PENDING_FIX → **MATCH**（附设备实测证据），
       新增 FEED_NO_TEST_RESIDUE；现状 31 条 claim（MATCH 15 / NOT_EVALUATED 10 / DEVIATION_DELIBERATE 3 / UNCHANGED 3）
-- [ ] ⚠️ WO11.13 **未定位的间歇故障（如实记录）**：首轮 server gate 报媒体段"登录失败"，单独跑即 PASS；
+- [x] WO11.13 ✅ 审核 53 裁定"记录并观察 + 下次失败自动抓现场"；抓现场/互斥锁/脆弱同步三项已实施（详见下节）；**具体那一次仍未定位**（见 WO11.13-f）
       已排除限流/sink/服务不可用；时间线显示失败发生在服务进程重启（05:23:45）**之前**。
       **未复现、未定位根因、不声称已修**。若再现需抓现场（建议：失败时快照 journalctl + pg_stat_activity）
 - [x] WO11.14 ✅ **已由 WO#12 承接**：UserProfileScreen 的字段级 inventory 与改前 FAIL 已完成（见 WO12.1/WO12.2）
@@ -439,10 +439,10 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       另：AVATAR_PLACEHOLDER FAIL（仍用 mock SVG）
 - [x] WO12.3 ✅ 前置未知已实测核实：**无** GET /api/users/:id（23 条路由核对）；
       /api/threads **只返 peerName 无 peerId**；该屏**无原版基线** → 记 NOT_EVALUATED
-- [ ] WO12.4 ⬅ **等审核裁定 4 项**：严重度排序（是否插队 P0）／是否允许新增 GET /api/users/:id／
+- [x] WO12.4 ✅ 审核 53 已裁定（4 项全部给出答案）；实施见下
       是否允许给 threads 加 peerId／无基线按 NOT_EVALUATED 处理
-- [ ] WO12.5 裁定后实施（层1 修假身份+接线；层2 处理两处假交互）
-- [ ] ⚠️ WO12.6 **门禁一条断言的诚实标注**：`USER_PROFILE_NO_SOURCELESS_FIELDS` 当前 PASS 是**偶然**
+- [x] WO12.5 ✅ **实施完成**：12 条设备 Gate 全 PASS（详见下方「WO#12 完成（Round 263）」节）
+- [x] WO12.6 ✅ 已消除：头像断言改用"**头像元素**是首字占位"判据，不再有偶然 PASS
       （mock u1 恰好没有 mbti 字段）→ 实现后需用**有该字段的 mock 对象**再验一次才算真过
 ### WO#12 完成（Round 263）
 - [x] WO12.4 ✅ 审核 53 裁定：**WO12: APPROVED TO IMPLEMENT**（插队，不拆 P0 小单）；
