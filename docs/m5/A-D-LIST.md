@@ -55,7 +55,7 @@ observed: ~~原版底部是 4 项~~ → **错误**：看 bounds 才知「校园�
 | 项数 / 宽 / pitch / 首末边界 | **FIXED** | 6 项、70 / 112（设备 px）逐项与原版吻合；CSS 40px + gap 24px，设备实测确认 |
 | 底色（C5） | **FIXED** | 原版无底色（像素采样圆内点亦纯白）；我们原有灰色圆片 → 已改为 transparent |
 | 字号（C6） | **FIXED** | 16px → 24px（据实心字形墨迹外接的**直接测量**；估计值，残余不确定已标注） |
-| **字符与形态（C4）** | **已收口（审核记录 30）：`C4_EMOJI_RENDERING_KIND: CONFIRMED — ImageView / image-based`；`C4_EXACT_6_ASSETS: NOT_CAPTURED`（停止投入）** | 已按审核记录 30 收口为**三层结论**：`C4_EMOJI_ASSET_SYSTEM: CONFIRMED`（154 个随包 webp）、`C4_BOARD_ROW_PACKAGED_DRAWABLE_BINDING: STRONGLY_SUPPORTED / DIRECT_BINDING NOT CAPTURED`、`C4_EXACT_6_ASSETS: NOT_CAPTURED`（停止投入）。'
+| **字符与形态（C4）** | **体系差异 CONFIRMED（审核记录 30）；具体修法 FROZEN（审核记录 32：`WO4_STATUS: DEFERRED_BY_MISSING_BINDING_EVIDENCE`）** | 已按审核记录 30 收口为**三层结论**：`C4_EMOJI_ASSET_SYSTEM: CONFIRMED`（154 个随包 webp）、`C4_BOARD_ROW_PACKAGED_DRAWABLE_BINDING: STRONGLY_SUPPORTED / DIRECT_BINDING NOT CAPTURED`、`C4_EXACT_6_ASSETS: NOT_CAPTURED`（停止投入）。'
   （历史：曾据 id 名判"是图片" → 又因像素读数降为 UNRESOLVED → 本轮用 aapt2 资源表 + 运行时 ImageView 确证。见 `docs/m5/C4-FORENSICS-RESULT.md`、`docs/m5/C4-EVIDENCE-CONFLICT.md`。） |
 
 ### 4. 留言板下拉刷新（C3） — **BLOCKED_BY_POLICY**
@@ -93,7 +93,7 @@ C2 原判: 缺留言总数
 撤销:   C1 顶部按钮、C2 留言总数（被只读观察推翻）
 待办:   「校园广场」**页面**的交互模型（点单图去哪 / 标签可点性 / 是否分页）——需只读观察
 待办:   语音消息（真实功能级缺口；我方为"类型预留+界面占位+明确标注"，见 AUDIT 附五）
-待办:   C4 的结构层改动（WO#4，需先报计划再动代码）
+待办:   C4 **具体修法冻结**（审核记录 32 驳回 WO#4：缺 token↔drawable 映射；且"DOM 必须是图片"是把实现细节当产品 contract）
 ```
 
 ## 三、维护规则
