@@ -24,17 +24,29 @@ scp -i "$KEY" -o BatchMode=yes "$LOCAL_GATE" "$HOST:/tmp/gate-m5.sh" >/dev/null
 echo "  已上传 scripts/gates/m5/gate-server.sh → /tmp/gate-m5.sh"
 
 echo
-echo "=== 2) 本地与远端 SHA256 必须一致（证明跑的就是我改的那份）==="
-LOCAL_SHA=$(sha256sum "$LOCAL_GATE" 2>/dev/null | cut -d' ' -f1 || certutil -hashfile "$LOCAL_GATE" SHA256 | sed -n 2p | tr -d ' \r')
-echo "  local  : $LOCAL_SHA"
-REMOTE_SHA=$(ssh -i "$KEY" -o BatchMode=yes "$HOST" "sha256sum /tmp/gate-m5.sh | cut -d' ' -f1")
-echo "  remote : $REMOTE_SHA"
-if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
-  echo "  FAIL 哈希不一致 —— 远端不是我要跑的那份，终止"
+echo "=== 2) SERVER_ARTIFACT_PROVENANCE（委托给权威检查器）==="
+# ⚠️ 这里**不再**自己算哈希（原实现用 `sha256sum | cut -d' ' -f1`，
+#    在 Git Bash 下会因 coreutils 对文件名转义而带上前导反斜杠 →
+#    与远端值比较时**假 FAIL**（或更糟：两边同样被转义时**假 PASS**）；
+#    它的回退分支还混用了 certutil 的输出格式，更脆）。
+#    现在统一交给 scripts/m5/check-server-artifact-provenance.sh：
+#      · 哈希归一化（awk + tr -cd 0-9a-f + 长度校验，避免转义问题）
+#      · 同时核对 **API bundle**（原实现只看 gate 脚本）
+#      · 核对 **服务进程启动时间 vs bundle mtime**（防"文件新了但进程没重启"）
+#      · 顺带打印迁移账本
+bash 'G:\demo map\scripts\m5\check-server-artifact-provenance.sh' || {
+  echo "  FAIL provenance 不成立 —— **不得引用任何服务端 Gate 结论**"
   exit 1
-fi
-echo "  PASS 哈希一致"
+}
 
 echo
 echo "=== 3) 跑门禁并打印账本与结果 ==="
-ssh -i "$KEY" -o BatchMode=yes "$HOST" "bash /tmp/gate-m5.sh /tmp/gate-current.txt >/dev/null 2>&1; echo EXIT=\$?; grep -E 'M5_OVERALL|WO#9A|WO#7|WO#6|GROUP_|REAL_EXIT|M5_SERVER_GATE_RESULT|PERSISTENT|STAGE|REGRESSION' /tmp/gate-current.txt | head -30"
+# ⚠️ 调用契约（这里原本是错的，记下来）：
+#   gate-m5.sh 的第一个参数是**脚本目录**（默认 /tmp/m5），**不是输出文件**。
+#   原实现写的是 `bash /tmp/gate-m5.sh /tmp/gate-current.txt` ——
+#   把输出文件当成脚本目录传进去 → 脚本内部找不到聚合目标而退出（实测 EXIT=2，
+#   且输出文件根本没被创建，于是后面的 grep 报 "No such file or directory"）。
+#   → 正确入口是包装器 /tmp/run-gate.sh <输出文件>：它捕获 gate 输出并打印 **REAL_EXIT**。
+#   （这个 bug 之所以一直没被发现，是因为我平时走的是另一条调用路径 ——
+#     这正是"包装脚本本身没被端到端跑过"的典型后果。）
+ssh -i "$KEY" -o BatchMode=yes "$HOST" "bash /tmp/run-gate.sh /tmp/gate-current.txt; echo '--- 账本 ---'; grep -a -E 'WO[0-9]|CLOSED|NEXT' /tmp/gate-current.txt | tail -6"
