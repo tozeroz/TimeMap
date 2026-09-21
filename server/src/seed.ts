@@ -172,26 +172,59 @@ export async function runSeed(client: PoolClient): Promise<SeedResult> {
     })
   }
 
-  // ---- media：逻辑 key 而不是完整 URL（未来切对象存储时 DB 不用改）----
-  await put('media', M.m1, {
+  // ---- media + post_media：逻辑 key 而不是完整 URL（未来切对象存储时 DB 不用改）----
+  //
+  // M4 起 media 是**带 scope 的一等资源**（迁移 006）：
+  //   - scope='public'：动态图片，Nginx 静态下发
+  //   - 归属通过 post_media 关联（**复合外键钉死 scope**，跨 scope 引用结构上不可能）
+  // sha256 用固定的 64 位十六进制值（seed 是确定性的；真实上传时由服务端计算）。
+  const mediaRows: Array<[string, string, string, string, number, number, number]> = [
+    // [id, ownerUserId, storageKey, sha256, bytes, width, height]
+    [
+      M.m1,
+      U.anmoss,
+      '2026/09/seed-anmoss-1.webp',
+      'a1'.repeat(32),
+      184320,
+      1080,
+      1440,
+    ],
+    [
+      M.m2,
+      U.lemy,
+      '2026/09/seed-lemy-1.webp',
+      'b2'.repeat(32),
+      210944,
+      1080,
+      1350,
+    ],
+  ]
+  for (const [id, ownerId, key, sha, bytes, w, h] of mediaRows) {
+    await put('media', id, {
+      owner_user_id: ownerId,
+      scope: 'public',
+      storage_key: key,
+      mime: 'image/webp',
+      bytes,
+      width: w,
+      height: h,
+      sha256: sha,
+      upload_request_id: id, // seed 用同一个固定 id 作幂等键（确定性）
+      created_at: T0,
+    })
+  }
+  // 关联到帖子（public → 只能进 post_media）
+  await put('post_media', 'eeeeeeee-0001-4001-8001-000000000001', {
     post_id: P.p1,
-    storage_key: '2026/09/seed-anmoss-1.webp',
-    mime: 'image/webp',
-    bytes: 184320,
-    width: 1080,
-    height: 1440,
+    media_id: M.m1,
+    media_scope: 'public',
     position: 0,
-    created_at: T0,
   })
-  await put('media', M.m2, {
+  await put('post_media', 'eeeeeeee-0002-4002-8002-000000000002', {
     post_id: P.p2,
-    storage_key: '2026/09/seed-lemy-1.webp',
-    mime: 'image/webp',
-    bytes: 210944,
-    width: 1080,
-    height: 1350,
+    media_id: M.m2,
+    media_scope: 'public',
     position: 0,
-    created_at: T0,
   })
 
   // ---- comments ----
@@ -344,14 +377,26 @@ function hashSpecs(): HashSpec[] {
       ids: [M.m1, M.m2],
       cols: [
         'id::text',
-        'post_id::text',
+        'owner_user_id::text',
+        'scope',
         'storage_key',
         'mime',
         'bytes::text',
         "coalesce(width::text,'')",
         "coalesce(height::text,'')",
-        'position::text',
+        'sha256',
+        'upload_request_id::text',
         ts('created_at'),
+      ],
+    },
+    {
+      table: 'post_media',
+      ids: ['eeeeeeee-0001-4001-8001-000000000001', 'eeeeeeee-0002-4002-8002-000000000002'],
+      cols: [
+        'post_id::text',
+        'media_id::text',
+        'media_scope',
+        'position::text',
       ],
     },
     {
@@ -477,6 +522,7 @@ export async function resetSeed(client: PoolClient): Promise<void> {
   await del('message_threads', ['ffffffff-0001-4001-8001-000000000001'])
   await del('likes', ['eeeeeeee-0001-4001-8001-000000000001', 'eeeeeeee-0002-4002-8002-000000000002'])
   await del('comments', ['dddddddd-0001-4001-8001-000000000001', 'dddddddd-0002-4001-8001-000000000002'])
+  await del('post_media', ['eeeeeeee-0001-4001-8001-000000000001', 'eeeeeeee-0002-4002-8002-000000000002'])
   await del('media', [M.m1, M.m2])
   await del('posts', [P.p1, P.p2, P.p3, P.p4])
   await del('places', ['cccccccc-0001-4001-8001-000000000001', 'cccccccc-0002-4002-8002-000000000002'])
