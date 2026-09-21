@@ -35,3 +35,40 @@ WO#2 前端已提交（2da713f）；跨层常量检查 C1 覆盖缺口**已关�
   WO2_OVERALL:  IN_PROGRESS（等前端真机证据；不能只凭"代码写了"就记完成）
   M5 服务器侧 Gate: PASS（全键）
   C1 跨层缺口: 已关闭
+
+---
+
+## 补充更正（2026-09-21 18:57）：按审核记录 25 的要求**永久分列两层证据**
+
+本文档上面写的是笼统的"真机 PASS"。**这违反了审核记录 25 的明确要求**：
+
+> 这份证据可以证明：**WebView 已经获得 File 对象之后的完整产品链路**。
+> 所以不是 mock，也不是无效测试。**但不能把它写成"真实用户完整选图 E2E"。**
+> 建议永久分成：
+> ```
+> FILE_INPUT_POST_SELECTION_E2E:  PASS
+> NATIVE_FILE_PICKER_INTERACTION: NOT_YET_VERIFIED
+> ```
+> 这样以后不会有人把两层混在一起。
+
+**因此本文档的说法更正为**：
+
+```
+FILE_INPUT_POST_SELECTION_E2E:  PASS
+  证据: DOM.setFileInputFiles 把文件交给 input（走浏览器自己的 file-chooser 管线），
+        之后的 上传 → 发消息 → 重拉列表 → blob 渲染 → 重载后仍在 全链路真实、无桩。
+        真机断言: 上传 201 / 发消息 201 / 图片 naturalWidth>0 / 气泡数 3→4 / 重载后仍在。
+        失败路径: 非图片 → 界面红字「发送失败」、气泡数不变（无幽灵消息）。
+
+NATIVE_FILE_PICKER_INTERACTION: NOT_YET_VERIFIED
+  缺口: 未证明"用户点击选图入口 → Android 系统 picker 真的出现 → 在 picker 里选了一张图
+        → WebView 真的收到 File"。
+  状态: WO2_FINAL_CLOSE = HOLD（审核记录 25）；正在由子代理自动化这一步
+        （脚本 scripts/m5/device-native-picker-check.mjs，用 uiautomator + adb input
+         驱动真实系统选择器，不引入人工）。
+```
+
+**为什么这个更正重要**：笼统写"真机 PASS"会让后来者（包括我自己）以为
+"用户从真实入口选图"这条路径已被验证过 —— 而它没有。
+这与本项目反复出现的主题一致：**措辞的精确性就是证据的精确性**
+（前面已有两例：把 pitch 写成 gap、把"功能闭环"写成"页面一致性已收敛"）。
