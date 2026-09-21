@@ -580,17 +580,17 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       `field → current source → /api/auth/me 是否已有权威来源 → reload/relogin 语义 →
        ProfileEdit 修改后是否同步 → 是否仅 mock 呈现 → wire / placeholder / hide`
       已知起点：`app/src/screens/MeScreen.tsx` 用 `me.name` / `me.avatar`（mock）
-- [ ] WO14.2 Gate 至少含：
+- [x] WO14.2 ✅ Gate 清单已写进计划（含审核 55 指定的 5 条 + ME_NO_FALLBACK_ON_UNAVAILABLE）
       `ME_IDENTITY_FROM_SESSION` ／ `ME_DISPLAY_NAME_CONSISTENCY` ／
       `PROFILE_EDIT_TO_ME_CONTINUITY`（**关键**：改完昵称回「我的」必须显示新值）／
       `ME_AVATAR_PLACEHOLDER` ／ `NO_MOCK_SELF_IDENTITY`
-- [ ] WO14.3 头像：无权威来源就继续**首字 placeholder**，**不加列**（与 WO#12/WO#13 同一冻结）
-- [ ] WO14.4 理由（审核 55）：MeScreen 是**主导航真实 surface**，身份却来自 mock；
+- [x] WO14.3 ✅ 计划已冻结：头像首字 placeholder、**不加列**
+- [x] WO14.4 ✅ 理由已记录；实测比预判更直接：**同屏两个身份**
       WO#13 已让它通往真实 ProfileEdit → 若不同步，会产生**新的跨页面 identity inconsistency**
-- [ ] WO14.5 做完 WO14 再做 **MapScreen**
+- [ ] WO14.5 做完 WO14 再做 **MapScreen**（审核 55 排序）
 
 ### ⭐ Cross-cutting（审核 55 指定，独立跟踪）
-- [ ] X1 **`CORS_CLIENT_METHOD_COVERAGE` Gate**（⭐ 修正我原先的过强提议）：
+- [x] X1 ✅ 已完成（见下方 X1/X2/X3 节）：按审核 55 的修正后不变量实现并按客户端实际调用验证
       我提议的是"每个已注册方法都必须在 allow-methods 里" —— 审核 55 判为**过强**：
       将来可能有"server route exists but intentionally not callable from WebView/browser"，
       强迫入表会**无意扩大暴露面**。
@@ -603,11 +603,11 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       **allow-methods 含所请求方法** ／ **allow-headers 含所请求的非简单头**。
       → 以后新增 PUT/PATCH/DELETE/带自定义头的 POST，只要客户端真会调用就自动进 Gate。
       现有 `check-cors-methods.sh` 是**近似版**（registered ⊆ allow-methods），需按上述改写。
-- [ ] X2 **把破坏性自愈测试从常规回归拆出**（审核 55 指出比"240s 够不够"更重要）：
+- [x] X2 ✅ 已完成（见下节）：拆出 DESTRUCTIVE_SELF_HEAL_GATE，常规回归不再重启后端
       常规 M5 regression **不应该每次都重启正在服务的 backend**、制造接近 3 分钟的不可用窗口。
       → 拆为 **`DESTRUCTIVE_SELF_HEAL_GATE`**，要求显式 maintenance / exclusive execution；
         普通 server regression 尽量**不** restart 服务。
-- [ ] X3 **`BACKEND_COLD_START / RESOURCE_PRESSURE INVESTIGATION`**（独立运维案；**不要**先调参数）：
+- [x] X3 ✅ 已完成（见下节）：清洁冷启动实测 11~20s，且窗口内无资源耗尽
       DO NOW（记录事实，不先改配置）：
         · 启动期间的**精确 DB 连接错误 / SQLSTATE**
         · 失败时刻 `pg_stat_activity` 状态与计数
@@ -626,4 +626,59 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [x] **`SERVER_API_PASS ≠ BROWSER_CLIENT_REACHABLE`**：
       服务端 API 验证通过只证明**协议端点自身**工作；只要真实客户端还隔着
       **CORS、WebView origin、构建产物与运行状态**，就**不能替代客户端 E2E**。
+
+
+### ⭐ Cross-cutting X1/X2/X3 —— **本项目轮已全部完成**
+- [x] X1 ✅ **`CORS_CLIENT_METHOD_COVERAGE` Gate 已按审核 55 的修正后不变量实现**：
+      `scripts/m5/check-cors-contract.sh` 从**客户端源码**提取客户端真正使用的 method，
+      对每个发**真实预检**（Origin + ACRM + ACRH），校验 2xx/204 ／ allow-origin 回显 ／
+      allow-methods 含该方法 ／ allow-headers 含所请求的非简单头。
+      实测 4 个 method（DELETE/GET/PATCH/POST）全部 PASS；反向信息报"多列了哪些客户端不用的方法"。
+      ⭐ 并且**新增 `selftest-cors-contract.sh`**：三种受控破坏（客户端声明 PUT ／
+      要求未允许的头 ／ 非白名单 origin）**全部被检出**，复原后回到 PASS →
+      `SELFTEST_CORS_CONTRACT: PASS`。
+      ⚠️ 该自测**特意写严**（③ 不只要"红了"，还要求**原因指向 origin**），当场揪出我门禁的两个真 bug：
+        ① 判定逐项覆盖 → 根因指错（origin 不被允许却报"缺 content-type"）→ 已改为**累积所有未通过项**
+        ② `case` 的 pattern 匹配的是**case 主语**而非循环变量 `$m` → `OPTIONS)` 永不命中 → 已改直接判断 `$m`
+- [x] X2 ✅ **破坏性自愈/重启测试已从常规回归拆出**：
+      · `gate-server.sh` 第 3 节默认记 `SKIPPED_DESTRUCTIVE`（**且不置 FAILED**），
+        并把它**移出 PERSISTENT 的"必须 PASS"列表**；汇总新增独立 `DESTRUCTIVE` 行
+      · 新增 `scripts/m5/run-destructive-gate.sh`（**唯一入口**，强制持有 Gate 互斥锁，拿不到即拒绝）
+      · 实测：常规回归 `M5_TMP_SELFHEAL SKIPPED_DESTRUCTIVE`、PERSISTENT/STAGE/REGRESSION PASS、
+        REAL_EXIT=0，且**后端启动时间未变**（07:24:13 → 07:24:13）⇒ **常规回归不再重启服务**
+      · 实测：显式 `M5_ALLOW_DESTRUCTIVE=1` 时后端**真的重启**（07:24:13 → 07:43:08）且
+        `DESTRUCTIVE PASS` ／ `M5_TMP_SELFHEAL PASS` ⇒ `SELFTEST_DESTRUCTIVE_GATE: PASS`
+      ⭐ 自测**双向都测**（默认不重启 + 显式则真跑）—— 只测一个方向的话"把整节删掉"也能骗过测试。
+- [x] X3 ✅ **冷启动/资源压力事实调查完成**（只记录、**未改任何参数**）→ `docs/m5/X3-COLD-START-FACTS.md`
+      ⭐ 核心结果：**清洁冷启动是 11~20 秒**（实测 3 次：14s/11s/20s），**不是** 176s；
+      且清洁窗口内**无资源耗尽**（MemAvailable 216~225MB、swap 增量 **0 页**、
+      campus 连接数最大 **2**、等待中的锁 **0**、无 OOM、loadavg ≤1.54）
+      → **直接证实审核 55 对我"资源是根因层"那条断言的驳回是对的**。
+      已采集审核 55 要求的全部事实：应用池 `PG_POOL_MAX=5`、`max_connections=15`+`reserved=3`、
+      4 类并发 DB 客户端、MemAvailable/swap-in-out/OOM/journal 信号。
+      代码侧按 DO NOW 补了**精确 SQLSTATE**：`db.ts` 启动探针原来 `catch { return false }`
+      **把错误完全吞掉** → 现在记录 `code=<SQLSTATE> errno= syscall= address=:port message=`。
+      ⚠️ 边界：176s 那次与**并发争用**相关是 **CONSISTENT 但未证明**（需受控并发复现，见 X3.1）
+- [ ] X3.1 ⬅ 下一步（可选、需裁定是否值得做）：**受控并发复现** ——
+      人为并发 N 个 gate/psql，观察 READY_AT 是否随并发上升。
+      只有做了才能把"176s 由并发争用导致"从 CONSISTENT 升级为 PROVEN。
+      ⚠️ 不做也不算未完成——审核 55 只要求"先把事实记清楚"，未要求证明该假设。
+
+### WO14 进展（Round 264）
+- [x] WO14.1 ✅ **inventory 完成**（审核 55 要求"先 inventory，不要直接改"）→
+      `docs/m5/WO14-PLAN-me-authoritative-self-identity.md`
+      ⭐ 发现比审核 55 预判的**更直接**：不是"跨页面不一致"，而是**同一块屏幕上同时显示两个身份**——
+        中心大字 `me.name` = **mock「自定义名称6」**，
+        下方登录行 `session.user.displayName` = **权威「Lemy」**（设备实测，四个 Gate 全 FAIL）
+      ⭐ 且根因是**两处互相独立**的缺陷：
+        ① 中心名字/头像走 mock（`MeScreen.tsx:74/:73`，`mock.ts` 的 me）
+        ② **登录行读陈旧缓存**：`getSession()` 有模块级 cache，而 MeScreen 只在挂载时读一次；
+           WO#13 的 PATCH 成功后**没有任何代码把新 displayName 写回 session 缓存**
+           ⇒ **即使把中心名字接上权威来源**，只要不修缓存同步，登录行仍会滞后
+- [ ] WO14.2 ⬅ **等审核批准计划**（含 4 个裁定点：批准计划 ／ 层 1b 是否同意补**窄函数**写回缓存
+      ／ 手机号在「我的」页继续显示是否成立 ／ `ORIGINAL_ME_SELF_IDENTITY` 记 NOT_EVALUATED）
+- [x] WO14.3 ✅ 已产出改前证据（PREFERRED）：`scripts/m5/diagnose-wo14-me-identity.mjs`
+      实测 4 条 FAIL（ME_DISPLAY_NAME_CONSISTENCY ／ PROFILE_EDIT_TO_ME_CONTINUITY ／
+      NO_MOCK_SELF_IDENTITY ／ ME_AVATAR_PLACEHOLDER），并证明 `PATCH` 未同步会话缓存
+- [ ] X3.2 待观察：若再出现慢启动，`[migrate] ...: code=<SQLSTATE> ...` 会给出可归因证据
 
