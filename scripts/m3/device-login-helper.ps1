@@ -58,10 +58,26 @@ function Invoke-HelperSsh([string]$RemoteShell) {
 function Connect-DeviceCdp {
   Invoke-HelperAdb @('forward', '--remove-all') | Out-Null
   $webviewPid = (Invoke-HelperAdb @('shell', 'pidof', $Pkg)).Trim()
-  if (-not $webviewPid) { throw "找不到 $Pkg 的进程（App 没起来？）" }
+  if (-not $webviewPid) {
+    # App 没在跑就**自己把它拉起来**，而不是直接抛错。
+    # 为什么：调用方（各 Gate / 验证脚本）关心的只是"设备处于可用状态"，
+    # 而不该被迫先记得去启动 App。此前 helper 在这里直接 throw，
+    # 结果"App 没起来"被报成"helper 坏了"，白排查一轮（真事）。
+    Say-HelperInfo "App 未运行 → 先启动它"
+    Invoke-HelperAdb @('shell', 'monkey', '-p', $Pkg, '-c', 'android.intent.category.LAUNCHER', '1') | Out-Null
+    for ($i = 0; $i -lt 15; $i++) {
+      Start-Sleep -Seconds 1
+      $webviewPid = (Invoke-HelperAdb @('shell', 'pidof', $Pkg)).Trim()
+      if ($webviewPid) { break }
+    }
+  }
+  if (-not $webviewPid) { throw "启动后仍找不到 $Pkg 的进程（App 是否已安装？）" }
   Invoke-HelperAdb @('forward', 'tcp:9222', "localabstract:webview_devtools_remote_$webviewPid") | Out-Null
   return $webviewPid
 }
+
+<# helper 自己的一行提示（避免依赖调用方定义的 Say，保持 helper 可独立使用） #>
+function Say-HelperInfo([string]$msg) { Write-Output "  [helper] $msg" }
 
 <# 冷启动：force-stop + 重启 + 重连 CDP。返回 WebView pid。#>
 function Restart-DeviceApp {
