@@ -99,6 +99,20 @@ echo "# M4 GATE KEYS:"
 for k in MEDIA_SCHEMA_RESULT MEDIA_UPLOAD_RESULT MEDIA_DELIVERY_RESULT M4_BACKUP_RESTORE MEDIA_ORPHAN_CLEANUP; do
   printf '#   %-26s %s\n' "$k" "${KEY[$k]}"
 done
+
+# 三层汇总（与 M3 gate 同口径）：layer 回答"哪一类保证还成立"，slice/key 回答"哪一块过了"。
+# 归位理由：
+#   PERSISTENT —— 跨阶段必须一直成立的能力：备份/恢复的完整性、磁盘不被垃圾撑满
+#   STAGE      —— M4 本阶段新增的不变量：媒体 schema / 上传 / 下发三条契约
+#   REGRESSION —— 本次 M4 gate 不重跑 M3 全量（那是 M3 gate 的职责，且要 5 分钟）；
+#                 这里明确标 NOT_RUN_IN_THIS_GATE，而不是默认给 PASS
+echo "# M4 GATE LAYERS:"
+P_FAIL=0; S_FAIL=0
+for k in M4_BACKUP_RESTORE MEDIA_ORPHAN_CLEANUP; do [ "${KEY[$k]}" = "PASS" ] || P_FAIL=1; done
+for k in MEDIA_SCHEMA_RESULT MEDIA_UPLOAD_RESULT MEDIA_DELIVERY_RESULT; do [ "${KEY[$k]}" = "PASS" ] || S_FAIL=1; done
+printf '#   %-12s %s\n' "PERSISTENT" "$([ $P_FAIL -eq 0 ] && echo PASS || echo FAIL)"
+printf '#   %-12s %s\n' "STAGE" "$([ $S_FAIL -eq 0 ] && echo PASS || echo FAIL)"
+printf '#   %-12s %s\n' "REGRESSION" "NOT_RUN_IN_THIS_GATE（由 M3 gate 负责，不得默认为 PASS）"
 echo "# M4_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
 echo "############################################################"
 exit "$FAILED"
