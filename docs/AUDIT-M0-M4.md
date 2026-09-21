@@ -1,0 +1,75 @@
+# 全局收口审计（M0–M4）
+
+> 时间：2026-09-21 16:10（Asia/Shanghai）
+> 性质：**只汇总已有证据**，不新增结论、不扩张范围。
+> 目的：给后续 M5（逐页收敛到 1:1）一个完整视角，避免建立在不完整认知上。
+
+## 一、各阶段 Gate key 总表
+
+| 阶段 | key | 结果 | 备注 |
+|---|---|---|---|
+| M0 | Nginx `/health` 网关证据 | PASS | 公开可达 `http://8.148.156.146/health` |
+| M1 | `BACKEND_RESULT` | PASS | 垂直切片：经 Nginx 写 → 读回 → 直查 PG |
+| M1 | `SEED_RESULT` | PASS | seed 幂等 + canonical + 收敛性 |
+| M2 | `AUTH_RESULT`（历史） | PASS | 见 `docs/m2/`；M2 历史可复现性已收口 |
+| M2 | `BACKUP_DRILL_RESULT` | PASS | **仅 DB**；从 M4 起不代表完整业务数据恢复 |
+| M2 | `TLS_SERVER_RESULT` | PASS | SAN/链/错误 CA/地址不匹配/TLS 版本/日志不泄漏 token |
+| M3 | `M3_FINAL_GATE_RESULT` | PASS | 三层全 PASS（当前 HEAD 重跑） |
+| M3 | `M3_PRECONDITION_RESULT` | PASS | 审计前置（M0 基线完整性 + 工作区清洁） |
+| M3 | `M3_SLICE0B/1/2/3/4_GATE_RESULT` | PASS | 六个 slice key 全 PASS |
+| M3 | `AUTH_OTP_RESULT` | PASS | phone+OTP、HMAC、dev sink 不进日志、密码登录已退休 |
+| M3 | `COMMENTS_RESULT` | PASS | 20 条：计数含回复、层级、replyTo |
+| M3 | `LIKES_RESULT` | PASS | 26 条：幂等、跨用户隔离 |
+| M3 | `PUBLISH_RESULT` | PASS | 26 条：作者只来自会话、四种注入全拒 |
+| M3 | `DEVICE_PUBLISH_RESULT` | PASS | 设备端闭环（无 session 夹具） |
+| M3 | `PLACES_RESULT` | PASS | 含同名歧义 closeout（0→NULL / 1→bind / >1→NULL） |
+| M3 | `SLICE4_POIDETAIL_CONFORMANCE` | PASS | 与可采信只读证据一致 + 反向断言 |
+| M3 | `CLEANUP_RESULT` | PASS | 定向清理；canonical 未变 |
+| M4 | `M4_FINAL_GATE_RESULT` | PASS | 三层全 PASS（当前 HEAD） |
+| M4 | `M4_STORAGE_GATE_RESULT` | PASS | 五 key 全 PASS |
+| M4 | `MEDIA_SCHEMA_RESULT` | PASS | 29 条（DB 级 cross-scope 防线 / 授权复用 / 幂等键） |
+| M4 | `MEDIA_UPLOAD_RESULT` | PASS | 26 条（内容嗅探 / 路径穿越 / 幂等 / 磁盘与体积） |
+| M4 | `MEDIA_DELIVERY_RESULT` | PASS | 22 条（命名空间隔离 / X-Accel / 撤回后不可读） |
+| M4 | `M4_BACKUP_RESTORE` | PASS | 含 `DATABASE_RESTORE` / `MEDIA_STORE_RESTORE` / `CROSS_REFERENCE_INTEGRITY` |
+| M4 | `MEDIA_ORPHAN_CLEANUP` | PASS | dry-run 不删 + 阈值保护 + 不碰被引用文件 |
+| M4 | `SLICE_A_DEVICE_RESULT` | PASS | 6/6（blob 加载、凭据不进 URL、登出取不到、blob revoke） |
+| M4 | `MESSAGING_API_RESULT` | PASS | 13 条（成员/非成员/未登录/撤回一致性） |
+| M4 | `MENTIONS_RESULT` | PASS | 13 条（mention 成员/非成员/自己/去重） |
+
+## 二、两维覆盖率（沿用审核记录 13 的口径）
+
+```
+BASELINE_PAGE_COVERAGE:  22 / 22 observed      （原版页面"看到过"）
+CONFORMANCE_EVIDENCE:
+  admissible:   poi-detail、登录页、schools/校区、map、message、feed-detail、
+                发布页结构、点赞展示规则、message-board
+  inadmissible: at-panel、media-preview、群聊页、comment-detail 的层级部分
+  blocked:      点赞切换、发布后反馈、评论写入因果、原版 @ 提及关系（BLOCKED_BY_POLICY）；
+                验证码页视觉（BLOCKED_BY_ETHICS）
+```
+
+> `22/22 observed` **不等于** `22/22 strict 1:1 verified`。
+
+## 三、已知偏差与未评估项清单（M5 的输入）
+
+| 项 | 状态 | 原因 |
+|---|---|---|
+| `OTP_UI_VISUAL_CONFORMANCE` | NOT_EVALUATED | 验证码页无原版证据；取证会给真实号码真发短信（BLOCKED_BY_ETHICS） |
+| `AT_PANEL_VISUAL_CONFORMANCE` | NOT_EVALUATED | 证据依赖第三方写操作（INADMISSIBLE） |
+| `MEDIA_PREVIEW_VISUAL` | NOT_EVALUATED | 同上 |
+| `MEDIA_UPLOAD_AND_SEND_TRANSITION` | BLOCKED_BY_POLICY | 必须发图片才能观察 |
+| 点赞切换 / 已点赞态 | BLOCKED_BY_POLICY | 必须点赞才能观察 |
+| 发布后的反馈/跳转/动画 | BLOCKED_BY_POLICY | 必须发布才能观察 |
+| 原版 `@` 提及模型 | NOT_EVALUATED | at-panel 证据 INADMISSIBLE，不反向推断 |
+| 手机号定位 | DEVIATION | demo 不申请定位权限，用校区坐标作参照（`DISTANCE_FUNCTIONAL: PASS` 但 `REAL_DEVICE_GEOLOCATION_CONFORMANCE: DEVIATION`） |
+| 图片压缩/重编码 | 未做 | 服务器 396MB + 无 native 图像库；上传只做结构校验与体积上限 |
+| `@所有人` | 未实现 | 明确不做（避免与"提到某人"在数据上无法区分） |
+| 语音消息 | 未实现 | 原版有语音；M4 只做 text/image/voice 三种 kind 中的前两者落地 |
+| per-user 配额 | 未做 | V1 不限制；记为已知限制（单账号可占满盘） |
+| `board_notes` | 建模完成、未做前端 | 模型结论 SUPPORTED（用户对用户私密留言） |
+
+## 四、这份审计的用途
+
+M5 若按"逐页与原版比对"推进，需要的正是第三节这张表：
+**哪些页可以声称一致、哪些必须标 NOT_EVALUATED、哪些是策略阻断**。
+把这三种状态混在一起，会重演"22/22 observed 被误读成 22/22 verified"的老问题。
