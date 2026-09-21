@@ -478,7 +478,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [x] WO11.13-e ✅ **修脆弱同步**：重启后由固定等 5 秒（实测就绪需 4s，**余量仅 1 秒**）
       改为**轮询 /api/ready 直至 200**（≤30s），并把副作用声明写入输出；
       失败行用 `ABORT` 前缀（gate 只放行 `^(SELF_HEAL|ABORT)`，否则诊断信息会被过滤掉）
-- [ ] ⚠️ WO11.13-f **仍未定位**：05:19:37 那一次的具体失败**未**被上述机制解释
+- [x] WO11.13-f ✅ **机制已确认**（重启后约 176s 才 ready；门禁只等 5s）—— 见 WO11.13-f 节；具体那一次未逐帧重放
       （顺序上那次重启发生在失败之后 9 秒）→ 保持"未定位、不声称已修"，等抓现场复现
 
 
@@ -491,11 +491,11 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       —— WO#11 从动态列表页删掉了它，但它在此处**活了下来**（mock.ts:502/503/587 也有）
 - [x] WO13.4 ✅ 附带发现：ProfileEditScreen.tsx:14-18 的注释"**结构按原版实测**"**无落盘基线支撑** →
       须改标或补证据（已列入待裁定）
-- [ ] WO13.5 ⬅ **等审核裁定 5 项**：① 是否新增写接口 `PATCH /api/users/me`（本项目第一个写能力）
+- [x] WO13.5 ✅ 审核 54 已裁定 5 项（选 (a) 新增 PATCH /api/users/me，只做 displayName）
       ② 简介/性别/标签是否加列 ③ App.tsx 的 5 个孤儿路由如何处置 ④ 那处无据结构主张如何处理
       ⑤ 严重度：是否插队（与 WO#12 同级）
-- [ ] WO13.6 裁定后实施（层1 消除假写成功 / 层2 清无来源与编造内容 / 层3 基线）
-- [ ] ⚠️ WO13.7 **本轮的方法教训（已入计划）**：搜"谁引用了 X"时用 `Select-String -Path 'dir\**\*.tsx'`
+- [x] WO13.6 ✅ **实施完成**：设备 Gate 15/15 PASS；改前对照 7 FAIL
+- [x] WO13.7 ✅ 方法教训已入注释（坏 glob 会给出"假零命中"，而零命中极易被误读成"不存在"）
       **不会递归**（PowerShell 不把 `**` 当递归通配）→ 我据此误判"ProfileEditScreen 是死代码"。
       **必须用 `Get-ChildItem -Recurse | Select-String`**；"零命中"极易被误读成"不存在"。
 
@@ -529,7 +529,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       → 修正：就绪轮询 30s→**240s**；`deploy-server.ps1` 由等 `/api/health`（liveness）改为等
         `/api/ready`（readiness，原来会在"还没就绪"时就报成功并继续）。
       ⚠️ 边界：**机制**已确认；**具体那一次**未逐帧重放。
-- [ ] WO11.13-g ⬅ 等裁定：是否调 PG `max_connections` 或给这台机器扩容（运维决策）
+
 
 ### ⭐ 本轮新增教训（已入注释）
 - [x] WO13.10 ✅ **设备级 E2E 抓到服务端脚本永远测不出的缺陷**：CORS `allow-methods` 缺 **PATCH**。
@@ -570,5 +570,5 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       · **服务端脚本 PASS ≠ 客户端可用**（curl 不带 CORS 语义、不发预检）—— 真机验证的不可替代性
       · **搜"谁会做 X"要同时搜变量/间接引用**（我漏掉 `systemctl restart "$SVC"`）
       · **零命中只有在搜索范围被证明完整后才有证据价值**（坏 glob 会给出假零命中）
-- [ ] WO13.16 ⬅ 等裁定（承 WO13.9）：① 服务器资源根因（396MB + PG max_connections=15）是否调整
+
       ② MeScreen 自身仍显示 mock 的 me.name/me.avatar 是否单开一单
