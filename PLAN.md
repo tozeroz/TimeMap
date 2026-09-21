@@ -595,3 +595,52 @@ docs/comparison.md 的多页"✅ 1:1 一致"结论，其依据是原版截图，
 
 **第 3 条值得单列**：它**主动报告了自己清理范围偏宽**——
 这正是本项目要求的诚实度：**不只报"我做了什么"，还报"我可能多做了什么"**。
+
+
+
+---
+
+## 附：两条纪律正式冻结（审核记录 29，2026-09-21 22:07）
+
+### 一、`force-stop` 规则（正式冻结）
+
+```
+DEFAULT:
+  不得主动 force-stop 第三方原版 App
+  若原版抢前台 → 优先重新拉起我们自己的 Activity
+  无法可靠恢复 → abort / 人工处理
+explicit force-stop switch:
+  允许保留，但**不得进入默认 conformance Gate**
+```
+
+**理由（审核原话）**：此前那次 force-stop 不属于对原版服务器的写操作，
+但它属于**主动第三方进程干预**，所以**不应成为默认自动化动作**。
+
+### 二、"测试期望来源"纪律（冻结，用**修订后的表述**）
+
+⚠ 我原先的表述被审核**否掉**，因为它太绝对：
+> ~~"不要从 HTTP response 构造测试期望。"~~
+
+**正式版本**：
+
+> **Test oracle 应来自与被验证 invariant 最直接、独立、权威的观测面；
+> 不要用被测流程中的脆弱中间变量循环构造期望。**
+
+**映射表（审核给出，可直接查用）**：
+
+| 被验证的东西 | 权威观测面 |
+|---|---|
+| HTTP contract | HTTP response |
+| 数据库持久化 | DB |
+| 文件状态 | filesystem |
+| 界面呈现 | rendered UI geometry / text |
+| 当前用户身份 | `/api/auth/me` / authoritative auth state |
+| 部署版本 | embedded revision / hash |
+
+**正例（审核点名 WO#3）**：
+`sender identity → server`、`bubble position → device geometry` ——
+而不是让 UI class **同时充当输入事实和输出证明**（那是循环论证）。
+
+**我的原表述错在哪**（值得记）：我把一条**启发式**写成了**绝对禁令**。
+"不要用 HTTP response 构造期望"会连带否掉正当用法 —— 例如验证 HTTP contract 时，
+response **就是**权威观测面。**规则要针对"被测流程的脆弱中间变量"，而不是针对某一种传输形式。**
