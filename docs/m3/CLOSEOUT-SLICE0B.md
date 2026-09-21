@@ -1,5 +1,17 @@
 # M3 Slice 0B 收尾（CLOSEOUT）
 
+> 状态：**CLOSED**（2026-09-21 销项；依据见下）
+>
+> 销项依据（审核记录 09 点名要这一项在项目记录里明确销项，而不是"默认为已解决"）：
+> - `scripts/m2/verify-auth.sh` 已从历史提交**恢复**（内容不改），commit `5f7c9c6`
+> - M2 Gate 的认证组已改回调用它，并在脚本里写明"只对 M2 修订可复现"（同 commit）
+> - 复现步骤见本文第三节
+> - **当前产品未恢复任何 password 功能**：`POST /api/auth/login` → 410、
+>   `users.password_hash` 列已删除、`auth.ts` 里没有密码原语。
+>   两者同时成立正是审核要求的"保留历史可复现性、不把密码登录带回产品"。
+> - Gate 里的机械验证：M3 Gate 第 3.2 组断言 `login_status=410`、`password_col=0`、
+>   "发密码后未新增任何会话"、"响应里没有 token 字段"。
+
 > 依据：审核记录 08 的 Slice 0B 裁定
 > ```
 > PRODUCT_BEHAVIOR: ACCEPTED

@@ -28,8 +28,20 @@ if (-not $SshKey) { $SshKey = Join-Path $repo 'TimeMap.pem' }
 $SshHost = 'root@8.148.156.146'
 
 $script:Failed = 0
+<#
+  per-slice 失败记账（审核记录 09 的命名要求）：
+  **不要让不同 slice 共享同一个最终结果 key** —— 否则未来自动汇总会把
+  "Slice 0B 过没过"和"Slice 1 过没过"混成一个数，产生歧义。
+  这里用 $script:CurrentSlice 标记当前正在检查哪一段，Bad() 把失败记到对应 slice 上。
+#>
+$script:SliceFail = @{ SLICE0B = 0; SLICE1 = 0 }
+$script:CurrentSlice = 'SLICE0B'
 function Ok([string]$m) { Write-Output "PASS $m" }
-function Bad([string]$m) { Write-Output "FAIL $m"; $script:Failed = 1 }
+function Bad([string]$m) {
+  Write-Output "FAIL $m"
+  $script:Failed = 1
+  $script:SliceFail[$script:CurrentSlice] = 1
+}
 function Head([string]$m) { Write-Output ''; Write-Output "=== $m ===" }
 function Say([string]$m) { Write-Output $m }
 
@@ -207,6 +219,7 @@ if ($m0fail.Count -eq 0) { Ok 'M0 基线完整性检查全通过（manifest/枚�
 else { foreach ($f in $m0fail) { Bad "M0: $f" } }
 
 # ---------------------------------------------------------------------------
+$script:CurrentSlice = 'SLICE1'
 Head '6.5) STAGE Slice 1：帖子详情 / 评论 / 回复（含点卡片进详情的回归）'
 Emit-Section '6.5.1 后端评论接口（含层级语义与计数口径）' 'COMMENTS_RESULT' (Run-Remote (Join-Path $repo 'scripts\m3\verify-comments.sh'))
 
@@ -261,13 +274,23 @@ if ($pvFiles.Count -ge 3) { Ok '违规取得的证据已自曝标签（未被当
 # ---------------------------------------------------------------------------
 Write-Output ''
 Write-Output '############################################################'
-if ($script:Failed -eq 0) {
+# 每个 slice 有自己的结果 key（审核记录 09：不得共享同一个最终结果 key）
+if ($script:SliceFail.SLICE0B -eq 0) {
   Write-Output '# M3_SLICE0B_GATE_RESULT: PASS'
   Write-Output '#   LOGIN_ENTRY_VISUAL:        PASS'
   Write-Output '#   OTP_UI_FUNCTIONAL:         PASS'
   Write-Output '#   OTP_UI_VISUAL_CONFORMANCE: NOT_EVALUATED (BLOCKED_BY_ETHICS)'
 } else {
   Write-Output '# M3_SLICE0B_GATE_RESULT: FAIL'
+}
+if ($script:SliceFail.SLICE1 -eq 0) {
+  Write-Output '# M3_SLICE1_GATE_RESULT: PASS'
+  Write-Output '#   COMMENTS_MODEL:            SUPPORTED / PRESENTATION EXPANDED'
+  Write-Output '#   COMMENT_COUNT_INCLUDES_REPLIES: PASS'
+  Write-Output '#   REPLY_TARGET_FROM_PARENT_AUTHOR: PASS'
+  Write-Output '#   EVIDENCE_OBTAINED_BY_POLICY_VIOLATION: TRUE (结论保留，手段违规已登记)'
+} else {
+  Write-Output '# M3_SLICE1_GATE_RESULT: FAIL'
 }
 Write-Output '############################################################'
 exit $script:Failed
