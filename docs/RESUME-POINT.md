@@ -294,3 +294,72 @@ M5_OVERALL: OPEN（待审核确认 WO#2 后更新）
   当时设备空闲（前台 launcher），不干扰在飞子代理。
 - 打断与重派之间有**几秒的设备争用窗口**——已评估为可接受（旧执行者当时闲置在 launcher，
   且它 17 分钟没有产生任何设备侧产物）。
+
+---
+
+## 十三、会话小结（2026-09-21 20:30–21:10，本 session 的闭环清单）
+
+> 本节为**续作入口**：接手者读完本节即掌握当前状态，无需翻聊天记录。
+
+### 一、状态快照
+
+| 项 | 状态 | 依据 |
+|---|---|---|
+| M0–M3 | CLOSED | `docs/AUDIT-M0-M4.md` |
+| **M4** | **ACCEPTED / CLOSED** | 含 `M4_BACKUP_RESTORE` 回归复核全 PASS |
+| **M5 WO#2 后端** | **ACCEPTED** | `docs/review-log/24-*` |
+| **M5 WO#2 前端** | **CLOSED** | `docs/review-log/27-*`（三层 E2E 分列 PASS，**不得**合并成"真人触摸 E2E"） |
+| M5 服务器侧 Gate | **PASS** | `scripts/gates/m5/gate-server.sh`，`M5_OVERALL: WO2_CLOSED` |
+| 策略越界案 | **结案** | `docs/POLICY-VIOLATION-2026-09-21.md` §八（**用户裁定 A：不补救、只记录**） |
+| 库基线 | **纯种子基线** | users 3 / messages 2 / media 2 / board_notes 1；`TEST_RESIDUE_USERS 0` |
+| tab deviation | **撤销** | `docs/m5/TAB-DEVIATION-WITHDRAWN.md` |
+| 气泡偏差 | **DEVIATION 成立** | `docs/m5/CHAT-SENDER-PRESENTATION-CONFIRMED.md` |
+| C4 表情形态 | **UNRESOLVED + FREEZE** | `docs/m5/C4-EVIDENCE-CONFLICT.md`（§七 权威） |
+
+### 二、本 session 新做的四件事
+
+1. **`NATIVE_FILE_PICKER_INTERACTION` 由"未验证"变为 PASS**（子代理自动化驱动真实系统 picker），
+   且我独立核验了"无 `setFileInputFiles` 痕迹"与"库回基线"。审核据此给了 **WO#2 CLOSED**。
+2. **撤销 tab deviation**：原登记"原版底部 4 项、我们 3 项"是**误数** ——
+   看 bounds 才知「校园广场」在**顶部区**(y≈130)，三个 tab 在底部区(y≈1829)。
+   我们的 3 tab + FAB 发布按钮 + 瀑布流 + 顶部 switcher **与原版逐项一致**。
+3. **结清策略越界案**：查证时发现该案悬置约 8 小时，报请用户裁定 → **A（不补救）**，
+   并写明"不要再提补救"以防后来者以修复为名再犯。
+4. **库清理到纯种子基线**：A 类（7 测试账号 + 4 media + 1 留言）+ B 类
+   （种子用户 Lemy 名下 2 条 image 消息 + 1 media，**必须用白名单**，否则按 owner 会误删种子图）。
+   并**更正基线参照**（旧快照 users=10 是"被污染的基线"）。
+
+### 三、本 session 新增的纪律（三条，均已落盘）
+
+| 纪律 | 位置 |
+|---|---|
+| **证据分级**：截图=线索级、dump=证据级；"数量/字符/行为"类结论不得仅凭截图 | `PLAN.md` |
+| **设备健康前置**：UI 自动化前先跑 `scripts/m5/device-health-probe.ps1` | `docs/DISCIPLINE-device-concurrency.md` |
+| **"占用设备"包括我委派的执行者**：委派前先确认无在飞设备侧任务 | 同上 |
+
+以及一条教训：**自我纠正也必须按证据强度来定**（我曾把弱证据与强证据并列、也曾在纠正时反向过度声明）。
+
+### 四、待做（按优先级）
+
+1. **气泡偏差的真机验证收口**（在飞）：接线已改（`ChatScreen.tsx` 用 `getSession()?.user?.id` 判 `mine`），
+   **CSS 无需改动**（`.bubble--me` 与 `.chat__row--me` 本就齐备、只是从未使用）。
+   核验要点：**断言实际几何**（气泡 `left` 明显偏右），不能只看类名；
+   截图对照 `docs/original-baseline/screens/original-chat/…-scroll-newer.png`；重跑 M5 gate。
+2. **C4**：维持 UNRESOLVED + FREEZE。新增可走路径 = 按
+   `docs/original-baseline/screens/original-chat/INDEX.md` §四 的配方**做一次表情相关的资源名提取**，
+   且**判读方式已预先写好**（见 `docs/m5/NEW-EVIDENCE-SOURCE-APK-RESOURCE-NAMES.md`），**不要事后凑标准**。
+3. **两项旧裁定**：`force-stop` 规则严格度 · "测试期望应从权威数据源推导"纪律。
+4. **既有残留（非本次产生）**：设备上 `/sdcard/Download/m5-wo2.png`、`/sdcard/picker-probe.xml` 等
+   —— 子代理刻意未动、建议我们处置（不影响 gate，因 gate 不读 /sdcard）。
+
+### 五、本 session 犯过并被记录的错（供接手者警惕同类）
+
+```
+1. 把 resource-id 名字当行为契约      → C1(ivClose) / C2(tvTotalComment) / C4(emotion_image)
+2. 只数节点不看坐标                    → tab "4 vs 3" 误判（已撤销）
+3. 把弱证据与强证据并列成"对等冲突"    → C4 §六（已撤回）
+4. 纠正时反向过度声明                  → 同上，把资源表证据评成"强"（已对齐为"间接"）
+5. 检索不完整却下结论                  → 断言 .chat__row--me "未见"，实为 chat.css:15（已更正）
+6. 委派时未检查设备占用                → 两个子代理争设备（已加纪律）
+7. 打断了一个仍在产出高价值结论的执行者  → 659cfcd8（它当时正在提取 APK 资源名）
+```
