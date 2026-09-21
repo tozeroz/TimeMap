@@ -48,7 +48,7 @@ observed: ~~原版底部是 4 项~~ → **错误**：看 bounds 才知「校园�
 | 项数 / 宽 / pitch / 首末边界 | **FIXED** | 6 项、70 / 112（设备 px）逐项与原版吻合；CSS 40px + gap 24px，设备实测确认 |
 | 底色（C5） | **FIXED** | 原版无底色（像素采样圆内点亦纯白）；我们原有灰色圆片 → 已改为 transparent |
 | 字号（C6） | **FIXED** | 16px → 24px（据实心字形墨迹外接的**直接测量**；估计值，残余不确定已标注） |
-| **字符与形态（C4）** | **UNRESOLVED + FREEZE（审核记录 26 确认，此前裁定作废）** | 此前依据节点 id `emotion_image` 判为"原版是图片"。**但那是照 id 名字下判断**（本项目已因此在 C1/C2 栽过两次），且视觉读图显示边缘特征更像**字体渲染**。两份证据冲突 → 降为 UNRESOLVED，见 `docs/m5/C4-EVIDENCE-CONFLICT.md`。**决定性检验（渲染对比）待做。** |
+| **字符与形态（C4）** | **形态已确证：DRAWABLE（审核记录 29 批准取证，见 `docs/m5/C4-FORENSICS-RESULT.md`）** | 此前依据节点 id `emotion_image` 判为"原版是图片"。**但那是照 id 名字下判断**（本项目已因此在 C1/C2 栽过两次），且视觉读图显示边缘特征更像**字体渲染**。两份证据冲突 → 降为 UNRESOLVED，见 `docs/m5/C4-EVIDENCE-CONFLICT.md`。**决定性检验（渲染对比）待做。** |
 
 ### 4. 留言板下拉刷新（C3） — **BLOCKED_BY_POLICY**
 
@@ -210,3 +210,27 @@ CHAT_MESSAGE_SENDER_PRESENTATION: **FIXED / VERIFIED**
 > 疑似"未登录"分支在**真机不可达**（未登录时会话页直接进错误态），
 > 故降级路径（`meId === null` → `--peer`）**仅由源码保证**，未被真机执行到。
 → 该分支的实现正确性有源码依据，**但无运行时证据**；若将来要补，需能构造"已进会话页但会话失效"的状态。
+---
+
+## 七、C4 结案（形态）：原版表情 = **随包 webp 图片**（审核记录 29 批准取证）
+
+```
+C4_EMOJI_RENDERING_KIND:  **DRAWABLE**（形态确证）
+  运行时: rvEmojiList(RecyclerView) → fl_emoji_root(LinearLayout,clickable) ×6
+                                   → emotion_image(**android.widget.ImageView**) ×6
+  资源侧: array/xhs_theme_xhs_emoji_res_v2 = 156 项 @drawable 引用（去重 154 名）
+          每项映射到 APK 内**真实存在的 webp**（文件名被混淆：dp.webp / sD.webp / tm.webp …）
+          全部 154 个已解出（1141KB，合法 RIFF/WEBP）
+  → 排除: 字体字形 / 运行时生成 / 网络下发
+
+ORIGINAL_EMOJI_CHARACTERS: 仍为 **NOT_CAPTURED**
+  （曾试像素差匹配 6 格，**指标不具判别力**（鸡蛋在 6 格全排第一），故不采用其输出）
+  新产物: docs/original-baseline/supplements/original-emoji-table.txt（154 拼音名/中文名/引用）
+          docs/original-baseline/supplements/original-emoji-path-map.tsv（名称→文件，可复现）
+
+IMPORTANT_FORM_FACT: 表情名形如 **[微笑C]** → **协议层是文本码、渲染层是图片**
+  → 对 1:1 复现有直接影响：需要"文本码 ↔ 图片"映射与替换渲染，而不是把 emoji 当普通文字
+
+IMPLEMENTATION_IMPACT: 仍建议 **冻结**
+  形态差异成立（我方用文字字形），但"该画哪套图"取决于是否引入图片表情体系；
+  且我方现有实现与"文本码+图片"双层形态不同，属较大变更，宜**另立工作单**
