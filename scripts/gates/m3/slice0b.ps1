@@ -385,6 +385,19 @@ Say '  口径（审核记录 11）：baseline coverage remains 22/0；本组增�
 
 # ---------------------------------------------------------------------------
 $script:CurrentLayer = 'PERSISTENT'
+Head '6.9) MODEL：四个必答模型问题必须都有结论（不允许悬空）'
+$mvPath = Join-Path $repo 'docs\m3\MODEL-VALIDATION.md'
+if (Test-Path -LiteralPath $mvPath) {
+  $mv = Get-Content -LiteralPath $mvPath -Raw -Encoding UTF8
+  # 每个必答问题都要在状态表里出现 SUPPORTED / NOT_SUPPORTED，不能还是 PENDING
+  $pendingCount = ([regex]::Matches($mv, '\*\*PENDING\*\*')).Count
+  if ($pendingCount -eq 0) { Ok '四个必答模型问题均无 PENDING（无悬空）' }
+  else { Bad "仍有 $pendingCount 个必答模型问题处于 PENDING（M3 不允许悬空）" }
+  foreach ($k in @('login-sns', 'places', 'comments.parent_id', 'board_notes')) {
+    if ($mv -match [regex]::Escape($k)) { Ok "模型登记表覆盖 $k" } else { Bad "模型登记表缺少 $k" }
+  }
+  if ($mv -match '用户对用户私密留言') { Ok 'board_notes 结论已落盘（用户对用户私密留言）' } else { Bad 'board_notes 结论缺失' }
+} else { Bad '缺少 docs/m3/MODEL-VALIDATION.md' }
 Head '7) POLICY：第三方只读约束的执行情况（用户 2026-09-21 明确要求）'
 $pvPath = Join-Path $repo 'docs\POLICY-VIOLATION-2026-09-21.md'
 if (Test-Path -LiteralPath $pvPath) {
