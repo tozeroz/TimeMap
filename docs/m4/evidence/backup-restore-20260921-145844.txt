@@ -1,0 +1,43 @@
+﻿  替换 2 处（期望 2）
+=== 语法校验 ===
+  语法 OK
+=== 确认替换生效 ===
+  124:sudo -u postgres psql -q -c "drop database if exists $RESTORE_DB" 2>&1 | sed "s/^/    drop: /"
+  125:sudo -u postgres psql -q -c "create database $RESTORE_DB owner campus" 2>&1 | sed "s/^/    create: /"
+  230:sudo -u postgres psql -q -c "drop database if exists $RESTORE_DB" 2>&1 | sed "s/^/    drop: /"
+
+=== 跑演练（timeout 300）===
+=== A. 联合备份（同一个 backup generation）===
+=== A0. 造演练 fixture（走真实上传接口）===
+  fixture 账号=13892461421，上传的 media: f2a14c5d-9cc3-4068-b57c-2122fc1322e4 3f3163d7-cac2-4341-a944-ad5b51c10ed3
+PASS 已通过真实接口造出演练 fixture
+PASS database.dump 生成（68449 字节）
+PASS uploads.tar.zst 生成（495 字节）
+PASS manifest.json 生成（记录两侧计数与 sha256）
+  media 行数=4  盘上文件=3
+
+=== B. DATABASE_RESTORE：从 dump 恢复到全新库 ===
+    drop: NOTICE:  database "campus_m4restore" does not exist, skipping
+PASS users 4==4 且 media 4==4（逐项计数一致）
+DATABASE_RESTORE: PASS
+PASS 可见性判定函数已随 schema 恢复
+
+=== C. MEDIA_STORE_RESTORE：媒体归档恢复到新目录 ===
+PASS 恢复文件数 3 == 备份时 3
+MEDIA_STORE_RESTORE: PASS
+
+=== D. CROSS_REFERENCE_INTEGRITY：恢复后的 DB 行 → 恢复后的文件，**逐行**核对 ===
+    缺文件: media=bbbbbbbb-0001-4001-8001-000000000001 → public/2026/09/seed-anmoss-1.webp
+    缺文件: media=bbbbbbbb-0002-4002-8002-000000000002 → public/2026/09/seed-lemy-1.webp
+FAIL 4 条里有 2 条**找不到文件**（悬空引用）
+PASS 文件 sha256 与 DB 记录**逐条一致**（内容也一致，不只是文件存在）
+  ⚠ 反向核对发现 1 个 orphan 文件（当前库里可能存在未登记文件；由清扫脚本负责，不影响本次联合恢复判定）
+CROSS_REFERENCE_INTEGRITY: FAIL
+
+=== E. 清理 ===
+PASS fixture 已清理（含落盘文件）
+PASS 备份 generation 保留在 /srv/campus/backups/gen-20260921-145845（便于复查；不进 git）
+
+备份 generation: /srv/campus/backups/gen-20260921-145845
+M4_BACKUP_RESTORE: FAIL
+DRILL_EXIT 1
