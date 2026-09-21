@@ -51,6 +51,15 @@ export function PostCard({
   return (
     <article
       className={`pcard ${hasImage ? 'pcard--media' : 'pcard--text'}`}
+      /*
+        稳定业务身份的测试钩子（M5 WO#11 加）：
+        卡片的 id 此前只存在于 onClick 里，DOM 上无迹可寻 ——
+        于是 Gate 只能靠"第几行/文案"去认卡片，那正是审核 47 禁止的
+        "按偶然位置选择测试对象"。加 data-feed-id 后，设备侧可以按**帖子 id**做集合比对
+        （CampusScreen 与 FeedListScreen 共用本组件，两边都受益）。
+        ⚠️ 它纯粹是测试钩子，不携带任何行为。
+      */
+      data-feed-id={post.id}
       onClick={() => navigate('feed', { id: post.id })}
     >
       {hasImage ? (

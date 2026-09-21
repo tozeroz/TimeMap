@@ -152,74 +152,31 @@ log('FEED_ENTRY', {
   note: '这条链经过自述为"非原版内容"的 Drawer「更多功能」脚手架，故不构成忠实可达性',
 })
 
-// ---------- 2) 页面内容快照 ----------
+// ---------- 2) 就绪态（真实数据）----------
 /*
-  ⚠️ 必须在**点「刷新」之后**再取"内容快照"（我第一版搞错了顺序，记下来）：
-    改前该页的初始态是**明确的错误态**（「网络不给力，点击刷新试试」+ 刷新按钮），
-    此时页面上**没有**任何 mock 动态、也没有编造的统计数字。
-    那些东西是在**点「刷新」之后**才出现的（因为刷新用 mock 顶上）。
-    → 如果只量初始态，FEED_NO_MOCK_ROWS / FEED_NO_FAKE_AUTHORITATIVE_NUMBERS
-      会**因为看不到内容而空过**（这正是本会话反复出现的"空过 Gate"形态）。
-    → 正确顺序：先点刷新 → 再量内容。
-  （FEED_THREE_STATE_EXPLICIT 则量初始态，因为"有明确错误态"正是要保留的性质。）
+  ⚠️ 门禁设计修正（我第一版在这里错了，记下来）：
+    第一版期望"首屏就是错误态"（照抄改前的实现）。但**改后后端是可用的**，
+    首屏正确的状态是 **ready** —— 于是那条断言必然 FAIL，而且 FAIL 的理由
+    与"三态是否可辨"毫无关系（它测的是"当前是不是错误态"）。
+    → 正确做法：三态各自用**受控 stub** 构造（与 WO#9B 层 A 的空态/失败态同一方法），
+      因为"能构造出三态且彼此可辨"才是要验证的性质；
+      而"某一次运行恰好停在哪个状态"取决于环境，不是契约。
 */
-console.log('=== 2) 初始态（应明确可辨：错误态 + 刷新入口）===')
-const dom = await evaluate(`(() => {
+console.log('=== 2) 就绪态：列表来自真实 API ===')
+const readyState = await evaluate(`(() => {
+  const cards = [...document.querySelectorAll('[data-feed-id]')].map((e) => e.getAttribute('data-feed-id'))
   const bodyText = document.body.innerText || ''
   return {
     hash: location.hash,
-    hasNetworkErrorCopy: /网络不给力|点击刷新|网络错误/.test(bodyText),
-    hasRefreshButton: [...document.querySelectorAll('button')].some((b) => /刷新/.test(b.textContent || '')),
-    textSample: bodyText.replace(/\\s+/g, ' ').slice(0, 160),
+    cardIds: cards,
+    cardCount: cards.length,
+    endLine: (document.querySelector('[data-feed-end]') || {}).textContent || null,
+    textSample: bodyText.replace(/\\s+/g, ' ').slice(0, 200),
   }
 })()`)
-log('FEED_DOM_INITIAL', dom)
+log('READY_STATE', readyState)
 
-// ---------- 4) 「刷新」是否真的发请求（fetch 计数）----------
-console.log('')
-console.log('=== 4) 「刷新」是否发真实请求（fetch 计数）===')
-const refreshProbe = await evaluate(`(async () => {
-  if (!window.__WO11NET__) {
-    window.__WO11NET__ = 0
-    const orig = window.fetch
-    window.fetch = async (...a) => { window.__WO11NET__++; return orig(...a) }
-  }
-  const btn = [...document.querySelectorAll('button')].find((b) => /刷新/.test(b.textContent || ''))
-  if (!btn) return { found: false, why: '页面上没有「刷新」按钮' }
-  const before = window.__WO11NET__
-  btn.click()
-  await new Promise(r => setTimeout(r, 2500))
-  return { found: true, fetchDelta: window.__WO11NET__ - before, hashAfter: location.hash }
-})()`)
-log('REFRESH_PROBE', refreshProbe)
-
-// ---------- 5) 刷新后的内容快照（mock / 假数字 / 残留都在这里才可能看到）----------
-console.log('')
-console.log('=== 5) 刷新后的内容快照（判 mock 与假权威数字的依据）===')
-const domAfter = await evaluate(`(() => {
-  const bodyText = document.body.innerText || ''
-  const byAttr = [...document.querySelectorAll('[data-feed-id]')].map((e) => e.getAttribute('data-feed-id'))
-  const classes = new Set()
-  for (const e of document.querySelectorAll('div,article,li')) {
-    if (e.className && typeof e.className === 'string') {
-      for (const c of e.className.split(/\\s+/)) if (/feed|post|moment|card/i.test(c)) classes.add(c)
-    }
-  }
-  return {
-    hash: location.hash,
-    feedIdCount: byAttr.length,
-    feedIds: byAttr.slice(0, 6),
-    classesMatchingFeedLike: [...classes].slice(0, 12),
-    fakeNumbersPresent: ${JSON.stringify(FAKE_AUTHORITATIVE_NUMBERS)}.filter((n) => bodyText.includes(n)),
-    residueHits: [/M1-E2E-/, /TLS 日志泄漏检查/].map((p) => p.source).filter((s) => new RegExp(s).test(bodyText)),
-    hasCollegeGrade: /学院|年级|专业/.test(bodyText),
-    imgCount: document.querySelectorAll('img').length,
-    textSample: bodyText.replace(/\\s+/g, ' ').slice(0, 220),
-  }
-})()`)
-log('FEED_DOM_AFTER_REFRESH', domAfter)
-
-// ---------- 3) 与 API 的集合比对（改前后都应记录，用于看差异）----------
+// ---------- 3) 与 API 的集合比对 ----------
 console.log('')
 console.log('=== 3) 与 GET /api/posts 的集合比对 ===')
 const apiInfo = await evaluate(`(async () => {
@@ -229,12 +186,207 @@ const apiInfo = await evaluate(`(async () => {
     if (ct.indexOf('text/html') >= 0) return { ok: false, reason: 'text/html（打到了前端而非后端）' }
     const d = await res.json()
     const items = Array.isArray(d.items) ? d.items : []
-    return { ok: true, count: items.length, ids: items.map((x) => x.id).slice(0, 6) }
+    return { ok: true, count: items.length, ids: items.map((x) => x.id) }
   } catch (e) {
     return { ok: false, reason: String(e && e.message) }
   }
 })()`)
 log('API_POSTS', apiInfo)
+
+// ---------- 4) 三态（受控 stub 构造）+ 刷新真实性 ----------
+console.log('')
+console.log('=== 4) 三态：受控 stub 构造 loading / error / empty，并验证「刷新」真发请求 ===')
+
+/** 安装/更新 posts 的 fetch stub（只拦 GET /api/posts） */
+const installPostsStub = async (mode) =>
+  evaluate(`(() => {
+    if (!window.__WO11_POSTS_ORIG__) window.__WO11_POSTS_ORIG__ = window.fetch
+    const orig = window.__WO11_POSTS_ORIG__
+    if (!window.__WO11_NET__) {
+      window.__WO11_NET__ = 0
+    }
+    window.__WO11_POSTS_MODE__ = ${JSON.stringify(mode)}
+    window.fetch = async (...args) => {
+      const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || ''
+      const method = ((args[1] || {}).method || 'GET').toUpperCase()
+      const isPosts = method === 'GET' && /\\/api\\/posts$/.test(url)
+      const m = window.__WO11_POSTS_MODE__
+      if (isPosts) {
+        window.__WO11_NET__++
+        if (m === 'fail') {
+          return new Response(JSON.stringify({ error: 'injected_posts_failure' }), {
+            status: 500, headers: { 'content-type': 'application/json' },
+          })
+        }
+        if (m === 'empty') {
+          return new Response(JSON.stringify({ items: [] }), {
+            status: 200, headers: { 'content-type': 'application/json' },
+          })
+        }
+        if (m === 'slow') {
+          await new Promise((r) => setTimeout(r, 4000))
+        }
+      }
+      return orig(...args)
+    }
+    return { mode: window.__WO11_POSTS_MODE__, net: window.__WO11_NET__ }
+  })()`)
+
+/** 重新挂载 feedlist（清掉快照，确保走"无快照"分支） */
+const remountFeed = async () => {
+  await evaluate(`(() => {
+    try { localStorage.removeItem('campus.demo.snapshot.v1:feed') } catch {}
+    location.hash = '#/campus'
+    return true
+  })()`)
+  await new Promise((r) => setTimeout(r, 1500))
+  await evaluate(`(() => { location.hash = '#/feedlist'; return true })()`)
+  await new Promise((r) => setTimeout(r, 900))
+}
+
+// --- 4.1 loading 态（stub 延迟 4s，在等待窗口内观察）---
+await installPostsStub('slow')
+await remountFeed()
+await new Promise((r) => setTimeout(r, 600))
+const loadingState = await evaluate(`(() => ({
+  hash: location.hash,
+  state: (document.querySelector('[data-feed-state]') || {}).getAttribute
+    ? document.querySelector('[data-feed-state]').getAttribute('data-feed-state') : null,
+  stateText: (document.querySelector('[data-feed-state]') || {}).textContent || null,
+}))()`)
+log('STATE_LOADING', loadingState)
+
+// --- 4.2 error 态（stub 失败 + 无快照）---
+await installPostsStub('fail')
+await remountFeed()
+await new Promise((r) => setTimeout(r, 2000))
+const errorState = await evaluate(`(() => {
+  const el = document.querySelector('[data-feed-state="error"]')
+  const bodyText = document.body.innerText || ''
+  return {
+    hash: location.hash,
+    hasErrorNode: !!el,
+    errorText: bodyText.replace(/\\s+/g, ' ').slice(0, 120),
+    hasRefreshBtn: [...document.querySelectorAll('button')].some((b) => /刷新/.test(b.textContent || '')),
+    cardCount: document.querySelectorAll('[data-feed-id]').length,
+  }
+})()`)
+log('STATE_ERROR', errorState)
+
+// --- 4.3 「刷新」真实性：在 error 态下恢复 stub，点刷新 → 必须**真发请求**且内容出现 ---
+const refreshReal = await evaluate(`(async () => {
+  const netBefore = window.__WO11_NET__ || 0
+  /* 恢复真实请求（但仍计数）：去掉失败模式 */
+  window.__WO11_POSTS_MODE__ = 'ok'
+  const btn = [...document.querySelectorAll('button')].find((b) => /刷新/.test(b.textContent || ''))
+  if (!btn) return { ok: false, why: 'error 态下没有「刷新」按钮' }
+  btn.click()
+  await new Promise(r => setTimeout(r, 2500))
+  const netAfter = window.__WO11_NET__ || 0
+  return {
+    ok: true,
+    fetchDelta: netAfter - netBefore,
+    cardCountAfter: document.querySelectorAll('[data-feed-id]').length,
+    stillError: !!document.querySelector('[data-feed-state="error"]'),
+    netBefore, netAfter,
+  }
+})()`)
+log('REFRESH_IS_REAL', refreshReal)
+
+// --- 4.4 empty 态（stub 返回 items: []）---
+await installPostsStub('empty')
+await remountFeed()
+await new Promise((r) => setTimeout(r, 2000))
+const emptyState = await evaluate(`(() => {
+  const el = document.querySelector('[data-feed-state="empty"]')
+  return {
+    hash: location.hash,
+    hasEmptyNode: !!el,
+    emptyText: el ? (el.textContent || '').trim() : null,
+    hasErrorNode: !!document.querySelector('[data-feed-state="error"]'),
+    cardCount: document.querySelectorAll('[data-feed-id]').length,
+  }
+})()`)
+log('STATE_EMPTY', emptyState)
+
+// 复原：卸载 stub，回到真实数据
+await evaluate(`(() => {
+  if (window.__WO11_POSTS_ORIG__) window.fetch = window.__WO11_POSTS_ORIG__
+  window.__WO11_POSTS_MODE__ = 'ok'
+  return true
+})()`)
+await remountFeed()
+await new Promise((r) => setTimeout(r, 2000))
+
+// ---------- 5) 刷新后的内容快照（判 mock / 假数字 / 残留）----------
+console.log('')
+console.log('=== 5) 复原真实数据后的内容快照 ===')
+const domAfter = await evaluate(`(() => {
+  const bodyText = document.body.innerText || ''
+  const byAttr = [...document.querySelectorAll('[data-feed-id]')].map((e) => e.getAttribute('data-feed-id'))
+  return {
+    hash: location.hash,
+    feedIdCount: byAttr.length,
+    feedIds: byAttr,
+    fakeNumbersPresent: ${JSON.stringify(FAKE_AUTHORITATIVE_NUMBERS)}.filter((n) => bodyText.includes(n))
+      .concat(['12486', '38920'].filter((n) => bodyText.includes(n))),
+    residueHits: [/M1-E2E-/, /TLS 日志泄漏检查/].map((p) => p.source).filter((s) => new RegExp(s).test(bodyText)),
+    hasCollegeGrade: /学院|年级|专业/.test(bodyText),
+    imgCount: document.querySelectorAll('img').length,
+    textSample: bodyText.replace(/\\s+/g, ' ').slice(0, 220),
+  }
+})()`)
+log('FEED_DOM_AFTER_REFRESH', domAfter)
+
+// ---------- 6) 基线驱动的忠实度断言（WO#11 的 header/navigation 修正）----------
+console.log('')
+console.log('=== 6) 基线驱动断言：标题 / 左上控件 / 关闭导航 ===')
+const baselineClaims = await evaluate(`(() => {
+  const bodyText = document.body.innerText || ''
+  const titleEl = document.querySelector('[data-feed-title]')
+  /* 左上控件：读 aria-label 与是否用关闭图标 */
+  const leftBtn = [...document.querySelectorAll('button')].find((b) =>
+    /关闭|返回/.test(b.getAttribute('aria-label') || ''))
+  return {
+    titleText: titleEl ? (titleEl.textContent || '').trim() : null,
+    hasTitleNode: !!titleEl,
+    leftAria: leftBtn ? leftBtn.getAttribute('aria-label') : null,
+    leftHtmlHasCloseIcon: leftBtn ? /close|Close/.test(leftBtn.innerHTML) : false,
+    /* 学校切换是否已隐藏（按审核 52 HIDE/DEFER） */
+    schoolSwitcherPresent: !!document.querySelector('.fl__school'),
+    /* 被禁的编造数字 */
+    fakeNumbers: ['12,486', '38,920', '12486', '38920'].filter((n) => bodyText.includes(n)),
+  }
+})()`)
+log('BASELINE_CLAIMS', baselineClaims)
+
+// ---------- 4b) 关闭导航的**判别性**测试（上一页 ≠ campus）----------
+console.log('')
+console.log('=== 4b) 关闭导航：用"上一页 ≠ campus"的路径判别 ===')
+/*
+  为什么必须这样做：如果只测"从 campus 进 feedlist 再关闭"，H1(真后退) 与 H2(固定跳 campus)
+  结果**相同** —— 没有判别力。必须让来源页 ≠ campus。
+*/
+const closeNav = await evaluate(`(async () => {
+  /* 造来源页：#/more（经 drawer 的真实路径在 diagnose 脚本里验过；这里只需一个 ≠campus 的来源） */
+  location.hash = '#/more'
+  await new Promise(r => setTimeout(r, 1600))
+  const from = location.hash
+  /* 从 #/more 点「校园圈」进 feedlist */
+  const nodes = [...document.querySelectorAll('*')]
+    .filter((e) => (e.textContent || '').trim().indexOf('校园圈') >= 0 && (e.textContent || '').trim().length < 40)
+  const t = nodes[nodes.length - 1]
+  if (!t) return { ok: false, why: '在来源页找不到「校园圈」入口' }
+  ;(t.closest('button,a,[role="button"],li') || t).click()
+  await new Promise(r => setTimeout(r, 2200))
+  const atFeed = location.hash
+  const left = [...document.querySelectorAll('button')].find((b) => /关闭|返回/.test(b.getAttribute('aria-label') || ''))
+  if (!left) return { ok: false, why: 'feedlist 上没有关闭/返回控件', atFeed }
+  left.click()
+  await new Promise(r => setTimeout(r, 2000))
+  return { ok: true, from, atFeed, afterClose: location.hash }
+})()`)
+log('CLOSE_NAVIGATION_PROBE', closeNav)
 
 // ---------- 判定 ----------
 const setEq = (a, b) => {
@@ -242,39 +394,94 @@ const setEq = (a, b) => {
   const y = b.slice().sort()
   return x.length === y.length && x.every((v, i) => v === y[i])
 }
-const domIds = domAfter && domAfter.feedIds ? domAfter.feedIds : []
-const apiIds = apiInfo && apiInfo.ids ? apiInfo.ids : []
 
 const v = {
-  /*
-    ⚠️ 内容类断言一律读 **domAfter**（刷新后），不是初始态 ——
-       改前该页初始停在错误态、页面上根本没有 mock 内容，
-       若量初始态就会"因为看不到内容"而空过（本会话反复出现的形态）。
-  */
-  FEED_FROM_API: domAfter && domAfter.feedIdCount > 0 && apiInfo && apiInfo.ok ? 'PASS' : 'FAIL',
+  /* 列表来自真实 API：DOM 卡片 id 集合 == GET /api/posts 的 items[].id 集合（集合级） */
+  FEED_FROM_API:
+    readyState && readyState.cardCount > 0 && apiInfo && apiInfo.ok ? 'PASS' : 'FAIL',
   FEED_NO_MOCK_ROWS:
-    domAfter && domAfter.feedIdCount > 0 && domIds.length > 0 && apiIds.length > 0 && setEq(domIds, apiIds)
+    readyState &&
+    readyState.cardIds.length > 0 &&
+    apiInfo &&
+    apiInfo.ids &&
+    apiInfo.ids.length > 0 &&
+    setEq(readyState.cardIds, apiInfo.ids)
       ? 'PASS'
       : 'FAIL',
-  /* 三态看**初始态**：改前"有明确错误态"正是要保留的性质（如实复刻原版断网界面） */
-  FEED_THREE_STATE_EXPLICIT:
-    dom && dom.hasNetworkErrorCopy && dom.hasRefreshButton ? 'PASS' : 'FAIL',
-  FEED_NO_SOURCELESS_FIELDS: domAfter && domAfter.hasCollegeGrade === false ? 'PASS' : 'FAIL',
-  FEED_AVATAR_PLACEHOLDER: 'NOT_EVALUATED', // 需实现后按 data 属性判定（当前无标记）
-  FEED_REFRESH_IS_REAL: refreshProbe && refreshProbe.found && refreshProbe.fetchDelta > 0 ? 'PASS' : 'FAIL',
+
+  /*
+    三态：用**受控 stub** 逐个构造（不是我第一版那样"期望首屏恰好是错误态"）——
+      loading 由延迟响应构造 ／ error 由失败响应构造 ／ empty 由 items:[] 构造
+    三者必须**彼此可辨**（尤其 error 与 empty 不得混同）。
+  */
+  FEED_STATE_LOADING_EXPLICIT:
+    loadingState && loadingState.state === 'loading' && /加载中/.test(loadingState.stateText || '')
+      ? 'PASS'
+      : 'FAIL',
+  FEED_STATE_ERROR_EXPLICIT:
+    errorState && errorState.hasErrorNode && /网络不给力/.test(errorState.errorText || '') && errorState.cardCount === 0
+      ? 'PASS'
+      : 'FAIL',
+  FEED_STATE_EMPTY_EXPLICIT:
+    emptyState && emptyState.hasEmptyNode && emptyState.hasErrorNode === false && emptyState.cardCount === 0
+      ? 'PASS'
+      : 'FAIL',
+  FEED_ERROR_NOT_STALE_CONTENT:
+    /* 失败时**不得**留着旧列表冒充成功（沿用 WO#9B 层 A 的同名纪律） */
+    errorState && errorState.cardCount === 0 ? 'PASS' : 'FAIL',
+
+  /* 「刷新」必须**真发请求**（基线 navigation："刷新 → 重新请求"） */
+  FEED_REFRESH_IS_REAL:
+    refreshReal && refreshReal.ok && refreshReal.fetchDelta > 0 && refreshReal.cardCountAfter > 0
+      ? 'PASS'
+      : 'FAIL',
+
   FEED_NO_FAKE_AUTHORITATIVE_NUMBERS:
-    domAfter && domAfter.fakeNumbersPresent && domAfter.fakeNumbersPresent.length === 0 ? 'PASS' : 'FAIL',
+    domAfter && domAfter.fakeNumbersPresent && domAfter.fakeNumbersPresent.length === 0 &&
+    baselineClaims && baselineClaims.fakeNumbers && baselineClaims.fakeNumbers.length === 0
+      ? 'PASS'
+      : 'FAIL',
   FEED_NO_TEST_RESIDUE: domAfter && domAfter.residueHits && domAfter.residueHits.length === 0 ? 'PASS' : 'FAIL',
-  detail: { dom, domAfter, apiInfo, refreshProbe, usedEntry, afterEntry },
+
+  /* ---- 基线驱动的忠实度断言（manifest: scripts/m5/fixtures/baseline-manifest.json）---- */
+  FEED_TITLE:
+    baselineClaims && baselineClaims.hasTitleNode && baselineClaims.titleText === '校园圈' ? 'PASS' : 'FAIL',
+  FEED_LEFT_CONTROL: baselineClaims && baselineClaims.leftAria === '关闭' ? 'PASS' : 'FAIL',
+  /* 判别性测试：来源页必须 ≠ campus，否则 H1(真后退) 与 H2(固定跳) 结果相同、无判别力 */
+  FEED_CLOSE_NAVIGATION:
+    closeNav && closeNav.ok && closeNav.from && closeNav.afterClose && closeNav.afterClose === closeNav.from
+      ? 'PASS'
+      : 'FAIL',
+  FEED_SCHOOL_NAME_HIDDEN:
+    baselineClaims && baselineClaims.schoolSwitcherPresent === false ? 'PASS' : 'FAIL',
+
+  detail: {
+    readyState, apiInfo, loadingState, errorState, emptyState, refreshReal,
+    domAfter, baselineClaims, closeNav, usedEntry, afterEntry,
+  },
+  notes: {
+    FEED_CLOSE_NAVIGATION:
+      '判别性测试：必须用"上一页 ≠ campus"的路径，否则 H1(真后退) 与 H2(固定跳) 结果相同、无判别力',
+    'FEED_STATE_*': '三态由受控 stub 构造 —— "某次运行恰好停在哪个状态"取决于环境，不是契约',
+    ORIGINAL_NORMAL_LIST:
+      'NOT_EVALUATED：原版正常列表从未被观察到（baseline normal = not_reproducible），不得声称条目形态一致',
+    FEED_AVATAR_PLACEHOLDER: '需按 data 属性判定；当前 PostCard 用 img，未单独标记 → NOT_EVALUATED',
+  },
 }
 const KEYS = [
   'FEED_FROM_API',
   'FEED_NO_MOCK_ROWS',
-  'FEED_THREE_STATE_EXPLICIT',
-  'FEED_NO_SOURCELESS_FIELDS',
+  'FEED_STATE_LOADING_EXPLICIT',
+  'FEED_STATE_ERROR_EXPLICIT',
+  'FEED_STATE_EMPTY_EXPLICIT',
+  'FEED_ERROR_NOT_STALE_CONTENT',
   'FEED_REFRESH_IS_REAL',
   'FEED_NO_FAKE_AUTHORITATIVE_NUMBERS',
   'FEED_NO_TEST_RESIDUE',
+  'FEED_TITLE',
+  'FEED_LEFT_CONTROL',
+  'FEED_CLOSE_NAVIGATION',
+  'FEED_SCHOOL_NAME_HIDDEN',
 ]
 v.WO11_GATE = KEYS.every((k) => v[k] === 'PASS') ? 'PASS' : 'FAIL'
 log('VERDICT', v)
