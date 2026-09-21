@@ -81,7 +81,9 @@ else
 fi
 
 # 1) 数据库
-pg_dump -Fc -h 127.0.0.1 -U campus -d campus -f "$GEN/database.dump" 2>/dev/null
+# **必须给 PGPASSWORD**：否则 pg_dump 会等待交互式密码输入 → 脚本永久挂住
+# （本轮真实踩到的坑：跑了 10 分钟超时。所有 psql/pg_dump/pg_restore 都要带凭据。）
+PGPASSWORD="$(cat /srv/campus/.db_password)" pg_dump -Fc -h 127.0.0.1 -U campus -d campus -f "$GEN/database.dump" 2>/dev/null
 [ -s "$GEN/database.dump" ] && ok "database.dump 生成（$(stat -c %s "$GEN/database.dump") 字节）" || bad "database.dump 失败"
 
 # 2) 媒体（只打包 public/ 与 private/，不含 .tmp 与临时文件）
