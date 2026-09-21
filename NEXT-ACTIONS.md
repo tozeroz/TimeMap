@@ -106,7 +106,7 @@
       DB 错误时 fail closed。报告字段：
       `expiredSessions / revokedSessions / expiredChallenges / consumedChallenges /`
       `activeSessions / pendingChallenges`
-- [ ] E4 **（下一步）Gate 只查"死数据"，不查总数**：
+- [x] E4 ✅ **已完成**：Gate 第 6 节 + 4 条状态型不变量（M5_AUTH_STALE_*）+ 总数只作 INFO/WARN`n      判别力自检 `scripts/m5/verify-auth-judge-logic.sh`（构造输入：全 0→PASS；任一非 0→FAIL；字段缺失→FAIL）`n      gate 29 键全 PASS，REAL_EXIT=0：
       `STALE_EXPIRED_SESSIONS = 0`、`STALE_CONSUMED_CHALLENGES = 0`
       或允许明确 retention window：`expired_at < now - 24h → 必须不存在`
       ⚠ **不要写 `sessions < 50`**。总行数只保留为**次级** trend/warning
