@@ -177,8 +177,19 @@ export async function postBoardNote(
 ): Promise<ApiResult<{ id: string; body: string }>> {
   return request<{ id: string; body: string }>(`/api/board-notes/${encodeURIComponent(peerId)}`, {
     method: 'POST',
-    // 只提交 body —— **不提交 from_user_id**（服务端会忽略，但客户端也不该发）
-    body: JSON.stringify({ body }),
+    /*
+      ⚠ **传对象，不要传字符串**。
+      踩过的坑（真实 bug，我自己引入的）：这里原来写的是
+        body: JSON.stringify({ body })
+      而 request() 内部本来就会 `JSON.stringify(init.body)` ——
+      于是请求体被**双重编码**成一个 JSON 字符串字面量（"{\"body\":\"😂\"}"），
+      服务端解析出来的是字符串而不是对象，`req.body.body` 为 undefined，
+      最终正确地回了 400 bad_body。
+      症状很有欺骗性：界面输入框显示正常、请求确实发出、服务端却稳定回 400，
+      很容易被误判成"测试注入的问题"或"接口坏了"。
+      教训：**客户端的 body 一律传对象，序列化只在 request() 里做一次**。
+    */
+    body: { body },
   })
 }
 
