@@ -74,3 +74,37 @@ app/src/api/client.ts:676   export function readSnapshot<T>(key)                
 - **不要**因为看到 `.bubble--me` 早已存在、却从未被使用，就假设"原设计就是这样" ——
   它是**未接线的样式**，不是"已决定的行为"
 - **不要**改 `postThreadImageMessage` / `uploadMedia` 等已通过审核的路径
+
+---
+
+## 附：勘察完成（2026-09-21 20:59）—— `meId` 的来源已确定，规格无未知项
+
+**现成入口（不需要新造存储）**：
+
+```
+app/src/api/session.ts        getSession()          ← 已有模块
+app/src/screens/MeScreen.tsx:3,21   import { getSession } from '../api/session'
+                                    const [session, setSession] = useState(() => getSession())
+app/src/components/TabBar.tsx:2,28  import { getSession } from '../api/session'
+                                    const s = getSession()
+```
+
+**即**：`ChatScreen` 只需 `import { getSession } from '../api/session'`，
+用 `getSession()?.user?.id`（**以实现时读到的 SessionUser 字段为准**）取 `meId`。
+
+**注意**：`MeScreen`/`TabBar` 都用了"状态 + 重新读取"的模式（`useState(() => getSession())`、
+并在登录/退出后重新 `getSession()`）。`ChatScreen` 若要跟随登录态变化，
+应**沿用同一模式**，不要引入新的订阅机制。
+
+### 至此修复的完整清单（无未知项）
+
+```
+1. ChatScreen.tsx   + import { getSession } from '../api/session'
+                    + 取 meId（null 时降级为 --peer）
+                    ~ 第 245–246 行：按 mine 选择 chat__row--me/--peer 与 bubble--me/--peer
+2. chat.css         ~ 补 .chat__row--me 的右侧对齐（.bubble--me 已存在可用）
+3. 验证             tsc/lint/build → cap sync → build-android → 装机
+                    → CDP 断言**实际几何**（气泡 getBoundingClientRect().left 明显偏右）
+                    → 截图对照原版 raw-dumps/original-chat/...-scroll-newer.png
+                    → 重跑 M5 gate
+```
