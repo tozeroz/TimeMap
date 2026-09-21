@@ -173,6 +173,73 @@ PY
 
 # ---------------------------------------------------------------------------
 echo
+echo "--- 7) NORMAL_GROUP_MESSAGE_MENTIONS_ALL_FALSE：普通群消息必须为 false（不得默认 true）---"
+NORM_MARK="WO9B-NORM-$(date +%s)"
+NC="$(curl -s -o /tmp/wo9b_norm.json -w '%{http_code}' -X POST \
+  "$BASE/api/threads/$GROUP/messages" \
+  -H "authorization: Bearer $TOK_A" -H 'content-type: application/json' \
+  -d "{\"body\":\"$NORM_MARK\",\"kind\":\"text\"}")"
+if [ "$NC" = "201" ]; then ok "普通群消息发送 201"; else bad "普通群消息发送 HTTP $NC（期望 201）"; fi
+NROW="$(PSQL "select id from messages where body='$NORM_MARK' limit 1")"
+if [ -n "$NROW" ]; then
+  NVAL="$(PSQL "select coalesce(mentions_all::text,'<no-col>') from messages where id='$NROW'")"
+  if [ "$NVAL" = "f" ]; then ok "普通群消息 mentions_all = false（未默认 true）"; else bad "普通群消息 mentions_all = $NVAL（期望 f）"; fi
+else
+  bad "普通群消息未落库（无法判定 mentions_all 默认值）"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "--- 8) MIXED_ALL_AND_INDIVIDUAL_REJECT：mentionsAll=true 且逐人 mentions 非空 → 4xx 且零 mutation ---"
+#
+# ⚠️⚠️ 这条断言我第一版**因为错误原因通过**（改前就 PASS），必须记下来：
+#   第一版用 anmoss 的 id 当提及目标，而登录身份**也是 anmoss** → 服务端返回
+#     400 {"error":"cannot_mention_self"}
+#   那是"不能提及自己"，**与"mentionsAll 与逐人提及互斥"毫无关系**。
+#   而改前服务端**根本不知道 mentionsAll**，所以那种 400 完全不能证明本不变量成立。
+#   → 这正是本项目纪律禁止的"只断 4xx"：**断言必须指明具体错误码**。
+#   → 修正：① 提及目标改为**另一位成员**（Lemy，避免 cannot_mention_self 干扰）
+#            ② 要求响应里的 error **必须是"互斥冲突"那一类**，而不是任意 4xx
+#   诊断脚本：scripts/m5/diagnose-mixed-mentions-code.sh（实测上述 400 的具体原因）
+MIX_TARGET='22222222-2222-4222-8222-222222222222'   # Lemy（**不是**当前登录的 anmoss）
+MIX_MARK="WO9B-MIX-$(date +%s)"
+M_BEFORE="$(PSQL "select count(*) from messages where thread_id='$GROUP'")"
+MC="$(curl -s -o /tmp/wo9b_mix.json -w '%{http_code}' -X POST \
+  "$BASE/api/threads/$GROUP/messages" \
+  -H "authorization: Bearer $TOK_A" -H 'content-type: application/json' \
+  -d "{\"body\":\"$MIX_MARK\",\"kind\":\"text\",\"mentionsAll\":true,\"mentions\":[\"$MIX_TARGET\"]}")"
+M_AFTER="$(PSQL "select count(*) from messages where thread_id='$GROUP'")"
+MIX_ERR="$(python3 -c "
+import json
+try:
+    print(json.load(open('/tmp/wo9b_mix.json')).get('error') or '')
+except Exception:
+    print('')
+" 2>/dev/null)"
+info "混合提交 HTTP $MC  error=$MIX_ERR  body=$(head -c 160 /tmp/wo9b_mix.json)"
+case "$MC" in
+  4*)
+    # 必须是"互斥冲突"这一类错误码，而不是任意 4xx（例如 cannot_mention_self）
+    case "$MIX_ERR" in
+      *conflict*|*mutually*|*exclusive*|*mentions_all*)
+        ok "混用被拒绝且错误码指明冲突（HTTP $MC error=$MIX_ERR）" ;;
+      cannot_mention_self)
+        bad "HTTP $MC 但 error=cannot_mention_self（**与互斥不变量无关** —— 断言又变成了'因为错误原因通过'）" ;;
+      '')
+        bad "HTTP $MC 但响应里没有 error 字段，无法证明是互斥冲突所致" ;;
+      *)
+        bad "HTTP $MC 但 error=$MIX_ERR（未指明'mentionsAll 与逐人提及互斥'，不足以支撑本不变量）" ;;
+    esac ;;
+  *) bad "混用未被拒绝（HTTP $MC error=$MIX_ERR）—— 两者必须**互斥**" ;;
+esac
+if [ "$((M_AFTER - M_BEFORE))" = "0" ]; then ok "混合提交 DB delta = 0（零 mutation）"; else bad "混合提交 DB delta = $((M_AFTER - M_BEFORE))（期望 0）"; fi
+MROWS="$(PSQL "select count(*) from messages where body='$MIX_MARK'")"
+if [ "$MROWS" = "0" ]; then ok "混合提交未落库（DB 里 0 条）"; else bad "混合提交落了 $MROWS 条"; fi
+MRM="$(PSQL "select count(*) from message_mentions mm join messages m on m.id=mm.message_id where m.body='$MIX_MARK'")"
+if [ "$MRM" = "0" ]; then ok "混合提交零 mention 残留"; else bad "混合提交留下 $MRM 条 mention 行"; fi
+
+# ---------------------------------------------------------------------------
+echo
 echo "=== 清理本轮写入的测试消息 ==="
 PSQL "delete from message_media where message_id in (select id from messages where body like 'WO9B-%')" >/dev/null
 PSQL "delete from message_mentions where message_id in (select id from messages where body like 'WO9B-%')" >/dev/null

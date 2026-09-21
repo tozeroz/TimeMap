@@ -193,9 +193,64 @@ const panel = await evaluate(`(() => {
   }
   out.sectionHeaderCount = host.querySelectorAll('[data-at-section-header]').length
   out.itemCount = host.querySelectorAll('[data-at-panel-item]').length
+  /* 成员行的**业务身份**（blocker ① 需要）：按稳定语义属性取，不按"第几行"（审核 47 原则） */
+  out.memberIds = [...host.querySelectorAll('[data-member-id]')].map((e) => e.getAttribute('data-member-id'))
+  out.memberNames = [...host.querySelectorAll('[data-member-id]')].map((e) => (e.textContent || '').trim().slice(0, 24))
   return out
 })()`)
 log('AT_PANEL', panel)
+
+// ---------- BLOCKER ①：成员来源权威性（审核 48）----------
+console.log('')
+console.log('=== 4) AT_MEMBER_SOURCE_AUTHORITY（blocker ①）===')
+/*
+  权威来源 = **服务端** GET /api/threads/:id 的 members[]。
+  ⚠️ 必须用**绝对 origin**（相对路径在 WebView 里会打到 Capacitor 本地服务器，
+      返回 HTML 200 —— 本项目已踩两次；run-device-gate.sh 的 4/7 步已把它做成机械前置）。
+  ⚠️ 面板一侧只读 DOM 的 `data-member-id`，**不**从 seed / 消息 sender / mock 反推成员。
+*/
+const memberSource = await evaluate(`(async () => {
+  const raw = localStorage.getItem('campus.demo.session.v1') || ''
+  let tok = null
+  try { tok = JSON.parse(raw).token || null } catch {}
+  if (!tok) return { ok: false, why: 'no token in localStorage' }
+  const res = await fetch('https://8.148.156.146/api/threads/${GROUP_ID}', { headers: { authorization: 'Bearer ' + tok } })
+  const ct = res.headers.get('content-type') || ''
+  let body = null
+  try { body = await res.json() } catch (e) { body = null }
+  return {
+    ok: res.ok,
+    status: res.status,
+    contentType: ct,
+    /* 契约（§二）：members: [{id, displayName}]。改前该字段不存在 → 这里就是 undefined */
+    members: body && Array.isArray(body.members) ? body.members : null,
+    hasMembersField: !!(body && Array.isArray(body.members)),
+    memberCount: body && body.memberCount,
+    kind: body && body.kind,
+    title: body && body.title,
+  }
+})()`)
+console.log('  MEMBER_SOURCE_PROBE =', JSON.stringify(memberSource))
+const apiMemberIds = Array.isArray(memberSource && memberSource.members)
+  ? memberSource.members.map((m) => String(m.id))
+  : []
+const panelMemberIds = panel && panel.memberIds ? panel.memberIds.map(String) : []
+const setEq = (a, b) => {
+  const x = a.slice().sort()
+  const y = b.slice().sort()
+  return x.length === y.length && x.every((v, i) => v === y[i])
+}
+const memberSourceOk = apiMemberIds.length > 0 && setEq(apiMemberIds, panelMemberIds)
+log('AT_MEMBER_SOURCE_AUTHORITY_DETAIL', {
+  apiStatus: memberSource && memberSource.status,
+  apiContentType: memberSource && memberSource.contentType,
+  hasMembersField: memberSource && memberSource.hasMembersField,
+  apiMemberIds,
+  panelMemberIds,
+  note:
+    '权威来源 = 服务端 members[]（契约 §二）。改前该字段不存在 → apiMemberIds 为空 → 必然 FAIL' +
+    '（这是**真实检查**，不是恒失败的占位；契约落地后它能真的 PASS）。',
+})
 
 // ---------- 层 A 判定（改前应全 FAIL）----------
 const num = (s) => (typeof s === 'string' ? Number.parseFloat(s) : NaN)
@@ -229,8 +284,30 @@ const v = {
   */
   AT_PANEL_NO_INVENTED_GROUPING:
     panel && panel.found ? (panel.sectionHeaderCount === 0 ? 'PASS' : 'FAIL') : 'NOT_EVALUATED',
-  AT_PANEL_EMPTY_STATE: 'NOT_EVALUATED', // 需网络 stub；面板不存在时也无从判断
-  AT_PANEL_TRIGGER: 'NOT_EVALUATED',
+  /*
+    键名与口径按审核记录 48 冻结的最终清单：
+      · 空态/失败态都标 **_CODEPATH** —— 它们由**受控 stub** 验证，
+        **不得**被写成"真实服务器故障/空账号 E2E"（当前种子群非空，也不为此再造空账号）。
+      · AT_MEMBER_SOURCE_AUTHORITY 与 AT_ALL_SELECTION_* 是审核 48 的**两个 blocker**，
+        未实现时必须是 FAIL（不能因为"面板不存在"就 NOT_EVALUATED ——
+        它们本身就是 blocker 要证明的东西）。
+  */
+  AT_PANEL_EMPTY_STATE_CODEPATH: 'NOT_EVALUATED', // 需受控 stub；与面板存在与否无关，故单独实现后再判
+  AT_PANEL_FAILURE_STATE_CODEPATH: 'NOT_EVALUATED',
+  /*
+    ★ BLOCKER ①（审核 48）：面板成员必须来自**权威来源**。
+    判据：面板里每个成员行的 data-member-id 集合 == **同一次** GET /api/threads/:id 的 members[].id 集合
+          （不漏、不多、**不得有 mock identity**）
+    ⚠️ 我第一版这里写成 `panel && panel.found ? 'FAIL' : 'FAIL'` —— 一个**恒 FAIL 的同义反复**，
+       它看起来"改前 FAIL 正确"，但**改后也永远不会 PASS**，属于坏断言（与我在层 A 修过的命名冲突同类）。
+       现在改成真正的集合比对：面板不存在 → memberSource 为空 → 必然 FAIL（正确的改前结果）；
+       面板存在后就是真实的 authority 检查。
+  */
+  AT_MEMBER_SOURCE_AUTHORITY: memberSourceOk ? 'PASS' : 'FAIL',
+  AT_ALL_SELECTION_VISIBLE: 'FAIL', // 未实现 → FAIL（blocker ②；实现后按可见标记判定）
+  AT_ALL_SELECTION_STATE_MATCHES_PAYLOAD: 'FAIL', // 未实现 → FAIL（blocker ②）
+  AT_PANEL_TRIGGER: 'OUR_DESIGN_CHOICE / ORIGINAL_NOT_EVALUATED',
+  AT_TRIGGER_STATIC_TRACE: 'FOUND',
   AT_PANEL_GROUPING_RULE: 'NOT_EVALUATED',
   detail: {
     entryReached: entryReachedIfAny,
