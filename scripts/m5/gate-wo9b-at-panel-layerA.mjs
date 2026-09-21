@@ -159,19 +159,43 @@ log('OPEN_AT_PANEL', open)
 console.log('')
 console.log('=== 3) 面板结构与几何 ===')
 const panel = await evaluate(`(() => {
-  const p = document.querySelector('[data-at-panel]')
-  const host = p || document.querySelector('[data-at-panel-host]')
+  const host = document.querySelector('[data-at-panel]')
   const dpr = window.devicePixelRatio
   const toCss = (r) => ({ w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10, top: Math.round(r.top * 10) / 10, bottom: Math.round(r.bottom * 10) / 10 })
   const out = { dpr, viewportCss: { w: window.innerWidth, h: window.innerHeight }, found: !!host }
   if (!host) return out
-  const hr = host.getBoundingClientRect()
-  out.hostBox = toCss(hr)
-  /* 底部弹层判据：面板容器贴着视口底部（bottom ≈ 视口高），且未占满全屏高度 */
-  out.isBottomSheet = Math.abs(hr.bottom - window.innerHeight) <= 2 && hr.height < window.innerHeight * 0.95
+
+  /*
+    ⚠️ AT_PANEL_KIND 必须量**弹层本体**，不是全屏包裹层（我第一版就搞错了）：
+      [data-at-panel] 是**全屏包裹层**（遮罩 + 弹层都挂在它下面），
+      它的 box 当然是满屏（top=0, bottom=视口高）→ 用它判"是不是底部弹层"必然 false。
+      正确的语义目标是**弹层本体** [data-at-panel-sheet]。
+    这也是本项目既有的测试原则：**按稳定业务语义选择测试对象**（而不是随手抓一个外层容器）。
+
+    ⚠️ 另外：本段是**模板字符串内部**，注释里**绝不能出现反引号** ——
+      我在这里第三次踩了同一个坑（前两次：给审核写消息、层 A 脚本的另一处注释），
+      它会把模板字符串提前闭合 → 整个脚本 SyntaxError。
+      因此这些选择器一律不写反引号（见 scripts/m5/check-gate-template-safety.mjs 的机械检查）。
+  */
+  const sheet = host.querySelector('[data-at-panel-sheet]')
+  const mask = host.querySelector('[data-at-panel-mask]')
+  out.hasSheet = !!sheet
+  out.hasMask = !!mask
+  if (sheet) {
+    const sr = sheet.getBoundingClientRect()
+    out.sheetBox = toCss(sr)
+    /* 底部弹层判据：贴着视口底部，且**不占满**整个高度 */
+    out.isBottomSheet = Math.abs(sr.bottom - window.innerHeight) <= 2 && sr.height < window.innerHeight * 0.95
+  }
+  if (mask) {
+    const mr = mask.getBoundingClientRect()
+    /* 遮罩应覆盖整个视口（原版该容器 clickable=true → 点外部关闭） */
+    out.maskCoversViewport = Math.abs(mr.width - window.innerWidth) <= 2 && Math.abs(mr.height - window.innerHeight) <= 2
+  }
+
   const titleEl = host.querySelector('[data-at-panel-title]')
   out.title = titleEl ? titleEl.textContent : null
-  out.titleStyle = titleEl ? { fontSize: getComputedStyle(titleEl).fontSize, fontWeight: getComputedStyle(titleEl).fontWeight, textAlign: getComputedStyle(titleEl).textAlign } : null
+  out.titleStyle = titleEl ? { fontSize: getComputedStyle(titleEl).fontSize, fontWeight: getComputedStyle(titleEl).fontWeight } : null
   out.hasCloseControl = !!(host.querySelector('[data-at-panel-close]') || host.querySelector('button[aria-label="关闭"]'))
   const atAll = host.querySelector('[data-at-all-item]')
   out.hasAtAll = !!atAll
@@ -193,7 +217,6 @@ const panel = await evaluate(`(() => {
   }
   out.sectionHeaderCount = host.querySelectorAll('[data-at-section-header]').length
   out.itemCount = host.querySelectorAll('[data-at-panel-item]').length
-  /* 成员行的**业务身份**（blocker ① 需要）：按稳定语义属性取，不按"第几行"（审核 47 原则） */
   out.memberIds = [...host.querySelectorAll('[data-member-id]')].map((e) => e.getAttribute('data-member-id'))
   out.memberNames = [...host.querySelectorAll('[data-member-id]')].map((e) => (e.textContent || '').trim().slice(0, 24))
   return out
@@ -252,6 +275,161 @@ log('AT_MEMBER_SOURCE_AUTHORITY_DETAIL', {
     '（这是**真实检查**，不是恒失败的占位；契约落地后它能真的 PASS）。',
 })
 
+// ---------- 6) 选中状态链路（blocker ②，审核 48/49 冻结）----------
+console.log('')
+console.log('=== 6) 「@所有人」选中状态：可见 → 与 payload 一致 → 成功清除／失败保留／可取消 ===')
+
+/*
+  先挂 fetch 观测：抓 POST /messages 的**请求体**。
+  为什么抓请求体而不是只看排队后的 DB：本层验的是"**界面状态与将要发出的 payload 一致**"
+  （AT_ALL_SELECTION_STATE_MATCHES_PAYLOAD），DB 层的对应断言在层 B。
+  ⚠️ 也不猜 localStorage key、不靠 CSS class 自证 —— 只看"应用实际发出去了什么"。
+*/
+await evaluate(`(() => {
+  if (!window.__WO9BSEL__) {
+    window.__WO9BSEL__ = []
+    const orig = window.fetch
+    window.fetch = async (...args) => {
+      const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || ''
+      const init = args[1] || {}
+      const method = (init.method || 'GET').toUpperCase()
+      if (method === 'POST' && /\\/messages/.test(url)) {
+        let parsed = null
+        try { parsed = JSON.parse(String(init.body)) } catch {}
+        window.__WO9BSEL__.push({ url: url.replace(/^https?:\\/\\/[^/]+/, ''), body: parsed })
+      }
+      return orig(...args)
+    }
+  }
+  window.__WO9BSEL__ = []
+  return true
+})()`)
+
+// --- 6.1 打开面板 → 点「所有人」→ 面板应关闭 + 出现可见 chip ---
+const selectAtAll = await evaluate(`(async () => {
+  const entry = document.querySelector('[data-at-panel-entry]')
+  if (!entry) return { ok: false, why: 'no entry' }
+  entry.click()
+  await new Promise(r => setTimeout(r, 900))
+  const item = document.querySelector('[data-at-all-item]')
+  if (!item) return { ok: false, why: 'no at-all item' }
+  item.click()
+  await new Promise(r => setTimeout(r, 900))
+  return {
+    ok: true,
+    panelClosed: !document.querySelector('[data-at-panel]'),
+    chipVisible: !!document.querySelector('[data-at-all-chip]'),
+    chipText: (document.querySelector('[data-at-all-chip]') || {}).textContent || null,
+  }
+})()`)
+log('SELECT_AT_ALL', selectAtAll)
+
+// --- 6.2 带 chip 发一条 → 抓 payload；成功后 chip 应消失 ---
+const sendWithAt = await evaluate(`(async () => {
+  const inp = document.querySelector('.chatbar__input')
+  if (!inp) return { ok: false, why: 'no input' }
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+  setter.call(inp, 'WO9B-SEL-SUCCESS')
+  inp.dispatchEvent(new Event('input', { bubbles: true }))
+  await new Promise(r => setTimeout(r, 500))
+  const btn = document.querySelector('[data-testid="chatbar-send"]')
+  if (!btn) return { ok: false, why: 'no send button' }
+  btn.click()
+  await new Promise(r => setTimeout(r, 2500))
+  return {
+    ok: true,
+    chipAfter: !!document.querySelector('[data-at-all-chip]'),
+    draftAfter: (document.querySelector('.chatbar__input') || {}).value,
+  }
+})()`)
+const sentPayloads = await evaluate(`window.__WO9BSEL__ || []`)
+log('SEND_WITH_AT', { sendWithAt, sentPayloads })
+
+const firstPayload = (sentPayloads || [])[0] || null
+const payloadHasMentionsAllTrue = !!(firstPayload && firstPayload.body && firstPayload.body.mentionsAll === true)
+/* 反向断言：**不得**把标记写进 body（审核 49 明确要求 presentation 与 semantics 分离） */
+const bodyHasAtText = !!(firstPayload && firstPayload.body && typeof firstPayload.body.body === 'string' && /@所有人/.test(firstPayload.body.body))
+
+// --- 6.3 取消链路：再次选中 → 点 chip 的 × → chip 消失 → 再发一条 payload 必须是 false ---
+const cancelFlow = await evaluate(`(async () => {
+  const entry = document.querySelector('[data-at-panel-entry]')
+  entry.click()
+  await new Promise(r => setTimeout(r, 800))
+  const item = document.querySelector('[data-at-all-item]')
+  item.click()
+  await new Promise(r => setTimeout(r, 700))
+  const chipBefore = !!document.querySelector('[data-at-all-chip]')
+  const rm = document.querySelector('[data-at-all-chip-remove]')
+  if (!rm) return { ok: false, why: 'no chip remove control', chipBefore }
+  rm.click()
+  await new Promise(r => setTimeout(r, 400))
+  const chipAfterRemove = !!document.querySelector('[data-at-all-chip]')
+  const inp = document.querySelector('.chatbar__input')
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+  setter.call(inp, 'WO9B-SEL-CANCEL')
+  inp.dispatchEvent(new Event('input', { bubbles: true }))
+  await new Promise(r => setTimeout(r, 400))
+  const btn = document.querySelector('[data-testid="chatbar-send"]')
+  btn.click()
+  await new Promise(r => setTimeout(r, 2200))
+  return { ok: true, chipBefore, chipAfterRemove }
+})()`)
+const cancelPayloads = await evaluate(`window.__WO9BSEL__ || []`)
+log('CANCEL_FLOW', { cancelFlow, cancelPayloads })
+/*
+  ⚠️ 必须取**最后一次** POST，而不是 [0]。
+  观测数组是**累加**的（钩子一直挂在 window 上），[0] 是上一步"成功发送"的那条
+  （mentionsAll:true）—— 我第一版就是读 [0]，于是明明取消了却误判 FAIL。
+  这与本项目此前"多角色共用同一个临时文件、读到被覆盖的旧产物"属同一类错误：
+  **读到了更早的那份证据**。因此这里显式取 last，并在 detail 里把整条链路打出来以便核对。
+*/
+const cancelPayload = (cancelPayloads || [])[(cancelPayloads || []).length - 1] || null
+const cancelPayloadFalse = !!(cancelPayload && cancelPayload.body && cancelPayload.body.mentionsAll === false)
+log('CANCEL_PAYLOAD_CHECK', {
+  taken: 'last',
+  body: cancelPayload ? cancelPayload.body : null,
+  mentionsAllIsFalse: cancelPayloadFalse,
+  allPayloadsInOrder: (cancelPayloads || []).map((p) => (p.body || {}).mentionsAll),
+})
+
+// --- 6.4 失败保留：stub 掉 POST → chip 与 draft 都应保留 ---
+const failFlow = await evaluate(`(async () => {
+  const orig = window.fetch
+  window.fetch = async (...args) => {
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || ''
+    const method = ((args[1] || {}).method || 'GET').toUpperCase()
+    if (method === 'POST' && /\\/messages/.test(url)) {
+      return new Response(JSON.stringify({ error: 'injected_failure' }), { status: 500, headers: { 'content-type': 'application/json' } })
+    }
+    return orig(...args)
+  }
+  const entry = document.querySelector('[data-at-panel-entry]')
+  entry.click()
+  await new Promise(r => setTimeout(r, 800))
+  document.querySelector('[data-at-all-item]').click()
+  await new Promise(r => setTimeout(r, 700))
+  const inp = document.querySelector('.chatbar__input')
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+  setter.call(inp, 'WO9B-SEL-FAIL')
+  inp.dispatchEvent(new Event('input', { bubbles: true }))
+  await new Promise(r => setTimeout(r, 400))
+  document.querySelector('[data-testid="chatbar-send"]').click()
+  await new Promise(r => setTimeout(r, 2200))
+  const res = {
+    chipAfterFail: !!document.querySelector('[data-at-all-chip]'),
+    draftAfterFail: (document.querySelector('.chatbar__input') || {}).value,
+    errorShown: !!(document.querySelector('.chatbar__error') || {}).textContent,
+  }
+  window.fetch = orig
+  /* 清理：把草稿与选中状态复位，避免影响后续 */
+  setter.call(document.querySelector('.chatbar__input'), '')
+  document.querySelector('.chatbar__input').dispatchEvent(new Event('input', { bubbles: true }))
+  const rm = document.querySelector('[data-at-all-chip-remove]')
+  if (rm) rm.click()
+  return res
+})()`)
+log('FAIL_FLOW', failFlow)
+
 // ---------- 层 A 判定（改前应全 FAIL）----------
 const num = (s) => (typeof s === 'string' ? Number.parseFloat(s) : NaN)
 const titleOk = panel && panel.title && panel.title.trim() === EXPECT.title
@@ -304,8 +482,33 @@ const v = {
        面板存在后就是真实的 authority 检查。
   */
   AT_MEMBER_SOURCE_AUTHORITY: memberSourceOk ? 'PASS' : 'FAIL',
-  AT_ALL_SELECTION_VISIBLE: 'FAIL', // 未实现 → FAIL（blocker ②；实现后按可见标记判定）
-  AT_ALL_SELECTION_STATE_MATCHES_PAYLOAD: 'FAIL', // 未实现 → FAIL（blocker ②）
+
+  /*
+    ---- 选中状态链路（blocker ②，审核 48/49 冻结）----
+    每条都对应审核明确要的一个环节：
+      VISIBLE      点「所有人」后 composer 出现**可见** chip（且面板关闭）
+      MATCHES_PAYLOAD  chip 与实际发出的 payload 一致（mentionsAll === true）
+      CANCEL       点 chip 的 × → chip 消失 → 后续 payload 的 mentionsAll === false
+      SUCCESS_CLEARS   发送成功后 chip 消失
+      FAILURE_PRESERVES 发送失败后 chip **与** draft 都保留（否则重试时语义静默丢失）
+  */
+  AT_ALL_SELECTION_VISIBLE: selectAtAll && selectAtAll.ok && selectAtAll.chipVisible ? 'PASS' : 'FAIL',
+  AT_ALL_SELECTION_STATE_MATCHES_PAYLOAD: payloadHasMentionsAllTrue ? 'PASS' : 'FAIL',
+  /*
+    ⚠️ 反向断言（审核 49 明确要求）：
+      可见标记**不得**被写进 message body —— presentation 与 persistence semantics 必须分离。
+      正确 payload: { body: "…", mentionsAll: true }
+      错误 payload: { body: "@所有人 …" }
+  */
+  AT_ALL_SELECTION_NOT_WRITTEN_INTO_BODY: bodyHasAtText ? 'FAIL' : 'PASS',
+  AT_ALL_SELECTION_CANCEL:
+    cancelFlow && cancelFlow.ok && cancelFlow.chipBefore && cancelFlow.chipAfterRemove === false && cancelPayloadFalse
+      ? 'PASS'
+      : 'FAIL',
+  MENTIONS_ALL_SUCCESS_CLEARS_SELECTION: sendWithAt && sendWithAt.ok && sendWithAt.chipAfter === false ? 'PASS' : 'FAIL',
+  MENTIONS_ALL_FAILURE_PRESERVES_SELECTION:
+    failFlow && failFlow.chipAfterFail === true && failFlow.draftAfterFail === 'WO9B-SEL-FAIL' ? 'PASS' : 'FAIL',
+  AT_ALL_PANEL_CLOSES_ON_SELECT: selectAtAll && selectAtAll.panelClosed ? 'PASS' : 'FAIL',
   AT_PANEL_TRIGGER: 'OUR_DESIGN_CHOICE / ORIGINAL_NOT_EVALUATED',
   AT_TRIGGER_STATIC_TRACE: 'FOUND',
   AT_PANEL_GROUPING_RULE: 'NOT_EVALUATED',
@@ -330,6 +533,14 @@ const KEYS = [
   'AT_PANEL_CLOSE_CONTROL',
   'AT_ALL_ITEM_PRESENT',
   'AT_ALL_ITEM_GEOMETRY',
+  'AT_MEMBER_SOURCE_AUTHORITY',
+  'AT_ALL_SELECTION_VISIBLE',
+  'AT_ALL_SELECTION_STATE_MATCHES_PAYLOAD',
+  'AT_ALL_SELECTION_NOT_WRITTEN_INTO_BODY',
+  'AT_ALL_SELECTION_CANCEL',
+  'MENTIONS_ALL_SUCCESS_CLEARS_SELECTION',
+  'MENTIONS_ALL_FAILURE_PRESERVES_SELECTION',
+  'AT_ALL_PANEL_CLOSES_ON_SELECT',
 ]
 /* 注意：AT_PANEL_NO_INVENTED_GROUPING 不在"必须 PASS"列表里 ——
    它在面板存在时才有意义（见上面注释），面板存在时若违规会单独报 FAIL 并在 detail 里可见。 */

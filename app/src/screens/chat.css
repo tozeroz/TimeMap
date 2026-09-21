@@ -331,3 +331,180 @@
   display: inline-flex;
   align-items: center;
 }
+/* ===========================================================================
+   M5 WO#9B 层 A：AT 面板（@ 提及选择）+ 「@所有人」选中 chip
+   =========================================================================== */
+
+/*
+  几何全部来自原版静态证据（res/XZ.xml 与 res/KW.xml），单位 CSS px
+  （本设备 dp 与 CSS px 同值：dump 里 plusBtn 声明 32dp、实测 56 设备 px、dpr 1.75）：
+    · 面板是**底部弹层**（原版：constraintBottom_to_BottomOf=parent）
+    · 列表高度固定 **500dp**（原版 RecyclerView layout_height=500dp）
+    · 「所有人」项：行高 **88dp**、图标 **56dp×56dp**、标签 **16sp**、图文间距 **12dp**
+    · 标题：**16sp / bold / 居中**
+*/
+
+.atpanel {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+}
+
+/* 全屏遮罩：原版该容器 clickable=true（点外部关闭） */
+.atpanel__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* 底部锚定的弹层本体 */
+.atpanel__sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--c-surface);
+  border-top-left-radius: var(--r-lg);
+  border-top-right-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  max-height: 80%;
+}
+
+.atpanel__head {
+  position: relative;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--c-divider);
+  flex: 0 0 auto;
+}
+
+/* 标题：原版 16sp / bold / gravity=center */
+.atpanel__title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.atpanel__close {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--c-text-2);
+}
+
+/* 列表：原版固定 500dp，加底部内边距；内容超出时内部滚动 */
+.atpanel__list {
+  height: 500px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+
+/* 行：原版「所有人」项行高 88dp、左右 padding、图文间距 12dp */
+.atitem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 88px;
+  padding: 0 16px;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  color: var(--c-text);
+}
+
+/* 图标：原版 56dp × 56dp */
+.atitem__icon {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border-radius: var(--r-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-surface-sunken);
+  color: var(--c-text-2);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* 「所有人」项的图标：原版是 src=@0x7f08029f 的图形；我方用可辨识的 @ 字形占位
+   （形状本身无证据可比对，故不声称与原版一致） */
+.atitem__icon--all {
+  background: var(--c-primary, #6b7cff);
+  color: #fff;
+}
+.atitem__icon--all::before {
+  content: '@';
+}
+
+/* 标签：原版 16sp */
+.atitem__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 16px;
+}
+
+.atpanel__empty {
+  margin: 40px 16px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--c-text-3);
+}
+
+/* ---- 「@所有人」选中 chip（可见状态；审核 49：必须是 composer chip/state，不得写进 body）---- */
+.chatbar__chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 6px 0 10px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  background: var(--c-surface-sunken);
+  color: var(--c-text);
+}
+
+.chip--at {
+  background: var(--c-primary, #6b7cff);
+  color: #fff;
+}
+
+.chip__remove {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* composer 里的 @ 入口（我方设计选择；原版触发方式无证据） */
+.chatbar__at {
+  font-size: 18px;
+  font-weight: 600;
+}

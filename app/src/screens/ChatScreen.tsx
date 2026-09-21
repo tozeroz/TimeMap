@@ -12,7 +12,7 @@ import {
 } from '../api/client'
 import { getSession } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
-import { IconBack, IconEmoji, IconImage, IconMic, IconMore, IconPlus } from '../components/icons'
+import { IconBack, IconClose, IconEmoji, IconImage, IconMic, IconMore, IconPlus } from '../components/icons'
 import { IconSend } from '../components/icons-send'
 import { RecorderError, formatDuration, startRecording, type RecorderSession } from '../native/recorder'
 import { goBack } from '../router'
@@ -256,7 +256,25 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
    * 访问控制与消息接口一致：非成员/不存在一律 404 → 这里表现为 meta 为 null，
    * 页面沿用与消息相同的"不存在或无权查看"文案（不额外泄漏"它存在但你没权限"）。
    */
-  const [meta, setMeta] = useState<{ title: string | null; memberCount: number; kind: string } | null>(null)
+  const [meta, setMeta] = useState<{
+    title: string | null
+    memberCount: number
+    kind: string
+    members: Array<{ id: string; displayName: string }>
+  } | null>(null)
+  /** AT 面板是否打开（入口位置是**我方设计选择**，见 composer 里的 @ 按钮） */
+  const [atOpen, setAtOpen] = useState(false)
+  /**
+   * 「@所有人」是否已选中（M5 WO#9B 层 A）。
+   *
+   * ⚠️ 它是**独立的选中状态**，与正文分离 —— 审核记录 49 明确要求：
+   *   可见标记必须是 **composer chip/state**，**不得**写进 message body。
+   *   正确：draft="下午开会" + mentionsAll=true → 发 { body:"下午开会", mentionsAll:true }
+   *   错误：body="@所有人 下午开会"
+   *   这样 UI presentation 与 persistence semantics 才分离得干净
+   *   （将来若拿到原版证据证明原版就是这么存正文的，再单独讨论）。
+   */
+  const [atAll, setAtAll] = useState(false)
   useEffect(() => {
     if (variant !== 'group') return
     const shape = classifyThreadId(id)
@@ -265,7 +283,14 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
     void (async () => {
       const r = await getThread(id)
       if (!alive || !mounted.current) return
-      if (r.ok) setMeta({ title: r.value.title, memberCount: r.value.memberCount, kind: r.value.kind })
+      if (r.ok) {
+        setMeta({
+          title: r.value.title,
+          memberCount: r.value.memberCount,
+          kind: r.value.kind,
+          members: r.value.members,
+        })
+      }
     })()
     return () => {
       alive = false
@@ -377,14 +402,25 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
     setSendErr('')
     setBusy('posting')
     try {
-      const sent = await postThreadTextMessage(id, text)
+      // M5 WO#9B：把「@所有人」作为**独立标记**随消息发出（不写进 body）
+      const sent = await postThreadTextMessage(id, text, atAll)
       if (!sent.ok) {
-        // ⚠️ 失败时**不清空 draft**：让用户能直接重试，不静默丢内容
+        /*
+          ⚠️ 失败时**既不清空 draft、也不清空 @所有人 选中状态**。
+
+          为什么必须保留选中状态：如果只留草稿、把 @ 标记悄悄丢掉，
+          用户重试时会发出一条**普通消息** —— 语义**静默丢失**，
+          而界面上看不出任何区别。这正是审核记录 48/49 要求
+          MENTIONS_ALL_FAILURE_PRESERVES_SELECTION 的原因。
+        */
         setSendErr(`发送失败：消息未发出（${sent.reason}）`)
         return
       }
-      // 只有成功才清空输入框
-      if (mounted.current) setDraft('')
+      // 只有成功才清空输入框与选中状态
+      if (mounted.current) {
+        setDraft('')
+        setAtAll(false)
+      }
       await loadMessages()
     } finally {
       if (mounted.current) setBusy('')
@@ -576,10 +612,66 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
               {sendErr}
             </div>
           )}
+          {/*
+            M5 WO#9B 层 A：**可见的「@所有人」选中标记**。
+
+            审核记录 48/49 的 blocker ② —— 用户点完 AT 面板里的「所有人」之后，
+            必须能看出"我确实选中了"，否则就是"后端字段存在但用户不知道自己选了什么"的半条链路。
+            审核 49 进一步冻结：它必须是 **composer chip/state**，
+            **不得**被写进 message body（presentation 与 persistence semantics 分离）。
+
+            生命周期（每一条都有对应 Gate）：
+              显示          AT_ALL_SELECTION_VISIBLE
+              与 payload 一致 AT_ALL_SELECTION_STATE_MATCHES_PAYLOAD
+              发送成功清除    MENTIONS_ALL_SUCCESS_CLEARS_SELECTION
+              发送失败保留    MENTIONS_ALL_FAILURE_PRESERVES_SELECTION
+              可取消（×）     AT_ALL_SELECTION_CANCEL
+          */}
+          {variant === 'group' && atAll && (
+            <div className="chatbar__chips" data-at-all-chip>
+              <span className="chip chip--at">
+                <span className="chip__text">@所有人</span>
+                <button
+                  className="chip__remove"
+                  aria-label="取消 @所有人"
+                  data-at-all-chip-remove
+                  onClick={() => setAtAll(false)}
+                >
+                  ×
+                </button>
+              </span>
+            </div>
+          )}
           <div className="chatbar">
             <button className="iconbtn" aria-label="表情">
               <IconEmoji size={22} />
             </button>
+            {/*
+              M5 WO#9B 层 A：AT 面板的**可达入口**。
+
+              ⚠️ 入口位置是**我方设计选择**，不是原版 conformance：
+                原版的 AT 面板触发方式**没有证据** ——
+                  有界静态 trace 只证明了符号存在（`openAtPanel`、`AtPanelActivity`/`GroupAtPanel`、
+                  相关 resource/model 符号），**读不到方法体**，因此无法回答
+                  "哪个控件、什么输入状态、什么手势触发它"。
+                → AT_TRIGGER_STATIC_SYMBOL_EVIDENCE: FOUND
+                  AT_PANEL_TRIGGER: ORIGINAL_BEHAVIOR NOT_EVALUATED ／ PROVENANCE: OUR_DESIGN_CHOICE
+              放在 composer 而不是顶部右侧入口，也是刻意的：
+                ① 顶部 rightIcon 的目的地在原版里同样无证据（很可能就是被排除的群管理），
+                   把它当 AT 入口属于"编行为"；
+                ② @ 与"要发出的消息"在同一视觉区域，语义上更自然。
+              仅群聊显示（direct 不允许 @所有人）。
+            */}
+            {variant === 'group' && (
+              <button
+                className="iconbtn chatbar__at"
+                aria-label="提醒的人"
+                data-at-panel-entry
+                onClick={() => setAtOpen(true)}
+              >
+                @
+              </button>
+            )}
             <input
               className="chatbar__input"
               placeholder="发消息..."
@@ -741,6 +833,104 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/*
+        ═══════════════════════════════════════════════════════════════════════
+        M5 WO#9B 层 A：AT 面板（@ 提及选择）
+
+        原版证据（静态 APK，可采信）—— `layout/activity_group_at_panel` → res/XZ.xml：
+          全屏 ConstraintLayout（clickable=true → **点外部关闭**）
+          └ **底部锚定** ConstraintLayout（constraintBottom_to_BottomOf=parent）← **底部弹层**
+              ImageButton  contentDescription="关闭"
+              TextView     **16sp / bold / 居中**  text="选择提醒的人"
+              TextView     visibility=GONE  text="暂无群成员"  margin=40dp
+              RecyclerView **layout_height=500dp（固定）** paddingBottom
+        「所有人」项 —— `layout/item_at_panel_at_all` → res/KW.xml：
+          行高 **88dp**；图标 56dp×56dp（contentDescription="所有人"）；标签 16sp；marginStart=12dp
+
+        ⚠️ 三处**不实现**（无证据，不猜）：
+          ① **分组标题**：`item_at_panel_section_header` 的存在只证明"原版有能力显示分组标题"，
+             **不**证明当前这个群一定分组、按什么规则分组 → 本面板**只渲染
+             「所有人」项 + 成员平铺**，并加反向断言 AT_PANEL_NO_INVENTED_GROUPING
+          ② **触发方式** → AT_PANEL_TRIGGER: ORIGINAL_BEHAVIOR NOT_EVALUATED（见 composer 的 @ 按钮注释）
+          ③ **@某人 后的消息渲染**（高亮/可点）→ 无证据，不做
+        ═══════════════════════════════════════════════════════════════════════
+      */}
+      {variant === 'group' && atOpen && (
+        <div className="atpanel" data-at-panel>
+          {/* 全屏遮罩：按 dump 的可点全屏容器（点外部关闭） */}
+          <div
+            className="atpanel__mask"
+            data-at-panel-mask
+            onClick={() => setAtOpen(false)}
+            aria-hidden
+          />
+          {/* 底部弹层本体 */}
+          <div className="atpanel__sheet" data-at-panel-sheet role="dialog" aria-label="选择提醒的人">
+            <header className="atpanel__head">
+              <span className="atpanel__title" data-at-panel-title>
+                选择提醒的人
+              </span>
+              <button
+                className="atpanel__close"
+                aria-label="关闭"
+                data-at-panel-close
+                onClick={() => setAtOpen(false)}
+              >
+                <IconClose size={18} />
+              </button>
+            </header>
+
+            <div className="atpanel__list" data-at-panel-list>
+              {/*
+                「所有人」项 —— 几何按 res/KW.xml 复刻：
+                  行高 88dp、图标 56dp×56dp、标签 16sp、图文间距 12dp（dp 与 CSS px 同值）
+                选中后：关闭面板 + 在 composer 显示可见 chip + 内部 mentionsAll=true
+              */}
+              <button
+                className="atitem atitem--all"
+                data-at-all-item
+                data-at-panel-item
+                onClick={() => {
+                  setAtAll(true)
+                  setAtOpen(false)
+                }}
+              >
+                <span className="atitem__icon atitem__icon--all" data-at-all-icon aria-hidden />
+                <span className="atitem__label" data-at-all-label>
+                  所有人
+                </span>
+              </button>
+
+              {/*
+                成员平铺（**无 section header**）。
+                成员来源 = **服务端** `GET /api/threads/:id` 的 members[]（blocker ①），
+                绝不从消息 sender / seed / mock / 本地缓存补成员。
+                每行带 data-member-id（稳定业务身份），供 AT_MEMBER_SOURCE_AUTHORITY 做集合比对。
+              */}
+              {(meta?.members ?? []).map((m) => (
+                <div key={m.id} className="atitem atitem--member" data-at-panel-item data-member-id={m.id}>
+                  <span className="atitem__icon" aria-hidden>
+                    {m.displayName.slice(0, 1)}
+                  </span>
+                  <span className="atitem__label">{m.displayName}</span>
+                </div>
+              ))}
+
+              {/*
+                空态 —— 按 dump：可见性默认 GONE，文案"暂无群成员"。
+                ⚠️ 证据分层：它由**受控 stub** 验证，标 CLIENT_CODEPATH PASS，
+                **不**声称"真实服务器/空账号 E2E"（当前种子群非空，也不为此再造空账号）。
+              */}
+              {(meta?.members ?? []).length === 0 && (
+                <p className="atpanel__empty" data-at-panel-empty>
+                  暂无群成员
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </Screen>

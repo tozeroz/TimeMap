@@ -327,7 +327,22 @@ export interface ApiSentMessage {
  */
 export async function postThreadMessage(
   threadId: string,
-  input: { body: string; kind?: 'text' | 'image' | 'voice'; mediaId?: string; mentions?: string[] },
+  input: {
+    body: string
+    kind?: 'text' | 'image' | 'voice'
+    mediaId?: string
+    mentions?: string[]
+    /**
+     * M5 WO#9B：@所有人。
+     *
+     * 与 `mentions`（逐人）**互斥** —— 服务端会在同一事务内拒绝两者同时出现
+     * （`mentions_all_conflicts_with_mentions`），因为在数据上"全体"与"逐人"
+     * 无法区分该按哪个解释。
+     * ⚠️ 它**只是标记**，**不得**把它写进 `body`（例如 body="@所有人 …"）：
+     *   UI presentation（可见 chip）与 persistence semantics（这个布尔）必须分离。
+     */
+    mentionsAll?: boolean
+  },
 ): Promise<ApiResult<ApiSentMessage>> {
   return request<ApiSentMessage>(`/api/threads/${encodeURIComponent(threadId)}/messages`, {
     method: 'POST',
@@ -402,8 +417,9 @@ export async function postThreadVoiceMessage(
 export async function postThreadTextMessage(
   threadId: string,
   body: string,
+  mentionsAll = false,
 ): Promise<ApiResult<ApiSentMessage>> {
-  return postThreadMessage(threadId, { body, kind: 'text' })
+  return postThreadMessage(threadId, { body, kind: 'text', mentionsAll })
 }
 
 // ===========================================================================
