@@ -245,3 +245,67 @@ com.kairuotu.campus:id/tv_user_tag_name            ← 标签里的用户名
 而我们的底部栏、发布按钮、瀑布流、顶部切换**本来就与原版一致**。
 **那等于往一个正确的实现里加东西**，正是上面 1–3 次错误造成的同类后果
 （例如我曾按一条不可复算的记录把表情从 6 改错成 7）。
+
+---
+
+## 附五：第三节清单的**现状更正**（2026-09-21 22:22）
+
+第三节写于 M0–M4 收口时，其中若干条**已被后续工作改变**。
+按"状态文字必须与事实同步"的纪律（旧结论若被继续引用，每次读取都在传播过期信息），
+在此逐条更正。**原表保留以便追溯。**
+
+### 5.1 已改变的条目
+
+| 项 | 三节原状态 | **现状态** | 依据 |
+|---|---|---|---|
+| `board_notes` | 建模完成、未做前端 | ✅ **已实现（前端 + 服务端）** | `app/src/screens/BoardScreen.tsx`（`getBoardNotes`/`postBoardNote`）+ `server/src/index.ts:1694`「M5 Slice 1：留言板」；M5 WO#1 已 CLOSED |
+| `MEDIA_UPLOAD_AND_SEND_TRANSITION` | BLOCKED_BY_POLICY | ⚠️ **部分解除**：产品链路已用**自动化驱动真实系统 picker** 验证通过（`NATIVE_FILE_PICKER_PRODUCT_PATH` / `SYSTEM_PICKER_SELECTION` / `WEBVIEW_FILE_DELIVERY` 均 PASS） | `docs/m5/G3-NATIVE-PICKER-E2E-RESULT.md`；**但** `ANDROID_INPUTDISPATCHER_ENTRY_TOUCH: NOT_EVALUATED`（用 CDP 注入触摸，非物理输入） |
+| 底部 tab 数量（附里的登记） | DEVIATION（原版 4 / 我们 3） | ✅ **RETRACTED** | `docs/m5/TAB-DEVIATION-WITHDRAWN.md`、本文件附四（误数：把顶部栏目当成底部 tab） |
+| 消息发送者呈现 | 未登记 | ✅ **已登记并修复** | `CHAT_MESSAGE_SENDER_PRESENTATION: FIXED/VERIFIED`（审核记录 27/29） |
+
+### 5.2 仍未改变的条目（现状核实，逐条给依据）
+
+| 项 | 状态 | 核实到的现状 |
+|---|---|---|
+| `OTP_UI_VISUAL_CONFORMANCE` | **NOT_EVALUATED** | 未变：取证会给真实号码发短信（BLOCKED_BY_ETHICS） |
+| `AT_PANEL_VISUAL_CONFORMANCE` | **NOT_EVALUATED** | 未变：证据依赖第三方写操作（INADMISSIBLE） |
+| `MEDIA_PREVIEW_VISUAL` | **NOT_EVALUATED** | 未变：同上 |
+| 点赞切换 / 已点赞态 | **BLOCKED_BY_POLICY** | 未变 |
+| 发布后的反馈 / 跳转 / 动画 | **BLOCKED_BY_POLICY** | 未变 |
+| 原版 `@` 提及模型 | **NOT_EVALUATED** | 未变 |
+| 手机号定位 | **DEVIATION** | 未变（`REAL_DEVICE_GEOLOCATION_CONFORMANCE: DEVIATION`） |
+| 图片压缩 / 重编码 | 未做 | 未变（服务器 396MB、无 native 图像库） |
+| `@所有人` | 未实现 | 未变（明确不做） |
+| **语音消息** | **未实现** | **未变，但现状已精确化** ↓ |
+| per-user 配额 | 未做 | 未变 |
+
+### 5.3 语音消息这一条的**现状精确化**（本次核实）
+
+**我们这边**（代码里**已诚实标注为占位**，不是"假装实现了"）：
+
+```
+app/src/screens/PublishScreen.tsx:33   注释「语音：录音波形（占位，未接真实录音）」
+app/src/screens/PublishScreen.tsx:294  界面文案「（录音功能尚未接入真实麦克风）」
+app/src/screens/PublishScreen.tsx:320  aria-label="按住说话" 的按钮（disabled）
+app/src/screens/MeScreen.tsx:122-129   me__voiceRow /「我的第一条语音」（静态展示卡，非真实数据）
+app/src/api/client.ts:240              kind: 'text' | 'image' | 'voice'（类型上已预留）
+server/src/index.ts:1538               只校验 kind 枚举，**无语音内容处理**
+```
+
+**原版这边**（静态证据，来自 APK 资源名，只读）：
+
+```
+im_chat_voice_layout
+im_chat_voice_ic
+im_chat_subitem_voice_left_layout      ← 语音气泡的左右两套（与文字一致的方向体系）
+im_chat_subitem_voice_right_layout
+im_chat_voice_to_text_bg               ← **语音转文字**（原版有此功能；**我们没有**）
+im_chat_voice_to_text_bg_night
+```
+
+→ **结论**：语音是**真实的 1:1 缺口**，且原版的功能面**比"能发语音"更宽**（含**语音转文字**）。
+我方现状是"类型预留 + 界面占位 + 明确标注未实现"，**没有谎报**。
+
+**实现影响**：这是**功能级缺口**，不是接线级 ——
+需要录音、上传、播放、以及"语音转文字"四件事，**远大于一个工作单**。
+建议：登记为正式 gap 项，**先不定实现**；若要推进，应按功能分单（录音 → 播放 → 转文字）。
