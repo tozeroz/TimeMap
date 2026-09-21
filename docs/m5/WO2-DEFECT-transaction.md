@@ -250,3 +250,48 @@ PASS 错误码明确 bad_media_id
 A7 那条**静默成功**的路径还有一个副作用：**写入了一条 `kind='image'` 但无 media 的消息**。
 这类消息在客户端渲染时会变成"一条没有图的图片消息"——与 M5 追求的"发图闭环"直接冲突。
 所以修复不仅要"拒绝数组"，还要确认**不存在其它"kind=image 但无 media"的合法写入路径**。
+---
+
+## 十五、**再次推翻**：这不是产品缺陷，是**部署了陈旧产物**（候选 #1 成立）
+
+### 决定性证据
+
+```
+本地源码（server/src/index.ts 行 1551）：
+    if (body?.mediaIds !== undefined) {
+      reply.code(400)
+      return { error: 'bad_media_id', reason: 'array_not_supported_use_singular_mediaId' }
+    }
+
+服务器产物：
+    grep -c 'array_not_supported_use_singular_mediaId' /srv/campus/server/dist/index.mjs → 0
+    grep -c 'mediaIds'                                  /srv/campus/server/dist/index.mjs → 0
+```
+
+**部署的 bundle 里根本没有这段检查**（连 `mediaIds` 字样都没有）。
+
+### 结论
+
+```
+A7 FAIL（mediaIds[] 被静默忽略并写入消息）
+  → **不是 PRODUCT_DEFECT**
+  → 而是 **ENVIRONMENT_DEFECT / GATE_DEFECT：部署的是陈旧产物**
+  产品代码是正确的：源码里明确拒绝复数 mediaIds（400 bad_media_id）
+```
+
+### 这是本会话同类错误的**第六次**，而且这次尤其刺眼
+
+上一轮我在文档里**明确把"部署产物与源码不一致"列为"必须最先排除"的候选 #1**，
+然后**没有先排除它，就先把结论定性为 PRODUCT_DEFECT** ——
+而且在同一份文档的 §八 我还刚写过"我先前的定性是错的"。
+
+**问题不在"不知道这个坑"，而在"知道却仍然跳过了那一步"。**
+本项目已两次栽在"验旧产物"上（M4 收口、设备端 APK），这是第三次。
+
+### 处置
+
+1. 重新构建 + **正确部署**（需查清为何 `-SkipBuild` 部署的 dist 不含新代码：
+   可能 build 产物路径与 deploy 上传路径不一致，或 deploy 用了缓存的旧文件）
+2. **部署后必须先核验产物**（在服务器上 grep `array_not_supported_use_singular_mediaId` 应为 ≥1），
+   再跑验证脚本 —— **把"产物核验"作为 Gate 的前置步骤**，而不是事后才发现
+3. 重跑 `verify-message-media.sh` 得到**真实**结论
