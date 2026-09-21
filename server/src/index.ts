@@ -1516,6 +1516,113 @@ export function buildServer(deps: ServerDeps) {
     }
   })
 
+  // -------------------------------------------------------------------------
+  // M5 Slice 1：留言板（board_notes）—— 原版 message-board 的对应实现
+  //
+  // 一致性依据是**可采信**的只读证据（supplements/message-board.json）：
+  //   「仅双方可见」（顶部副标题 + 输入框占位）、空态「可以给同学留言噢」、
+  //   发送按钮「留言」、表情行恰好 7 个。
+  // 模型结论为 SUPPORTED：**用户对用户的私密留言**，不挂在帖子/地点上。
+  //
+  // 可见性规则（服务端强制）：
+  //   只有 from_user_id = 我 或 to_user_id = 我 的留言才返回 —— 也就是"双方可见"。
+  //   第三方即使知道对方 user id 也拿不到（返回空列表，而不是 403：
+  //   与私有媒体同口径，不泄漏"这两个人之间有没有留言"）。
+  // 写入规则：不能给自己留言（DB 层已有 CHECK，这里先在服务层给出明确 400）。
+  // -------------------------------------------------------------------------
+  app.get('/api/board-notes/:userId', async (req, reply) => {
+    const otherId = (req.params as { userId?: string }).userId ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(otherId)) {
+      reply.code(404)
+      return { error: 'not_found' }
+    }
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') return unauthorized(reply)
+    try {
+      const r = await db.pool.query<{
+        id: string
+        from_user_id: string
+        to_user_id: string
+        body: string
+        created_at: Date
+        from_name: string | null
+        to_name: string | null
+      }>(
+        `select b.id, b.from_user_id, b.to_user_id, b.body, b.created_at,
+                fu.display_name as from_name, tu.display_name as to_name
+           from board_notes b
+           left join users fu on fu.id = b.from_user_id
+           left join users tu on tu.id = b.to_user_id
+          where (b.from_user_id = $1 and b.to_user_id = $2)
+             or (b.from_user_id = $2 and b.to_user_id = $1)
+          order by b.created_at asc
+          limit $3`,
+        [s.user.userId, otherId, LIST_LIMIT],
+      )
+      return {
+        peerId: otherId,
+        // 原版口径：标题「留言」+ 副标题「仅双方可见」；空态「可以给同学留言噢」
+        visibleTo: 'two_parties_only',
+        emptyText: '可以给同学留言噢',
+        toUser: r.rows[0]?.to_name ?? null,
+        items: r.rows.map((row) => ({
+          id: row.id,
+          fromUserId: row.from_user_id,
+          toUserId: row.to_user_id,
+          fromName: row.from_name,
+          toName: row.to_name,
+          body: row.body,
+          createdAt: row.created_at.toISOString(),
+          mine: row.from_user_id === s.user.userId,
+        })),
+      }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  app.post('/api/board-notes/:userId', async (req, reply) => {
+    const toId = (req.params as { userId?: string }).userId ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(toId)) {
+      reply.code(404)
+      return { error: 'not_found' }
+    }
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') return unauthorized(reply)
+    if (toId === s.user.userId) {
+      reply.code(400)
+      return { error: 'cannot_leave_note_to_self' }
+    }
+    const b = req.body as { body?: unknown } | undefined
+    const text = typeof b?.body === 'string' ? b.body.trim() : ''
+    if (!text || text.length > 200) {
+      reply.code(400)
+      return { error: 'bad_body' }
+    }
+    try {
+      const exists = await db.pool.query('select 1 from users where id = $1', [toId])
+      if (!exists.rowCount) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      const id = randomUUID()
+      await db.pool.query(
+        'insert into board_notes (id, from_user_id, to_user_id, body) values ($1, $2, $3, $4)',
+        [id, s.user.userId, toId, text],
+      )
+      reply.code(201)
+      return { id, fromUserId: s.user.userId, toUserId: toId, body: text }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
   return app
 }
 /**
