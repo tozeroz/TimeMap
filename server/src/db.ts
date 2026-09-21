@@ -276,20 +276,63 @@ export function createDb(cfg: AppConfig): Db {
   let closing = false
 
   async function refreshOnce(): Promise<DbStatus> {
-    const up = await (async () => {
+    /*
+      ⚠️ M5 X3（审核记录 55 的 DO NOW 项）：**不要把错误丢掉**。
+        原先这里是 `} catch { return false }` —— 错误被**完全吞掉**，
+        于是日志只说得出 `[migrate] retryable: database unreachable`，
+        **没有 SQLSTATE、没有 code、没有 message**。
+        而审核 55 明确要求："记录启动期间的**精确 DB 连接错误 / SQLSTATE**"，
+        并特别提醒：`max_connections=15 且 used=10` 很紧，但**必须有实际的
+        SQLSTATE / connection error 才能说是"连接耗尽"**（不能靠数字推断）。
+        → 因此这里把 pg 的错误字段取出来存进 `state.lastError`，让启动期失败**可归因**。
+        注意：这**只是记录**，不改变任何重试/判定行为（审核 55：先记录事实，不先调参数）。
+
+      ⚠️ 实现形态：**由这个 IIFE 直接 return 结果**，而不是去改一个外层变量。
+        我第一版写成 `let probeErr = null` + 在 catch 里 `probeErr = {...}`，
+        结果 tsc 报 6 个 `Property 'x' does not exist on type 'never'` ——
+        因为**外层控制流分析看不到嵌套函数里发生的赋值**，
+        于是把 probeErr 一路收窄成 `null`（真值分支里就变成 `never`）。
+        → 改成 return 结构后，类型完全确定，不需要任何断言。
+    */
+    type PgErrInfo = {
+      code?: string
+      errno?: string
+      syscall?: string
+      address?: string
+      port?: number
+      message?: string
+    }
+    const probe = await (async (): Promise<{ up: boolean; err: PgErrInfo | null }> => {
       try {
         await pool.query('select 1')
-        return true
-      } catch {
-        return false
+        return { up: true, err: null }
+      } catch (raw) {
+        const e = raw as PgErrInfo
+        return {
+          up: false,
+          err: {
+            code: e?.code,
+            errno: e?.errno,
+            syscall: e?.syscall,
+            address: e?.address,
+            port: e?.port,
+            message: e?.message,
+          },
+        }
       }
     })()
+    const up = probe.up
     state.dbUp = up
     state.applied = up ? await appliedCount() : 0
 
     if (!up) {
       state.state = 'retryable'
-      state.lastError = 'database unreachable'
+      // 把可归因的字段拼进来；缺哪个就写 <none>，**不要**用空串掩盖"没取到"
+      const e = probe.err
+      const detail = e
+        ? `code=${e.code ?? '<none>'} errno=${e.errno ?? '<none>'} syscall=${e.syscall ?? '<none>'} address=${e.address ?? '<none>'}:${e.port ?? '<none>'} message=${e.message ?? '<none>'}`
+        : 'code=<none>（探针未捕获到错误对象）'
+      state.lastError = `database unreachable: ${detail}`
       state.ready = false
       return { ...state }
     }
