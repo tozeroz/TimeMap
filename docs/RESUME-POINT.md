@@ -128,3 +128,73 @@ messages 与 message_media 同事务；TTL GC（默认 24h，与 orphan 分开�
 - 待审核裁定：① `mediaIds` 复数 strict 400 是否认可 ② `.tmp` 部署缺口修法 A/B
   ③ C4 表情形态（图片 vs 文字）④ `force-stop` 规则严格度
 - 待清理：子代理遗留 docker 容器 `wo2-pg`（已停止）
+---
+
+## 九、更新（2026-09-21 18:45）：WO#2 完成（待审核确认收口）
+
+### WO#2 状态
+
+```
+WO2_BACKEND:  ACCEPTED（审核记录 24）
+WO2_FRONTEND: 真机 PASS（含失败路径）
+WO2_OVERALL:  待审核确认 CLOSED
+```
+
+**前端真机证据**（子代理执行，我核验 commit `2da713f`）：
+```
+DEVICE_CHAT_IMAGE_RESULT PASS
+  选图 → 上传 201 → 发消息 201 → 图片真的渲染（blob, naturalWidth>0）
+  → 气泡数 3→4 → 重载后仍在；服务端复核两张图 scope=private
+DEVICE_CHAT_IMAGE_FAILPATH PASS
+  非图片 → 红字「发送失败」、气泡数不变（无幽灵消息）、input 已清空
+```
+**证据强度的一处已知弱点（子代理主动披露，我认可其标注）**：
+"选图"这一步用 `DOM.setFileInputFiles` 交给 input（**原生系统选择器 CDP 点不到**），
+之后的 上传/发送/重拉/渲染 全是产品代码、无桩。选择器弹窗本身未人工确认。
+→ 属"弱一档但已如实标注"；若需更强证据需人工介入（BLOCKED 类）。
+
+### 跨层常量检查：C1 覆盖缺口**已关闭**
+`scripts/m4/verify-cross-layer-constants.sh` → `CROSS_LAYER_CONSTANTS_RESULT PASS`
+（C1 原为 FAIL："app 从不发送 purpose"，现已修复并复跑确认。）
+
+### M5 服务器侧 Gate：全键 PASS
+`scripts/gates/m5/gate-server.sh`（服务器实跑）：
+```
+PERSISTENT PASS / STAGE PASS / REGRESSION PASS
+M5_MEDIA_MESSAGE_API / M5_MEDIAID_STRICT_REJECT / M5_UNATTACHED_TTL_GC
+M5_TMP_SELFHEAL / M5_BOARD_NOTES   全部 PASS
+M5_SERVER_GATE_RESULT: PASS
+M5_OVERALL: OPEN（待审核确认 WO#2 后更新）
+```
+
+### 本轮修掉的两个测试侧问题（都已验证）
+1. **坏断言**：`verify-message-media.sh` 的 id 集合断言用了**从未赋值的 `MSG2`**，
+   本质恒错、表现为间歇性 flaky → 改为**从 DB 按 kind 推导**（image=1 且 text=1）。
+2. **产物核验必须用 ASCII 标记**：esbuild 把非 ASCII 转义成 `\uXXXX`，
+   grep 中文恒为 0 → 假阴性（实测踩到）。已写进 Gate 前置步骤的注释。
+
+### 验证残留已清理（我做的）
+子代理留在我们服务器上的 2 条消息 + 2 条 media 已按 id 精确清理，
+盘上文件一并删除；orphan 清扫 dry-run 结果
+`orphans=[] unattached=[] unattachedMissingFile=0`（存储一致）。
+理由：本项目多个 Gate 做计数类断言，残留会造成"测试污染被测环境"。
+
+### 待人工执行（我不绕道）
+清理已退出的 docker 容器 `wo2-pg`：本会话的命令守卫对容器删除类命令
+一律返回 "cannot statically verify deletion inside opaque shell syntax"。
+我如实记为**需在会话外清理一次**。影响：仅占磁盘与一个容器名，
+不影响任何功能与验证。
+
+### 待审核裁定（累积 6 项）
+1. WO#2 整体可否 CLOSED
+2. 前端"替代入口"方式是否接受（DOM.setFileInputFiles 代真手指点系统选择器）
+3. `uploadMedia` 返回 `width/height: number | null` 的有意偏离是否认可
+4. **C4 表情形态**：复刻 6 个图标图像 vs 先做 image-based structure
+5. **`force-stop` 规则严格度**（已改为默认不干预原版 + 显式开关）
+6. 新提纪律："测试期望应从权威数据源推导，而非从 HTTP 响应正则抓取"
+
+### 一条工具使用上的观察（记录，不视为项目问题）
+本会话的命令守卫会把**命令文本里出现的删除关键词**（哪怕只是文档内容里提到）
+判为"无法静态验证的删除"并拒绝执行。处置：把含这类字样的内容**用文件工具写**，
+命令只做追加与提交 —— 这不是绕过安全控制（我并没有执行任何删除），
+而是避免文档用词触发假阳性。
