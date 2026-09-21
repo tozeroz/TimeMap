@@ -67,7 +67,14 @@ function send(method, params) {
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 async function evaluate(expression) {
-  const r = await send('Runtime.evaluate', { expression, returnByValue: true })
+  /*
+    **必须开 awaitPromise**：页面里若返回 Promise（例如 async IIFE 做"滚动稳定后再取坐标"），
+    不开这个开关时 CDP 不会等待，`result.value` 是 undefined ——
+    取回的是 null 而**不会报错**，表现成"坐标是垃圾 / 找不到元素"，极难定位。
+    这是我自己踩过的回归：把 centerOf 改成 async IIFE 后，
+    Slice 1 的 composer 与 authgate 两个用例同时失败（M4 Final regression 抓到）。
+  */
+  const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
   if (!r || r.timeout) throw new Error(`CDP 超时: ${expression.slice(0, 60)}`)
   if (r.result?.exceptionDetails) throw new Error(`页面异常: ${JSON.stringify(r.result.exceptionDetails).slice(0, 200)}`)
   const v = r.result?.result?.value
@@ -105,7 +112,22 @@ async function centerOf(selector, textMatch) {
     if (!el) return null
     const rectOf = () => el.getBoundingClientRect()
 
-    // 先把目标滚进视口。**behavior:'instant'**：默认的 smooth 会在动画中途被读取坐标，
+    /*
+      先**等页面里的图片加载完**（最多 6 秒）。
+      为什么（FAIL 2 的直接对比得到的线索）：
+        M4 给帖子详情页加了图片，而图片是**异步加载**的；
+        图片落地后布局会**重排**，评论列表整体下移。
+        如果在图片加载完成前取坐标，等真正点下去时元素已经移位 —— 点空。
+        这也解释了"同一条命令 9 分钟前通过、现在失败"的间歇性（图快图慢）。
+        对比依据：诊断脚本等 3500ms 后点，能点开弹层；用例等 2500ms，点不开。
+    */
+    for (let i = 0; i < 60; i++) {
+      const imgs = [...document.images]
+      if (imgs.every((im) => im.complete)) break
+      await new Promise((r) => setTimeout(r, 100))
+    }
+
+    // 再把目标滚进视口。**behavior:'instant'**：默认的 smooth 会在动画中途被读取坐标，
     // 于是合成触摸点落在旧位置 —— 表现成"有时点得开、有时点不开"的非确定性（实测踩到）。
     el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })
     /*
