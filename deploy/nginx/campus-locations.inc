@@ -60,6 +60,27 @@ location /_private_media/ {
     # 私有内容不允许任何缓存（含中间代理）
     add_header Cache-Control "private, no-store" always;
     add_header X-Content-Type-Options "nosniff" always;
+
+    # ---------------------------------------------------------------------
+    # CORS：**必须**加上，否则前端拿不到私有图（实测踩到的坑）
+    #
+    # 为什么：X-Accel-Redirect 的响应是**由 Nginx 直接生成的**，
+    # 不经过 Fastify，所以**不携带 Fastify 的 CORS 头**。
+    # 现象：OPTIONS 预检 204 通过、GET 在服务端 200 成功（日志可见），
+    #       但浏览器因为没有 Access-Control-Allow-Origin 而把响应丢弃，
+    #       前端只能看到 `TypeError: Failed to fetch` —— 极易误判成"服务端坏了"。
+    #
+    # 为什么公开图没暴露这个问题：<img src> 加载图片不受 CORS 约束（不透明响应）；
+    # 而私有图必须用 fetch（才能带 Authorization 头），fetch 受 CORS 约束。
+    #
+    # 只在已知来源上回显 Origin（不写 "*"）：这是私有资源，
+    # 允许任意来源读取字节是不必要的放宽。
+    # 允许来源 = Capacitor 应用的 https://localhost 与本地开发端口。
+    # ---------------------------------------------------------------------
+    if ($http_origin ~* ^(https?://localhost(:\d+)?|https?://127\.0\.0\.1(:\d+)?)$) {
+        add_header Access-Control-Allow-Origin $http_origin always;
+        add_header Access-Control-Allow-Credentials "true" always;
+    }
     types {
         image/jpeg jpg jpeg;
         image/png  png;
