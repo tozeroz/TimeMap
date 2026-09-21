@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | 1 | `login-sns` 真实身份语义 | Slice 0A | **SUPPORTED（已冻结）** | **手机号 + 短信验证码**；无密码、无第三方 SNS；固定 +86；协议未勾选走弹窗而非禁用。详见 `docs/m3/SLICE0-LOGIN-SEMANTICS.md` |
 | 2 | `places` / `schools` 建模 | Evidence Preflight | **部分完成**（见下） | `places` SUPPORTED；`schools` **SUPPORTED 但需要修订**（校区子实体） |
-| 3 | `comments.parent_id` | Slice 1 | **PENDING** | 尚未观察评论层级 |
+| 3 | `comments.parent_id` | Slice 1 | **SUPPORTED（已解决）** | **MODEL: SUPPORTED / PRESENTATION: EXPANDED**，见 2.7 |
 | 4 | `message` / `group` / `board_note` 关系 | 消息/群/留言观察 | **部分完成** | group 与 chat 已观察（同构、共用会话模型）；`board_note` 待观察 |
 
 ### 1.1 Slice 0A 带来的**契约层**问题（需审核确认）
@@ -93,6 +93,52 @@ posts.school_campus_id → campuses(id)            -- 动态归属到某个"校�
 ### 2.5 `board_notes` 与三者的关系 —— PENDING
 
 Preflight 未打开留言板（`message-board`）。按审核要求，这一条要在「消息/群/留言真实入口观察」时给出结论。
+
+### 2.7 `comments.parent_id` —— **MODEL: SUPPORTED / PRESENTATION: EXPANDED**（Slice 1 解决）
+
+**证据强度说明**：审核记录 07 明确要求"页面上出现『回复』两个字"**不算**模型证据 —— 那只是线索。
+因此本轮不是"看到回复按钮就下结论"，而是**真的发了一条回复，再看它被如何保存与渲染**。
+
+做法（2026-09-21，MuMu + 原版 app）：
+1. 信息流 → 动态详情 → 点评论数 → 评论区（内联在 `FeedDetailActivity` 的 ViewPager 里）
+2. 点某条评论的「回复」→ 打开回复弹层，标题「**回复 @幽灵小姐**」
+3. 输入 `M3REPLYTEST` → 点「发布」
+4. **观察它渲染到了哪里**
+
+结果 —— 回复出现在**父评论容器内部的子列表**里：
+
+```
+id/comment_number =「评论 2」                                ← 计数 +1
+id/cl_feed_detail_comment_message [28,373][1052,714]         ← 父评论的整行容器
+├── id/cl_feed_detail_first_comment [28,373][1052,555]       ← 父评论本体（幽灵小姐）
+└── id/rv_feed_detail_comment_List [28,555][1052,714]        ← 子回复列表（**嵌套在父容器内**）
+    └── id/cl_feed_detail_comment_reply_content
+        ├── tv_feed_detail_comment_reply_username = 自定义名称6
+        ├── tv_feed_detail_comment_reply_label    =「回复」
+        ├── tv_feed_detail_comment_reply_target   =「幽灵小姐」  ← **独立的目标字段**
+        └── tv_feed_detail_reply_comment_text_card_content = M3REPLYTEST
+```
+
+**MODEL: SUPPORTED** —— 三条独立理由：
+1. 关系被**保存**：发布后重新读取，回复仍在父评论内部（不是一次性动画）；
+2. 有**独立的目标字段** `tv_feed_detail_comment_reply_target`，与 `..._label`「回复」并列渲染
+   → 说明数据里存了"回复了谁"，而不只是把 `@某人` 当文案拼进正文；
+3. 父评论与子回复用**两套不同的控件 id 前缀**（`comment_*` vs `comment_reply_*`）。
+
+**PRESENTATION: EXPANDED** —— 有独立的嵌套列表容器 `rv_feed_detail_comment_List`，
+且头像 x 从 28 缩进到 116；不是 FLAT。
+
+**顺带得到的两条事实（都影响实现）**：
+
+| 事实 | 证据 | 影响 |
+|---|---|---|
+| 「评论 N」**把回复也算进去** | 发一条回复后计数从「评论 1」→「评论 2」 | 评论计数 = 顶层评论 + 子回复总数；**不要只数 `parent_id IS NULL`** |
+| 回复可以**再被回复** | 子回复行自身也带「回复」按钮 | `parent_id` 允许指向任意一条评论 → 自引用外键即可，不需要限制层级 |
+
+证据：`supplements/comment-detail.json`、`screens/comment-detail/recovered-m3-nested-reply*.png|xml`
+
+**造数披露**：为取得"关系是否被保存"的证据，本轮在**原版 app 里真实发布了一条回复**。
+这必须显式声明，否则会被误当成原版自带数据。
 
 ### 2.6 登记为"后续阶段必须补"的模型缺口（本阶段不改）
 

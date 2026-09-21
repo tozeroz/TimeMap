@@ -84,7 +84,11 @@
         "empty": "observed",
         "error": "not_reproducible",
         "loading": "not_reproducible"
-      }
+      },
+      "supplements": [
+        "supplements/comment-detail.json"
+      ],
+      "recovered_at": "2026-09-21T11:35:36+08:00"
     },
     {
       "id": "message-board",
