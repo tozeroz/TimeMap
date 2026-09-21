@@ -73,7 +73,7 @@ export default function App() {
       {root === 'comments' && <CommentsScreen id={route.query.id ?? param ?? ''} />}
       {root === 'message' && <MessageScreen />}
       {root === 'chat' && <ChatScreen id={param ?? 't1'} />}
-      {root === 'board' && <BoardScreen />}
+      {root === 'board' && <BoardScreen peerId={param ?? '22222222-2222-4222-8222-222222222222'} />}
       {root === 'daily' && <DailyScreen />}
       {root === 'poi' && <PoiSearchScreen />}
       {root === 'publish' && <PublishScreen />}

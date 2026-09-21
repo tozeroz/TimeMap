@@ -126,14 +126,60 @@ export interface ApiMessage {
 
 export async function getThreads(): Promise<ApiResult<{ items: ApiThread[] }>> {
   return request<{ items: ApiThread[] }>('/api/threads')
-}
-
-export async function getThreadMessages(
+}export async function getThreadMessages(
   threadId: string,
 ): Promise<ApiResult<{ threadId: string; items: ApiMessage[] }>> {
   return request<{ threadId: string; items: ApiMessage[] }>(
     `/api/threads/${encodeURIComponent(threadId)}/messages`,
   )
+}
+
+// ===========================================================================
+// M5 Slice 1：留言板（对应原版 message-board）
+//
+// 一致性依据是**可采信**的只读证据：
+//   标题「留言」+ 副标题「仅双方可见」、空态「可以给同学留言噢」、
+//   输入框占位「留言仅双方可见」、按钮「留言」、表情行 7 个。
+//
+// 注意（审核记录 18 的要求）：**另一方用户是唯一的客户端参数**；
+// 当前用户永远来自 session —— 这里不提供、也不接受 from_user_id，
+// 服务端同样忽略客户端提交的该字段（verify-board-notes.sh 的 B8 组断言了这一点）。
+// ===========================================================================
+
+export interface ApiBoardNote {
+  id: string
+  fromUserId: string
+  toUserId: string
+  fromName: string | null
+  toName: string | null
+  body: string
+  createdAt: string
+  /** 同一条留言在不同视角下 mine 不同：我发的为 true，对方发的为 false */
+  mine: boolean
+}
+
+export interface ApiBoardNotes {
+  peerId: string
+  /** 原版口径：仅双方可见 */
+  visibleTo: string
+  /** 原版空态文案 */
+  emptyText: string
+  items: ApiBoardNote[]
+}
+
+export async function getBoardNotes(peerId: string): Promise<ApiResult<ApiBoardNotes>> {
+  return request<ApiBoardNotes>(`/api/board-notes/${encodeURIComponent(peerId)}`)
+}
+
+export async function postBoardNote(
+  peerId: string,
+  body: string,
+): Promise<ApiResult<{ id: string; body: string }>> {
+  return request<{ id: string; body: string }>(`/api/board-notes/${encodeURIComponent(peerId)}`, {
+    method: 'POST',
+    // 只提交 body —— **不提交 from_user_id**（服务端会忽略，但客户端也不该发）
+    body: JSON.stringify({ body }),
+  })
 }
 
 export type ApiResult<T> =
