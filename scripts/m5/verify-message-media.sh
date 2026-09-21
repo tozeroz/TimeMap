@@ -195,11 +195,24 @@ echo "=== A9. **同事务**：上面所有失败的请求都不该留下消息�
 MSGS1="$(PSQL "select count(*) from messages where thread_id='$THREAD'")"
 [ "$MSGS1" = "2" ] && ok "会话内恰好 2 条消息（全部媒体校验失败都没写入）" \
   || bad "期望 2 条，实际 $MSGS1 条 —— 存在「校验失败却写了消息」的路径"
-# 更严的版本：消息 id 集合必须**恰好**是 A1 与 T1 那两条（不是"数量凑巧对"）
-IDS="$(PSQL "select string_agg(id::text, ',' order by id) from messages where thread_id='$THREAD'")"
-WANT="$(printf '%s\n%s\n' "$MSG" "$MSG2" | sort | paste -sd, -)"
-[ "$IDS" = "$WANT" ] && ok "消息 id 集合恰好是 A1/T1 两条（无第三条来自失败请求）" \
-  || bad "消息 id 集合不符：实际 $IDS / 期望 $WANT"
+# 更严的版本：消息**组成**必须恰好是 A1 一条 image + T1 一条 text（不是"数量凑巧对 2"）。
+#
+# ⚠ 为什么改成"从 DB 按 kind 推导"而不是比较抓到的 id 变量（本轮实测踩到的根因）：
+#   原写法用 `WANT="$(printf '%s\n%s\n' "$MSG" "$MSG2" | sort | paste -sd, -)"`，
+#   但**脚本里从未给 MSG2 赋值**（全文件只有 MSG=）——于是 WANT 恒为 ",<MSG>"，
+#   而 IDS 是两个真 id，**这条断言本质上一直是坏的**。
+#   更糟的是它**间歇性**：前一版脚本曾一次 PASS、一次 FAIL，属 flaky，
+#   而 flaky 断言比稳定失败更危险（可能靠运气通过、让问题长期不被发现）。
+#   教训：**不要用"从 HTTP 响应里正则抓到的变量"构造期望值** ——
+#   一旦抓取逻辑变化或响应形状变化，期望值会**静默变错**，
+#   报出指向产品的误导性 FAIL。改为**从数据库直接推导事实**。
+K_IMG="$(PSQL "select count(*) from messages where thread_id='$THREAD' and kind='image'")"
+K_TXT="$(PSQL "select count(*) from messages where thread_id='$THREAD' and kind='text'")"
+if [ "$K_IMG" = "1" ] && [ "$K_TXT" = "1" ]; then
+  ok "消息组成恰好：1 条 image（A1）+ 1 条 text（T1），无第三条来自失败请求"
+else
+  bad "消息组成不符：image=$K_IMG text=$K_TXT（应各为 1）"
+fi
 MM1="$(PSQL "select count(*) from message_media where message_id in (select id from messages where thread_id='$THREAD')")"
 [ "$MM1" = "1" ] && ok "message_media 恰好 1 行（只有 A1 那次挂上）" || bad "message_media 行数异常：$MM1"
 
