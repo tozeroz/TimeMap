@@ -225,7 +225,23 @@ autovacuum_max_workers = 2
       四个必答模型问题全部有结论（含 board_notes 用户对用户私密留言）；
       认识论边界：只读观察支持**行为/领域语义**结论，不代表对方服务端存储结构。
 
-      - [ ] **M4（已批准开工，审核记录 14）**：media upload → storage → delivery
+      ### M4 状态（2026-09-21）
+      ```
+      M4_FINAL_GATE_RESULT: PASS
+      M4_FINAL_GATE_LAYERS:
+        PERSISTENT: PASS   STAGE: PASS   REGRESSION: PASS
+      M4 存储 gate 五 key 全 PASS：
+        MEDIA_SCHEMA / MEDIA_UPLOAD / MEDIA_DELIVERY / M4_BACKUP_RESTORE / MEDIA_ORPHAN_CLEANUP
+      消息消费端 SLICE_A_DEVICE_RESULT PASS（6/6）；MESSAGING_API_RESULT PASS；
+      MENTIONS_RESULT PASS（@ 提及最小闭环）
+      ```
+      语义边界：本 PASS 只覆盖 **M4 冻结范围**（媒体生命周期 / 消息模型补全 / @ 提及最小闭环），
+      **不表示整个 App 已 1:1**；原版侧多处证据为 INADMISSIBLE 或 BLOCKED_BY_POLICY。
+      `pg_dump restore PASS` 从 M4 起只代表数据库恢复，完整业务数据恢复由
+      `M4_BACKUP_RESTORE`（含媒体 + 逐行交叉核对）代表。
+      下一步待审核裁定：M4 CLOSE → M5（逐页收敛 1:1）或先做 M0–M4 全局收口审计。
+
+      - [x] **M4（已批准开工，审核记录 14）**：media upload → storage → delivery
             → message media references → message kind → @ mention relation
             **工作单 #1（先做这个，不动代码）**：拿 PLAN §6 的冻结图片存储设计，
             逐条回答审核记录 13 提出的 **7 条边界**，提交审核后**再**动手实现：
