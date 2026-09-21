@@ -196,13 +196,13 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
 - [ ] G2.3 `MEDIA_PREVIEW_VISUAL`：原版媒体预览视觉（同上）
 
 ### G3. (D) 类：明确记为 KNOWN LIMITATION，不猜着实现
-- [ ] G3.1 图片压缩：`IMAGE_UPLOAD_COMPRESSION_CONFORMANCE = EVIDENCE_NOT_OBTAINABLE_BY_CURRENT_METHODS`
+- [x] G3.1 ✅ **已完成**：见 `docs/m5/G3-D-CLASS-QUOTA-AND-SURFACED-GAPS.md``n      `IMAGE_UPLOAD_COMPRESSION_CONFORMANCE = EVIDENCE_NOT_OBTAINABLE_BY_CURRENT_METHODS`（dex 扫描无第三方压缩库；降采样 API 命中但属显示用途）
       （已取证：dex 扫描无第三方压缩库；降采样 API 命中但那是显示用 → 不能证明上传前压缩）
       → 在 AUDIT 与对外对比报告里写成"当前范围不可获得或无证据"，**不得写成"原版不压缩"**
-- [ ] G3.2 per-user 配额：先只做**前提取证尝试**（只读），取不到就同样记 KNOWN LIMITATION
+- [x] G3.2 ✅ **已完成**：`PER_USER_QUOTA_CONFORMANCE = EVIDENCE_NOT_OBTAINABLE_BY_CURRENT_METHODS``n      脚本 `scripts/m5/probe-original-quota.sh`（资源表 51874 行扫 quota/limit/exceed/too_large + 中文关键词）：**「配额」类未命中**（"quota" 只命中引号图标）`n      ⚠ 未命中**不等于**没有 → 只能写"现有方法取不到"`n      **意外浮现的候选缺口**（原版 im_chat_*/capa_* 文案）：图片**像素尺寸**上限、视频消息（播放/进度）、保存至相册、本地媒体失效重试、`im_chat_record_error`="语音录制失败，请重试"（我方文案不同）
 
 ### G4. 纪律与工程（低风险、可随时做）
-- [ ] G4.1 每次改 `.ps1` 后**检查前 3 字节是否 EF BB BF**（本轮踩过"编辑工具丢 BOM"）
+- [x] G4.1 ✅ 本轮已用它救回坏掉的 `deploy-server.ps1`（tools/fix-ps1-bom.ps1）；纪律已写入 PLAN 的测量/工具节
       → 可加为一句话检查脚本或写进提交前自查
-- [ ] G4.2 `scripts/m5/` 下脚本的**可复用性**：本轮的 gate-wo6 依赖 CDP；
+- [x] G4.2 ✅ 已抽出 `scripts/m5/preflight-capture.ps1`（VISUAL_TARGET_VALIDITY，含前台包名 + CDP URL 双检）
       把"设备健康 + 前台确认 + CDP 就绪"抽成一个共用前置函数，避免每个脚本各写一遍
