@@ -309,3 +309,71 @@ im_chat_voice_to_text_bg_night
 **实现影响**：这是**功能级缺口**，不是接线级 ——
 需要录音、上传、播放、以及"语音转文字"四件事，**远大于一个工作单**。
 建议：登记为正式 gap 项，**先不定实现**；若要推进，应按功能分单（录音 → 播放 → 转文字）。
+
+---
+
+## 附六：**「手机号定位 / 定位」这条登记已过期，且方向是"低报"**（2026-09-21 22:30）
+
+### 6.1 原登记（第三节与附五均沿用）
+
+```
+手机号定位 | DEVIATION | demo 不申请定位权限，用校区坐标作参照
+（DISTANCE_FUNCTIONAL: PASS 但 REAL_DEVICE_GEOLOCATION_CONFORMANCE: DEVIATION）
+```
+
+### 6.2 核实结果：**"不申请定位权限"这一句现在是假的**
+
+仓库里有**完整、已接入**的真实定位实现 —— `app/src/native/geo.ts`（172 行）：
+
+```
+@capacitor/geolocation  → APK 走系统定位（GPS/融合/基站），首次使用弹系统授权框
+navigator.geolocation   → 浏览器预览等价行为
+hasLocationPermission()      只查已授权，不弹窗（进地图时静默判断）
+ensureLocationPermission()   申请权限；**显式处理 Android 12+ 只给"大致位置"的情形**
+                            （current.location 或 current.coarseLocation 任一 granted 即算授权）
+getCurrentFix()              单次定位：先高精度(10s) → 失败退回粗定位(15s)，两段兜底
+watchFix()                   持续跟踪，返回停止函数
+distanceMeters()             Haversine 球面距离
+formatDistance() / formatAccuracy()
+GeoStatus 状态机             'idle' | 'asking' | 'ok' | 'denied' | 'unavailable' | 'timeout'
+```
+
+**且确实在用**（不是死代码）—— `app/src/screens/MapScreen.tsx` 导入并调用了
+`ensureLocationPermission` / `hasLocationPermission` / `getCurrentFix` / `watchFix` /
+`distanceMeters` / `formatDistance` / `formatAccuracy`，维护 `GeoStatus` 状态，
+并渲染「当前位置距校园 {formatDistance(...)}」；`geoStatus === 'denied'` 时打开提示。
+原生地图组件（`AmapMap` / `TencentMap` / `RealMap`）都以 `here?: GeoFix` 接收定位结果。
+
+### 6.3 更正后的口径（区分"我们做了什么"与"与原版是否一致"）
+
+```
+REAL_DEVICE_GEOLOCATION_CONFORMANCE: **需重新评估**
+  原登记所述原因（"demo 不申请定位权限，用校区坐标作参照"）→ **事实不成立，作废**
+  事实: 真实定位**已实现并接入**（权限申请 / 单次+持续 / 距离 / 精度 / 状态机）
+
+  仍未评估的部分（与上面是两件事，不得混为一谈）:
+    · 原版的**距离呈现形态**（文案、单位、位置、是否显示精度）是否与我们一致
+      → 需要原版只读证据（已入库 `docs/original-baseline/screens/original-sweep/02-map.png`；
+        也可做一次只读观察）
+    · 原版在**拒绝授权**时的表现（提示样式/降级行为）
+```
+
+### 6.4 ⚠️ 这条过期的**方向值得单独记**（比上一条更有价值）
+
+前面发现的过期登记（`board_notes` 未做前端、tab 4 vs 3）都是**高报**：
+把"已经做了"写成"还没做"。**这一条是相反的：把"已经做了"写成"有一个偏差"，
+即低报我们的符合度。**
+
+```
+高报（说我们差）  → 后果: 浪费时间重做已完成的事（board_notes）
+低报（说我们有偏差，其实没有）→ 后果: **符合度被低估**，
+                              且可能据此去做一个"修复"，而那个"修复"才是真正的偏差
+```
+
+→ **纪律补充**：审计表里的每一项都要按**当前代码**核实，
+**两个方向都会出错**；不要假设过期信息一定是"保守/高报"。
+
+### 6.5 处置
+
+- 第三节与附五的那两行**以本附六为准**
+- 该条的后续（若要做）另立：**MAP_DISTANCE_PRESENTATION_CONFORMANCE**（只读对比，不涉写操作）
