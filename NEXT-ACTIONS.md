@@ -576,9 +576,8 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       ② MeScreen 自身仍显示 mock 的 me.name/me.avatar 是否单开一单
 
 ### ⭐ WO14 计划立项（审核 55 指定，**优先于 Map**）
-- [ ] WO14.1 **先 inventory，不要直接改**。逐字段查：
-      `field → current source → /api/auth/me 是否已有权威来源 → reload/relogin 语义 →
-       ProfileEdit 修改后是否同步 → 是否仅 mock 呈现 → wire / placeholder / hide`
+- [x] WO14.1 ✅ inventory 已完成（含逐字段表与 reload/relogin 语义）→
+      `docs/m5/WO14-PLAN-me-authoritative-self-identity.md`；详见下方「WO14 进展」节
       已知起点：`app/src/screens/MeScreen.tsx` 用 `me.name` / `me.avatar`（mock）
 - [x] WO14.2 ✅ Gate 清单已写进计划（含审核 55 指定的 5 条 + ME_NO_FALLBACK_ON_UNAVAILABLE）
       `ME_IDENTITY_FROM_SESSION` ／ `ME_DISPLAY_NAME_CONSISTENCY` ／
