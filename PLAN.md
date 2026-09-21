@@ -194,14 +194,13 @@ autovacuum_max_workers = 2
             **切换行为与已点赞态样式 = BLOCKED_BY_POLICY**（禁止在原版点赞），仅自建系统验证
             证据措辞已按审核更正：`LIKE_ANIMATION_CAPABILITY: OBSERVED` /
             `LIKE_ANIMATION_TRANSITION: BLOCKED_BY_POLICY`（观测到能力 ≠ 观测到行为）
-      - [ ] **Slice 3（已批准开工）**：登录后发帖，**无 session 夹具**
-            要求：真实 OTP 登录 → PublishScreen → 请求体**不含** author/authorId
+      - [x] **Slice 3 完成**：登录后发帖（`docs/m3/SLICE3-REPORT.md`）→ `M3_SLICE3_GATE_RESULT: PASS`
+            真实 OTP 登录（**无 session 夹具**）→ PublishScreen → 请求体不含 author/authorId
             → backend 从 session 解析 author_id → 写 PG → 列表/详情归属一致 → 重启后仍在
-            攻击用例：手工塞 author/authorId → strict 400 **且 DB 无任何行**
-            工程要求：把"冷启动 → OTP 登录 → 已登录设备状态"抽成**可复用 helper**，
-            Slice 0B 与 Slice 3 各自调用（不得整段复用 verify-device-login.ps1，
-            避免两个 Gate 因测试流程互相耦合）
-            原版侧继续只读；发布后的反馈/跳转/动画无只读证据 → BLOCKED_BY_POLICY
+            **攻击用例**：手工塞 author/authorId/author_id/user_id → strict 400 且 DB 不产生任何行
+            共享 helper：`device-login-helper.ps1` 的 Reset-DeviceToLoggedOut；
+            **Slice 0B 与 Slice 3 都走它**（不再各自一份冷启动逻辑）
+            原版侧继续只读；发布后的反馈/跳转/动画 = BLOCKED_BY_POLICY
       - [ ] Slice 4（恢复页一致性）→ M3 Final Gate
 
 ---
