@@ -1,0 +1,29 @@
+﻿=== E0 两侧锁键必须一致（**这条不能靠人记，必须机械核对**）===
+sed: can't read /srv/campus/server/src/mutationBarrier.ts: No such file or directory
+/tmp/m4-verify-barrier-e2e.sh: line 34: 16#: invalid integer constant (error token is "16#")
+FAIL **锁键不一致**：脚本 1295270465 ≠ 应用  —— 屏障在真实运行时不会生效
+=== 准备：一个真实会话 + 一份真实图片 ===
+PASS 真实会话就绪（13899756384）
+PASS 测试图片就绪（8824 字节的真实 PNG）
+
+=== 开一个 12 秒的排他窗口（模拟备份）===
+PASS 排他窗口已生效（pg_locks 可见）
+
+=== E1 窗口内 POST /api/media 必须 503 ===
+FAIL 窗口内上传期望 503，实际 400
+
+=== E4 窗口内读接口必须不受影响 ===
+PASS 窗口内读帖子 → 200（**读路径不加锁**，设计如此）
+
+=== E2 窗口内 cleanup --apply 必须退出码 3 且不删文件 ===
+PASS **cleanup 在窗口内退出码 3**（备份窗口内被挡，明确可识别）
+PASS **文件数未变（6）—— fail-closed，一个都没删**
+
+=== E3 窗口结束后上传必须恢复 201 ===
+FAIL 窗口结束后上传期望 201，实际 400
+
+=== 清理（用真实接口产生的那条 media 连文件一起删）===
+PASS 测试 media 已清理
+PASS 测试账号已清理
+
+BARRIER_E2E_RESULT FAIL

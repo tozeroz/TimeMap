@@ -17,7 +17,7 @@ ok()  { printf 'PASS %s\n' "$1"; }
 bad() { printf 'FAIL %s\n' "$1"; FAILED=1; }
 
 BASE=http://127.0.0.1
-KEY=1295258177
+KEY=1295270465
 UP=/srv/campus/uploads
 NODE=/opt/node-v24.21.0-linux-x64/bin/node
 SINK=/run/campus/login-codes
@@ -25,6 +25,18 @@ export PGPASSWORD="$(cat /srv/campus/.db_password)"
 PSQL() { psql -h 127.0.0.1 -U campus -d campus -Atc "$1" 2>&1; }
 count_files() { find "$UP/public" "$UP/private" -type f 2>/dev/null | wc -l; }
 
+echo "=== E0 两侧锁键必须一致（**这条不能靠人记，必须机械核对**）==="
+# 踩过的坑：我曾在脚本里把 0x4D344241 误算成 1295270465，
+# 于是 holder 与被测方用了**不同的键** → 机制层测试照样 PASS
+# （因为两侧用同一个错键也会互相阻塞），但**生产里屏障其实不生效**。
+# 这类"测试通过但证明了错的东西"最危险，所以把"键一致"做成断言。
+TS_KEY="$(sed -n 's/.*MEDIA_MUTATION_LOCK_KEY *= *0x\([0-9a-fA-F_]*\).*/\1/p' /srv/campus/server/src/mutationBarrier.ts | head -1 | tr -d '_')"
+APP_KEY=$((16#$TS_KEY))
+if [ "$APP_KEY" = "$KEY" ]; then
+  ok "脚本锁键与应用侧一致（$KEY）"
+else
+  bad "**锁键不一致**：脚本 $KEY ≠ 应用 $APP_KEY —— 屏障在真实运行时不会生效"
+fi
 echo "=== 准备：一个真实会话 + 一份真实图片 ==="
 PH="138$(printf '%08d' $((RANDOM*RANDOM%100000000)))"
 REQ="$(curl -s -m 10 -X POST "$BASE/api/auth/request-code" -H 'Content-Type: application/json' -d "{\"phone\":\"$PH\"}")"

@@ -30,7 +30,7 @@ FAILED=0
 ok()  { printf 'PASS %s\n' "$1"; }
 bad() { printf 'FAIL %s\n' "$1"; FAILED=1; }
 
-KEY=1295258177
+KEY=1295270465
 export PGPASSWORD="$(cat /srv/campus/.db_password)"
 PCDB=(psql -h 127.0.0.1 -U campus -d campus -q -At -v ON_ERROR_STOP=0)
 

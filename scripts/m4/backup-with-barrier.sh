@@ -34,8 +34,7 @@ UPLOADS="${2:?需要 uploads_root}"
 HOLD="${3:-0}"
 
 # 必须与 server/src/mutationBarrier.ts 的 MEDIA_MUTATION_LOCK_KEY 一致（0x4d344241）
-KEY=1295258177
-
+KEY=1295270465
 PSQL_BASE=(psql -h 127.0.0.1 -U campus -d campus -q -v ON_ERROR_STOP=1)
 export PGPASSWORD="$(cat /srv/campus/.db_password)"
 
