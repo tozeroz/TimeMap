@@ -182,15 +182,29 @@ MEDIA_BEFORE=$(PSQL "select count(*) from media")
 FILES_BEFORE=$(find "$UP" -type f -name '*.webm' | wc -l)
 echo "  基线：media=$MEDIA_BEFORE  webm 文件=$FILES_BEFORE"
 
-# 持排他锁 8 秒（与备份侧同一把锁、同一调用形态）
+# 持排他锁 20 秒（与备份侧同一把锁、同一调用形态）
+#
+# ⚠️ 为什么从 8s 改成 20s（2026-09-22 实测修正，防"假 FAIL"）：
+#   服务端屏障 = `set local lock_timeout='5000ms'` + `pg_advisory_xact_lock_shared`。
+#   上传的**锁等待**并非从 holder 拿锁那一刻开始，而是从上传请求真正执行到那句 SQL 才开始
+#   （本脚本之前还有 `sleep 1.5` 与 HTTP/curl 开销）。于是：
+#     持锁 6s → 可用等待 ≈4.2s **< 5s** → 锁先释放 → 上传成功 **201**（屏障来不及超时）
+#     持锁 8s → 可用等待 ≈6.3s **> 5s** → 超时触发 → **503**
+#   实测扫描（scripts/m5/diagnose-barrier-hold-sweep.sh）：
+#     6s→201 ／ 8s→503 ／ 10s→503 ／ 12s→503 ／ 20s→503
+#   → **原来的 8s 距临界只有约 1.3s 余量**；在 2 vCPU 且有并发负载时会落到 <5s，
+#     表现为"屏障没拦住"的**假 FAIL**（产品其实是好的）。
+#   → 改为 20s：余量 ≈13.5s，足以覆盖负载抖动，同时仍小于下面的 curl 超时。
 PGPASSWORD="$PW" psql -h 127.0.0.1 -U campus -d campus -q -At \
-  -c "select pg_advisory_lock($KEY)" -c "select pg_sleep(8)" -c "select pg_advisory_unlock($KEY)" \
+  -c "select pg_advisory_lock($KEY)" -c "select pg_sleep(20)" -c "select pg_advisory_unlock($KEY)" \
   >/tmp/lc-barrier-holder.log 2>&1 &
 HOLDER=$!
 sleep 1.5   # 等它确实拿到锁
 
 T0=$(date +%s%N)
-R=$(curl -s -m 20 -w '\n%{http_code}' -X POST "$API/api/media" -H "$AUTH" \
+# curl 超时从 20s 提到 40s：持锁变长后，正常情况下上传仍应在 ~6s 返回 503；
+# 加长只是为了在"屏障真的失效"时能把它**记录成 201 而不是 curl 超时**（后者会让判定含混）。
+R=$(curl -s -m 40 -w '\n%{http_code}' -X POST "$API/api/media" -H "$AUTH" \
   -F "file=@$FIX;type=audio/webm" -F 'purpose=chat' \
   -F "uploadRequestId=$(python3 -c 'import uuid;print(uuid.uuid4())')" -F 'durationMs=2500')
 T1=$(date +%s%N)

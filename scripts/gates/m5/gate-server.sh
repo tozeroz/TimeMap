@@ -249,6 +249,37 @@ fi
 #   （否则会重演"按总数清理/判红"的误伤：清掉或判红 94 条合法会话。）
 step "6. 认证数据卫生（死数据=0 才算过；总数只作次级信息）"
 if [ -f /srv/campus/server/dist/cleanup-auth.mjs ]; then
+  # ⚠️ 2026-09-22 修正（原实现会**假 FAIL**，记下原因）：
+  #   原实现只跑 `cleanup-auth --json --grace-hours 24`（**dry-run**）后断言四类死数据 == 0。
+  #   但部署侧现在靠 **systemd timer 每 6 小时** `--apply` 一次（本轮新装，
+  #   见 scripts/m5/install-cleanup-timers.sh）——一条会话跨过 24h 阈值后，
+  #   到下次 timer 运行之间**必然存在最长 6 小时的窗口**，期间该断言一定 FAIL。
+  #   即：断言要求"任意时刻都为 0"，而部署只保证"6 小时内清掉"，两者不一致。
+  #   修正两步（既不 flaky，又仍能抓真问题）：
+  #     ① **先**断言"没有超出 grace + 清理节奏 的陈死数据"（24h + 6h = 30h）——
+  #        这才是真不变量：若 timer 坏了、清理从未跑，死数据会无限累积 → 必然 FAIL。
+  #     ② **再**用 `--apply` 把环境收敛，然后断言四类为 0 ——
+  #        这一步检验"清理工具确实能清干净"（工具可用性）；被删的行都是
+  #        **按冻结保留策略可证明已死**的，不会误伤 active 会话（工具本身只报不删 active）。
+  STALE_BOUND_HOURS=30
+  AH_PRE="$(cd /srv/campus/server && DATABASE_URL="$DSN" node dist/cleanup-auth.mjs --json --grace-hours "$STALE_BOUND_HOURS" 2>&1)"
+  AH_PRE_SUM="$(printf '%s' "$AH_PRE" | python3 -c "
+import sys, json
+try:
+    print(int(json.load(sys.stdin).get('deadTotal', -1)))
+except Exception:
+    print('ERR')" 2>/dev/null)"
+  if [ "$AH_PRE_SUM" = "0" ]; then
+    setk M5_AUTH_NO_UNBOUNDED_ACCUMULATION PASS
+  else
+    setk M5_AUTH_NO_UNBOUNDED_ACCUMULATION "FAIL(超出 grace+清理节奏(${STALE_BOUND_HOURS}h) 的死数据仍有 $AH_PRE_SUM 条 —— 清理未按节奏运行？)"
+    FAILED=1
+  fi
+
+  # ② 收敛：真跑一次 --apply（幂等；只删策略上可证明已死的行）
+  AH_APPLY_OUT="$(cd /srv/campus/server && DATABASE_URL="$DSN" node dist/cleanup-auth.mjs --apply --grace-hours 24 2>&1 | tail -2)"
+  printf '%s\n' "$AH_APPLY_OUT" | sed 's/^/    /'
+
   AH_JSON="$(cd /srv/campus/server && DATABASE_URL="$DSN" node dist/cleanup-auth.mjs --json --grace-hours 24 2>&1)"
   printf '%s\n' "$AH_JSON" | sed 's/^/    /'
   ahget() {
