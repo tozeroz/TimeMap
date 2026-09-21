@@ -21,12 +21,13 @@ ADB='G:\Program Files\Netease\MuMu\nx_main\adb.exe'
 SERIAL='127.0.0.1:16384'
 PKG='com.campusx.demo'
 PREFLIGHT='G:\demo map\scripts\m5\preflight-capture.ps1'
+API_ORIGIN_PREFLIGHT='G:\demo map\scripts\m5\preflight-api-origin.mjs'
 
-echo "=== 1/5 把目标 App 带到前台（am start，不做 force-stop）==="
+echo "=== 1/7 把目标 App 带到前台（am start，不做 force-stop）==="
 "$ADB" -s "$SERIAL" shell am start -n "$PKG/.MainActivity" >/dev/null 2>&1
 sleep 3
 
-echo "=== 2/5 建 CDP 转发（必须早于 preflight 的 CDP 检查）==="
+echo "=== 2/7 建 CDP 转发（必须早于 preflight 的 CDP 检查）==="
 PID="$("$ADB" -s "$SERIAL" shell pidof "$PKG" | tr -d '\r')"
 if [ -z "$PID" ]; then echo "  FATAL 拿不到 $PKG 的 pid"; exit 1; fi
 "$ADB" -s "$SERIAL" forward --remove-all >/dev/null 2>&1
@@ -34,22 +35,39 @@ if [ -z "$PID" ]; then echo "  FATAL 拿不到 $PKG 的 pid"; exit 1; fi
 sleep 1
 echo "  forward tcp:9222 → webview_devtools_remote_$PID"
 
-echo "=== 3/5 VISUAL_TARGET_VALIDITY（采集前）==="
+echo "=== 3/7 VISUAL_TARGET_VALIDITY（采集前）==="
 powershell -NoProfile -Command "& '$PREFLIGHT' -ExpectPackage $PKG -ExpectCdpUrl localhost" || {
   echo "  VISUAL_TARGET_VALIDITY: FAIL → 证据作废，终止（这不是产品 FAIL）"
   exit 1
 }
 
-echo "=== 4/5 跑 Gate: $GATE ==="
+echo "=== 4/7 API_E2E_ORIGIN_VALIDITY（采集前；审核记录 47 要求的机械前置）==="
+# 为什么要有它（本项目**已踩两次**的坑）：
+#   在 Capacitor WebView 里用**相对路径** fetch 会打到 WebView 自己的本地服务器
+#   （https://localhost），并且**返回 HTML 且状态码 200** → json() 得 {}，
+#   看起来像"服务端没返回字段"。第一次踩在 WO#5 的语音 E2E，第二次踩在 WO#9A 的身份 oracle。
+# 审核 47 要求把它升级成**机械前置**：捕获到 text/html 就**直接 FATAL**，
+#   不要继续 json() 让 {} 污染后续判断。
+# 因此：这里先证明"绝对 origin 能从 WebView 打到后端且返回 JSON"，
+#   不成立就终止（exit 2），后续所有 API 断言一并不作数。
+node "$API_ORIGIN_PREFLIGHT"
+RC_ORIGIN=$?
+if [ "$RC_ORIGIN" -ne 0 ]; then
+  echo "  API_E2E_ORIGIN_VALIDITY: FATAL（exit $RC_ORIGIN）→ 本次所有 API 断言不可信，终止"
+  exit 2
+fi
+
+echo "=== 5/7 跑 Gate: $GATE ==="
 node "$GATE" "$@"
 RC=$?
 
-echo "=== 5/5 VISUAL_TARGET_VALIDITY（采集后复核：确认期间没被切走）==="
+echo "=== 6/7 VISUAL_TARGET_VALIDITY（采集后复核：确认期间没被切走）==="
 powershell -NoProfile -Command "& '$PREFLIGHT' -ExpectPackage $PKG -ExpectCdpUrl localhost" || {
   echo "  VISUAL_TARGET_VALIDITY(after): FAIL → 本次证据作废"
   exit 1
 }
 
 echo
+echo "=== 7/7 汇总 ==="
 echo "DEVICE_GATE_EXIT=$RC"
 exit $RC
