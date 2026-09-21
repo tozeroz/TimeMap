@@ -41,3 +41,7 @@ tools/tmp/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# 临时/工作目录（代理或脚本留下的 scratch；避免被 git add -A 无意带进仓库）
+.tmp-*/
+*.tmp-*
