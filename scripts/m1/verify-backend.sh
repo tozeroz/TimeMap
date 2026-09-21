@@ -108,8 +108,10 @@ rm -f /tmp/m1-tmp1.log /tmp/m1-tmp2.log
 # ===========================================================================
 echo
 echo "=== A. [API] 经 Nginx 写一条 ==="
-# M2 起写路径需要会话：先登录（用 seed 用户），后续写请求带上 Authorization。
-# M1 阶段没有认证，这里是空数组。
+# M2 起写路径需要会话，后续写请求带 Authorization。
+# **M3 起改走手机号 + 一次性验证码**：审核记录 08 判定 M2 的 handle+password 契约
+# 已被原版实测语义 supersede（原版没有密码登录），/api/auth/login 现在返回 410。
+# 脚本自己就在服务器上，所以可以直接读 dev sink 取码（不经日志）。
 AUTH_HDR=()
 if [ "$stage" = "M2" ]; then
   LOGIN_JSON="$(curl -s -m 15 -X POST http://127.0.0.1/api/auth/login \
@@ -123,10 +125,34 @@ if [ "$stage" = "M2" ]; then
     bad "M2 需要会话但登录失败：$(printf '%s' "$LOGIN_JSON" | head -c 120)"
   fi
 fi
+if [ "$stage" = "M3" ] || [ "$stage" = "M2PLUS" ]; then
+  # 用 seed 用户的手机号（+8613800000001 = anmoss）
+  TEST_PHONE="13800000001"
+  SINK=/run/campus/login-codes
+  rm -f "$SINK/8613800000001.json" 2>/dev/null || true
+  REQ_JSON="$(curl -s -m 15 -X POST http://127.0.0.1/api/auth/request-code \
+    -H 'Content-Type: application/json' -d "{\"phone\":\"$TEST_PHONE\"}")"
+  SINK_PATH="$(printf '%s' "$REQ_JSON" | sed -n 's/.*"sink":"\([^"]*\)".*/\1/p')"
+  if [ -n "$SINK_PATH" ] && [ -f "$SINK_PATH" ]; then
+    CODE="$(sed -n 's/.*"code": *"\([0-9]*\)".*/\1/p' "$SINK_PATH")"
+    VER_JSON="$(curl -s -m 15 -X POST http://127.0.0.1/api/auth/verify-code \
+      -H 'Content-Type: application/json' -d "{\"phone\":\"$TEST_PHONE\",\"code\":\"$CODE\"}")"
+    TOKEN="$(printf '%s' "$VER_JSON" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+    if [ -n "$TOKEN" ]; then
+      AUTH_HDR=(-H "Authorization: Bearer $TOKEN")
+      ok "已取得会话（M3：手机号 + dev sink 取码；token 长度 ${#TOKEN}，不打印内容）"
+    else
+      bad "M3 需要会话但验证码登录失败：$(printf '%s' "$VER_JSON" | head -c 120)"
+    fi
+  else
+    bad "M3 需要会话但没能从 dev sink 取到验证码（响应: $(printf '%s' "$REQ_JSON" | head -c 120)）"
+  fi
+  rm -f "$SINK/8613800000001.json" 2>/dev/null || true
+fi
 
 # M2 起 author 字段属于**禁止字段**（strict schema 会 400），所以按 stage 决定是否带上。
 # M1 阶段没有认证，作者就是客户端给的占位名 —— 这正说明 M1 的写法不能带到 M2。
-if [ "$stage" = "M2" ]; then
+if [ "$stage" = "M2" ] || [ "$stage" = "M3" ] || [ "$stage" = "M2PLUS" ]; then
   POST_PAYLOAD="{\"body\":\"$MARK 这是一条垂直切片验证帖\",\"place\":\"北京交通大学\"}"
 else
   POST_PAYLOAD="{\"body\":\"$MARK 这是一条垂直切片验证帖\",\"place\":\"北京交通大学\",\"author\":\"M1验证\"}"

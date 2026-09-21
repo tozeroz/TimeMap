@@ -94,9 +94,25 @@ echo
 echo "=== H. bearer 不得出现在日志里 ==="
 # 用一个临时会话真实调用一次，然后检查 nginx 访问日志与应用日志里是否出现该 token。
 # 注意：绝不要把 token 打印出来，只打印长度与判定结果。
+#
+# M3 起改用**手机号 + 一次性验证码**取会话：审核记录 08 判定 M2 的 handle+password
+# 契约已被原版实测语义 supersede（/api/auth/login 现在返回 410）。
+# 本脚本在服务器上执行，所以可以直接读 dev sink 取码（不经日志）。
 BASE=https://$IP/api
-LOGIN="$(curl -s -m 15 --cacert "$CA" -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
-  -d '{"handle":"anmoss","password":"seed-password-1"}')"
+TEST_PHONE=13800000001
+SINK=/run/campus/login-codes
+rm -f "$SINK/8613800000001.json" 2>/dev/null || true
+REQ="$(curl -s -m 15 --cacert "$CA" -X POST "$BASE/auth/request-code" \
+  -H 'Content-Type: application/json' -d "{\"phone\":\"$TEST_PHONE\"}")"
+SINK_PATH="$(printf '%s' "$REQ" | sed -n 's/.*"sink":"\([^"]*\)".*/\1/p')"
+CODE=""
+[ -n "$SINK_PATH" ] && [ -f "$SINK_PATH" ] && CODE="$(sed -n 's/.*"code": *"\([0-9]*\)".*/\1/p' "$SINK_PATH")"
+LOGIN=""
+if [ -n "$CODE" ]; then
+  LOGIN="$(curl -s -m 15 --cacert "$CA" -X POST "$BASE/auth/verify-code" \
+    -H 'Content-Type: application/json' -d "{\"phone\":\"$TEST_PHONE\",\"code\":\"$CODE\"}")"
+fi
+rm -f "$SINK/8613800000001.json" 2>/dev/null || true
 TOKEN="$(printf '%s' "$LOGIN" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
 if [ -n "$TOKEN" ]; then
   ok "取到临时会话用于日志检查（token 长度 ${#TOKEN}，不打印内容）"
