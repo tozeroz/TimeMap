@@ -1,5 +1,14 @@
 // src/imageProbe.ts
 var err = (reason) => ({ ok: false, reason });
+var MAX_PIXELS = 4e7;
+function checkDimensions(kind, width, height) {
+  if (width <= 0 || height <= 0) return err(`${kind} \u5C3A\u5BF8\u975E\u6CD5\uFF08${width}x${height}\uFF09`);
+  if (width > 2e4 || height > 2e4) return err(`${kind} \u5355\u8FB9\u5C3A\u5BF8\u8FC7\u5927\uFF08${width}x${height}\uFF09`);
+  if (width * height > MAX_PIXELS) {
+    return err(`${kind} \u50CF\u7D20\u603B\u91CF\u8FC7\u5927\uFF08${width}x${height} = ${width * height} \u50CF\u7D20\uFF0C\u4E0A\u9650 ${MAX_PIXELS}\uFF09`);
+  }
+  return null;
+}
 var PNG_SIG = [137, 80, 78, 71, 13, 10, 26, 10];
 function startsWith(buf, sig, at = 0) {
   if (buf.length < at + sig.length) return false;
@@ -17,8 +26,8 @@ function probePng(b) {
   if (len !== 13) return err(`PNG IHDR \u957F\u5EA6\u5F02\u5E38\uFF08${len}\uFF09`);
   const width = be32(b, 16);
   const height = be32(b, 20);
-  if (width <= 0 || height <= 0) return err(`PNG \u5C3A\u5BF8\u975E\u6CD5\uFF08${width}x${height}\uFF09`);
-  if (width > 2e4 || height > 2e4) return err(`PNG \u5C3A\u5BF8\u8FC7\u5927\uFF08${width}x${height}\uFF09`);
+  const bad = checkDimensions("PNG", width, height);
+  if (bad) return bad;
   return { ok: true, mime: "image/png", width, height };
 }
 function probeJpeg(b) {
@@ -46,8 +55,8 @@ function probeJpeg(b) {
       if (o + 9 >= b.length) return err("JPEG SOF \u6BB5\u4E0D\u5B8C\u6574");
       const height = be16(b, o + 5);
       const width = be16(b, o + 7);
-      if (width <= 0 || height <= 0) return err(`JPEG \u5C3A\u5BF8\u975E\u6CD5\uFF08${width}x${height}\uFF09`);
-      if (width > 2e4 || height > 2e4) return err(`JPEG \u5C3A\u5BF8\u8FC7\u5927\uFF08${width}x${height}\uFF09`);
+      const bad = checkDimensions("JPEG", width, height);
+      if (bad) return bad;
       return { ok: true, mime: "image/jpeg", width, height };
     }
     o += 2 + segLen;
@@ -69,7 +78,10 @@ function probeWebp(b) {
     }
     const w = ((b[i + 6] | b[i + 7] << 8) & 16383) >>> 0;
     const h = ((b[i + 8] | b[i + 9] << 8) & 16383) >>> 0;
-    if (w <= 0 || h <= 0) return err(`WebP \u5C3A\u5BF8\u975E\u6CD5\uFF08${w}x${h}\uFF09`);
+    {
+      const bad = checkDimensions("WebP", w, h);
+      if (bad) return bad;
+    }
     return { ok: true, mime: "image/webp", width: w, height: h };
   }
   if (fourcc === "VP8L") {
@@ -78,14 +90,20 @@ function probeWebp(b) {
     const bits = b[21] | b[22] << 8 | b[23] << 16 | b[24] << 24;
     const w = (bits & 16383) + 1;
     const h = (bits >> 14 & 16383) + 1;
-    if (w <= 0 || h <= 0) return err(`WebP \u5C3A\u5BF8\u975E\u6CD5\uFF08${w}x${h}\uFF09`);
+    {
+      const bad = checkDimensions("WebP", w, h);
+      if (bad) return bad;
+    }
     return { ok: true, mime: "image/webp", width: w, height: h };
   }
   if (fourcc === "VP8X") {
     if (b.length < 30) return err("WebP VP8X \u5934\u4E0D\u5B8C\u6574");
     const w = (b[24] | b[25] << 8 | b[26] << 16) + 1;
     const h = (b[27] | b[28] << 8 | b[29] << 16) + 1;
-    if (w <= 0 || h <= 0) return err(`WebP \u5C3A\u5BF8\u975E\u6CD5\uFF08${w}x${h}\uFF09`);
+    {
+      const bad = checkDimensions("WebP", w, h);
+      if (bad) return bad;
+    }
     return { ok: true, mime: "image/webp", width: w, height: h };
   }
   return err(`WebP \u5B50\u683C\u5F0F\u4E0D\u652F\u6301\uFF08${fourcc}\uFF09`);

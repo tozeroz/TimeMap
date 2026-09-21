@@ -32,6 +32,32 @@ export interface ImageProbeError {
 
 const err = (reason: string): ImageProbeError => ({ ok: false, reason })
 
+/**
+ * 像素总量上限（width × height）。
+ *
+ * 为什么单边上限（20000）不够：20000×20000 满足"每边 ≤ 20000"，
+ * 但那是 **4 亿像素** —— 一张这样的图在客户端缩放、或在任何解码器里展开，
+ * 都可能瞬间吃光内存。这正是"解压炸弹"的典型形态：
+ * **用很小的文件声明一个巨大的画布**。
+ *
+ * 取值 4000 万像素（约 4000 万 × 4 字节 ≈ 160MB 的原始 RGBA）：
+ * 明显高于正常手机拍摄（常见 1200 万像素），又不足以撑爆 396MB 的服务器。
+ *
+ * 注意强度边界：这是**结构校验**（读头部字段），不是完整解码 ——
+ * 它挡住"声明值过大"，但不保证图片内容一定能被正常渲染。
+ */
+const MAX_PIXELS = 40_000_000
+
+/** 统一的尺寸校验：单边 + 像素总量。三个格式分支共用，避免口径不一致。 */
+function checkDimensions(kind: string, width: number, height: number): ImageProbeError | null {
+  if (width <= 0 || height <= 0) return err(`${kind} 尺寸非法（${width}x${height}）`)
+  if (width > 20000 || height > 20000) return err(`${kind} 单边尺寸过大（${width}x${height}）`)
+  if (width * height > MAX_PIXELS) {
+    return err(`${kind} 像素总量过大（${width}x${height} = ${width * height} 像素，上限 ${MAX_PIXELS}）`)
+  }
+  return null
+}
+
 /** PNG 签名 89 50 4E 47 0D 0A 1A 0A */
 const PNG_SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
 
@@ -55,8 +81,8 @@ function probePng(b: Uint8Array): ImageProbe | ImageProbeError {
   if (len !== 13) return err(`PNG IHDR 长度异常（${len}）`)
   const width = be32(b, 16)
   const height = be32(b, 20)
-  if (width <= 0 || height <= 0) return err(`PNG 尺寸非法（${width}x${height}）`)
-  if (width > 20000 || height > 20000) return err(`PNG 尺寸过大（${width}x${height}）`)
+  const bad = checkDimensions('PNG', width, height)
+  if (bad) return bad
   return { ok: true, mime: 'image/png', width, height }
 }
 
@@ -91,8 +117,8 @@ function probeJpeg(b: Uint8Array): ImageProbe | ImageProbeError {
       if (o + 9 >= b.length) return err('JPEG SOF 段不完整')
       const height = be16(b, o + 5)
       const width = be16(b, o + 7)
-      if (width <= 0 || height <= 0) return err(`JPEG 尺寸非法（${width}x${height}）`)
-      if (width > 20000 || height > 20000) return err(`JPEG 尺寸过大（${width}x${height}）`)
+      const bad = checkDimensions('JPEG', width, height)
+      if (bad) return bad
       return { ok: true, mime: 'image/jpeg', width, height }
     }
     o += 2 + segLen
@@ -117,7 +143,7 @@ function probeWebp(b: Uint8Array): ImageProbe | ImageProbeError {
     }
     const w = ((b[i + 6]! | (b[i + 7]! << 8)) & 0x3fff) >>> 0
     const h = ((b[i + 8]! | (b[i + 9]! << 8)) & 0x3fff) >>> 0
-    if (w <= 0 || h <= 0) return err(`WebP 尺寸非法（${w}x${h}）`)
+    { const bad = checkDimensions('WebP', w, h); if (bad) return bad }
     return { ok: true, mime: 'image/webp', width: w, height: h }
   }
   if (fourcc === 'VP8L') {
@@ -126,14 +152,14 @@ function probeWebp(b: Uint8Array): ImageProbe | ImageProbeError {
     const bits = b[21]! | (b[22]! << 8) | (b[23]! << 16) | (b[24]! << 24)
     const w = (bits & 0x3fff) + 1
     const h = ((bits >> 14) & 0x3fff) + 1
-    if (w <= 0 || h <= 0) return err(`WebP 尺寸非法（${w}x${h}）`)
+    { const bad = checkDimensions('WebP', w, h); if (bad) return bad }
     return { ok: true, mime: 'image/webp', width: w, height: h }
   }
   if (fourcc === 'VP8X') {
     if (b.length < 30) return err('WebP VP8X 头不完整')
     const w = (b[24]! | (b[25]! << 8) | (b[26]! << 16)) + 1
     const h = (b[27]! | (b[28]! << 8) | (b[29]! << 16)) + 1
-    if (w <= 0 || h <= 0) return err(`WebP 尺寸非法（${w}x${h}）`)
+    { const bad = checkDimensions('WebP', w, h); if (bad) return bad }
     return { ok: true, mime: 'image/webp', width: w, height: h }
   }
   return err(`WebP 子格式不支持（${fourcc}）`)

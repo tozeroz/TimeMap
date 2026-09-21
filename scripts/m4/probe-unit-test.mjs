@@ -47,6 +47,12 @@ function jpeg(w, h) {
 }
 cases.push({ name: "合法 JPEG 800x600", buf: jpeg(800, 600), expect: "ok" })
 
+// 2b) **像素总量上限**：单边不超限但像素数巨大（解压炸弹的典型形态）
+//     20000x20000 = 4 亿像素 —— 每边都 ≤ 20000 却能撑爆内存，必须被拒。
+cases.push({ name: "PNG 20000x20000（4 亿像素，单边未超限）", buf: png(20000, 20000), expect: "err" })
+// 2c) 边界内的大图应通过：6000x6000 = 3600 万像素 < 4000 万上限
+cases.push({ name: "PNG 6000x6000（3600 万像素，边界内）", buf: png(6000, 6000), expect: "ok" })
+
 // 3) 伪造：文本改名 .jpg
 cases.push({ name: "文本内容伪装成 .jpg", buf: Buffer.from("this is definitely not an image at all, just text"), expect: "err" })
 // 4) 伪造：PNG 签名 + 垃圾
