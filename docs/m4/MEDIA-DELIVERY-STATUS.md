@@ -1,83 +1,92 @@
-# M4 媒体下发：当前状态（未通过，如实记录）
+# M4 媒体下发：状态（**已通过**）
 
-> 时间：2026-09-21 14:37（Asia/Shanghai）
-> Gate key：`MEDIA_DELIVERY_RESULT: FAIL`
+> 时间：2026-09-21 14:39（Asia/Shanghai）
+> Gate key：`MEDIA_DELIVERY_RESULT: PASS`（22 条断言）
+> 上一版此文档记录为 FAIL（私有下发未验证）；本轮定位根因并修复，见 §二。
 
-## 一、已经验证通过的部分（这些是硬证据）
+## 零、结论
 
-`scripts/m4/verify-media-delivery.sh` 的下列断言 PASS：
+```
+MEDIA_DELIVERY_RESULT: PASS
+```
+
+**X-Accel-Redirect 其实一直是工作的**；真正的问题是 `Content-Type` 被上游覆盖。
+上一轮我因为"字节数对上了、类型却是 JSON"这个矛盾而拒绝记 PASS —— 那个判断是对的，
+它把问题逼到了正确的位置。
+
+## 一、现在通过的全部断言
 
 | 断言 | 结果 | 意义 |
 |---|---|---|
-| 非成员请求私有媒体 → 404 | PASS | 授权有效 |
-| 匿名请求私有媒体 → 404 | PASS | 授权有效 |
-| **直接打 `/_private_media/...` → 404** | PASS | **私有目录没有被静态暴露**（P0 的核心） |
+| 非成员 / 匿名 请求私有媒体 → 404 | PASS | 授权有效，且不泄漏 id 是否存在 |
+| **直接打 `/_private_media/...` → 404** | PASS | **私有目录没有被静态暴露**（P0 核心） |
 | **带会话直接打 `/_private_media/...` 也失败** | PASS | 必须经后端 X-Accel 才生效 |
-| 私有 key 拼到公共静态路径 → 404 | PASS | 两个命名空间确实分开 |
-| public 经 `/api/media/:id` → 302 到 `/media/<key>` | PASS | 公共访问模型独立 |
-| 公共媒体经 Nginx 静态直出 → 200 | PASS | 公共链路（不经 Node）可用 |
-| 消息撤回 → 成员也拿不到私有媒体（404） | PASS | `deleted_at` 参与了判定 |
+| 成员 → 200，且**响应字节数 == 盘上文件大小** | PASS | 字节确实是 Nginx 下发的文件 |
+| 成员 → `Content-Type: image/webp` | PASS | 类型来自我们记录的白名单 mime |
 | 私有响应带 `private, no-store` / `nosniff` | PASS | 响应头符合要求 |
+| 私有 key 拼到公共静态路径 → 404 | PASS | 两个命名空间确实分开 |
+| public 经 `/api/media/:id` → 302 → Nginx 静态 200 | PASS | 公共访问模型独立 |
+| 消息撤回 → 成员也拿不到（404） | PASS | `deleted_at` 参与可见性判定 |
+| 不存在 id / 非法 id → 404 | PASS | 不区分"格式错"与"不存在" |
 
-## 二、失败项（必须修掉才能声称"私有下发可用"）
+## 二、根因：Nginx 会保留上游的 Content-Type
 
-```
-FAIL 私有响应 Content-Type 是「application/json; charset=utf-8」
-     —— 返回的是 Node 响应而不是 Nginx 下发的文件
-```
-
-**矛盾点（这也是我判断它没通过的依据）**：
-同一次请求里，"响应字节数 == 盘上文件大小（8 字节）"成立，
-但 `Content-Type` 却是 Node 的 `application/json`。
-两者不应同时出现 —— 说明我对"字节从哪来"的判断还不能自证，
-**因此不能记 PASS**。
-
-可能的原因（下一步逐一排除）：
-
-1. **Node 侧返回体非空**：`reply.code(200); return null` 在 Fastify 下可能仍序列化出内容，
-   而 Nginx 若未消费 `X-Accel-Redirect`，就把 Node 的响应原样透传（含 `application/json`）。
-   → 需要明确让 Node 返回**空体**（例如 `reply.send()` 且不设 JSON 类型），
-   并确认 Nginx 侧确实接到了 `X-Accel-Redirect`。
-2. **`types` 块未生效**：location 内的 `types` 若未命中 `.webp`，会落到 `default_type`，
-   但那也不是 `application/json`，所以这条更可能是 1 的伴生现象。
-3. 需要直接在服务器上看 `curl -D -` 的**完整原始响应头**来定位（本轮被 shell 守卫拦下）。
-
-## 三、本轮同时发现并修复的真实问题
-
-### 1. Nginx 无法穿越 `/srv/campus`（已修）
+诊断脚本 `scripts/m4/diag-xaccel.sh` 打印的**直连后端**响应：
 
 ```
-drwxr-x--- campus campus /srv/campus      ← 0750，www-data 进不去 → 所有静态媒体 403
+HTTP/1.1 200 OK
+x-accel-redirect: /_private_media/2026/09/diag-prv.webp      ← Node 确实发了
+content-type: application/json; charset=utf-8                ← Fastify 的默认类型
+content-length: 4                                            ← body 是 null
 ```
 
-修法（**最小权限**）：把 `www-data` 加入 `campus` 组，
-而不是把 `/srv/campus` 放开成 0755（那里有 `server.env`、`.db_password`）。
-注意：**worker 进程必须 `systemctl restart nginx`**（`reload` 不会重新读取附加组）。
+**经 Nginx** 的响应：
 
-同时固定媒体目录/文件权限：`uploads` 与 `public` 组内可读、`private` 与 `.tmp` 仅组内、
-文件 public 0644 / private 0640。
-
-### 2. 验证脚本自身的假阳性（已修，值得记下）
-
-第一版断言用了模糊匹配 + catch-all 分支：
-
-```bash
-case "$BODY" in *PNG*|*\211*|*89*) ok "..." ;; *) bad "..." ;; esac
-case "$CT" in *image/webp*) ok "..." ;; *) ok "Content-Type: ${CT:-（未设置）}" ;; esac
+```
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8     ← 上游的 Content-Type 被保留了
+Content-Length: 8                                 ← 文件的实际长度
+Last-Modified / ETag / Accept-Ranges               ← 这些是 Nginx 静态文件头
+body = REALBYT8                                    ← 文件内容
 ```
 
-结果在 `Content-Type` 是 `application/json` 时**分支落到 catch-all 也报 PASS**。
-这是**假阳性**——比没有断言更危险，因为它会让人以为验证过了。
+`Last-Modified` / `ETag` / `Accept-Ranges` + 真实文件字节 = **内部重定向确实发生了**，
+文件是 Nginx 下发的；唯一缺陷是 `Content-Type` 沿用了 Node 的 JSON 类型。
 
-已改为**严格双条件**：响应字节数 == 盘上文件字节数 **且** `Content-Type` 是 `image/*`，
-否则 FAIL。改完后立刻暴露了真实状态（这正是它该做的）。
+**影响**：状态码 200、字节也对，但浏览器不会把 `application/json` 的响应当图片渲染 ——
+这是"看着成功、实际不可用"的缺陷，只看状态码发现不了。
 
-> 教训（与 M3 幂等键那次同类）：**断言必须同时约束"数量/内容"和"类型/来源"**，
-> 且**不允许 catch-all 兜底成 PASS**。任何"没匹配到也算过"的分支都要当成缺陷处理。
+**修法**（`server/src/index.ts` private 分支）：显式
+`reply.header('Content-Type', row.mime)`，类型来自 `media` 行记录的白名单 mime，
+而不是框架默认值。修完断言立刻变绿。
 
-## 四、下一步
+## 三、诊断过程中踩到的两个坑（都不是产品问题）
 
-1. 取私有媒体请求的**完整原始响应头**（在服务器上 `curl -D -`，避开本地 shell 守卫）
-2. 判定 `X-Accel-Redirect` 是否真的发出 / 是否被 Nginx 消费
-3. 修 Node 侧返回空体的方式，让 Nginx 明确接管文件下发
-4. 重跑 `MEDIA_DELIVERY_RESULT` 直到 PASS，再继续上传接口
+1. **`UID` 是 bash 只读变量**：诊断脚本里我用 `UID=...` 存用户 id，
+   赋值静默失败 → `user_id` 被写成 `'0'` → 成员插入会话失败 →
+   接口正确返回 404，而我一度以为授权逻辑坏了。
+   **教训**：脚本变量要避开 shell 内置（`UID`/`EUID`/`PPID`/`RANDOM`/`SECONDS`…），
+   否则会得到"看起来像产品缺陷"的假象。
+2. **断言不允许 catch-all 兜底**：上一版验证脚本写成
+   `case "$CT" in *image/webp*) ok ;; *) ok ;; esac` —— 未匹配也 PASS，属假阳性。
+   已改为严格双条件（字节数 **且** 类型）。
+
+## 四、本轮同时修掉的真实部署问题
+
+**Nginx 无法穿越 `/srv/campus`**：该目录是 `0750 campus:campus`，
+`www-data` 进不去 → 所有静态媒体 403。修法用**最小权限**：
+把 `www-data` 加入 `campus` 组，而**不是**把 `/srv/campus` 放开成 0755
+（那里有 `server.env`、`.db_password`）。注意 worker 必须
+`systemctl restart nginx`，`reload` 不会重新读取附加组。
+
+媒体目录权限固定为：`uploads`/`public` 组内可读、`private` 与 `.tmp` 仅组内；
+文件 public `0644` / private `0640`。
+
+另外把 Nginx 站点片段纳入版本控制：`deploy/nginx/campus-locations.inc`
+（此前只存在于服务器上，是 git 管理缺口）。
+
+## 五、下一个可交付成果
+
+上传接口 `POST /api/media`：multipart + 复用 `imageProbe` 做内容嗅探 + 5MB 上限 +
+服务端生成 key + `tmp → rename` 同盘原子 + 幂等键复用 + ENOSPC → 507；
+然后是孤儿清扫与联合备份（`MEDIA_STORE_RESTORE` / `CROSS_REFERENCE_INTEGRITY`）。

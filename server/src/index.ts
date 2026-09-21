@@ -1052,6 +1052,15 @@ export function buildServer(deps: ServerDeps) {
         return { error: 'not_found' }
       }
       reply.header('X-Media-Scope', 'private')
+      /*
+        **必须显式设置 Content-Type**（诊断得到的教训）：
+        Nginx 做 X-Accel-Redirect 内部重定向时，**会保留上游响应里的 Content-Type**。
+        Fastify 默认给的是 application/json; charset=utf-8，
+        于是客户端拿到的就是"内容是真图、类型却是 JSON" —— 浏览器不会把它当图片渲染，
+        而且这种不一致很难从状态码上看出来（200 看着是成功的）。
+        所以这里按 media 行里记录的 mime 明确设置，让类型来自我们的白名单而不是框架默认值。
+      */
+      reply.header('Content-Type', row.mime)
       // Nginx internal location 映射到 uploads/private/
       reply.header('X-Accel-Redirect', `${PRIVATE_XACCEL_PREFIX}/${row.storage_key}`)
       reply.code(200)
