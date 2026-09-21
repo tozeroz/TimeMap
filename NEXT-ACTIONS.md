@@ -25,32 +25,32 @@
 ```
 
 ### A1. 服务端（`server/src/index.ts`）
-- [ ] A1.1 `/api/media`：接受 `durationMs`；**audio/webm 必须带正 durationMs**；**image/* 禁止带 durationMs**（不静默忽略）
-- [ ] A1.2 `/api/media`：对 audio/webm 做 **EBML/WebM 容器 sniff**（声明强度=容器有效性，不得写成"已证明只有音频轨"）
-- [ ] A1.3 消息路由：把 `media_requires_image_kind` **泛化**为 kind↔mime 相容性（image↔image/*、voice↔audio/*），**并保住** `text + mediaId` → 400、`mediaIds[]` → 400
+- [x] A1.1 `/api/media`：接受 `durationMs`；**audio/webm 必须带正 durationMs**；**image/* 禁止带 durationMs**（不静默忽略）
+- [x] A1.2 `/api/media`：对 audio/webm 做 **EBML/WebM 容器 sniff**（声明强度=容器有效性，不得写成"已证明只有音频轨"）
+- [x] A1.3 消息路由：把 `media_requires_image_kind` **泛化**为 kind↔mime 相容性（image↔image/*、voice↔audio/*），**并保住** `text + mediaId` → 400、`mediaIds[]` → 400
 
 ### A2. 客户端
-- [ ] A2.1 `app/src/api/client.ts`：`uploadMedia(file, purpose, durationMs?)`；`postThreadVoiceMessage`
-- [ ] A2.2 `ChatScreen`：长按录音（MediaRecorder）→ 松手停止 → **用 `performance.now()` 单调时钟计时** → 上传 → 发消息
-- [ ] A2.3 `ChatScreen`：语音气泡渲染（时长 `round(ms/1000)″` + 播放/暂停；**沿用已 PASS 的 senderId 左右方向**）
-- [ ] A2.4 权限拒绝时明确提示；**不得**发出任何 `/api/media` 或 `/messages`（⑦a）
+- [x] A2.1 `app/src/api/client.ts`：`uploadMedia(file, purpose, durationMs?)`；`postThreadVoiceMessage`
+- [x] A2.2 `ChatScreen`：长按录音（MediaRecorder）→ 松手停止 → **用 `performance.now()` 单调时钟计时** → 上传 → 发消息
+- [x] A2.3 `ChatScreen`：语音气泡渲染（时长 `round(ms/1000)″` + 播放/暂停；**沿用已 PASS 的 senderId 左右方向**）
+- [x] A2.4 权限拒绝时明确提示；**不得**发出任何 `/api/media` 或 `/messages`（⑦a）
 
 ### A3. 构建与真机验证
-- [ ] A3.1 `tsc -b` + lint + build + `cap sync android` + APK 装机
-- [ ] A3.2 真机 E2E：录音 → 201 → 201 → DB 核查 kind=voice 且 media.duration_ms>0
-- [ ] A3.3 真机断言：气泡显示时长与实际录音时长 **±1s**；点击可播放/暂停
-- [ ] A3.4 reload 后仍能显示时长并播放（**不重新下载音频也能知道时长**）
-- [ ] A3.5 ⑦a 拒绝代码路径：**stub getUserMedia 抛 NotAllowedError** → 明确提示 + **0 次 /api/media + 0 次 /messages + 0 ghost bubble**
+- [x] A3.1 `tsc -b` + lint + build + `cap sync android` + APK 装机
+- [x] A3.2 真机 E2E：录音 → 201 → 201 → DB 核查 kind=voice 且 media.duration_ms>0
+- [x] A3.3 真机断言：气泡显示时长与实际录音时长 **±1s**；点击可播放/暂停
+- [x] A3.4 reload 后仍能显示时长并播放（**不重新下载音频也能知道时长**）
+- [x] A3.5 ⑦a 拒绝代码路径：**stub getUserMedia 抛 NotAllowedError** → 明确提示 + **0 次 /api/media + 0 次 /messages + 0 ghost bubble**
 
 ### A4. Gate（审核要求补 7 条负向断言）
-- [ ] A4.1 `audio/webm` 无 durationMs → 400 且**无 media 行**
-- [ ] A4.2 `image/png` 带 durationMs → 400 且**无 media 行**
-- [ ] A4.3 伪造二进制声明 `audio/webm` → sniff 拒绝且**无 media 行**
-- [ ] A4.4 `voice` + image 媒体 → 4xx / **零消息变更**
-- [ ] A4.5 `image` + voice 媒体 → 4xx / **零消息变更**
-- [ ] A4.6 `text + mediaId` → 保持 400（回归）
-- [ ] A4.7 `mediaIds[]` → 保持 400（回归）
-- [ ] A4.8 把 A4.1–A4.7 接进 `scripts/gates/m5/gate-server.sh`
+- [x] A4.1 `audio/webm` 无 durationMs → 400 且**无 media 行**
+- [x] A4.2 `image/png` 带 durationMs → 400 且**无 media 行**
+- [x] A4.3 伪造二进制声明 `audio/webm` → sniff 拒绝且**无 media 行**
+- [x] A4.4 `voice` + image 媒体 → 4xx / **零消息变更**
+- [x] A4.5 `image` + voice 媒体 → 4xx / **零消息变更**
+- [x] A4.6 `text + mediaId` → 保持 400（回归）
+- [x] A4.7 `mediaIds[]` → 保持 400（回归）
+- [x] A4.8 把 A4.1–A4.7 接进 `scripts/gates/m5/gate-server.sh`
 
 ### A5. 提交审核
 - [ ] A5.1 写 `docs/review-log/36-*` 并提交给审核
@@ -62,8 +62,8 @@
 - [x] B1 ✅ 已写入 `PLAN.md` 末（硬规则：不得以汇报结束回合；含自查三问）
 - [ ] B2 记录并处置**停机路径缺陷**：`[migrate] TERMINAL failure ... Cannot use a pool after calling end on the pool`
       —— 关闭时后台迁移循环未检查 shutdown 状态，打出假警报并翻转 health。应记为缺陷并修（或在文档明确其为 shutdownown-only）
-- [ ] B3 把本次两条工具规则写入纪律：① 二进制证据禁止经 shell 文本重定向 ② PowerShell 脚本优先 ASCII
-- [ ] B4 把 `NEXT-ACTIONS.md` 的机制写进 `docs/RESUME-POINT.md`，使接手者也会先读它
+- [x] B3 ✅ 已写入 `PLAN.md`（二进制证据禁止经 shell 文本重定向；PowerShell 脚本优先 ASCII） 把本次两条工具规则写入纪律：① 二进制证据禁止经 shell 文本重定向 ② PowerShell 脚本优先 ASCII
+- [x] B4 ✅ `docs/RESUME-POINT.md` 顶部已加 NEXT-ACTIONS 指针 把 `NEXT-ACTIONS.md` 的机制写进 `docs/RESUME-POINT.md`，使接手者也会先读它
 
 ---
 
