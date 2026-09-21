@@ -160,3 +160,81 @@ permission denied → NotAllowedError → zero upload → zero message
      · 服务端对 audio/webm 做 **WebM/EBML 容器 sniff**（不信 multipart Content-Type）
 4. 再写产品代码（Phase 1）
 ```
+
+---
+
+## 七、P3 定论（截图证据）：**本设备无权限弹窗 —— 权限被静默授予**
+
+> 时间：2026-09-21 23:14｜方法：`pm clear` 置于"从未请求过"→ 触发 getUserMedia → 每 0.6s 截图（用 `adb pull`，非 PS 重定向）→ 视觉读图
+
+### 结果
+
+```
+重置后权限状态: RECORD_AUDIO granted=false, flags=[USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+                （**无 USER_SET** → 真正的"从未请求过"）
+触发 getUserMedia: **ok:true, 270ms**（成功）
+截图 8 帧哈希:   帧0=E05B… 帧1=7FE5…（**唯一不同的一帧**）帧2-7=E05B…
+视觉读图结论:
+  · **没有任何 Android 运行时权限弹窗**
+  · 帧1 与其余帧的唯一差别 = 状态栏多了**绿色麦克风使用指示图标**
+最终权限状态: RECORD_AUDIO granted=**true**, flags=[**USER_SET**|…]
+```
+
+### 结论（必须按此表述，不得夸大）
+
+```
+P3  是否出现真实 Android 授权 UI:  **NOT_OBSERVED（本设备自动静默授予）**
+    性质: **设备特性**，不是应用缺陷 → 按本项目分类属 ENVIRONMENT，不属 PRODUCT_DEFECT
+    依据: 8 帧截图无任何权限弹窗；权限状态却从"从未请求"变为 granted=true + USER_SET
+    含义: **不能宣称"真实用户会看到授权提示"** —— 本设备上不会
+WEB_API_CAPTURE_PREREQUISITE: **PASS（采集链路可用）**
+    依据: 三次独立运行均 getUserMedia ok:true / P5-P9 全 PASS
+```
+
+### 为什么这**不**触发审核说的"写 WebChromeClient"那条分支
+
+审核的原话是：
+
+> 如果加 manifest 后**仍然完全没有系统授权流程**，不要让实现者自行继续写 WebChromeClient。
+> 那时状态应是 `WEB_API_CAPTURE_PREREQUISITE: FAIL` …
+
+**但实际结果是 `PASS`**：授权流程**确实发生了**（权限从"从未请求"变成了 granted=true + USER_SET），
+只是**它的 UI 在本设备上没有出现**。二者不同：
+- 前者（完全没流程）= 桥没接上 → 需要 native 工作
+- 后者（有流程、无 UI）= **设备自动授予策略** → 应用侧无需改动
+
+→ 因此**不需要**写 WebChromeClient、**不需要**改 Capacitor 源码，也没有违反审核禁令。
+
+### ⚠️ 必须在报告里说明的**证据边界**
+
+```
+本结论的适用范围: **仅 MuMu 模拟器（Android 12 / SDK 32, ro.build.type=user）**
+未覆盖: 真实手机上"首次请求是否弹窗" —— 本设备不弹，故**无法由此推断真机行为**
+建议: 该项记为 PERMISSION_UI_ON_THIS_DEVICE: NOT_OBSERVED
+      （而不是 "PERMISSION_UI: PASS/FAIL"）
+      —— 因为该观测的缺失源于设备策略，不能作为产品行为的结论
+```
+
+### 我本次的方法错误（已修正，值得记）
+
+第一次截图我用 `adb exec-out screencap -p > file` —— **PowerShell 的 `>` 重定向会对二进制做文本转换**，
+产出的 PNG 头是 `FF FE FD FF 50 00 4E 00`（不是 `89 50 4E 47`），**文件已损坏**，
+并被视觉工具以"unsupported image"拒绝。
+
+**改用 `adb shell screencap -p /sdcard/x.png` + `adb pull`** 后头部正常（`89 50 4E 47`）。
+
+→ 纪律：**在 PowerShell 里不要用 `>` 接二进制输出**；要么用 `adb pull`，
+要么显式按字节写文件。（这与本项目已记录的"PowerShell 编码/引号坑"同族。）
+
+## 八、下一步：拒绝路径测试（本设备自动授予，须用 AppOps 强制拒绝）
+
+因为本设备会自动授予，常规 `pm revoke` 后仍会被静默重授，**无法用它测拒绝路径**。
+改用 **AppOps** 强制拒绝（即使权限状态是 granted，也能让系统在调用时拒绝）：
+
+```
+adb shell appops set com.campusx.demo RECORD_AUDIO deny
+→ 触发 getUserMedia → 期望 NotAllowedError
+→ 并验证"零上传、零消息"（对服务器 DB 与上传目录做只读核对）
+```
+
+测试后必须 `appops set com.campusx.demo RECORD_AUDIO allow` 还原，避免留下污染状态。
