@@ -69,6 +69,73 @@ export function mediaUrl(id: string): string {
   return `${API_ORIGIN}/api/media/${encodeURIComponent(id)}`
 }
 
+/**
+ * M4 Slice A：**带会话凭据地**取媒体字节，返回一个 blob: URL。
+ *
+ * 为什么不能直接用 `<img src={mediaUrl(id)}>`（审核记录 16 点名的关键点）：
+ *   `<img>` 无法附加 `Authorization` 头，而私有媒体必须经过
+ *   session → can_read_message → can_read_media 才下发。
+ *   若为了 `<img>` 好用而把 token 放进 URL/query，就等于把凭据泄漏到
+ *   日志、Referer 与浏览器历史里 —— 所以**不做**那种退化。
+ *
+ * 正确链路：authenticated fetch → blob → URL.createObjectURL → <img src="blob:...">
+ * 调用方**必须**在卸载时 revokeObjectURL（见 MediaImage 组件），否则会持续占用内存。
+ */
+export async function fetchMediaBlobUrl(id: string): Promise<ApiResult<string>> {
+  try {
+    // 复用既有的 authHeaders()，不另写一套凭据拼装逻辑
+    const res = await fetch(mediaUrl(id), { headers: authHeaders() })
+    if (!res.ok) return { ok: false, reason: `http_${res.status}`, status: res.status }
+    const blob = await res.blob()
+    return { ok: true, value: URL.createObjectURL(blob) }
+  } catch (err) {
+    return { ok: false, reason: (err as Error).message }
+  }
+}
+
+// ===========================================================================
+// M4 Slice A：会话与消息
+// ===========================================================================
+
+export interface ApiThreadLastMessage {
+  body: string
+  kind: string
+  createdAt: string | null
+}
+
+export interface ApiThread {
+  id: string
+  kind: string
+  title: string | null
+  memberCount: number
+  lastMessage: ApiThreadLastMessage | null
+}
+
+export interface ApiMessage {
+  id: string
+  senderId: string | null
+  sender: string | null
+  body: string
+  /** text | image | voice */
+  kind: string
+  createdAt: string
+  /** 已撤回：界面显示「消息已撤回」，且 media 已被服务端清空 */
+  revoked: boolean
+  media: ApiMediaRef[]
+}
+
+export async function getThreads(): Promise<ApiResult<{ items: ApiThread[] }>> {
+  return request<{ items: ApiThread[] }>('/api/threads')
+}
+
+export async function getThreadMessages(
+  threadId: string,
+): Promise<ApiResult<{ threadId: string; items: ApiMessage[] }>> {
+  return request<{ threadId: string; items: ApiMessage[] }>(
+    `/api/threads/${encodeURIComponent(threadId)}/messages`,
+  )
+}
+
 export type ApiResult<T> =
   | { ok: true; value: T }
   | { ok: false; reason: string; status?: number }
