@@ -6,9 +6,7 @@
   "by": "M3 模型验证（M3 原始必答的假设 #4：message / group / board_note 关系）",
   "method": "只读：deep link 进入 + uiautomator dump + 截图（**未发任何留言**）",
   "policy_note": "发留言是写操作 → 全程只读。本页不依赖任何第三方写操作即可到达（deep link 无参数可进），因此证据**可采信**。",
-
   "activity": "com.kairuotu.feed.messageboard.MessageBoardActivity",
-
   "observations": {
     "ui_ids": [
       "id/iv_back [28,77][98,147]            返回",
@@ -29,7 +27,6 @@
       "留言（发送按钮）"
     ]
   },
-
   "model_verdict": {
     "assumption": "board_notes 与 message / group 的关系（M3 原始必答假设 #4）",
     "verdict": "SUPPORTED",
@@ -45,9 +42,20 @@
       "留言板挂在帖子上",
       "留言板挂在地点上",
       "留言板是公开的（任何人可见）"
-    ]
+    ],
+    "evidence_strength": {
+      "strong": [
+        "「仅双方可见」出现两次（顶部 leaveMsgTip + 输入框 et_comment_board）—— 直接表达双边私密语义",
+        "空态文案「可以给同学留言噢」—— 直接表明对象是一个用户",
+        "deep link 不带参数即可进入 —— 表明它是与我相关的留言板，而非帖子/地点的子页"
+      ],
+      "auxiliary": [
+        "控件命名里没有 post_id / place_id 挂载点 —— 命名不一定反映真实关系，属间接线索，不单独承担排除性证明"
+      ],
+      "note": "审核记录 14 的方法论提醒：强证据是直接表达语义的文本与交互对象；命名与可达性只能支持结论，不能单独排除其他解释。"
+    },
+    "epistemic_boundary": "本判定支持的是**行为/领域语义**层面的结论（留言是面向另一用户的双方可见私密关系，不是 post/place 的子资源）。它**不证明**原版后端内部一定存在独立的 board_notes 表（对方也可能用 thread 实现）——只读观察看不到对方服务端存储结构。因此不得据此断言「原版有一张 board_notes 表」。"
   },
-
   "additional_read_only_facts": [
     {
       "fact": "表情行恰好 7 个表情",
@@ -68,7 +76,6 @@
       "verdict": "SUPPORTED"
     }
   ],
-
   "blocked_by_policy": [
     {
       "what": "留一条留言以观察发送后的反馈（列表渲染、气泡样式、时间格式）",
@@ -77,7 +84,6 @@
       "substitute": "在自建 demo 里造留言数据并验证渲染"
     }
   ],
-
   "evidence": [
     ".mumu-capture/m3-board/board.png（只读截图）",
     ".mumu-capture/m3-board/board-ui.xml（控件树，含 id 与 bounds）",

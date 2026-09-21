@@ -213,7 +213,32 @@ autovacuum_max_workers = 2
             → `M3_FINAL_GATE_RESULT: PASS`（PERSISTENT / STAGE / REGRESSION 三层全 PASS）
             六个 slice key 全 PASS；前置两件事（非零距离 canonical seed、定向清理测试残留）已完成
             Final Gate 前无遗留缺陷；已知限制如实列在报告第五节
-      - [ ] **M4**（媒体：上传/存储/下发 + 消息类型与媒体引用 + 群聊 @ 提及关系）
+      ### M3 阶段冻结状态（审核记录 14）
+      ```
+      M3 Final Gate — PASS
+      M3 — ACCEPTED / CLOSED
+        PERSISTENT: PASS   STAGE: PASS   REGRESSION: PASS
+        两维报告：BASELINE_PAGE_COVERAGE 22/22 observed
+                 CONFORMANCE_EVIDENCE admissible / inadmissible / blocked
+      ```
+      语义边界：M3 PASS = "M3 定义范围内已完成"，**不等于**"整个 App 已 1:1"。
+      四个必答模型问题全部有结论（含 board_notes 用户对用户私密留言）；
+      认识论边界：只读观察支持**行为/领域语义**结论，不代表对方服务端存储结构。
+
+      - [ ] **M4（已批准开工，审核记录 14）**：media upload → storage → delivery
+            → message media references → message kind → @ mention relation
+            **工作单 #1（先做这个，不动代码）**：拿 PLAN §6 的冻结图片存储设计，
+            逐条回答审核记录 13 提出的 **7 条边界**，提交审核后**再**动手实现：
+              1. DB 只存 metadata/reference，不把客户端路径当存储地址
+              2. 上传文件名由服务器生成（不信任客户端 filename/path，防路径穿越）
+              3. 不只信 Content-Type：按内容嗅探图片类型 + 单文件/请求体大小限制
+              4. DB row 与文件之间的失败原子性（DB 成功文件失败 / 反之 → orphan 处理）
+              5. 20 GB 磁盘：disk-full / quota / orphan cleanup 行为
+              6. **公共动态图 vs 私有聊天图的访问控制不能同构**（最重要）
+              7. `pg_dump` 不能代表完整备份 → 必须给 **DB + media store 联合恢复**证据
+            @ 提及范围：`SELF_OWNED_MENTION_FUNCTIONAL`；
+            原版关系记 `ORIGINAL_MENTION_MODEL_CONFORMANCE: NOT_EVALUATED`
+            （at-panel 证据已被 provenance 审计排除，不得反向当作"原版就是这样"）
 
 ---
 
