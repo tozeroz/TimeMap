@@ -29,17 +29,24 @@ import './message.css'
  *
  * | 区块 | 数据来源 | 状态 |
  * |---|---|---|
- * | 会话列表（群聊 + 单聊） | `GET /api/threads` | ✅ **已接真实后端**（本单） |
- * | 邀请卡的**姓名** | `getSession().user.displayName` | ✅ 真实（本单修：此前显示 mock 的「自定义名称6」，与底部 tab 栏显示的真名自相矛盾） |
- * | 邀请卡的学校/学院/年级/头像 | mock | ⚠️ `MOCK_NOT_WIRED`（后端无对应字段，见下） |
- * | 更多同学 + 好友申请 | mock | ⚠️ `MOCK_NOT_WIRED`（后端无推荐/好友申请能力） |
+ * | 会话列表（群聊 + 单聊） | `GET /api/threads` | ✅ **已接真实后端**（WO#8） |
+ * | 邀请卡的**姓名** | `getSession().user.displayName` | ✅ 真实（WO#8 修：此前显示 mock 的「自定义名称6」，与底部 tab 栏显示的真名自相矛盾） |
+ * | 邀请卡的**头像** | 首字占位（`invite__avatar--ph`） | ✅ **已改占位**（WO#8；因 `users` 表**无 avatar 列**，见下） |
+ * | 邀请卡的**学校/学院/年级** | **不渲染** | ✅ **已移除**（WO#8；无权威来源 → 空着比填假值诚实） |
+ * | 更多同学 + 好友申请 | mock | ⚠️ **`MOCK_NOT_WIRED`**（后端无推荐/好友申请能力）—— WO#10 处理 |
  *
- * 为什么邀请卡只接了姓名、其余仍是 mock：
- *   `/api/auth/me` 目前只返回 `id / handle / displayName / phone`，**没有** school/college/grade/avatar。
- *   姓名我们有权威来源（会话），而那几个字段没有 —— 留着 mock 值是"未接线"，
- *   但留着一个**与登录身份不符的姓名**是"主动矛盾"，两者性质不同，所以只修前者。
- *   不把整张卡"半接线成看起来全真"是刻意的：**半真半假比明确未接线更危险**。
- *   → 已登记接线单（NEXT-ACTIONS J 区 WO#10），届时 profile 字段补齐后一并接。
+ * ⚠️ 本表曾在 WO#8 后**未同步更新**（一度仍写着"邀请卡学校/学院/年级/头像 = mock"，
+ *    而代码里那几项其实已经移除/改占位了）。2026-09-22 按源码逐项核对后更正。
+ *    —— 文档与实际不符本身就是一种缺陷（会误导后续工作单与审核），故单独记这一笔。
+ *
+ * 为什么这些字段没有权威来源（实测，非推测）：
+ *   `users` 表只有 id / handle / display_name / created_at / updated_at / school_campus_id / phone_e164
+ *   → **没有** avatar / college / grade / major / mbti / zodiac 这些列；
+ *   `school_campus_id` 指向 campuses(id) → schools(id)，但**两张表都没有数据、且三个用户该列全为 NULL**
+ *     （`scripts/m5/probe-school-source.sh` 实测）。
+ *   姓名我们有权威来源（会话），那几个字段没有 —— 所以只接姓名，
+ *   其余**不填假值**。不把整张卡"半接线成看起来全真"是刻意的：**半真半假比明确未接线更危险**。
+ *   → WO#10 按字段级 inventory 处理（`docs/m5/WO10-PLAN-message-screen-field-inventory.md`）。
  */
 
 /** 会话行要显示的名字：群聊用 title；单聊用对方昵称（后端新给的 peerName） */
