@@ -1,0 +1,83 @@
+# E1 AUTH_HYGIENE_AUDIT 输出（只读审计，2026-09-22）
+# 目的：按审核记录 39 的要求，先量出**状态分布**，再谈 retention 与清理。
+# 脚本：scripts/m5/audit-auth-hygiene.sh
+
+=== E1 AUTH_HYGIENE_AUDIT ===
+时间: 2026-09-22T01:27:31+08:00
+
+########## sessions ##########
+--- 总数 ---
+130
+
+--- 状态分布（**互斥分类**，按优先级：revoked 优先于 expired）---
+active(未撤销未过期) = 94
+expired(未撤销)    = 0
+revoked            = 36
+
+--- 更细的交叉表（revoked × expired）---
+not_revoked / valid = 94
+revoked / valid = 36
+
+--- age 分布（按 created_at 距今天数分桶）---
+a) <1h = 16
+b) 1h..1d = 114
+
+--- 过期多久了（仅 expired 行；用于定 retention grace）---
+
+--- 会话有效期（expires_at - created_at）分布：确认 TTL 语义 ---
+d) >=7d = 130
+
+--- 每个用户的会话数（看是否有异常集中）---
+sessions_per_user: max=113 avg=65.00 users=2
+
+########## login_challenges ##########
+--- 总数 ---
+108
+
+--- 状态分布（**互斥分类**：consumed 优先于 expired）---
+consumed           = 103
+expired-pending    = 5
+valid-pending      = 0
+
+--- 更细的交叉表（consumed × expired）---
+consumed / expired = 103
+not_consumed / expired = 5
+
+--- age 分布 ---
+a) <1h = 16
+b) 1h..1d = 92
+
+--- 挑战有效期（expires_at - created_at）分布：确认 OTP TTL 语义 ---
+b) 1..10min = 108
+
+--- attempts 分布（看是否有暴力尝试堆积）---
+attempts=0 → 108
+
+########## 清理候选测算（仅统计，不删除）##########
+--- retention grace = 1 hour ---
+  consumed challenge(consumed_at < now() - 1 hour) = 87
+  expired challenge (expires_at  < now() - 1 hour) = 92
+  expired session   (expires_at  < now() - 1 hour) = 0
+  revoked session   (revoked_at  < now() - 1 hour) = 36
+--- retention grace = 1 day ---
+  consumed challenge(consumed_at < now() - 1 day) = 0
+  expired challenge (expires_at  < now() - 1 day) = 0
+  expired session   (expires_at  < now() - 1 day) = 0
+  revoked session   (revoked_at  < now() - 1 day) = 0
+--- retention grace = 7 days ---
+  consumed challenge(consumed_at < now() - 7 days) = 0
+  expired challenge (expires_at  < now() - 7 days) = 0
+  expired session   (expires_at  < now() - 7 days) = 0
+  revoked session   (revoked_at  < now() - 7 days) = 0
+
+########## 必须**绝不**被误删的集合（规模）##########
+  active sessions           = 94
+  valid pending challenges  = 0
+
+########## 与其它表的关联（防删除破坏外键）##########
+--- sessions.user_id → users(id) ON DELETE CASCADE：删 session 不影响 user ---
+users 总数 = 3
+--- 其它表是否引用 sessions / login_challenges ---
+referencing_tables = (无)
+
+AUTH_HYGIENE_AUDIT: DONE（只读，未修改任何数据）
