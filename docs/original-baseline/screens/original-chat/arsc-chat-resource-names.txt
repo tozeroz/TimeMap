@@ -1,0 +1,352 @@
+# Original app resource names related to chat message direction
+# (raw product; regeneration recipe is in ./INDEX.md section 4)
+#
+# NOTE on the leading junk characters (!! , "" , && , $$ etc.):
+#   they are extraction artifacts. resources.arsc stores strings as UTF-16/UTF-8
+#   pools; a naive "printable ASCII run" scan can start a run mid-byte, so a few
+#   entries carry 1-2 spurious leading characters. The real name is the part after
+#   the last non-identifier character.
+
+captured_at_local : 2026-09-21 20:57:34 +08:00
+package           : com.kairuotu.campus
+apk_path_on_device: /data/app/~~AppT99r0abVpPM-vq3jbjw==/com.kairuotu.campus-Tq8lUFi3wsgZBZRuNZKvwQ==/base.apk
+apk_sha256        : 3373B6B2FBC997919398543DBBC59546172376BEEDEE87312154EBA095D6C294
+method            : pull base.apk -> read resources.arsc -> extract printable ASCII runs (len>=5) -> filter by regex
+arsc_bytes        : 2928292
+total_strings     : 24287
+
+IMPORTANT: this is DID-NOT-OBSERVE evidence.
+  It is the app resource TABLE, not a rendered page.
+  It proves the names exist in this package; it does NOT prove which layout
+  the observed GroupChatActivity actually inflated.
+
+=== [A] im_chat_* names (IM module) ===
+  im_chat_camera_permission_denied
+  im_chat_max_length_content_toast
+  im_chat_right_text_item_bg_night
+!!im_chat_subitem_profile_layout_v2
+!!im_chat_subitem_voice_left_layout
+!!im_chat_video_duration_background
+""im_chat_media_storage_insufficient
+""im_chat_subitem_voice_right_layout
+##im_chat_invalid_empty_content_toast
+##im_chat_video_progress_thumb_shadow
+$$im_chat_media_save_status_background
+&&im_chat_subitem_text_left_style_layout
+im_chat_album_confirm
+im_chat_bg_12dp
+im_chat_bg_12dp_night
+im_chat_blank_item_layout
+im_chat_camera_launch_failed
+im_chat_capture_photo_failed
+im_chat_capture_video_failed
+im_chat_card_hey_bottom_mask
+im_chat_card_profile_mask_bg
+im_chat_feed_v2_img_layout
+im_chat_feed_v2_text_layout
+im_chat_feed_v2_video_layout
+im_chat_feed_v2_voice_layout
+im_chat_hint_item_layout
+im_chat_keyboard
+im_chat_left_common_item_layout
+im_chat_left_content_layout
+im_chat_live_photo_badge
+im_chat_live_photo_label
+im_chat_media_close
+im_chat_media_download
+im_chat_media_image
+im_chat_media_network_error
+im_chat_media_pause
+im_chat_media_progress
+im_chat_media_resume
+im_chat_media_retry_unavailable
+im_chat_media_save
+im_chat_media_save_failed
+im_chat_media_save_status_size
+im_chat_media_save_success
+im_chat_media_saving
+im_chat_media_seek
+im_chat_media_vertical_height
+im_chat_message_quote_layout
+im_chat_page_quote_layout
+im_chat_pet_loading_item_layout
+im_chat_plus_album
+im_chat_plus_camera
+im_chat_plus_item_layout
+im_chat_plus_layout
+im_chat_plus_location
+im_chat_plus_page_layout
+im_chat_plus_video
+im_chat_plus_video_icon
+im_chat_plus_yearbook
+im_chat_push_btn_bg_v2
+im_chat_push_failure_ic
+im_chat_record_error
+im_chat_revoke
+im_chat_richtext_cursor
+im_chat_right_text_item_bg
+im_chat_send_msg
+im_chat_sending
+im_chat_sending_anim
+im_chat_sending_night
+im_chat_server_hint_item_layout
+im_chat_setting_dialog_layout
+im_chat_setting_item_layout
+im_chat_status_failed
+im_chat_status_sending
+im_chat_status_sending_night
+im_chat_stroke_1px_corner_12dp
+im_chat_subitem_image_layout
+im_chat_subitem_video_layout
+im_chat_summary_image
+im_chat_summary_video
+im_chat_text_item_bg
+im_chat_text_item_bg_night
+im_chat_video_duration_exceeded
+im_chat_video_duration_width
+im_chat_video_pause
+im_chat_video_play
+im_chat_video_play_background
+im_chat_video_play_foreground
+im_chat_video_play_fullscreen
+im_chat_video_play_icon
+im_chat_video_progress_unplayed
+im_chat_voice_ic
+im_chat_voice_layout
+im_chat_voice_to_text_bg
+im_chat_voice_to_text_bg_night
+
+=== [B] names containing left ===
+  abc_text_select_handle_left_mtrl
+  widgets_round_bottom_left_radius
+!!im_chat_subitem_voice_left_layout
+!!m3_btn_text_btn_icon_padding_left
+""abc_dropdownitem_text_padding_left
+$$red_map_common_unselect_top_left_new
+$bg_message_list_left_arrow__0
+%%widgets_tip_breath_left_bottom_layout
+&&im_chat_subitem_text_left_style_layout
+((Animation.Material3.SideSheetDialog.Left
+**material_ic_keyboard_arrow_left_black_24dp
+**red_map_common_unselect_top_left_new_night
+,,ShapeAppearanceOverlay.Material3.Corner.Left
+++widgets_tip_breath_left_bottom_layout_white
+back_left_b
+bg_message_list_left_arrow
+btn_left_icon
+btnLeft
+campus_post_left_return_btn
+contentInsetLeft
+contentPaddingLeft
+cornerFamilyBottomLeft
+cornerFamilyTopLeft
+cornerSizeBottomLeft
+cornerSizeTopLeft
+dragLeft
+drawableLeftCompat
+ic_left_close_night
+ic_message_list_left_arrow
+im_chat_left_common_item_layout
+im_chat_left_content_layout
+im_share_school_card_left_ic
+images_recycler_left_mask
+ivBtnLeft
+layout_constraintLeft_creator
+layout_constraintLeft_toLeftOf
+layout_constraintLeft_toRightOf
+layout_constraintRight_toLeftOf
+layout_goneMarginLeft
+left_right
+leftBg
+leftDrawable
+leftDrawableHeight
+leftDrawableWidth
+leftIcon
+leftToRight
+listPreferredItemPaddingLeft
+location_select_left_edge_mask
+m3_btn_icon_btn_padding_left
+m3_btn_padding_left
+m3_btn_text_btn_padding_left
+m3_side_sheet_enter_from_left
+m3_side_sheet_exit_to_left
+marginLeftSystemWindowInsets
+mtrl_btn_icon_btn_padding_left
+mtrl_btn_padding_left
+mtrl_btn_text_btn_padding_left
+paddingLeftSystemWindowInsets
+rBottomLeftRadius
+--red_map_activity_common_bubble_arrow_top_left
+''red_map_common_unselect_bottom_left_new
+red_view_back_left_b
+right_left
+rightToLeft
+rLeftRadius
+rns_slide_in_from_left
+rns_slide_in_from_left_ios
+rns_slide_out_to_left
+rns_slide_out_to_left_ios
+roundBottomLeft
+roundTopLeft
+rTopLeftRadius
+stickerBoundLeft
+tv_left
+tv_left_line
+widgets_contentPaddingLeft
+''widgets_element_shape_tip_left_triangle
+widgets_id_toolbar_left
+widgets_round_top_left_radius
+widgets_shape_tip_left_triangle
+widgets_tip_left_bottom_layout
+widgets_tip_left_middle_layout
+widgets_tip_left_top_layout
+widgets_tv_left
+x_left
+xhs_theme_shadow_left
+xhs_theme_tv_left
+xyreactnative_rnview_left_in
+xyreactnative_rnview_left_out
+
+=== [C] names containing right ===
+  bright_foreground_material_light
+  im_chat_right_text_item_bg_night
+  layout_constraintRight_toRightOf
+  m3_sys_color_dark_surface_bright
+  xyreactnative_xhs_theme_right_in
+!!abc_text_select_handle_right_mtrl
+!!m3_sys_color_light_surface_bright
+!!widgets_round_bottom_right_radius
+!!xhs_theme_icon_brightness_grey_30
+""abc_ic_arrow_drop_right_black_24dp
+""im_chat_subitem_voice_right_layout
+""m3_btn_text_btn_icon_padding_right
+""selector_toolbar_right_color_night
+##abc_dropdownitem_text_padding_right
+##notification_right_side_padding_top
+%%red_map_common_unselect_top_right_new
+&&widgets_tip_breath_right_bottom_layout
+((bright_foreground_disabled_material_dark
+((bright_foreground_inverse_material_light
+((m3_sys_color_dynamic_dark_surface_bright
+((red_map_common_unselect_bottom_right_new
+))Animation.Material3.SideSheetDialog.Right
+))bright_foreground_disabled_material_light
+))m3_sys_color_dynamic_light_surface_bright
+))widgets_common_bg_right_round_white_night
+**material_personalized_color_surface_bright
+,,widgets_tip_breath_right_bottom_layout_white
+..red_map_activity_common_bubble_arrow_top_right
+++material_ic_keyboard_arrow_right_black_24dp
+11red_map_activity_common_bubble_arrow_bottom_right
+arrow_icon_right_night
+arrow_right_center_m
+arrow_right_right_m
+''bright_foreground_inverse_material_dark
+bright_foreground_material_dark
+brightness
+btn_right_icon
+campus_post_item_right_icon
+capa_activity_right_in
+capa_activity_right_out
+colorSurfaceBright
+contentInsetRight
+contentPaddingRight
+cornerFamilyBottomRight
+cornerFamilyTopRight
+cornerSizeBottomRight
+cornerSizeTopRight
+devkit_arrow_icon_right
+dragRight
+drawableRightCompat
+icBgShadowRight
+im_chat_right_text_item_bg
+im_share_school_card_right_ic
+images_recycler_right_mask
+layout_constraintLeft_toRightOf
+layout_constraintRight_creator
+layout_constraintRight_toLeftOf
+layout_goneMarginRight
+left_right
+leftToRight
+listPreferredItemPaddingRight
+location_select_right_edge_mask
+m3_btn_icon_btn_padding_right
+m3_btn_padding_right
+m3_btn_text_btn_padding_right
+m3_side_sheet_enter_from_right
+m3_side_sheet_exit_to_right
+marginRightSystemWindowInsets
+mtrl_btn_padding_right
+mtrl_btn_text_btn_padding_right
+notification_right_icon_size
+paddingRightSystemWindowInsets
+rBottomRightRadius
+red_view_arrow_circle_right
+red_view_arrow_right_center
+red_view_arrow_right_center_m
+red_view_arrow_right_right_m
+red_view_rights_protection_m
+right
+right_arrow_blue_night
+right_arrow_night
+right_btn
+right_icon
+right_left
+right_side
+rightBg
+rightDrawable
+rightDrawableHeight
+rightDrawableWidth
+rightIcon
+rightToLeft
+rns_slide_in_from_right
+rns_slide_in_from_right_ios
+rns_slide_out_to_right
+rns_slide_out_to_right_ios
+roundBottomRight
+roundTopRight
+rRightRadius
+rTopRightRadius
+--ShapeAppearanceOverlay.Material3.Corner.Right
+space_right
+stickerBoundRight
+tv_right
+tv_right_line
+widgets_contentPaddingRight
+widgets_id_toolbar_right
+widgets_right_in
+widgets_right_out
+widgets_round_top_right_radius
+widgets_tip_right_bottom_layout
+widgets_tip_right_top_layout
+x_right
+xhs_theme_icon_arrow_right
+xhs_theme_right_btn
+xhs_theme_right_in
+xhs_theme_right_out
+xhs_theme_shadow_right
+xyreactnative_rnview_right_in
+xyreactnative_rnview_right_out
+
+=== [D] self / other / revoked markers ===
+chat_base_other_revoked_message
+chat_base_self_revoked_message
+feed_search_other_campus
+im_ref_msg_revoked
+map_search_other_school
+post_entrance_other_item
+ru_choose_other_map
+skynet_net_other_ex
+
+=== [E] the ids actually seen in the GroupChatActivity dump ===
+# for cross-check: these names exist in the same resources.arsc as [A]-[D]
+chatContentRoot
+chatContentView
+chatImageCardView
+chatImageRootContainer
+chatTextRootContainer
+contentViewLayout
+frontChain
+highlightLayout
+msgList
+userAvatarView
