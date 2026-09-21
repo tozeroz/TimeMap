@@ -274,17 +274,21 @@ try {
 }
 if (-not $wp2) { Bad '设备未就绪：找不到 app 进程' } else { Say "  WebView pid=$wp2（已转发 CDP 9222）" }
 
-# 从数据库读权威计数，作为"UI 与权威值一致"的比对基准
-# （用单引号 PS 字符串 + '' 转义，避免嵌套 here-string 把脚本解析打断）
-$countsCmd = 'export PGPASSWORD=$(cat /srv/campus/.db_password); for p in aaaaaaaa-0001-4001-8001-000000000001 aaaaaaaa-0002-4002-8002-000000000002; do echo "$p $(psql -h 127.0.0.1 -U campus -d campus -Atc "select count(*) from likes where post_id=''''$p''''") $(psql -h 127.0.0.1 -U campus -d campus -Atc "select count(*) from comments where post_id=''''$p''''")"; done'
-$counts = Invoke-SshRaw $countsCmd
-$p1Line = @($counts | Where-Object { "$_" -match '0001-4001' }) | Select-Object -First 1
-$p2Line = @($counts | Where-Object { "$_" -match '0002-4002' }) | Select-Object -First 1
-$p1Parts = "$p1Line".Trim().Split(' ')
-$p2Parts = "$p2Line".Trim().Split(' ')
-$p1L = $p1Parts[1]; $p1C = $p1Parts[2]
-$p2L = $p2Parts[1]; $p2C = $p2Parts[2]
+# 从数据库读权威计数，作为"UI 与权威值一致"的比对基准。
+# 走 scripts/m3/counts.sh（文件 + base64 传输）：内联 shell 的引号会被
+# PowerShell → ssh → bash 三层解析吃掉，曾导致 psql 报错、拿到垃圾数据、
+# Slice 2 被误判成 FAIL（Gate 抓到的 GATE_DEFECT）。
+$counts = Run-Remote (Join-Path $repo 'scripts\m3\counts.sh')
+$p1Line = @($counts | Where-Object { "$_" -match '^COUNTS .*0001-4001' }) | Select-Object -First 1
+$p2Line = @($counts | Where-Object { "$_" -match '^COUNTS .*0002-4002' }) | Select-Object -First 1
+$p1L = ("$p1Line" -replace '.*likes=(\d+).*', '$1').Trim()
+$p1C = ("$p1Line" -replace '.*comments=(\d+).*', '$1').Trim()
+$p2L = ("$p2Line" -replace '.*likes=(\d+).*', '$1').Trim()
+$p2C = ("$p2Line" -replace '.*comments=(\d+).*', '$1').Trim()
 Say "  DB 权威计数：p1 likes=$p1L comments=$p1C；p2 likes=$p2L comments=$p2C"
+if ($p1L -notmatch '^\d+$' -or $p2L -notmatch '^\d+$') {
+  Bad "DB 计数解析失败（p1Line='$p1Line' p2Line='$p2Line'）—— 设备端断言会失去基准"
+}
 
 foreach ($case in @(
   @{ args = @('display',  '--post', 'aaaaaaaa-0001-4001-8001-000000000001', '--expect-like', $p1L, '--expect-comment', $p1C); tag = 'SLICE2_DISPLAY_RESULT' },
