@@ -76,6 +76,16 @@ export interface ServerDeps {
   trustProxy?: string
 }
 
+/**
+ * 上传根目录 —— **模块级单一来源**。
+ *
+ * 提升到模块级的原因（审核记录 24 的实现后果）：`main()` 需要在启动时验证它并自建 `.tmp`，
+ * 而它原本只是 `buildServer` 内部的局部常量，`main()` 取不到。
+ * 若在 `main()` 里再写一遍 `process.env.UPLOAD_ROOT ?? '/srv/campus/uploads'`，
+ * 默认值就会变成**两处真相**（改一处忘另一处 → 启动自愈与实际写入落在不同目录）。
+ */
+const UPLOAD_ROOT = process.env.UPLOAD_ROOT ?? '/srv/campus/uploads'
+
 export function buildServer(deps: ServerDeps) {
   const app = Fastify({
     logger: false,
@@ -1051,7 +1061,8 @@ export function buildServer(deps: ServerDeps) {
   // -------------------------------------------------------------------------
   const MEDIA_URL_PREFIX = process.env.MEDIA_URL_PREFIX ?? '/media'
   const PRIVATE_XACCEL_PREFIX = process.env.PRIVATE_XACCEL_PREFIX ?? '/_private_media'
-  const UPLOAD_ROOT = process.env.UPLOAD_ROOT ?? '/srv/campus/uploads'
+  // UPLOAD_ROOT 见模块级常量（单一来源）；此处不再重复定义。
+  // 启动时由 main() 验证 UPLOAD_ROOT 并自建 .tmp —— 见那里的注释与审核记录 24。
   const MEDIA_MAX_BYTES = 5 * 1024 * 1024 // 单图 ≤ 5MB（PLAN §6）
   const DISK_RESERVE_BYTES = 1024 * 1024 * 1024 // 预留 1GB
   const DISK_REJECT_PERCENT = 90 // >90% 拒绝新上传
@@ -1874,6 +1885,43 @@ async function main() {
    *
    * 现在：liveness 立刻可用；schema 没就绪时 /api/ready 与**所有业务路由**都返回 503。
    */
+
+  /**
+   * 上传根目录的启动自愈（审核记录 24 选定方案 A；**边界：只自建 `.tmp`**）。
+   *
+   * 背景（实测踩到）：`POST /api/media` 先写 `UPLOAD_ROOT/.tmp/<id>.<ext>` 再 rename，
+   * 但代码**从不创建 `.tmp`**（只对 `public`/`private` 那层做过 mkdir）。
+   * 于是当前服务器因为历史手工 `install -d` 建过 `.tmp` 而一直 PASS，
+   * **全新机器上第一次上传直接 500（ENOENT）** —— 典型的 persistent invariant 漏洞。
+   *
+   * 边界（刻意区分，避免把部署配置塞进应用）：
+   *   · `UPLOAD_ROOT` 是**持久存储根**，与"PG 必须安装""service user 权限"同类，
+   *     属部署职责 —— 这里**只验证、绝不自建**。缺失时打印明确错误而**不阻断进程**，
+   *     以保持既有的"liveness 优先"语义（文本功能仍可用，只有媒体上传会失败）。
+   *   · `UPLOAD_ROOT/.tmp` 是**应用自己拥有的运行时内部子目录**：上传代码自己依赖它，
+   *     就自己保证它存在 —— 递归创建，权限与既有 scope 目录一致（0o750）。
+   */
+  try {
+    await statfs(UPLOAD_ROOT)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    console.error(
+      `[uploads] 上传根目录不可用：${UPLOAD_ROOT}（${code ?? String(err)}）。` +
+        'UPLOAD_ROOT 属部署职责（需挂载并授予 service user 权限），本进程不会自建它；' +
+        '在修复前媒体上传会失败，其余功能不受影响。',
+    )
+  }
+  try {
+    await mkdir(join(UPLOAD_ROOT, '.tmp'), { recursive: true, mode: 0o750 })
+    console.log(`[uploads] tmp 目录就绪：${join(UPLOAD_ROOT, '.tmp')}`)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    console.error(
+      `[uploads] 无法创建 .tmp 目录：${join(UPLOAD_ROOT, '.tmp')}（${code ?? String(err)}）。` +
+        '上传会失败；请检查 UPLOAD_ROOT 是否存在且对 service user 可写。',
+    )
+  }
+
   await app.listen({ host: cfg.host, port: cfg.port })
   console.log(`[listen] http://${cfg.host}:${cfg.port}`)
 
