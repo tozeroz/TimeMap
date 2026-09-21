@@ -235,6 +235,25 @@ autovacuum_max_workers = 2
       消息消费端 SLICE_A_DEVICE_RESULT PASS（6/6）；MESSAGING_API_RESULT PASS；
       MENTIONS_RESULT PASS（@ 提及最小闭环）
       ```
+      **M4_STATUS: ACCEPTED / CLOSED（审核记录 20 正式关账）**
+
+      M4 关账时补齐的最后一个 P0 —— 真正的备份 mutation barrier —— 有**两层**证据，
+      审核明确要求**永久保留、不要合并**：
+      - Layer 1 LOCK_PRIMITIVE：同 key 的 shared/exclusive 互斥关系正确
+      - Layer 2 BARRIER_E2E：真实生产路径与备份脚本**实际使用同一个 contract**
+        （窗口内 /api/media → 503、cleanup --apply 退 3 且零删除、普通 GET 仍 200；
+        窗口释放后同一路径上传恢复 201）
+      为什么要两层：我曾把锁键手算错（1295270465 写成 1295258177），
+      两侧用了**不同的锁 → 屏障在生产里完全不生效**，但**机制层测试照样 PASS**
+      —— "一个测试可以非常严格地证明一个错误系统内部自洽"。
+
+      **由此确立一条纪律（审核提出的通则）**：
+      凡是跨 shell↔应用 / 前端↔后端 / 迁移↔运行时 / 备份↔服务
+      **共享 magic value 或 protocol constant** 的地方，都要做
+      **双方值机械一致性检查**，不要只靠复制粘贴与代码审查。
+      已落地例子：E0 lock-key equality。待落地候选：purpose→scope 映射、
+      media mime 白名单、cleanup 退出码语义。
+
       语义边界：本 PASS 只覆盖 **M4 冻结范围**（媒体生命周期 / 消息模型补全 / @ 提及最小闭环），
       **不表示整个 App 已 1:1**；原版侧多处证据为 INADMISSIBLE 或 BLOCKED_BY_POLICY。
       `pg_dump restore PASS` 从 M4 起只代表数据库恢复，完整业务数据恢复由
