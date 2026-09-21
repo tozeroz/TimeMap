@@ -34,6 +34,8 @@ const P = {
   p1: 'aaaaaaaa-0001-4001-8001-000000000001',
   p2: 'aaaaaaaa-0002-4002-8002-000000000002',
   p3: 'aaaaaaaa-0003-4003-8003-000000000003',
+  /** 挂在非校内地点（达美乐比萨）上，用于验证"按地点聚合动态"在第二个地点也有内容 */
+  p4: 'aaaaaaaa-0004-4004-8004-000000000004',
 } as const
 
 const M = {
@@ -119,20 +121,53 @@ export async function runSeed(client: PoolClient): Promise<SeedResult> {
     created_at: T0,
   })
 
+  /*
+    第二个地点：**非校内**，坐标在另一个城市。
+    为什么补这一条（M3 Slice 4 记录的缺口）：
+      poi-detail 的「距我N公里」需要"参照点 ≠ 目标地点"才有意义。
+      只有校内那一个地点时，参照点（校区坐标）正好等于目标地点 → 永远显示「距我0公里」，
+      数值对但退化，看不出这个功能到底有没有在工作。
+    选址依据是**原版只读证据**：poi-detail 实测那条动态的地点就是
+    「达美乐比萨(广州萝岗万达广场)」，地址与坐标按该证据填写
+    （supplements/poi-detail.json，只读取得 → 可采信）。
+    注意：原版显示的是「距我4公里」，那是因为**原版使用者当时在广州**；
+    我们的参照点是北京校区，所以这条会显示一个跨城距离 —— 那是**正确行为**，
+    只是内容不同，不作为一致性依据。
+  */
+  const placePizza = 'cccccccc-0002-4002-8002-000000000002'
+  await put('places', placePizza, {
+    name: '达美乐比萨(广州萝岗万达广场)',
+    address: '联和街道科丰路89号开创大道2707号万达广场负一层商场B1006铺',
+    latitude: 23.1776,
+    longitude: 113.4404,
+    created_at: T0,
+  })
+
   // ---- posts：作者引用上面的固定用户 ----
-  const postBodies: Array<[string, string, string]> = [
-    [P.p1, U.anmoss, '而我不再觉得，孤独是一种遗憾。'],
-    [P.p2, U.lemy, '在大理淘到了好多漂亮的小物品，已经迫不及待想布置宿舍了。'],
-    [P.p3, U.azur, '图书馆四楼靠窗的位置下午三点后基本没光，适合睡觉不适合背书（亲测）。'],
+  // 第 4 条挂在**非校内地点**上：让「按地点聚合动态」在第二个地点也有内容可看
+  // （否则那条地点的详情页永远是空的，看不出聚合功能）。
+  // 正文取自原版 poi-detail 实测那条评论的语义（「真的好好吃」），
+  // 但作者是我们的 seed 用户 —— 不把原版他人的昵称搬进来。
+  const postBodies: Array<[string, string, string, string, string]> = [
+    [P.p1, U.anmoss, '而我不再觉得，孤独是一种遗憾。', '北京交通大学', placeJiaoda],
+    [P.p2, U.lemy, '在大理淘到了好多漂亮的小物品，已经迫不及待想布置宿舍了。', '北京交通大学', placeJiaoda],
+    [P.p3, U.azur, '图书馆四楼靠窗的位置下午三点后基本没光，适合睡觉不适合背书（亲测）。', '北京交通大学', placeJiaoda],
+    [
+      P.p4,
+      U.lemy,
+      '这家真的好好吃，肉多菜也多。',
+      '达美乐比萨(广州萝岗万达广场)',
+      placePizza,
+    ],
   ]
-  for (const [id, authorId, body] of postBodies) {
+  for (const [id, authorId, body, placeName, placeId] of postBodies) {
     const display = SEED_USERS.find((u) => u.id === authorId)!.displayName
     await put('posts', id, {
       author_name: display,
       author_id: authorId,
       body,
-      place: '北京交通大学',
-      place_id: placeJiaoda,
+      place: placeName,
+      place_id: placeId,
       created_at: T0,
     })
   }
@@ -293,7 +328,7 @@ function hashSpecs(): HashSpec[] {
     },
     {
       table: 'posts',
-      ids: [P.p1, P.p2, P.p3],
+      ids: [P.p1, P.p2, P.p3, P.p4],
       cols: [
         'id::text',
         "coalesce(author_id::text,'')",
@@ -338,7 +373,7 @@ function hashSpecs(): HashSpec[] {
     },
     {
       table: 'places',
-      ids: ['cccccccc-0001-4001-8001-000000000001'],
+      ids: ['cccccccc-0001-4001-8001-000000000001', 'cccccccc-0002-4002-8002-000000000002'],
       cols: [
         'id::text',
         'name',
@@ -443,7 +478,7 @@ export async function resetSeed(client: PoolClient): Promise<void> {
   await del('likes', ['eeeeeeee-0001-4001-8001-000000000001', 'eeeeeeee-0002-4002-8002-000000000002'])
   await del('comments', ['dddddddd-0001-4001-8001-000000000001', 'dddddddd-0002-4001-8001-000000000002'])
   await del('media', [M.m1, M.m2])
-  await del('posts', [P.p1, P.p2, P.p3])
-  await del('places', ['cccccccc-0001-4001-8001-000000000001'])
+  await del('posts', [P.p1, P.p2, P.p3, P.p4])
+  await del('places', ['cccccccc-0001-4001-8001-000000000001', 'cccccccc-0002-4002-8002-000000000002'])
   await del('users', SEED_USERS.map((u) => u.id))
 }
