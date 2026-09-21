@@ -135,6 +135,14 @@ printf '%s\n' "$BARRIER_OUT" | grep -E '^(PASS|FAIL|BACKUP_MUTATION)' | sed 's/^
 if printf '%s' "$BARRIER_OUT" | grep -q 'BACKUP_MUTATION_BARRIER_RESULT PASS'; then KEY[BACKUP_MUTATION_BARRIER]=PASS
 else KEY[BACKUP_MUTATION_BARRIER]=FAIL; FAILED=1; fi
 printf '#   %-34s %s\n' "BACKUP_MUTATION_BARRIER" "${KEY[BACKUP_MUTATION_BARRIER]}（窗口内并发写被阻塞 2062ms 后超时；窗口后立即成功）"
+# 端到端层：持真实排他锁 → 打真实接口 → 断言真实状态码/退出码。
+# 与上面的机制层断言互补：机制层证明锁语义，这一层证明**应用侧真的接上了同一把锁**
+# （踩过的坑：两层用不同键时，机制层照样 PASS，而生产里屏障完全不生效）。
+E2E_OUT="$(bash /tmp/m4-verify-barrier-e2e.sh 2>&1)"
+printf '%s\n' "$E2E_OUT" | grep -E '^(PASS|FAIL|BARRIER_E2E)' | sed 's/^/    /'
+if printf '%s' "$E2E_OUT" | grep -q 'BARRIER_E2E_RESULT PASS'; then KEY[BARRIER_E2E]=PASS
+else KEY[BARRIER_E2E]=FAIL; FAILED=1; fi
+printf '#   %-34s %s\n' "BARRIER_E2E" "${KEY[BARRIER_E2E]}（窗口内 503 / cleanup 退 3 且不删 / 窗口后 201 / 读不受影响）"
 echo "# M4 GATE KEYS:"
 for k in MEDIA_SCHEMA_RESULT MEDIA_UPLOAD_RESULT MEDIA_DELIVERY_RESULT M4_BACKUP_RESTORE MEDIA_ORPHAN_CLEANUP; do
   printf '#   %-26s %s\n' "$k" "${KEY[$k]}"
