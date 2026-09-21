@@ -101,6 +101,46 @@ EVIDENCE_LIMITATION       证据本身的边界（**不是**缺陷、也**不是
 这三条不属于 KNOWN_DEVIATION（我们没有主动少做），而是**基线里就是未知** ——
 但它们同样会限制 1:1 主张，故一并登记。
 
+### L-004 ~ L-007：Me 页四个条目的**目的地**未知（审核记录 54）
+
+```
+L-004 ORIGINAL_INTEREST_DESTINATION: NOT_EVALUATED
+L-005 ORIGINAL_TAG_DESTINATION:      NOT_EVALUATED
+L-006 ORIGINAL_BIO_DESTINATION:      NOT_EVALUATED
+L-007 ORIGINAL_SCHOOL_DESTINATION:   NOT_EVALUATED
+      屏：me（「我的」页）→ 四个条目的去向
+      依据：**只**有证据证明"条目存在"与"「编辑资料」→ 资料编辑页"：
+            docs/original-baseline/screens/trident-me/baseline.json:38（五个条目的文案与位置）
+            :42（「编辑资料」→ 资料编辑页）
+            docs/original-interaction-map.md:51
+            **没有**证据说明兴趣/标签/介绍/学校各自进入什么页面。
+      → 处置（审核 54 冻结）：
+        · 「编辑资料」→ ProfileEditScreen      [MATCH, baseline-supported]
+        · 其余四项**不得**再进入 ProfileEditScreen（改前五个条目**全部** navigate('profile-edit')，
+          等于假装"我的兴趣 = 改昵称页面"），**也**不得接到 App.tsx 里那五个旧 mock 路由
+        · 条目本身**保留**（有基线），但当前目的地记为 NOT_EVALUATED / DEFERRED，
+          界面上渲染为**不可点的行 + 「待核对」标注**
+      → 为什么这不算 KNOWN_DEVIATION：后撤需要有**原版事实**作参照；
+        这里我们连原版去哪个页面都不知道，所以它是"范围限制"而不是"我们少做了"。
+
+### L-008：资料编辑页自身的**页面结构**无基线（审核记录 54）
+
+```
+L-008 ORIGINAL_PROFILE_EDIT_PAGE_STRUCTURE: NOT_EVALUATED
+      屏：profile-edit（资料编辑页）
+      依据：docs/original-baseline/screens/ 下 **26 个屏目录里没有该页**
+      附带更正：该文件原注释曾写"结构按原版实测：三张卡片…" ——
+                这是**无落盘基线支撑的结构主张**，已按审核 54 降级为
+                  ORIGINAL_PROFILE_EDIT_ENTRY:          SUPPORTED by trident-me baseline
+                  ORIGINAL_PROFILE_EDIT_PAGE_STRUCTURE: NOT_EVALUATED
+                  Current layout: OUR CURRENT IMPLEMENTATION / not a conformance claim
+                审核 54 也确认没有另一份观察记录可供补证，
+                因此**不为保住注释去推断"曾经存在过证据"**。
+      → 后果：本页即使 Gate 全 PASS，也只能声称
+              authoritative write wiring / data semantics / fake interactions removed 三项，
+              不得声称本页"1:1 复现"。
+```
+
 ```
 L-001 ORIGINAL_NORMAL_LIST: NOT_EVALUATED
       屏：feed-list（动态列表）

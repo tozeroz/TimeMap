@@ -385,6 +385,88 @@
       ]
     },
 
+    "profile-edit": {
+      "baseline_file": "docs/original-baseline/screens/trident-me/baseline.json",
+      "baseline_evidence_strength": "**入口层有基线**（trident-me/baseline.json:38 记了五个入口文案与位置、:42 记了「编辑资料」→资料编辑页）；**页面内容层无基线**（screens/ 下 26 个目录没有资料编辑页）",
+      "claims_explanation": "审核记录 54 冻结：ENTRY 有据、PAGE_STRUCTURE 无据；不得把'我们当前的实现'当成一致性主张",
+      "claims": [
+        {
+          "id": "ORIGINAL_PROFILE_EDIT_ENTRY",
+          "claim": "「编辑资料」入口及 Me 页五个条目的文案与位置",
+          "evidence": "docs/original-baseline/screens/trident-me/baseline.json:38 逐字记录；:42「编辑资料」→ 资料编辑页；docs/original-interaction-map.md:51",
+          "status": "MATCH",
+          "implementation_impact": "已实现：MeScreen 保留这五个条目（文案与位置一致），「编辑资料」进入 ProfileEditScreen",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "ORIGINAL_PROFILE_EDIT_PAGE_STRUCTURE",
+          "claim": "资料编辑页自身的内容结构（三张卡片、头像相机、昵称/简介/性别/标签、校园名片、学校卡）",
+          "evidence": "**无基线** —— docs/original-baseline/screens/ 下没有该页目录",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "本页布局记为 **OUR CURRENT IMPLEMENTATION / not a conformance claim**；原注释里的『结构按原版实测』已按审核 54 降级（不为保住注释去推断存在过证据）",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "ORIGINAL_INTEREST_DESTINATION",
+          "claim": "「我的兴趣」在原版进入哪个页面",
+          "evidence": "**无基线**（只证明了条目存在，未证明其目的地）",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "当前实现渲染为**不可点的行 + 「待核对」标注**（不再误路由到 ProfileEditScreen，也不再接旧的 mock 路由）—— 审核 54 冻结",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "ORIGINAL_TAG_DESTINATION",
+          "claim": "「我的标签」在原版进入哪个页面",
+          "evidence": "**无基线**",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "同上（渲染为不可点行 + 待核对）",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "ORIGINAL_BIO_DESTINATION",
+          "claim": "「介绍一下自己～」在原版进入哪个页面",
+          "evidence": "**无基线**",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "同上",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "ORIGINAL_SCHOOL_DESTINATION",
+          "claim": "「我的学校」在原版进入哪个页面",
+          "evidence": "**无基线**",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "同上",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "PROFILE_EDIT_SAVE_IS_REAL",
+          "claim": "「保存」是真实持久化写入，而不是本地 state 伪装",
+          "evidence": "**设备实测**（gate-wo13，WO13_MUTATE=1）：SAVE_PROBE {fetchDelta:1, nameAfter==target, errorShown:false}；RELOAD_PROBE 重进仍为新值；**服务端实测** 四方一致（PATCH 响应==DB==/api/auth/me==/api/users/:id）。改前对照（bd2e1ff）：**fetchDelta=0 而值变了 = 假写成功**",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#13）：新增 PATCH /api/users/me + 保存链 draft→PATCH→DB→权威响应→UI commit",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#13（commit 39652d7）"
+        },
+        {
+          "id": "PROFILE_AUX_ENTRIES_NOT_MISROUTED",
+          "claim": "「我的兴趣/我的标签/介绍一下自己～/我的学校」不得进入 ProfileEditScreen",
+          "evidence": "**设备实测**：四项渲染为 div（非 button），点击后 hash 不变（navigated:false）；改前它们全部 navigate('profile-edit')",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#13）：渲染为不可点行 + 「待核对」标注（审核 54 冻结：不能再假装『我的兴趣 = 改昵称页面』）",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#13（commit 39652d7）"
+        }
+      ]
+    },
+
     "at-panel": {      "baseline_file": "docs/original-baseline/screens/at-panel/baseline.json",
       "baseline_evidence_strength": "baseline.json **内容为空**（所有 states not_reproducible、interactions/navigation 为空）；另有 recovered-m3-ui.xml",
       "claims_explanation": "该 baseline 的 blocked_reason = \"deep link 无法直达；需要群聊上下文\"，其 known_unknowns 三项逐一处置如下",

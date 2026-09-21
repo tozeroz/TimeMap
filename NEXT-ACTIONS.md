@@ -499,3 +499,40 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       **不会递归**（PowerShell 不把 `**` 当递归通配）→ 我据此误判"ProfileEditScreen 是死代码"。
       **必须用 `Get-ChildItem -Recurse | Select-String`**；"零命中"极易被误读成"不存在"。
 
+
+### WO#13 完成（Round 263）
+- [x] WO13.5 ✅ 审核 54 裁定：**WO13_PROFILE_EDIT_AUTHORITATIVE_WRITE: APPROVED**（HIGH/PREEMPTIVE）
+      · 选 (a)：新增 `PATCH /api/users/me`，**只做 displayName**
+      · 措辞更正：这是**第一个 profile-update 写能力**（项目已有发帖/评论/点赞），不是"第一个写能力"
+- [x] WO13.6 ✅ **实施完成** → 设备 Gate **15/15 PASS**；seed 已精确恢复（anmoss/Lemy/Azur冰弦）
+      · 服务端 PATCH：401／严格拒绝 6 个未知字段且点名／空・超长 400／**4xx 零写入**／
+        ⭐**四方一致**（PATCH 响应==DB==/api/auth/me==/api/users/:id）
+      · 客户端：保存链 draft→PATCH→DB→**权威响应**→UI commit；失败**保留输入**且无成功表象；
+        头像首字占位、移除 inert「更换头像」、简介/性别/标签/学校一律不渲染
+      · MeScreen：五个入口修正（「编辑资料」→本页 MATCH；其余四项**不再误路由**，渲染为不可点行+待核对）
+      · 删除 App.tsx 的 5 个 fabricated orphan route（**12,486 随之消失**）
+      · 降级了 ProfileEditScreen 里那处"结构按原版实测"的无据注释
+- [x] WO13.7 ✅ 方法教训已入注释：坏 glob（`Select-String -Path 'dir\**\*.tsx'` 不递归）
+      会给出"零命中"，而零命中极易被误读成"不存在"
+- [x] WO13.8 ✅ 审核 54 的推广：**零命中只有在搜索范围被证明完整后才有证据价值**
+- [ ] WO13.9 ⬅ **等审核裁定 2 项**：① 服务器资源是根因层问题（396MB + PG max_connections=15），
+      本轮只修了"等待策略"，是否调整 PG 配置/扩容？② MeScreen 自身仍显示 mock 的 me.name/me.avatar，
+      是否单开一单？
+
+### ⭐ WO11.13-f 结案方向：机制已确认（Round 263）
+- [x] WO11.13-f ✅ **机制已确认**（不再称"未定位"）：
+      后端重启后约 **176 秒**才 ready（实测时间戳：Started 06:49:54 → ready 06:52:50），
+      期间连续 `[migrate] retryable: database unreachable`；资源侧：free 仅 8MB、swap 183MB、
+      loadavg 3.27（2 vCPU）、**PG max_connections 仅 15**。
+      → M5 gate 的 verify-tmp-selfheal.sh 会**重启后端**，而它原来只 `sleep 5` → 完全错过该窗口 →
+        后续要登录的段偶发失败，**单独跑同一脚本却 PASS**。时间线与 05:19:37 那次吻合。
+      → 修正：就绪轮询 30s→**240s**；`deploy-server.ps1` 由等 `/api/health`（liveness）改为等
+        `/api/ready`（readiness，原来会在"还没就绪"时就报成功并继续）。
+      ⚠️ 边界：**机制**已确认；**具体那一次**未逐帧重放。
+- [ ] WO11.13-g ⬅ 等裁定：是否调 PG `max_connections` 或给这台机器扩容（运维决策）
+
+### ⭐ 本轮新增教训（已入注释）
+- [x] WO13.10 ✅ **设备级 E2E 抓到服务端脚本永远测不出的缺陷**：CORS `allow-methods` 缺 **PATCH**。
+      PATCH 触发预检(OPTIONS) → 预检失败 → fetch 报 "Failed to fetch" → 设备上保存 100% 失败，
+      而 `verify-wo13-patch-me.sh`（curl，**不带 CORS 语义、不发预检**）全 PASS。
+      → 已修 + 在服务端脚本里**新增预检断言**。教训：**每新增一个 HTTP 方法都要同步检查 allow-methods**。
