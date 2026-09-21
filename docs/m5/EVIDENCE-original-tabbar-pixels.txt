@@ -1,3 +1,8 @@
+# [INVALID] 本文件的方法已被判定 INVALID —— 不得用于任何一致性断言
+# 原因: 底部区是照片卡片+栏的混合内容，逐行白/黑占比启发式不成立
+# 详见 docs/m5/WO6-PLAN-tabbar-vertical-layout.md 第五节
+# 保留目的: 记录无效测量，防止重蹈
+
 # 原版截图底部栏像素扫描
 # 文件: G:\demo map\docs\original-baseline\screens\trident-campus\normal.png
 # 尺寸: 1080x1920

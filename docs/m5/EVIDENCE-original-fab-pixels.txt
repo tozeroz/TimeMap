@@ -1,3 +1,9 @@
+# [INVALID] 本文件的方法已被判定 INVALID —— 不得用于任何一致性断言
+# 原因: 测得的深色块(208x199) 大于 dump 的 FAB 节点框(171x171)，
+#       说明窗口内其它暗色内容被算入（脚本自查判据已正确拦下）
+# 结论: FAB 可见直径 NOT_MEASURED_RELIABLY
+# 详见 docs/m5/WO6-PLAN-tabbar-vertical-layout.md 第五节
+
 
 # 原版截图右下发布按钮（FAB）的定向像素测量
 # 文件: G:\demo map\docs\original-baseline\screens\trident-campus\normal.png（尺寸 1080x1920）
