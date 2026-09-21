@@ -163,7 +163,13 @@ autovacuum_max_workers = 2
       规格：`docs/m3/SPEC.md`（审核记录 07 有条件批准，5 点已并入）
       - [x] **Evidence Preflight 完成**：三个 blocked 页面全部恢复，口径 → `22 / 0`（`docs/m3/PREFLIGHT.md`）
       - [x] 模型验证登记表建立并首轮更新（`docs/m3/MODEL-VALIDATION.md`），已落实 `004_m3_model_revisions`
-      - [ ] Slice 0A 登录语义观察 → Slice 0B 登录 UI → Slice 1 → Slice 2 → Slice 3 → Slice 4 → M3 Final Gate
+      - [x] **Slice 0A 完成**：登录语义冻结（`docs/m3/SLICE0-LOGIN-SEMANTICS.md`）→ 审核 08 ACCEPTED
+      - [x] **Slice 0B 完成**：手机号 + 一次性验证码登录（`docs/m3/SLICE0B-REPORT.md`）
+            落实审核记录 08 的三处修订；`M3_SLICE0B_GATE_RESULT: PASS`
+            口径拆分：`LOGIN_ENTRY_VISUAL: PASS` / `OTP_UI_FUNCTIONAL: PASS` /
+            `OTP_UI_VISUAL_CONFORMANCE: NOT_EVALUATED (BLOCKED_BY_ETHICS)`
+      - [ ] Slice 1（帖子详情/评论 → 解决 `comments.parent_id`）→ Slice 2（点赞）
+            → Slice 3（登录后发帖，**无 session 夹具**）→ Slice 4（恢复页一致性）→ M3 Final Gate
 
 ---
 
