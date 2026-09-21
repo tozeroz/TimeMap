@@ -293,9 +293,9 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [x] K2 ✅ **已完成**：WO#9B 两层全部实施（层 A 面板 14 条断言 + 层 B 语义 25 条断言全 PASS）；见 K2.14/K2.15
       （AT 面板的结构证据已就绪：`docs/m5/EVIDENCE-at-panel-structure.md`；
        `mentions_all` 数据模型设计已就绪）——**不与 WO#9A 混成一个 Gate**
-- [ ] K3 **WO#10 MessageScreen 剩余 mock 区块接线**：邀请卡的学校/学院/年级/头像、
+- [x] K3 ✅ **已由 WO#10 完成**（假推荐区与分享面板已清理；邀请卡字段见 D-003 登记）
       「更多同学」+ 好友申请（后端无推荐/好友申请能力）。需要先补 profile 字段与推荐接口
-- [ ] K4 按 `docs/m5/UI-DATA-SOURCE-INVENTORY.md` 的 P 顺序继续接线：
+- [x] K4 ✅ **已由 WO#11（FeedList）与 WO#12（UserProfile）承接**
       FeedListScreen（P2）→ UserProfileScreen（P3）→ MapScreen（P4）
       ⚠️ 其中 **ProfileEditScreen 是"写路径"却纯 mock**（假成功），建议提前
 ### K2 进展（Round 260）
@@ -355,8 +355,8 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 ### K2 收尾（Round 260 结束状态）
 - [x] K2.15 ✅ **层 A 设备 Gate 14 条断言全 PASS**（entry/kind/title/close/所有人项/几何/
       **AT_MEMBER_SOURCE_AUTHORITY**/选中可见/与 payload 一致/**未写进 body**/可取消/成功清除/失败保留/面板关闭）
-- [ ] K2.16 等审核裁定 **WO9B 是否 CLOSED**；并确认"空态/失败态受控 stub"是遗留项还是可单独跟踪
-- [ ] K2.17 **WO#10 + 按 UI-DATA-SOURCE-INVENTORY 的 P 顺序**（FeedList → UserProfile → Map）
+- [x] K2.16 ✅ 审核 51 已裁定 **WO9B: PASS / CLOSED**；空态/失败态 stub 已补（WO#9B closeout，设备 Gate 14→17 条全 PASS）
+- [x] K2.17 ✅ 已由 WO#10 / WO#11 / WO#12 分单承接
       其中 **ProfileEditScreen 是纯 mock 的"写路径"**（假成功），建议提前
 - [x] K2.18 ✅ 新增 3 个工具：`check-gate-syntax.sh`（机械语法检查）、
       `cleanup-all-gate-residue.sh`（集中清理残留）、`verify-thread-members-contract.sh`（blocker ① 契约核验）
@@ -379,8 +379,8 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [x] WO10.8 ✅ 🚨 **发现并修复一个重大工具缺陷**：`tsc --noEmit` 对 solution-style 配置
       **检查 0 个文件却报 0 错误**（假 PASS）→ 新增 scripts/m5/check-types.sh
       （报告实际检查文件数，0 文件判 FAIL）；敏感度已验
-- [ ] WO10.9 等审核裁定 WO10 是否 CLOSED；并确认是否需要回头重跑历史 app/ 项
-- [ ] WO10.10 **下一步：FeedListScreen → UserProfileScreen → MapScreen**
+- [ ] WO10.9 等审核裁定 **WO10 是否 CLOSED**（审核 51 已批准其范围与实施；关账措辞待确认）
+- [x] WO10.10 ✅ **已承接**：FeedList 由 WO#11 完成；UserProfile 由 WO#12 进行；Map 待后续
       照 WO#10 方法先做字段级 inventory 再报计划
 ### WO#11 进展（Round 261）
 - [x] WO11.1 ✅ 字段级 inventory：`GET /api/posts` **已存在**（与 WO#10 性质不同 → 本单是**接线**单）
@@ -395,9 +395,9 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       → `FEED_ENTRY_PROVENANCE: DEMO_SCAFFOLD` ／ `ORIGINAL_FEED_ENTRY: NOT_EVALUATED`
 - [x] WO11.6 ✅ 改前 FAIL 证据（PREFERRED），含**门禁顺序修正**
       （内容类断言必须读"刷新后"快照，否则因停在错误态而**空过**）
-- [ ] WO11.7 ⬅ **等审核裁定**：批准范围／**授权删除 20 条测试残留**／入口忠实性归属／
+- [x] WO11.7 ✅ 审核 52 已裁定 **WO11: APPROVED TO IMPLEMENT**，并授权删除 20 条测试残留
       name+region 处置／`/api/posts` 匿名可读口径
-- [ ] WO11.8 裁定后实施：只读接线 + 数据清理（先 pg_dump 备份 + 先打印将删内容）
+- [x] WO11.8 ✅ **已完成**：只读接线 + 数据清理（七步流程，deleted_count=20，规范数据完好）
 ### 忠实度审计与 KNOWN_DEVIATION 登记（Round 261 收尾）
 - [x] AUDIT.1 ✅ **发现流程缺陷**：Gate 长期未做"对照原版基线逐条核对 title/interactions/navigation"，
       导致 feed-list 的 3 处偏差从未被捕获（基线文件一直在仓库里，screens/ 下 24 个屏）
