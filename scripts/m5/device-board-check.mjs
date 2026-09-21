@@ -116,7 +116,21 @@ if (inputBox) {
   await wait(60)
   await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
   await wait(600)
-  await send('Input.insertText', { text: UNIQUE })
+  /*
+    用**逐字符真实按键事件**注入，而不是 Input.insertText。
+    为什么（实测踩到）：insertText 之后 DOM 的 value 读回来是对的，
+    但 React 的受控 state **没有更新**（受控输入在 state 未更新时会回退 DOM 值），
+    于是提交的 draft 是空串 → 服务端正确地回 400 bad_body（产品没错）。
+    逐字符 keyDown/char/keyUp 是"像人一样打字"，能走完整的 React 输入路径。
+  */
+  // **每个字符只发一次 char 事件**。
+  // 踩过的坑：keyDown/char/keyUp 三次都带 text 会让 React 收到两次输入
+  // （实测输入框变成 "MM55设设备备留留言言…"，每字符翻倍）。
+  // 只发 char 即可触发一次完整的 React onChange。
+  for (const ch of UNIQUE) {
+    await send('Input.dispatchKeyEvent', { type: 'char', text: ch })
+    await wait(25)
+  }
   await wait(500)
 }
 // 校验确实进了 state（输入框的 value 应等于我们输入的内容）
