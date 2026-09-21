@@ -127,3 +127,26 @@ NATIVE_FILE_PICKER_INTERACTION   真实点击选图入口 → 系统 picker 真�
 | board_notes 收口 | "Slice 1 收口"（把功能闭环与页面一致性混在一起） | `FUNCTIONAL: CLOSED` / `CONFORMANCE: OPEN` |
 
 **共同点**：不精确的措辞把"已验证的范围"说得比实际更大。
+
+### 1b. `CHAT_MESSAGE_SENDER_PRESENTATION` 的**当前状态与所需证据**（2026-09-21 20:51 更新）
+
+```
+状态:      DEVIATION（前提已确认成立 —— comparison.md 记载原版确有单聊/群聊页面可比对）
+代码刻画:  docs/m5/CHAT-BUBBLE-DEVIATION-ANALYSIS.md
+           → senderId 与 .bubble--me 都已存在，只是渲染硬编码 --peer（属**接线级**修法，非缺功能）
+证据状态:  docs/m5/ORIGINAL-CHAT-EVIDENCE-STATUS.md
+
+⚠ 已排除的一条"伪证据":
+   11-chat.png（原版单聊截图，已入库）**该页没有消息气泡** → 不能用来判断左右区分。
+   若仅因"截图已入库"就下结论，很可能错误地得出"原版不区分"，
+   进而把本来正确的实现改错 —— 这是 C1/C2/C4 三次同型错误的形态。
+
+所需证据:  一次**只读**观察 —— 原版里一条**已有消息**的会话页的
+           · 截图（线索级）+ **控件树 dump**（证据级：气泡 bounds 左边界差异才是较强依据）
+前提:      原版账号已登录（是）；且若**所有**会话都为空 →
+           该项应记 **BLOCKED_BY_POLICY**（造消息 = 写操作 = 禁止）
+在飞:      子代理 659cfcd8（2026-09-21 20:50 起）
+裁定规则:  原版区分左右 → 偏差成立，做接线级修复
+           原版不区分   → **撤销该偏差**
+           控件树不足以判定 → 保持 UNRESOLVED，**不得强行判"是/否"**
+```
