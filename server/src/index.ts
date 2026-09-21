@@ -123,16 +123,23 @@ export function buildServer(deps: ServerDeps) {
       reply.header('access-control-allow-origin', origin)
       reply.header('vary', 'Origin')
       /*
-        ⚠️ **必须包含 PATCH**（M5 WO#13 加 PATCH /api/users/me 时踩到）：
-          原来这里是 'GET,POST,OPTIONS'。而 PATCH 带 `content-type: application/json`
-          与 `authorization` 头时，浏览器/WebView 会先发 **CORS 预检（OPTIONS）**；
-          预检响应里没列 PATCH → 预检失败 → fetch 直接以 **"Failed to fetch"** 报错。
-        为什么**服务端脚本测不出来**：curl/psql 不带 CORS 语义，预检那一步根本不存在 ——
-          所以 verify-wo13-patch-me.sh 全 PASS，而设备上保存 100% 失败。
-          **这是设备级 E2E 独有的发现**（也正是"真机验证"这条纪律的价值所在）。
-        教训：**每新增一个 HTTP 方法，都要同步检查 CORS 的 allow-methods**。
+        ⚠️ **必须包含所有已注册的方法**（M5 WO#13 踩到两次同类问题）：
+          · 加 PATCH /api/users/me 时忘了加 PATCH → 设备上"保存"100% 失败
+          · 而 **DELETE 从一开始就缺**：`app.delete('/api/posts/:id/like')`（取消点赞）
+            注册了，但这里没有 DELETE → 跨域（Capacitor WebView, origin=https://localhost）
+            下 DELETE 会先发预检、预检未列 DELETE → fetch 报 **"Failed to fetch"**。
+            ⚠️ 注意：DELETE **不是** CORS 简单方法，**无论有没有自定义头都必触发预检**，
+            所以它比 PATCH 更早、更稳定地坏掉 —— 而点赞（POST，无 body 时客户端不带
+            content-type）是简单请求、不触发预检，所以**点赞正常、只有取消点赞坏**。
+            设备实测（scripts/m5/diagnose-unlike-cors.mjs）：
+              POST(点赞)   → 正常（简单请求）
+              DELETE(取消) → **"Failed to fetch"**  ← 用户可见的功能性缺陷，长期存在
+        为什么服务端脚本测不出来：curl/psql **不带 CORS 语义、根本不发预检**。
+        → 已加机械门禁 scripts/m5/check-cors-methods.sh：
+            从部署产物提取已注册方法，逐一断言它们都在 allow-methods 里。
+            它上线当天就抓到了这个 DELETE 缺失（我原本只修了 PATCH）。
       */
-      reply.header('access-control-allow-methods', 'GET,POST,PATCH,OPTIONS')
+      reply.header('access-control-allow-methods', 'GET,POST,PATCH,DELETE,OPTIONS')
       reply.header('access-control-allow-headers', 'content-type,authorization')
       reply.header('access-control-max-age', '600')
     }

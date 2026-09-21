@@ -1,4 +1,4 @@
-<#
+﻿<#
   M1 部署：把本地打好的后端单文件包推上服务器并切换 systemd。
   用法： & '.\tools\deploy-server.ps1'
 
@@ -99,19 +99,8 @@ systemctl enable campus-backend.service
 systemctl restart campus-backend.service
 # 固定 sleep 是不可靠的：实测这台机器上从 restart 到 listen 需要约 4-8 秒，
 # sleep 3 会让后面的 curl 打到还没监听的端口，set -e 直接把脚本打断。
-# 所以改成轮询等待，最长 60 秒。
+# 所以改成轮询等待，最长 240 秒（实测这台机器重启后最长约 176 秒才 ready）。
 # 审核记录 04 对轮询的要求：明确 timeout、非无限等待、失败时打印最后状态并输出 journal/systemctl 诊断。
-#
-# ⚠️ 2026-09-22 修正：**原来等的是 /api/health（liveness），不是 /api/ready（readiness）**。
-#    这两个语义**完全不同**：
-#      /api/health = 进程活着就 200（listen 之后立刻 200）
-#      /api/ready  = **能服务请求**才 200（要连上 PG 并跑完迁移检查）
-#    实测这台 2 vCPU / 396MB 的机器上，restart 后要 **176 秒**才 ready
-#    （free 仅 8MB、swap 用 183MB、loadavg 3.27、PG max_connections 仅 15 →
-#      启动阶段连库被反复拒绝，Node 反复 "[migrate] retryable: database unreachable"）。
-#    因此旧写法会在**还没 ready 时**就打印"就绪耗时: Ns"并继续 ——
-#    而此刻任何请求（登录/媒体）都会失败。这也是长期"未定位的间歇性失败"的机制之一。
-#    → 改为轮询 /api/ready，超时从 60s 提到 **240s**（实测 176s + 余量）。
 for i in $(seq 1 240); do
   if curl -sf -m 2 http://127.0.0.1:3001/api/ready >/dev/null 2>&1; then
     echo "  就绪耗时: ${i}s（/api/ready 200）"
@@ -119,7 +108,6 @@ for i in $(seq 1 240); do
   fi
   if [ "$i" = 240 ]; then
     echo "  等待 240s 仍未 ready（/api/ready 未返回 200）—— 现场信息如下"
-    echo "  /api/health: $(curl -s -m 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/health 2>&1)"
     echo "  is-enabled: $(systemctl is-enabled campus-backend.service 2>&1)"
     echo "  is-active:  $(systemctl is-active campus-backend.service 2>&1)"
     echo "  --- systemctl status ---"
