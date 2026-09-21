@@ -240,3 +240,97 @@ SENSITIVITY: ① mentions_all 强制置 false → MENTIONS_ALL_DB 必须 FAIL
 5. 静态 trace 结果 FOUND（含 `openAtPanel` 专用符号）—— 按你"追到就停"的指示我**已停止**，
    并保持 AT_PANEL_TRIGGER: OUR_DESIGN_CHOICE / ORIGINAL_NOT_EVALUATED。这样处理对吗？
 ```
+
+---
+
+# 📌 从审核 49 冻结的补充（WO#9B 层 A 实施前必须遵守）
+
+## 一、`members[]` 的边界（blocker ① 的补充约束）
+
+```
+GET /api/threads/:id     member → 200     non-member → 404
+  返回：{ id, kind, title, memberCount, members: [ { id, displayName } ] }
+
+必须保持的边界：
+ · members[] **只返回 AT 面板真正需要的最小身份字段**（id + displayName）
+   —— **不顺手暴露 phone 等无关数据**
+ · `memberCount` 应与 `members.length` **一致** → Gate 顺手检查
+ · 面板**不得**从"消息 sender / seed / mock / 本地缓存"**补成员**
+ · ⚠️ 当前**没有原版成员排序规则的证据** →
+   **集合一致**是权威性 Gate；**顺序不得写成 conformance contract**
+```
+
+## 二、选中状态的补充：可见标记**不得写进 message body**
+
+审核 49 要求再冻结一个细节，避免未来产生双重语义：
+
+```
+✅ 正确：可见的 @所有人 标记作为 **composer chip / state**，与正文分离
+     draft      = "下午开会"
+     mentionsAll = true
+   → 发送 { "body": "下午开会", "mentionsAll": true }
+
+❌ 错误：把标记偷偷写进正文（除非将来有**原版证据**证明原版就是这么存的）
+     body = "@所有人 下午开会"
+
+理由：这样 **UI presentation 与 persistence semantics 分离得最干净**。
+```
+
+**新增一条便宜的 Gate**（审核 49 认可为"非 blocker 但很值得"）：
+```
+AT_ALL_SELECTION_CANCEL
+   移除可见标记 → mentionsAll=false → 随后发出的消息在 DB 里 mentions_all 必须为 false
+```
+
+## 三、⚠️ 校验顺序（审核 49 **冻结**；已落到代码与 Gate）
+
+```
+1. authenticate / resolve thread membership
+2. **non-member → 404**（最先）
+3. validate thread-kind policy（direct → 400）
+4. validate mentionsAll ↔ individual mentions **mutual exclusion**
+5. only then validate individual mention targets（cannot_mention_self / membership / duplicates…）
+6. perform writes in transaction
+```
+
+**为什么必须写死**：我此前那次 `MIXED_ALL_AND_INDIVIDUAL_REJECT` 的假 PASS 已经证明
+**错误优先级会影响 Gate 是否真的覆盖目标分支**。
+`mentionsAll=true + mentions=[Lemy]` 必须稳定得到 `mentions_all_conflicts_with_mentions`，
+**不能**先掉进 `cannot_mention_self` / `mention_not_in_thread`。
+
+**已落实**：
+- 代码：类型检查留在事务前；**语义检查（kind 策略、互斥）全部移进事务、且排在成员判定之后**
+- Gate 新增 `5b)` 段：**非成员 + 双字段 → 必须 404**（证明第 2 步先于第 4 步）
+  实测 **PASS**（非成员拿 404，而非 400）
+
+## 四、静态 trace 的**准确分层**（审核 49 要求改名）
+
+```
+❌ 不要写：AT_PANEL_TRIGGER: CONFIRMED（没有看到调用点/方法体）
+✅ 准确分层：
+     AT_TRIGGER_STATIC_SYMBOL_EVIDENCE:
+         FOUND
+         · openAtPanel
+         · AtPanelActivity / GroupAtPanel
+         · 相关 resource / model 符号（AtPanelMember / sectionHeader / item_at_panel_*）
+     AT_PANEL_TRIGGER:
+         ORIGINAL_BEHAVIOR: NOT_EVALUATED
+         PROVENANCE:        OUR_DESIGN_CHOICE
+     → 然后**停止深挖**（审核明确认可）
+```
+审核 49 对 `openAtPanel` 的评价：
+> "openAtPanel 比普通 startActivity **强很多**，它说明 APK 中确实存在**专用概念**，
+>  但仍不能回答：**哪个控件、什么输入状态、什么手势**触发它？"
+> 因此我方可达入口继续标 `PROVENANCE: OUR_DESIGN_CHOICE` **完全合格**。
+
+## 五、⭐ 新增一条长期纪律（审核 49 从我的假 PASS 总结）
+
+```
+负向测试必须验证**目标拒绝原因**，而不仅仅验证"请求失败"。
+当请求可能经过**多个 validation branch** 时，
+**fixture 必须先排除更早的无关拒绝条件**。
+```
+
+（本项目已有的相关纪律：断言必须指明**具体错误码**，不能只断 4xx。
+本条是它的"fixture 侧"补充：**先把不相干的早期拒绝条件排除掉**，
+否则你测的可能是另一个分支。）

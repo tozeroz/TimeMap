@@ -192,6 +192,29 @@ if [ "$((N_AFTER - N_BEFORE))" = "0" ]; then ok "非成员 DB delta = 0（零 mu
 # 合并计数会把"非成员越权"与"direct 不该被接受"混成一个信号，定位时就会误导。
 NL="$(PSQL "select count(*) from messages where body like 'WO9B-NONMEMBER-%'")"
 if [ "$NL" = "0" ]; then ok "非成员越权写入零残留（DB 里 0 条 WO9B-NONMEMBER-*）"; else bad "非成员越权写入残留 $NL 条"; fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "--- 5b) **校验顺序**（审核 49 冻结）：非成员同时带 mentionsAll+mentions 必须 **404**（不是 400）---"
+#
+# 为什么单独立一条：审核 49 明确把校验顺序写死，理由是"错误优先级会影响 Gate 是否真的覆盖目标分支"。
+#   冻结顺序：1 authenticate → 2 **non-member 404** → 3 kind policy → 4 互斥 → 5 逐人提及目标
+#   因此非成员 + 两个字段同时出现时：
+#     正确 → **404**（第 2 步先拦）
+#     错误 → 400（例如先判了 kind 或互斥）—— 那既违反冻结顺序，
+#            也把"你不在这个会话里"这条先决条件暴露成了另一类错误。
+PREC_CODE="$(curl -s -o /tmp/wo9b_prec.json -w '%{http_code}' -X POST \
+  "$BASE/api/threads/$GROUP/messages" \
+  -H "authorization: Bearer $TOK_C" -H 'content-type: application/json' \
+  -d '{"body":"WO9B-PREC-SHOULD-NOT-EXIST","kind":"text","mentionsAll":true,"mentions":["22222222-2222-4222-8222-222222222222"]}')"
+info "非成员 + 双字段 HTTP $PREC_CODE  body=$(head -c 140 /tmp/wo9b_prec.json)"
+if [ "$PREC_CODE" = "404" ]; then
+  ok "校验顺序正确：非成员拿到 404（第 2 步先于第 4 步）"
+else
+  bad "校验顺序**错误**：非成员拿到 HTTP $PREC_CODE（期望 404）—— 说明 kind/互斥检查排在了成员判定之前"
+fi
+PREC_LEAK="$(PSQL "select count(*) from messages where body like 'WO9B-PREC-%'")"
+if [ "$PREC_LEAK" = "0" ]; then ok "顺序用例零残留"; else bad "顺序用例残留 $PREC_LEAK 条"; fi
 DL="$(PSQL "select count(*) from messages where body like 'WO9B-DIRECT-%'")"
 if [ "$DL" = "0" ]; then ok "direct 上的 mentionsAll 写入零残留（DB 里 0 条 WO9B-DIRECT-*）"; else bad "direct 上被接受了 $DL 条写入（应被 4xx 拒绝，不该落库）"; fi
 

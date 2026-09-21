@@ -1759,7 +1759,7 @@ export function buildServer(deps: ServerDeps) {
     }
 
     /*
-      ---- M5 WO#9B：@所有人（mentions_all）的形状级检查 ----------------------------
+      ---- M5 WO#9B：@所有人（mentions_all）------------------------------------------
 
       ## 为什么是**独立布尔**而不是"逐人提及的一种特殊形式"
         既有 `message_mentions.mentioned_user_id` 是**指向 users(id) 的外键** ——
@@ -1767,19 +1767,36 @@ export function buildServer(deps: ServerDeps) {
         （"绝不能伪造成某个 user id：那会让'提到全体'与'提到某人'在数据上无法区分"）。
         → 独立布尔，与逐人提及**并存但不混同**。
 
-      ## 为什么"互斥"在**这里**判（而不是只靠事务内）
-        它只依赖请求体本身，不需要连库。越早拒越省事，也避免为一次必然失败的请求开事务。
+      ## ⚠️ 校验顺序（审核记录 49 **冻结**，必须严格按此）
+        1. authenticate / resolve thread membership
+        2. **non-member → 404**（最先，不泄漏"会话存在"）
+        3. validate thread-kind policy（direct → 400）
+        4. validate mentionsAll ↔ individual mentions **mutual exclusion**
+        5. only then validate individual mention targets
+             （cannot_mention_self / mentioned user membership / duplicates…）
+        6. perform writes in transaction
 
-      ## 与既有先例一致
-        本接口对 `mediaIds`（复数）也是**显式拒绝**而不是"不认识就忽略" ——
-        因为静默忽略会让客户端收到 **201**：以为语义生效了，其实没有。见上面 mediaId 段注释。
+        为什么顺序必须写死：我此前踩过一个真实假 PASS ——
+        `MIXED_ALL_AND_INDIVIDUAL_REJECT` 曾"因为 `cannot_mention_self` 而通过"，
+        证明**错误优先级会影响 Gate 是否真的覆盖目标分支**。
+        按冻结顺序，`mentionsAll=true + mentions=[Lemy]` 必须稳定得到
+        `mentions_all_conflicts_with_mentions`，
+        **不能**先掉进 `cannot_mention_self` / `mention_not_in_thread`。
 
-      ## 口径（审核记录 48 强制要求）
+      ## ⚠️ 因此形状检查里**只做类型**，不做互斥
+        互斥（第 4 步）依赖不了"是不是成员"吗？—— 不，它**必须**排在成员判定（第 2 步）之后：
+        否则非成员同时带两个字段时会拿到 400（冲突）而不是 404，
+        既违反冻结顺序，也把"你不在这个会话里"这条先决条件暴露成了另一类错误。
+        → 类型检查（不需要连库）留在事务前；**语义检查全部进事务**。
+
+      ## 口径（审核记录 48/49）
         MENTIONS_ALL_DIRECT_POLICY: REJECT
         PROVENANCE:                 OUR_DESIGN_CHOICE
         ORIGINAL_BEHAVIOR:          NOT_EVALUATED
-        ⚠️ **不**声称"direct 里 @全体 逻辑上不可能"——该说法已被审核 48 否决；
-           只是**我方产品选择**不提供该语义。direct 的拒绝放在事务内（需要 kind）。
+        ⚠️ **不**声称"direct 里 @全体 逻辑上不可能"——该说法已被否决；
+           只是**我方产品选择**不提供该语义。
+        AT_ALL_PERMISSION_POLICY: group member → allowed ／ non-member → 404
+        PROVENANCE: OUR_DESIGN_CHOICE ／ ORIGINAL_PERMISSION_MODEL: NOT_EVALUATED
     */
     const mentionsAllRaw = (body as { mentionsAll?: unknown } | undefined)?.mentionsAll
     if (mentionsAllRaw !== undefined && typeof mentionsAllRaw !== 'boolean') {
@@ -1787,15 +1804,6 @@ export function buildServer(deps: ServerDeps) {
       return { error: 'bad_mentions_all', got: typeof mentionsAllRaw }
     }
     const mentionsAll = mentionsAllRaw === true
-    if (mentionsAll && mentions.length > 0) {
-      // 互斥：两者同时出现会让"全体"与"逐人"的语义同时存在，读端无法区分该按哪个解释
-      reply.code(400)
-      return {
-        error: 'mentions_all_conflicts_with_mentions',
-        mentionsAll: true,
-        mentionsCount: mentions.length,
-      }
-    }
 
     const client = await db.pool.connect()
     try {
@@ -1811,14 +1819,14 @@ export function buildServer(deps: ServerDeps) {
         return { error: 'not_found' }
       }
       /*
-        ---- M5 WO#9B：@所有人 只在**群聊**里成立 ----------------------------------
-        口径（审核记录 48）：MENTIONS_ALL_DIRECT_POLICY: REJECT ／
-                             PROVENANCE: OUR_DESIGN_CHOICE ／ ORIGINAL_BEHAVIOR: NOT_EVALUATED
-        ⚠️ 这里**不**写"direct 里 @全体 语义不可能" —— 该说法已被审核 48 否决；
-           只是**我方产品选择**不提供该语义（拒绝而非忽略：忽略会让调用方以为生效了）。
-
-        成员资格**先判**（上面已判），所以这里取 kind 不会泄漏"这个会话是否存在"：
-        非成员在上一行就已经拿到 404 并 rollback 了。
+        ---- M5 WO#9B：@所有人 的两条语义检查（审核记录 49 冻结的**第 3、4 步**）--------
+        顺序严格按冻结清单：
+          2. non-member → 404（上面刚判完）
+          3. thread-kind policy：mentionsAll 且 kind !== 'group' → 400
+          4. mentionsAll ↔ 逐人 mentions **互斥** → 400
+          5. 之后才校验逐人提及目标（cannot_mention_self / member / 重复）—— 见下面既有块
+        这样 `mentionsAll=true + mentions=[Lemy]` 会**稳定**命中 mentions_all_conflicts_with_mentions，
+        而**不会**先掉进 cannot_mention_self —— 这正是我此前那次"假 PASS"要防的形态。
       */
       if (mentionsAll) {
         const th = await client.query<{ kind: string }>('select kind from message_threads where id = $1', [threadId])
@@ -1828,8 +1836,18 @@ export function buildServer(deps: ServerDeps) {
           reply.code(400)
           return { error: 'mentions_all_requires_group', kind: threadKind }
         }
+        if (mentions.length > 0) {
+          // 互斥：两者同时出现会让"全体"与"逐人"的语义同时存在，读端无法区分该按哪个解释
+          await client.query('rollback')
+          reply.code(400)
+          return {
+            error: 'mentions_all_conflicts_with_mentions',
+            mentionsAll: true,
+            mentionsCount: mentions.length,
+          }
+        }
       }
-      // 校验被提及者：必须是会话成员、且不能是自己
+      // 校验被提及者：必须是会话成员、且不能是自己（冻结顺序的第 5 步）
       for (const m of mentions) {
         if (m === s.user.userId) {
           await client.query('rollback')
