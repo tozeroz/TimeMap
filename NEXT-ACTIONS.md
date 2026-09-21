@@ -481,3 +481,21 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [ ] ⚠️ WO11.13-f **仍未定位**：05:19:37 那一次的具体失败**未**被上述机制解释
       （顺序上那次重启发生在失败之后 9 秒）→ 保持"未定位、不声称已修"，等抓现场复现
 
+
+### WO#13 计划（Round 263 收尾）
+- [x] WO13.1 ✅ 字段级 inventory 完成 → `docs/m5/WO13-PLAN-profile-edit-field-inventory.md`
+      **审核 53 担心的"假写成功"确认成立**，且是**从「我的」页一步可达**（MeScreen 5 个入口）
+- [x] WO13.2 ✅ 前置事实核实（不靠猜）：服务端**无**改资料写接口；MeScreen 5 个入口**有基线支持**
+      （trident-me/baseline.json:38/:42）；**页面内容层无基线** → ORIGINAL_PROFILE_EDIT_BASELINE: UNAVAILABLE
+- [x] WO13.3 ✅ 附带发现：App.tsx 的 **5 个孤儿路由**（无人导航到）里 **App.tsx:177 仍有编造数字 12,486**
+      —— WO#11 从动态列表页删掉了它，但它在此处**活了下来**（mock.ts:502/503/587 也有）
+- [x] WO13.4 ✅ 附带发现：ProfileEditScreen.tsx:14-18 的注释"**结构按原版实测**"**无落盘基线支撑** →
+      须改标或补证据（已列入待裁定）
+- [ ] WO13.5 ⬅ **等审核裁定 5 项**：① 是否新增写接口 `PATCH /api/users/me`（本项目第一个写能力）
+      ② 简介/性别/标签是否加列 ③ App.tsx 的 5 个孤儿路由如何处置 ④ 那处无据结构主张如何处理
+      ⑤ 严重度：是否插队（与 WO#12 同级）
+- [ ] WO13.6 裁定后实施（层1 消除假写成功 / 层2 清无来源与编造内容 / 层3 基线）
+- [ ] ⚠️ WO13.7 **本轮的方法教训（已入计划）**：搜"谁引用了 X"时用 `Select-String -Path 'dir\**\*.tsx'`
+      **不会递归**（PowerShell 不把 `**` 当递归通配）→ 我据此误判"ProfileEditScreen 是死代码"。
+      **必须用 `Get-ChildItem -Recurse | Select-String`**；"零命中"极易被误读成"不存在"。
+
