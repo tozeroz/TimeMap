@@ -9,6 +9,7 @@ import mediaScopeSql from './migrations/006_media_scope.sql'
 import mediaLinkIdsSql from './migrations/007_media_link_ids.sql'
 import messageMentionsSql from './migrations/008_message_mentions.sql'
 import voiceMediaSql from './migrations/009_voice_media.sql'
+import voiceMediaStrictSql from './migrations/010_voice_media_strict.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -30,6 +31,8 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '008_message_mentions', sql: messageMentionsSql },
   // 009：语音消息 —— media.mime 放开 audio/webm + 新增 duration_ms（实测驱动，见该文件头部注释）
   { version: '009_voice_media', sql: voiceMediaSql },
+  // 010：加严 MIME ↔ duration 一致性（审核记录 35 要求；009 已应用不能改，故追加）
+  { version: '010_voice_media_strict', sql: voiceMediaStrictSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */
