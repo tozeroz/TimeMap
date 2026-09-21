@@ -191,12 +191,21 @@ C2="$(curl -s -m 10 "${AUTH_HDR[@]}" -o /dev/null -w '%{http_code}' -X POST http
 echo
 echo "=== E. 重启 backend 后数据仍在 ==="
 systemctl restart campus-backend.service
-for i in $(seq 1 30); do
-  [ "$(curl -s -m 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/health)" = "200" ] && break
+# 必须轮询 **/api/ready**（就绪语义），不能轮询 /api/health（存活语义）：
+# M3 起服务是"先 listen、再后台迁移"，liveness 在迁移完成前就 200，
+# 而业务路由在就绪前统一 503。轮询 liveness 会立刻通过，紧接着读 /api/posts 拿到 503，
+# 表现成"重启后读不到"（其实是脚本没尊重新旧语义差别）。
+for i in $(seq 1 40); do
+  [ "$(curl -s -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1/api/ready)" = "200" ] && break
   sleep 1
 done
+READY_CODE="$(curl -s -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1/api/ready)"
 LIST2="$(curl -s -m 10 http://127.0.0.1/api/posts)"
-if printf '%s' "$LIST2" | grep -q "$MARK"; then ok "重启后仍能读到（已持久化）"; else bad "重启后读不到"; fi
+if printf '%s' "$LIST2" | grep -q "$MARK"; then
+  ok "重启后仍能读到（已持久化）"
+else
+  bad "重启后读不到（/api/ready=$READY_CODE，响应: $(printf '%s' "$LIST2" | head -c 160)）"
+fi
 
 echo
 echo "=== F. [API] readiness 语义：停掉 PG 必须 503 ==="

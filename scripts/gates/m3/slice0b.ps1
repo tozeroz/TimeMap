@@ -354,6 +354,27 @@ if ($planText -match 'BLOCKED_BY_POLICY') { Ok 'PLAN 已登记 BLOCKED_BY_POLICY
 $pvFiles = @(Get-ChildItem -LiteralPath (Join-Path $repo 'docs\original-baseline\supplements') -Filter '*.json' |
   Where-Object { (Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8) -match 'POLICY_VIOLATION' })
 Say "  带 POLICY_VIOLATION 标记的补充证据: $($pvFiles.Count) 个（$((($pvFiles | ForEach-Object { $_.BaseName }) -join ', '))）"
+
+# 审核记录 11 的 PRECONDITION：违规取得的证据还要**排除出一致性证据**（不能拿它给自己背书）。
+# 这一条必须是机器可查的，否则"排除"只停留在文档里。
+$needsExclusion = @('at-panel', 'media-preview', 'comment-detail')
+$badExclusion = @()
+foreach ($id in $needsExclusion) {
+  $fp = Join-Path $repo "docs\original-baseline\supplements\$id.json"
+  if (-not (Test-Path -LiteralPath $fp)) { $badExclusion += "$id(缺补充证据)"; continue }
+  $txt = Get-Content -LiteralPath $fp -Raw -Encoding UTF8
+  if ($txt -notmatch '"conformance_evidence"') { $badExclusion += "$id(未标 conformance_evidence)" }
+  elseif ($txt -notmatch '"status": "INADMISSIBLE"') { $badExclusion += "$id(状态不是 INADMISSIBLE)" }
+}
+if ($badExclusion.Count -eq 0) {
+  Ok "违规取得的证据已排除出一致性证据（$($needsExclusion -join '/') 均标 INADMISSIBLE）"
+} else {
+  Bad "以下证据未正确排除出一致性证据: $($badExclusion -join ', ')"
+}
+# provenance 审计文档必须存在（它是 Slice 4 的开工前置）
+if (Test-Path -LiteralPath (Join-Path $repo 'docs\m3\EVIDENCE-PROVENANCE-AUDIT.md')) {
+  Ok 'provenance 审计文档存在（Slice 4 开工前置已满足）'
+} else { Bad '缺少 docs/m3/EVIDENCE-PROVENANCE-AUDIT.md' }
 if ($pvFiles.Count -ge 3) { Ok '违规取得的证据已自曝标签（未被当作普通 observed）' } else { Bad "带违规标记的补充证据只有 $($pvFiles.Count) 个（期望 >=3）" }
 
 # ---------------------------------------------------------------------------

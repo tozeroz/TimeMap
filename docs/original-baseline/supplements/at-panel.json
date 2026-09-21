@@ -95,5 +95,13 @@
     "full_log": "docs/POLICY-VIOLATION-2026-09-21.md",
     "rule": "对原版 app 只允许只读观察（截图 / uiautomator dump / 纯导航点击）；需要写入上下文的验证改在本项目自建后端里做。",
     "evidence_validity": "证据本身的结构性结论仍有效（来自 DOM/控件树结构，不依赖『是谁发的』），但取证手段违规，故同时标注 EVIDENCE_OBTAINED_BY_POLICY_VIOLATION。"
+  },
+  "conformance_evidence": {
+    "status": "INADMISSIBLE",
+    "reason": "该页证据是通过**第三方写操作**取得的，不能作为「我们实现得与原版一致」的依据（审核记录 11 的 PRECONDITION）",
+    "depends_on_third_party_writes": "依赖 W1（创建群聊）才可达；面板本身靠 W2（在输入框打 @）触发",
+    "allowed_use": "仅可作为**设计线索**（指导实现方向），不得作为 conformance 证明",
+    "policy": "preserve / label / exclude from admissible conformance evidence / do not reproduce",
+    "audit": "docs/m3/EVIDENCE-PROVENANCE-AUDIT.md"
   }
 }
