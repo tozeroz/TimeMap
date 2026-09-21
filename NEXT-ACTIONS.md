@@ -84,7 +84,13 @@
 > 审核原话要点：`sessions=122` 可能是"120 条早已过期的垃圾"，也可能是"122 条仍合法的活跃 session"
 > —— **这两个语义完全不同，总行数不是正确的 invariant**。
 
-- [ ] E1 **先做 `AUTH_HYGIENE_AUDIT`（查状态分布，不先做清理）**
+- [x] E1 ✅ **已完成**（2026-09-22 01:27）
+      脚本 `scripts/m5/audit-auth-hygiene.sh`（只读）；输出 `docs/m5/EVIDENCE-auth-hygiene-audit.txt`
+      **结论**：sessions 130 条中 **active 合法会话 = 94**、revoked = 36、expired = **0**；
+              challenges 108 条中 consumed = 103、expired-pending = 5、valid-pending = 0；
+              attempts 全 0；**无任何表引用这两张表**（删除不破坏外键）。
+      ⭐ 该结果**直接证实**"总数不是 invariant"：130 条里 94 条是活跃会话，
+         任何总数上界门禁/按总数清理都会误伤合法会话。
       ```
       sessions:          active / expired / revoked / age distribution
       login_challenges:  pending-valid / expired / consumed / age distribution
@@ -152,10 +158,8 @@ sessions 总数 130，其中 **94 条是 active 合法会话**。
 所以 Gate 只能用 `STALE_EXPIRED_SESSIONS = 0` / `STALE_CONSUMED_CHALLENGES = 0` 这类
 **状态型**不变量（E4），总数只作次级 warning。
 
-### 待办调整
-- [ ] E2 retention 语义冻结：需定 **retention grace 值**（我建议默认 24h、可配 `--grace-hours`）。
-      理由：当前 grace=1d 时候选为 0，说明现有数据都是"近 24h 内产生的"，
-      设 24h 既不会误删活跃数据、又能约束长期膨胀。
-      ⚠ 但**过期的 sessions 目前为 0**（TTL ≥7 天），所以本工具短期只会清 challenges。
-- [ ] E3 独立 cleanup-auth（dry-run 默认 / --apply / 分类计数 / DB 错误 fail-closed）
-- [ ] E4 Gate：STALE_EXPIRED_SESSIONS=0 与 STALE_CONSUMED_CHALLENGES=0；总数只作 WARN
+### 待办调整（E2–E4 的细项；**与上方 E 区同项，以上方为准**，这里只补"已查明的前提"）
+- E2 前提已查明：**retention grace 建议 24h 且可配 `--grace-hours`**
+  （依据：grace=1d 时候选为 0 → 现有数据都在近 24h 内；设 24h 既不误删活跃数据、又能约束长期膨胀）
+  ⚠ 且 **expired sessions 目前为 0**（会话 TTL ≥7 天）→ 本工具短期只会清 challenges
+- E3 前提已查明：**没有任何表引用 sessions / login_challenges** → 删除不破坏引用完整性
