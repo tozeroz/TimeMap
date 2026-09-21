@@ -39,7 +39,7 @@ Gate:     scripts/m5/gate-wo6-tabbar-orientation.mjs（设备侧，**坐标单�
           FAB 可见直径 = NOT_MEASURED_RELIABLY / PRODUCT_CHANGE: NONE（两种像素方法自判 INVALID）
 ```
 
-### 6. 会话页**文字消息发送路径缺失** — **DEVIATION（已提案 WO#7，待批准）**
+### 6. 会话页**文字消息发送路径缺失** — **FIXED / CLOSED**（WO#7，审核记录 43）
 
 ```
 observed: 我方 ChatScreen 的 draft 只用于 input 的 value/onChange —— **draft 从未被发送**；
@@ -52,7 +52,12 @@ observed: 我方 ChatScreen 的 draft 只用于 input 的 value/onChange —— 
 ⚠ 推断强度: "无文字时显示表情+加号、有文字时显示发送"这一**切换关系**由
           "sendBtn 默认 GONE + emojiBtn/plusBtn 常显"**推断**而来；
           **渲染态（输入文字后）未观察到** → 实现前必须标注该推断
-提案:     docs/m5/WO7-PROPOSAL-composer-text-send.md（含合规问题：见该文档 §七）
+实现:     client.ts 的 postThreadTextMessage + ChatScreen 的 onSendText + .chatbar__send（图标按原版矢量资源复刻）
+Gate:     scripts/m5/gate-wo7-text-send.mjs（设备侧 6 项全 PASS，含 SENSITIVITY 受控突变）
+          scripts/m5/verify-wo7-db-oracle.sh（DB oracle：kind=text / body 逐字一致 / sender=Lemy / message_media 无行）
+裁定:     审核记录 42（批准 + Stage 0 前置）、43（**PASS / CLOSED**）
+仍开放:   COMPOSER_EXACT_VISIBILITY_STATE: NOT_EVALUATED（"何时显示发送按钮"未取证，当前为我方设计选择）
+          ENTER_TO_SEND: NOT_IMPLEMENTED（原版无证据）
 ```
 
 ### 1. `CHAT_MESSAGE_SENDER_PRESENTATION` — **FIXED / VERIFIED**（2026-09-21，commit `c9d7a7d`）
