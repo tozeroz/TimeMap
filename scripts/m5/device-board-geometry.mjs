@@ -69,7 +69,12 @@ const out = await ev(`(() => {
     gapCSS: csRow.gap,
     widthCSS: cs.width,
     dpr: window.devicePixelRatio,
-    viewportWidth: window.innerWidth
+    viewportWidth: window.innerWidth,
+    // 容器与首项偏移（用于核对原版首项左边界 21 设备 px = 12 CSS px）
+    rowLeft: Math.round(document.querySelector('.board__emojis').getBoundingClientRect().left * 100) / 100,
+    firstItemLeft: Math.round(first.left * 100) / 100,
+    rowPaddingLeft: csRow.paddingLeft,
+    rowPaddingBottom: csRow.paddingBottom
   })
 })()`)
 
