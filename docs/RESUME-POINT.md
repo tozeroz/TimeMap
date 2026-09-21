@@ -94,3 +94,37 @@ docs/original-baseline/raw-dumps/
 
 获取方式（**纯只读**）：`adb shell am start -a android.intent.action.VIEW -d "campusx://messageBoard" com.kairuotu.campus`
 → `uiautomator dump` → `adb pull`。**全程未做任何写操作。**
+
+---
+
+## 八、更新（2026-09-21 18:28）：WO#2 后端已完成，前端已开工
+
+### WO#2 后端：**完成并双层验证通过**
+
+```
+MESSAGE_MEDIA_RESULT:      PASS   （真实服务器；含 A7「复数 mediaIds → 400」）
+CLEANUP_UNATTACHED_RESULT: PASS   （真实服务器，20 条）
+另有实现在本地 docker postgres + 本地 node 产物上的真实 HTTP 验证：A 26/26、B 25/25
+→ "实现者自查 + 独立复核"两段齐备
+```
+
+实现要点：单数 `mediaId`；事务内逐条校验（成员/存在/scope=private/**owner=当前用户**）；
+messages 与 message_media 同事务；TTL GC（默认 24h，与 orphan 分开计数报告；
+删行自带 not exists 判据；dry-run 默认；备份窗口内 exit 3 且不动行与文件）。
+
+### WO#2 前端：**已委派子代理 `c4836556`（进行中）**
+
+内容：`client.ts` 新增上传函数（FormData：`file`/`purpose`/`uploadRequestId`=UUID；复用 `authHeaders()`；
+不手动设 Content-Type）；`ChatScreen.tsx` 底部加 `<input type="file">` 选图 → 上传(purpose=chat) →
+发 `kind='image'`+`mediaId` 的消息 → 重拉列表；**不引入新插件、不改 MediaImage 的 blob 逻辑**。
+验证要求：tsc/lint/build/装机 + 真机验证 + **`verify-cross-layer-constants.sh` 的 C1 应由 FAIL 转 PASS**。
+
+### 交接给下一轮的注意点
+
+- 部署/验证**前必须先核验产物**（本项目已三次栽在"验旧产物"上）：
+  `grep -c '<关键新符号>' /srv/campus/server/dist/xxx.mjs` 应 ≥1
+- **不要** `git add -A`（有并发写者）；只用显式路径
+- 设备端若前台不是我们的 App：**不要 force-stop 原版**，先拉回自己前台，否则报错停下
+- 待审核裁定：① `mediaIds` 复数 strict 400 是否认可 ② `.tmp` 部署缺口修法 A/B
+  ③ C4 表情形态（图片 vs 文字）④ `force-stop` 规则严格度
+- 待清理：子代理遗留 docker 容器 `wo2-pg`（已停止）
