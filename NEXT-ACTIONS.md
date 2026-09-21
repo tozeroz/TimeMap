@@ -444,3 +444,40 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [ ] WO12.5 裁定后实施（层1 修假身份+接线；层2 处理两处假交互）
 - [ ] ⚠️ WO12.6 **门禁一条断言的诚实标注**：`USER_PROFILE_NO_SOURCELESS_FIELDS` 当前 PASS 是**偶然**
       （mock u1 恰好没有 mbti 字段）→ 实现后需用**有该字段的 mock 对象**再验一次才算真过
+### WO#12 完成（Round 263）
+- [x] WO12.4 ✅ 审核 53 裁定：**WO12: APPROVED TO IMPLEMENT**（插队，不拆 P0 小单）；
+      并冻结 identity 安全原则：unknown/malformed id → 明确不可用态，**NEVER 回落另一个用户**
+- [x] WO12.5 ✅ **实施完成**：
+      · 服务端三处只读扩展：`GET /api/users/:id`（只 {id,displayName}，404）／
+        `GET /api/posts?authorId=`（服务端过滤；非法 → 400 `bad_author_id`）／
+        `GET /api/threads` 增加 `peerId`（仅 direct，**机械验证** == 另一成员 id）
+      · 客户端 UserProfileScreen 重写：解析 `u:<uuid>` → canonical UUID、**不回落**、
+        昵称走权威来源、TA 的动态走服务端过滤、头像首字占位、无来源字段一律不渲染、
+        「关注」移除、「私信」按 peerId 匹配真实会话（无则显示静态不可用）、三态明确
+      · 另修 App.tsx 的 `route.query.id ?? 'u1'`（又一处 mock id 回落）
+      → 设备 Gate **12 条断言全 PASS**；敏感度两条（均：突变→被抓→恢复→PASS）
+- [x] WO12.6 ✅ 断言的偶然 PASS 已消除：头像改用"**头像元素**是首字占位"判据（不再用"整页 imgCount==0"）
+- [ ] WO12.7 ⬅ **等审核裁定**：WO#12 是否可写 **PASS / CLOSED**；并请确认对
+      「抓它的是 INVALID_PROFILE_ID_NO_FALLBACK 而非审核点名的 NO_MOCK_IDENTITY」这一分工差异是否接受
+      （两条断言测不同表面：前者测坏输入用例、后者测有效资料页）
+- [ ] WO12.8 下一步（审核 53 指定）：**ProfileEditScreen**（那里可能有 fake write-success 风险）
+
+### 未定位故障的排查进展（Round 263）
+- [x] WO11.13-a ✅ 审核 53 裁定：接受"记录并观察 + **下次失败自动抓现场**"（不要求盲跑 10 次）
+- [x] WO11.13-b ✅ **抓现场已实现**：`scripts/m5/capture-login-failure-forensics.sh`
+      （7 类现场：服务启动时间/重启次数、后端日志 300 行、pg_stat_activity+wait_event+advisory 锁、
+       OTP sink、health/ready、fd/ulimit/线程/磁盘/内存）已接进两条 verify 脚本的登录失败分支，
+      并**逐项打印当次实际值**（token 长度 / user id / sink 目录）以区分不同失败类型
+- [x] WO11.13-c ✅ **找到一条真实机制**：M5 服务器侧 Gate **自己会重启后端**
+      （`verify-tmp-selfheal.sh` 的 `systemctl restart "$SVC"` + 清空 uploads/.tmp）
+      → Gate 重启窗口内在飞的请求会失败，症状正是"间歇性登录失败、单独跑则 PASS"
+      ⚠️ 我先前没搜到是因为只搜了字面量 `campus-backend`，而脚本用**变量** `"$SVC"`
+      → 教训已入注释：**搜"谁会做 X"必须同时搜变量/间接引用**
+- [x] WO11.13-d ✅ **Gate 互斥锁**：`scripts/m5/gate-lock.sh`（锁在服务器，带陈旧判定与原因打印），
+      已接入 run-device-gate.sh 与 run-gate-server.sh；实测拒绝/抢占/释放/超时四条路径
+- [x] WO11.13-e ✅ **修脆弱同步**：重启后由固定等 5 秒（实测就绪需 4s，**余量仅 1 秒**）
+      改为**轮询 /api/ready 直至 200**（≤30s），并把副作用声明写入输出；
+      失败行用 `ABORT` 前缀（gate 只放行 `^(SELF_HEAL|ABORT)`，否则诊断信息会被过滤掉）
+- [ ] ⚠️ WO11.13-f **仍未定位**：05:19:37 那一次的具体失败**未**被上述机制解释
+      （顺序上那次重启发生在失败之后 9 秒）→ 保持"未定位、不声称已修"，等抓现场复现
+
