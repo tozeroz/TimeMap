@@ -560,12 +560,27 @@ export function buildServer(deps: ServerDeps) {
     const place = placeRaw || null
 
     try {
+      /*
+        M3 Slice 4：把地点文本**对到已知地点**（places.name 精确匹配）并写 place_id。
+        为什么必须有这一步：原版 poi-detail 是"按地点聚合动态"，而聚合只能靠 place_id；
+        只存文本 place 的话，地点详情页永远查不到"该地点的动态"。
+        匹配不上就保持 NULL —— 不伪造地点归属（与 author_id 同一原则：未知就是未知）。
+      */
+      let placeId: string | null = null
+      if (place) {
+        const pr = await db.pool.query<{ id: string }>(
+          'select id from places where name = $1 limit 1',
+          [place],
+        )
+        placeId = pr.rows[0]?.id ?? null
+      }
+
       // 作者完全来自服务端会话；author_name 存为快照（用户以后改名也保留当时的展示名）
       const r = await db.pool.query<PostRow>(
-        `insert into posts (id, author_name, author_id, body, place)
-         values ($1, $2, $3, $4, $5)
+        `insert into posts (id, author_name, author_id, body, place, place_id)
+         values ($1, $2, $3, $4, $5, $6)
          returning id, author_name, author_id, body, place, created_at`,
-        [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, place],
+        [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, place, placeId],
       )
       const row = r.rows[0]!
       reply.code(201)
@@ -897,6 +912,65 @@ export function buildServer(deps: ServerDeps) {
       ])
       const st = await likeStateFor(id, s.user.userId)
       return { liked: false, ...st }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  // -------------------------------------------------------------------------
+  // 地点（M3 Slice 4：poi-detail 的一致性依据是**只读证据**，可做真实比对）
+  //
+  // 1:1 依据（supplements/poi-detail.json，只读取得 → 可采信）：
+  //   - 地点详情页聚合「该地点的动态」（图片 + 作者标签叠加）
+  //   - 显示 地点名 + 距离 + 完整地址
+  //   因此 posts.place_id 必须真的落库 —— 只存文本 place 是聚合不出"该地点的动态"的。
+  // -------------------------------------------------------------------------
+
+  /** 地点详情：地点本体 + 该地点的动态列表（按时间倒序） */
+  app.get('/api/places/:id', async (req, reply) => {
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    try {
+      const pr = await db.pool.query<{
+        id: string
+        name: string
+        address: string | null
+        latitude: number | null
+        longitude: number | null
+      }>('select id, name, address, latitude, longitude from places where id = $1', [id])
+      const place = pr.rows[0]
+      if (!place) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      const posts = await db.pool.query<PostRow>(
+        `select id, author_name, author_id, body, place, created_at
+           from posts
+          where place_id = $1
+          order by created_at desc, id desc
+          limit $2`,
+        [id, LIST_LIMIT],
+      )
+      return {
+        id: place.id,
+        name: place.name,
+        address: place.address,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        posts: posts.rows.map((row) => ({
+          id: row.id,
+          author: row.author_name,
+          authorId: row.author_id,
+          body: row.body,
+          createdAt: row.created_at.toISOString(),
+        })),
+        postCount: posts.rows.length,
+      }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
       reply.code(500)

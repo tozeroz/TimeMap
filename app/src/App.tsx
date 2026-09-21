@@ -81,7 +81,7 @@ export default function App() {
       {root === 'onboarding' && <OnboardingScreen />}
       {root === 'announce' && <AnnounceScreen />}
       {root === 'feedlist' && <FeedListScreen />}
-      {root === 'poidetail' && <PoiDetailScreen />}
+      {root === 'poidetail' && <PoiDetailScreen id={route.query.id ?? param ?? ''} />}
       {root === 'group' && <GroupChatScreen />}
       {root === 'scanner' && <ScannerScreen />}
       {root === 'loginselect' && <LoginSelectScreen />}

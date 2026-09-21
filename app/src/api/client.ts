@@ -340,6 +340,36 @@ export async function unlikePost(postId: string): Promise<ApiResult<LikeState>> 
   return request<LikeState>(`/api/posts/${encodeURIComponent(postId)}/like`, { method: 'DELETE' })
 }
 
+// ===========================================================================
+// M3 Slice 4：地点详情（poi-detail）
+//
+// 一致性依据是**只读取得**的证据（supplements/poi-detail.json），未被政策排除，
+// 因此这一页**可以**做视觉/结构一致性判定（与 at-panel / media-preview 不同）。
+// ===========================================================================
+
+export interface ApiPlacePost {
+  id: string
+  author: string
+  authorId: string | null
+  body: string
+  createdAt: string
+}
+
+export interface ApiPlaceDetail {
+  id: string
+  name: string
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+  posts: ApiPlacePost[]
+  postCount: number
+}
+
+/** 地点详情：地点本体 + 该地点的动态（原版的「按地点聚合动态」） */
+export async function getPlace(id: string): Promise<ApiResult<ApiPlaceDetail>> {
+  return request<ApiPlaceDetail>(`/api/places/${encodeURIComponent(id)}`)
+}
+
 // ---------------------------------------------------------------------------
 // 「最后一次成功的 API 快照」缓存
 //

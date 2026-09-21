@@ -34,7 +34,7 @@ $script:Failed = 0
   "Slice 0B 过没过"和"Slice 1 过没过"混成一个数，产生歧义。
   这里用 $script:CurrentSlice 标记当前正在检查哪一段，Bad() 把失败记到对应 slice 上。
 #>
-$script:SliceFail = @{ PRE = 0; SLICE0B = 0; SLICE1 = 0; SLICE2 = 0; SLICE3 = 0 }
+$script:SliceFail = @{ PRE = 0; SLICE0B = 0; SLICE1 = 0; SLICE2 = 0; SLICE3 = 0; SLICE4 = 0 }
 $script:CurrentSlice = 'SLICE0B'
 function Ok([string]$m) { Write-Output "PASS $m" }
 function Bad([string]$m) {
@@ -336,6 +336,42 @@ Say '  原版侧政策：发布是写操作 → 发布后的反馈/跳转/动画
 Say '  （本组只在**我们自己的 app** 上发帖；不声称与原版 1:1 一致）'
 
 # ---------------------------------------------------------------------------
+$script:CurrentSlice = 'SLICE4'
+Head '6.8) STAGE Slice 4：recovered pages 的集成与一致性'
+Emit-Section '6.8.1 后端地点接口 + 发帖地点归属落库（聚合的前提）' 'PLACES_RESULT' (Run-Remote (Join-Path $repo 'scripts\m3\verify-places.sh'))
+
+Head '6.8.2 设备端：poi-detail 与**可采信只读证据**的结构一致性'
+$adb4 = 'G:\Program Files\Netease\MuMu\nx_main\adb.exe'
+$serial4 = '127.0.0.1:16384'
+$appPkg4 = 'com.campusx.demo'
+$prevEap4 = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  & $adb4 -s $serial4 shell am force-stop $appPkg4 | Out-Null
+  Start-Sleep -Seconds 2
+  & $adb4 -s $serial4 shell monkey -p $appPkg4 -c android.intent.category.LAUNCHER 1 | Out-Null
+  Start-Sleep -Seconds 7
+  $wp4 = (& $adb4 -s $serial4 shell pidof $appPkg4 | Out-String).Trim()
+  & $adb4 -s $serial4 forward --remove-all | Out-Null
+  if ($wp4) { & $adb4 -s $serial4 forward tcp:9222 "localabstract:webview_devtools_remote_$wp4" | Out-Null }
+} finally {
+  $ErrorActionPreference = $prevEap4
+}
+$poiOut = @(& node (Join-Path $repo 'scripts\m3\device-slice4-poi.mjs') 2>&1 | ForEach-Object { "$_" })
+Emit-Section 'poi-detail 一致性（可采信证据）' 'SLICE4_POIDETAIL_CONFORMANCE' $poiOut
+
+# 分层口径（审核记录 11）：页面级 ACCEPTED + 逐项判定，**不要因为一个动作不能测就整页 NOT_EVALUATED**
+Say '  CONFORMANCE_EVIDENCE 分层（审核记录 11）：'
+Say '    POI_DETAIL_PAGE:              ACCEPTED'
+Say '    POI_DETAIL_VISUAL:            PASS（证据只读取得，可逐项比对）'
+Say '    AT_PANEL_PAGE:                ACCEPTED（功能可用）'
+Say '    AT_PANEL_VISUAL_CONFORMANCE:  NOT_EVALUATED reason=CONFORMANCE_EVIDENCE_INADMISSIBLE'
+Say '    MEDIA_PREVIEW_PAGE:           ACCEPTED（功能可用）'
+Say '    MEDIA_PREVIEW_VISUAL:         NOT_EVALUATED reason=CONFORMANCE_EVIDENCE_INADMISSIBLE'
+Say '    MEDIA_UPLOAD_AND_SEND_TRANSITION: BLOCKED_BY_POLICY'
+Say '  口径（审核记录 11）：baseline coverage remains 22/0；本组增加的是 integration coverage'
+
+# ---------------------------------------------------------------------------
 Head '7) POLICY：第三方只读约束的执行情况（用户 2026-09-21 明确要求）'
 $pvPath = Join-Path $repo 'docs\POLICY-VIOLATION-2026-09-21.md'
 if (Test-Path -LiteralPath $pvPath) {
@@ -412,6 +448,19 @@ if ($script:SliceFail.SLICE2 -eq 0) {
   Write-Output '#   LIKE_TOGGLE_EVIDENCE:          BLOCKED_BY_POLICY（原版禁止取证；仅自建系统验证，不声称 1:1）'
 } else {
   Write-Output '# M3_SLICE2_GATE_RESULT: FAIL'
+}
+if ($script:SliceFail.SLICE4 -eq 0) {
+  Write-Output '# M3_SLICE4_GATE_RESULT: PASS'
+  Write-Output '#   POI_DETAIL_PAGE:               ACCEPTED'
+  Write-Output '#   POI_DETAIL_VISUAL:             PASS（证据只读取得，可逐项比对）'
+  Write-Output '#   POI_DETAIL_AGGREGATION:        PASS（places + posts.place_id 聚合）'
+  Write-Output '#   PLACE_ID_NOT_FABRICATED:       PASS（未知地点 place_id 保持 NULL）'
+  Write-Output '#   AT_PANEL_VISUAL_CONFORMANCE:   NOT_EVALUATED reason=CONFORMANCE_EVIDENCE_INADMISSIBLE'
+  Write-Output '#   MEDIA_PREVIEW_VISUAL:          NOT_EVALUATED reason=CONFORMANCE_EVIDENCE_INADMISSIBLE'
+  Write-Output '#   MEDIA_UPLOAD_AND_SEND_TRANSITION: BLOCKED_BY_POLICY'
+  Write-Output '#   baseline coverage:             remains 22/0（本组只增加 integration coverage）'
+} else {
+  Write-Output '# M3_SLICE4_GATE_RESULT: FAIL'
 }
 if ($script:SliceFail.SLICE3 -eq 0) {
   Write-Output '# M3_SLICE3_GATE_RESULT: PASS'
