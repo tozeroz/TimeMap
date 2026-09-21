@@ -39,6 +39,11 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $SshKey) { $SshKey = Join-Path $repo 'TimeMap.pem' }
 
+# 复用共享的冷启动逻辑（Reset-DeviceToLoggedOut）。
+# 审核记录 10 要求 Slice 0B 与 Slice 3 用同一套 helper，而不是各自写一份 ——
+# 否则两个 Gate 会因测试流程不同而互相耦合，且各自踩各自的坑。
+. (Join-Path $repo 'scripts\m3\device-login-helper.ps1')
+
 $script:Failed = 0
 function Ok([string]$m) { Write-Output "PASS $m" }
 function Bad([string]$m) { Write-Output "FAIL $m"; $script:Failed = 1 }
@@ -110,13 +115,15 @@ $installed = Invoke-Adb @('shell', 'pm', 'list', 'packages', $Pkg)
 if ($installed -notmatch [regex]::Escape($Pkg)) { Bad "未安装 $Pkg"; exit 1 }
 Ok "$Pkg 已安装"
 
-Step 'A. 清空本地存储并真正冷启动（无 session 前提）'
-$webviewPid = Forward-Cdp
-Ok "已转发 CDP 端口（WebView pid=$webviewPid）"
-$null = Run-Node @('reset')
-if ($LASTEXITCODE -ne 0) { Bad 'reset 失败' }
-$webviewPid = ColdRestart
-Ok "已 force-stop + 重启（WebView pid=$webviewPid）"
+Step 'A. 清空本地存储并冷启动（无 session 前提）'
+# 复用共享 helper 的"重置到未登录"（审核记录 10 要求：Slice 0B 与 Slice 3 用同一套
+# 冷启动逻辑，不要让两个 Gate 各写一份而互相耦合/各自踩坑）。
+# 旧写法「reset → 立刻 force-stop → 重启」有两个互相掩护的问题：
+#   清空后立刻杀进程 Chromium 来不及落盘 → 旧会话又回来；
+#   而"重启后再查"若连到旧调试目标，会读到"已清空"把问题掩盖成通过。
+# helper 的 coldreset：清空 → 等落盘 → reload → 重连 → **当场断言为空**。
+$webviewPid = Reset-DeviceToLoggedOut
+Ok "已完成冷启动并确认无会话（WebView pid=$webviewPid）"
 
 Step 'B. 登录入口页 → 协议弹窗 → 手机号页 → 请求验证码'
 $prepareOut = Run-Node @('prepare', '--phone', $Phone)

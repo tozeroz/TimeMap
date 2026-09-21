@@ -329,6 +329,16 @@ if (mode === 'coldreset') {
   // 等 Chromium 落盘（清空后立刻做别的动作容易读到旧值）
   await wait(1200)
 
+  /*
+    **先把路由复位到默认页，再 reload**。
+    为什么必需：reload **会保留当前 hash**。上一组用例若把 App 留在 `#/loginselect`，
+    reload 之后仍停在登录页 —— 于是后面找底部导航就会报「找不到底部导航」，
+    看起来像 App 坏了，其实是"冷启动"没把 App 带回默认起点。
+    这是跨用例的状态泄漏，属于测试自身的问题。
+  */
+  await evaluate(`location.hash = '#/campus'`)
+  await wait(400)
+
   // 页面 reload = Web 应用的冷启动；之后必须重连调试目标
   await evaluate(`location.reload()`)
   await wait(2500)

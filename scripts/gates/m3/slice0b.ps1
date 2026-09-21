@@ -34,7 +34,7 @@ $script:Failed = 0
   "Slice 0B 过没过"和"Slice 1 过没过"混成一个数，产生歧义。
   这里用 $script:CurrentSlice 标记当前正在检查哪一段，Bad() 把失败记到对应 slice 上。
 #>
-$script:SliceFail = @{ SLICE0B = 0; SLICE1 = 0; SLICE2 = 0 }
+$script:SliceFail = @{ PRE = 0; SLICE0B = 0; SLICE1 = 0; SLICE2 = 0; SLICE3 = 0 }
 $script:CurrentSlice = 'SLICE0B'
 function Ok([string]$m) { Write-Output "PASS $m" }
 function Bad([string]$m) {
@@ -82,6 +82,17 @@ function Run-RemoteNode([string]$scriptPath, [string]$scriptArgs) {
   return Invoke-SshRaw "echo '$b64' | base64 -d > /tmp/gate-node.mjs && /opt/node-v24.21.0-linux-x64/bin/node /tmp/gate-node.mjs $scriptArgs"
 }
 
+<# 跑一个子 PowerShell 脚本并取回全部输出。嵌套调用的 stderr 在 Stop 下会被当成
+   终止错误把 Gate 打断（与 adb/ssh 同类），所以统一在这里放宽。 #>
+function Invoke-SubPowerShell([string]$scriptPath) {
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    return @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath 2>&1 | ForEach-Object { "$_" })
+  } finally {
+    $ErrorActionPreference = $prev
+  }
+}
 function Emit-Section([string]$title, [string]$resultTag, [array]$lines) {
   Head $title
   # 保留**全部非空行**（审核记录 04：只留 PASS/FAIL 会丢掉诊断信息）
@@ -174,7 +185,15 @@ Head '4) STAGE：设备端登录 E2E（不注入 session 夹具）'
 if ($SkipDevice) {
   Bad '使用了 -SkipDevice：正式 Gate 不允许跳过设备端闭环'
 } else {
-  $e2eLog = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\m3\verify-device-login.ps1') 2>&1
+  # 嵌套 powershell 的 stderr 在 Stop 下会被当成终止错误把 Gate 打断
+  # （与 adb/ssh 同类），必须临时放宽
+  $prevSub = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $e2eLog = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\m3\verify-device-login.ps1') 2>&1
+  } finally {
+    $ErrorActionPreference = $prevSub
+  }
   $e2e = @($e2eLog | ForEach-Object { "$_" })
   foreach ($l in $e2e) { if ("$l".Trim()) { Say "  $l" } }
   $e2eResult = @($e2e | Where-Object { $_ -match 'DEVICE_LOGIN_E2E_RESULT' }) | Select-Object -Last 1
@@ -200,6 +219,11 @@ Emit-Section '5.3 备份/恢复演练（M2）' 'BACKUP_DRILL_RESULT' (Run-Remote
 Emit-Section '5.4 TLS 服务器侧（M2）' 'TLS_SERVER_RESULT' (Run-Remote (Join-Path $repo 'scripts\m2\verify-tls-server.sh'))
 
 # ---------------------------------------------------------------------------
+# 这一组是**审计前置**（M0 基线完整性 + 工作区清洁度），不属于任何 slice。
+# 归到 PRE 的原因：它曾经被算进 SLICE0B，导致"工作区是否已提交"会让
+# M3_SLICE0B_GATE_RESULT 在 PASS/FAIL 之间翻转 —— 那不是一个阶段结论，
+# 而是"跑 Gate 时的仓库状态"。归因错了会让人误以为 Slice 0B 挂了。
+$script:CurrentSlice = 'PRE'
 Head '6) PERSISTENT：基线证据完整性（M0 冻结项 + supplements 审计）'
 $manPath = Join-Path $repo 'docs\original-baseline\manifest.json'
 if (Test-Path -LiteralPath $manPath) {
@@ -303,6 +327,15 @@ foreach ($case in @(
 }
 
 # ---------------------------------------------------------------------------
+$script:CurrentSlice = 'SLICE3'
+Head '6.7) STAGE Slice 3：登录后发帖（无 session 夹具；作者只能来自会话）'
+Emit-Section '6.7.1 后端发帖 + 攻击用例（手工塞 author/authorId → strict 400 且不产生行）' 'PUBLISH_RESULT' (Run-Remote (Join-Path $repo 'scripts\m3\verify-publish.sh'))
+Emit-Section '6.7.2 设备端闭环（冷启动 → OTP 登录 → UI 发帖 → 归属 → 重启后仍在）' 'DEVICE_PUBLISH_RESULT' `
+  (@(Invoke-SubPowerShell (Join-Path $repo 'scripts\m3\verify-device-publish.ps1')))
+Say '  原版侧政策：发布是写操作 → 发布后的反馈/跳转/动画 = BLOCKED_BY_POLICY'
+Say '  （本组只在**我们自己的 app** 上发帖；不声称与原版 1:1 一致）'
+
+# ---------------------------------------------------------------------------
 Head '7) POLICY：第三方只读约束的执行情况（用户 2026-09-21 明确要求）'
 $pvPath = Join-Path $repo 'docs\POLICY-VIOLATION-2026-09-21.md'
 if (Test-Path -LiteralPath $pvPath) {
@@ -327,6 +360,11 @@ if ($pvFiles.Count -ge 3) { Ok '违规取得的证据已自曝标签（未被当
 Write-Output ''
 Write-Output '############################################################'
 # 每个 slice 有自己的结果 key（审核记录 09：不得共享同一个最终结果 key）
+if ($script:SliceFail.PRE -ne 0) {
+  Write-Output '# M3_PRECONDITION_RESULT: FAIL（审计前置不满足：M0 基线完整性 / 工作区清洁度）'
+} else {
+  Write-Output '# M3_PRECONDITION_RESULT: PASS'
+}
 if ($script:SliceFail.SLICE0B -eq 0) {
   Write-Output '# M3_SLICE0B_GATE_RESULT: PASS'
   Write-Output '#   LOGIN_ENTRY_VISUAL:        PASS'
@@ -353,6 +391,17 @@ if ($script:SliceFail.SLICE2 -eq 0) {
   Write-Output '#   LIKE_TOGGLE_EVIDENCE:          BLOCKED_BY_POLICY（原版禁止取证；仅自建系统验证，不声称 1:1）'
 } else {
   Write-Output '# M3_SLICE2_GATE_RESULT: FAIL'
+}
+if ($script:SliceFail.SLICE3 -eq 0) {
+  Write-Output '# M3_SLICE3_GATE_RESULT: PASS'
+  Write-Output '#   AUTHOR_FROM_SESSION_ONLY:      PASS（author_id == 会话用户 id）'
+  Write-Output '#   AUTHOR_INJECTION_REJECTED:     PASS（author/authorId/author_id/user_id → 400 且不产生行）'
+  Write-Output '#   UNAUTH_PUBLISH_REJECTED:       PASS（401 且不产生行）'
+  Write-Output '#   PUBLISH_SURVIVES_RESTART:      PASS（后端重启 + App 重启后仍存在）'
+  Write-Output '#   NO_SESSION_FIXTURE:            PASS（设备端走真实 OTP 登录闭环）'
+  Write-Output '#   ORIGINAL_PUBLISH_TRANSITION:   BLOCKED_BY_POLICY（原版发布=写操作，禁止取证）'
+} else {
+  Write-Output '# M3_SLICE3_GATE_RESULT: FAIL'
 }
 Write-Output '############################################################'
 exit $script:Failed

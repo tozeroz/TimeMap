@@ -18,7 +18,7 @@ BASE=http://127.0.0.1/api
 SINK=/run/campus/login-codes
 PGPASS_FILE=/srv/campus/.db_password
 TEST_PHONE="13800009001"      # 明显编造：138 0000 9001
-TEST_PHONE2="13800009002"
+# D2 的手机号改为运行时随机生成（见 D2 段说明），不再用固定号
 
 q() { PGPASSWORD="$(cat $PGPASS_FILE)" psql -h 127.0.0.1 -U campus -d campus -Atc "$1"; }
 json_get() { printf '%s' "$1" | sed -n "s/.*\"$2\":\"\([^\"]*\)\".*/\1/p" | head -1; }
@@ -154,19 +154,30 @@ FK="$(q "insert into sessions (id, user_id, token_hash, expires_at) values (gen_
 
 echo
 echo "=== D2. 登录即注册（新号码）+ 请求限流 ==="
+# **用随机号码**，不要固定号：服务端按 (IP, 手机号) 对发码限流 5 次/300s，
+# 每次 Gate 都跑同一个号会在某次运行里踩到 429，表现成"新号码未创建账号"这种
+# 完全看不出原因的失败（本轮就是这样被抓到的）。
+D2_PHONE="138$(printf '%08d' $((RANDOM * RANDOM % 100000000)))"
 rm -f "$SINK"/*.json 2>/dev/null || true
-R2="$(curl -s -m 10 -X POST "$BASE/auth/request-code" -H 'Content-Type: application/json' -d "{\"phone\":\"$TEST_PHONE2\"}")"
+R2="$(curl -s -m 10 -X POST "$BASE/auth/request-code" -H 'Content-Type: application/json' -d "{\"phone\":\"$D2_PHONE\"}")"
+echo "  发码响应: $(printf '%s' "$R2" | head -c 160)"
 SINK2="$(json_get "$R2" sink)"
-CODE2="$(sed -n 's/.*"code": *"\([0-9]*\)".*/\1/p' "$SINK2" 2>/dev/null)"
-curl -s -m 10 -o /dev/null -X POST "$BASE/auth/verify-code" -H 'Content-Type: application/json' \
-  -d "{\"phone\":\"$TEST_PHONE2\",\"code\":\"$CODE2\"}"
-U2="$(q "select count(*) from users where phone_e164='+86$TEST_PHONE2'")"
-[ "$U2" = "1" ] && ok "新号码首次登录即创建账号" || bad "新号码未创建账号"
+CODE2=""
+[ -n "$SINK2" ] && [ -f "$SINK2" ] && CODE2="$(sed -n 's/.*"code": *"\([0-9]*\)".*/\1/p' "$SINK2" 2>/dev/null)"
+V2="$(curl -s -m 10 -w '\n%{http_code}' -X POST "$BASE/auth/verify-code" -H 'Content-Type: application/json' \
+  -d "{\"phone\":\"$D2_PHONE\",\"code\":\"$CODE2\"}")"
+V2C="$(printf '%s' "$V2" | tail -1)"
+U2="$(q "select count(*) from users where phone_e164='+86$D2_PHONE'")"
+if [ "$U2" = "1" ]; then
+  ok "新号码首次登录即创建账号（verify 状态码 $V2C）"
+else
+  bad "新号码未创建账号（verify 状态码 $V2C，响应: $(printf '%s' "$V2" | head -n -1 | head -c 160)）"
+fi
 
 LAST=0
 for i in $(seq 1 8); do
   LAST="$(curl -s -m 10 -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/request-code" \
-    -H 'Content-Type: application/json' -d "{\"phone\":\"$TEST_PHONE2\"}")"
+    -H 'Content-Type: application/json' -d "{\"phone\":\"$D2_PHONE\"}")"
   [ "$LAST" = "429" ] && break
 done
 [ "$LAST" = "429" ] && ok "频繁请求验证码被限流（429，第 $i 次触发）" || bad "请求限流未生效（最后一次 $LAST）"
@@ -202,9 +213,9 @@ RC="$(curl -s -m 10 -o /dev/null -w '%{http_code}' "$BASE/posts")"
 
 echo
 echo "=== G. 清理测试数据 ==="
-q "delete from sessions where user_id in (select id from users where phone_e164 in ('+86$TEST_PHONE','+86$TEST_PHONE2'))" >/dev/null
-q "delete from login_challenges where phone_e164 in ('+86$TEST_PHONE','+86$TEST_PHONE2')" >/dev/null
-q "delete from users where phone_e164 in ('+86$TEST_PHONE','+86$TEST_PHONE2')" >/dev/null
+q "delete from sessions where user_id in (select id from users where phone_e164 in ('+86$TEST_PHONE','+86$D2_PHONE'))" >/dev/null
+q "delete from login_challenges where phone_e164 in ('+86$TEST_PHONE','+86$D2_PHONE')" >/dev/null
+q "delete from users where phone_e164 in ('+86$TEST_PHONE','+86$D2_PHONE')" >/dev/null
 rm -f "$SINK"/*.json 2>/dev/null || true
 ok "测试账号与挑战已清理"
 

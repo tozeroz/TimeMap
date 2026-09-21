@@ -149,6 +149,26 @@ function Disconnect-Device {
   Invoke-HelperAdb @('forward', '--remove-all') | Out-Null
 }
 
+<#
+  把设备重置成"未登录"状态（Web 应用冷启动 + 无会话）。
+  给所有需要"无 session 前提"的流程复用 —— Slice 0B 的登录 E2E 与 Slice 3 都用它。
+
+  为什么必须有这一步：旧写法是「CDP 清空存储 → 立刻 adb force-stop → 重启」，有两个
+  互相掩护的问题：
+    1) 清空后立刻杀进程，Chromium 来不及落盘 → 重启后旧会话又回来了（prepare 报"本地仍存在会话"）；
+    2) "重启后再查"若连到重启前的旧调试目标，会读到"已清空"，把问题掩盖成通过。
+  现在统一走 coldreset 模式：清空 → 等落盘 → 页面 reload → 重连 → **当场断言为空**。
+#>
+function Reset-DeviceToLoggedOut {
+  $null = Connect-DeviceCdp
+  $out = Run-HelperNode @('coldreset')
+  if ($out -notmatch 'DEVICE_LOGIN_COLDRESET OK') {
+    throw "冷启动（无会话前提）失败：`n$out"
+  }
+  # reload 之后页面目标可能变化，重新转发一次
+  return (Connect-DeviceCdp)
+}
+
 if ($SelfTest) {
   Write-Output '=== helper 自检：冷启动 → OTP 登录 → 已登录状态 ==='
   $s = Connect-DeviceLoggedIn
