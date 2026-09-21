@@ -64,6 +64,13 @@ const bad = (m) => {
 }
 
 // 会话页路由：#/chat/<id>
+//
+// **必须先 reload 再断言**（踩过的坑）：如果页面已经停在同一个 hash 上，
+// `location.hash = ...` 不会触发任何导航 → React 不会重挂载 →
+// 组件会一直保留**上一次失败**的状态，于是断言永远读到一个过期的"图片不可用"。
+// 这与"诊断脚本在同一页面手动执行却能成功"的现象完全吻合。
+await ev(`location.reload()`)
+await wait(3000)
 await ev(`location.hash = '#/chat/${threadId}'`)
 await wait(5000)
 
