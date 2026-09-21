@@ -259,7 +259,7 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
       4. .mumu-capture/apk/target.apk             原版 APK 副本（172MB）
       5. app/src/** 其它"按原版截图/资源复刻"的图标（需逐个核对来源）
       ```
-- [ ] I2 在仓库根加一个 `LICENSING-NOTES.md`：集中登记"哪些文件源自第三方、
+- [x] I2 ✅ **已完成**：仓库根 `LICENSING-NOTES.md` —— 逐项登记"逐字复制自第三方 APK"的资产、明确不受影响的资产、**检索方法**（rg 命令）、标记格式约定、发布前动作清单`n      已核实：原版 APK **未被 git 跟踪**（`.gitignore:31` 的 `.mumu-capture/` + 全局 `*.apk`）；仓库中无任何被跟踪的 .apk
       各自的使用边界、发布前需要做什么"（避免这条只存在于 review-log 里而被忘掉）
 - [ ] I3 若确定要公开：为图标做"视觉等价但非直接复制"的重绘（并保留 `ASSET_ORIGIN` 注释以便溯源）
 
