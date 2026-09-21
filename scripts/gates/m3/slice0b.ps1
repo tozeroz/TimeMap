@@ -207,6 +207,37 @@ if ($m0fail.Count -eq 0) { Ok 'M0 基线完整性检查全通过（manifest/枚�
 else { foreach ($f in $m0fail) { Bad "M0: $f" } }
 
 # ---------------------------------------------------------------------------
+Head '6.5) STAGE Slice 1：帖子详情 / 评论 / 回复（含点卡片进详情的回归）'
+Emit-Section '6.5.1 后端评论接口（含层级语义与计数口径）' 'COMMENTS_RESULT' (Run-Remote (Join-Path $repo 'scripts\m3\verify-comments.sh'))
+
+Head '6.5.2 设备端（我们自己的 demo app；允许写操作）'
+$adb = 'G:\Program Files\Netease\MuMu\nx_main\adb.exe'
+$serial = '127.0.0.1:16384'
+$appPkg = 'com.campusx.demo'
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  & $adb -s $serial shell am force-stop $appPkg | Out-Null
+  Start-Sleep -Seconds 2
+  & $adb -s $serial shell monkey -p $appPkg -c android.intent.category.LAUNCHER 1 | Out-Null
+  Start-Sleep -Seconds 7
+  $wp = (& $adb -s $serial shell pidof $appPkg | Out-String).Trim()
+  & $adb -s $serial forward --remove-all | Out-Null
+  if ($wp) { & $adb -s $serial forward tcp:9222 "localabstract:webview_devtools_remote_$wp" | Out-Null }
+} finally {
+  $ErrorActionPreference = $prevEap
+}
+if (-not $wp) { Bad '设备未就绪：找不到 app 进程' } else { Say "  WebView pid=$wp（已转发 CDP 9222）" }
+
+foreach ($mode in @('detail', 'cardtap', 'composer', 'authgate')) {
+  $out = & node (Join-Path $repo 'scripts\m3\device-slice1.mjs') $mode 2>&1
+  $lines = @($out | ForEach-Object { "$_" })
+  foreach ($l in $lines) { if ("$l".Trim()) { Say "  $l" } }
+  $tag = "SLICE1_$($mode.ToUpper())_RESULT"
+  $res = @($lines | Where-Object { $_ -match $tag }) | Select-Object -Last 1
+  if ($res -match 'PASS') { Ok "设备端 $mode → PASS" } else { Bad "设备端 $mode → FAIL（未产出 $tag）" }
+}
+# ---------------------------------------------------------------------------
 Head '7) POLICY：第三方只读约束的执行情况（用户 2026-09-21 明确要求）'
 $pvPath = Join-Path $repo 'docs\POLICY-VIOLATION-2026-09-21.md'
 if (Test-Path -LiteralPath $pvPath) {
