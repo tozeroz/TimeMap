@@ -1,0 +1,73 @@
+{
+  "_comment": "MessageScreen 历史 mock 身份的 **provenance fixture**（仅测试用）",
+  "_purpose": [
+    "让 Gate 不再把被禁字符串散落在脚本里：集中一处、可审计、更新时只改一个地方。",
+    "将来 audit 能回答'为什么这些标识被禁止' —— 它们是本项目**自己造的假数据**，",
+    "而不是'原版契约'或'禁止用户名列表'。",
+    "⚠️ 本文件**只供测试**使用，**不得**被产品代码引用（产品里不存在任何'禁止用户名'逻辑）。"
+  ],
+  "_source": "app/src/data/mock.ts 的 users 字典 + MessageScreen.tsx 里硬编码的推荐数组",
+  "_origin": "WO#8/WO#10 之前的遗留 mock 数据集（legacy MessageScreen mock dataset）",
+
+  "userIds": ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11", "u12", "u_me"],
+
+  "displayNames": {
+    "u1": "蒸柿煮捞呆",
+    "u2": "anmoss",
+    "u3": "肆季",
+    "u4": "Lemy",
+    "u5": "Azur冰弦",
+    "u6": "又又",
+    "u7": "辣椒面",
+    "u8": "苏苏",
+    "u9": "eveee",
+    "u10": "小支",
+    "u11": "禾桉涵",
+    "u_me": "自定义名称6"
+  },
+
+  "_nameCollisionWarning": {
+    "collidesWithRealUsers": ["anmoss", "Lemy", "Azur冰弦"],
+    "note": [
+      "这三个既出现在历史 mock 字典里，**也是真实种子用户的 display_name**。",
+      "因此：昵称级检查必须①只针对 **mock 专有**昵称（用下面的 mockOnlyDisplayNames），",
+      "②范围限定在目标区块内（例如推荐区），**不得**对整个 DOM 扫描 ——",
+      "否则在会话列表/群聊里会把合法的真实数据误判为 mock（假阳性）。"
+    ]
+  },
+
+  "mockOnlyDisplayNames": [
+    "蒸柿煮捞呆",
+    "肆季",
+    "又又",
+    "辣椒面",
+    "苏苏",
+    "eveee",
+    "小支",
+    "禾桉涵",
+    "小熊汉堡",
+    "自定义名称6"
+  ],
+
+  "legacySuggestionArray": {
+    "_where": "app/src/screens/MessageScreen.tsx:66-76（WO#10 之前的硬编码）",
+    "_asWritten": "[users.u5, users.u6, users.u7, users.u8, users.u9, users.u10, users.u11, users.u1, users.u2]",
+    "count": 9,
+    "resolvedDisplayNames": [
+      "Azur冰弦",
+      "又又",
+      "辣椒面",
+      "苏苏",
+      "eveee",
+      "小支",
+      "禾桉涵",
+      "蒸柿煮捞呆",
+      "anmoss"
+    ]
+  },
+
+  "legacyShareTargets": {
+    "_where": "app/src/screens/MessageScreen.tsx 的 dialog__targets（WO#10 之前）",
+    "targets": ["微信好友", "朋友圈", "QQ", "复制链接", "二维码"]
+  }
+}

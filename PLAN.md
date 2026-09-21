@@ -1234,3 +1234,55 @@ AT_ALL_SELECTION_CANCEL
 （本项目已有的相关纪律：断言必须指明**具体错误码**，不能只断 4xx。
 本条是它的"fixture 侧"补充：**先把不相干的早期拒绝条件排除掉**，
 否则你测的可能是另一个分支。）
+
+---
+
+## ⚠️ 新增纪律（2026-09-22，Round 261）：**"跑过了"不等于"检查了"—— 必须防空过 Gate**
+
+### 事故
+我长期用 `npx tsc --noEmit` 做前端类型检查，它**一直报 0 diagnostics**，
+于是我以为前端类型是干净的。真相：
+
+```
+app/tsconfig.json 是 **solution-style** 配置：
+    { "files": [], "references": [ {"path":"./tsconfig.app.json"}, {"path":"./tsconfig.node.json"} ] }
+对它跑 `tsc --noEmit`（不带 -p / --build）→ **一个文件都不检查**，却以 exit 0 结束。
+
+实测对比：
+  tsc --noEmit（默认）             检查到的 src 文件数: **0**      ← 假 PASS
+  tsc -p tsconfig.app.json          检查到的 src 文件数: **58**     ← 真实检查
+```
+
+后果：我在 MessageScreen 删掉若干 state 后留下 **6 处悬空引用**
+（`setTarget` / `setRequest` / `setApplied` / `target` 等），
+类型检查报 "0 diagnostics"，我差点把它当成"改得很干净"。
+用真实配置一跑，立刻报出 **12 个错误**。
+
+### 这是本项目反复出现的那一类缺陷的**内部版本**
+```
+一个无法失败的 Gate（vacuous gate）比没有 Gate 更危险 —— 它制造虚假信心。
+```
+
+### 冻结的做法
+1. **类型检查一律用 leaf 配置**：
+   `npx tsc --noEmit -p tsconfig.app.json`（不是 `tsc --noEmit`）
+2. **机械脚本**：`scripts/m5/check-types.sh`
+   对每个真实工程配置跑检查，并且**必须报告"实际检查了多少属于本工程的文件"**；
+   文件数为 0 → 判 **FAIL（空过）**，而不是通过。
+3. **统计口径**：数"工程内文件"（排除 node_modules 与 lib.*.d.ts），
+   **不是**只数 `src/` —— 我第一版就因此把 `tsconfig.node.json`
+   （其 include 是 `["vite.config.ts"]`，设计如此）误判为空过。
+4. 敏感度已验：注入一个真实类型错误 → `FAIL(1 errors)` 且打印精确错误行；删除 → 回到 PASS。
+
+### 推广（与已冻结纪律的关系）
+这与下列既有条目同源，应一并套用：
+- `ARTIFACT_PROVENANCE`（source changed ≠ executed artifact changed）
+- 旧 server gate 副本事故（改仓库 ≠ 服务器上跑的是新的）
+- `ORIGIN_VALIDITY`（拿到 200 不等于拿到了后端的 JSON）
+
+**通用形式**：任何"检查/验证"步骤都必须能回答两个问题：
+```
+① 它实际作用在**哪个对象**上？（文件数 / 路径 / 产物哈希 / 目标 URL）
+② 什么情况下它会**失败**？（必须有可验证的失败条件）
+```
+答不出②的检查，一律视为**空过**，不得据此宣称通过。

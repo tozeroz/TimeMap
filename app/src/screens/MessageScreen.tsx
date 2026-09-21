@@ -3,7 +3,12 @@ import { Screen, TopBar } from '../components/Shell'
 import { IconChatBubble, IconClose, IconPlus, IconSearch } from '../components/icons'
 import { getThreads, relativeTime, type ApiThread } from '../api/client'
 import { getSession } from '../api/session'
-import { users, type User } from '../data/mock'
+/*
+  ⚠️ M5 WO#10：本文件**已不再 import 任何 mock 数据**。
+  此前是 `import { users, type User } from '../data/mock'` —— 它支撑了
+  「更多同学」的 9 个写死用户与好友申请链路。随那条假链路一起删除。
+  这使 MessageScreen 成为本项目**第一个完全不依赖 mock 数据的页面**。
+*/
 import { goBack, navigate } from '../router'
 import './message.css'
 
@@ -66,25 +71,18 @@ function lastSummary(t: ApiThread): string {
 
 export function MessageScreen() {
   /*
-    更多同学 / 好友申请：**仍然是 mock**（后端没有推荐与好友申请能力）。
-    保留渲染是为了不制造新的 1:1 偏差（原版有这个区块），但已在文件头与
-    docs 里明确登记为 MOCK_NOT_WIRED，并开了接线单 —— 不是"假装它是真的"。
+    ⚠️ M5 WO#10：这里原本有 5 份**纯前端假状态**，现已全部删除：
+      suggestions / applied  —— 9 个写死的 mock 用户 + "已申请"标记
+      target / request       —— 好友申请弹窗的收件人与申请文案
+      inviteOpen             —— 邀请分享面板开关
+    它们共同构成一条"看起来能操作、实际零副作用"的链路：
+      添加 → 弹窗 → 写文案 → 发送 → 显示"已申请"（实测 fetchCountDelta = 0）
+    审核记录 51 把本单判据冻结为："用户在 MessageScreen 上不得再看到任何会被合理理解为
+    '来自真实业务状态'或'执行了真实业务操作'的 mock 内容。"
+    删掉这些状态就是删掉那条假链路的根 —— 而不是只把按钮藏起来。
+    （原先的 9 元素硬编码数组已抄进测试 fixture：
+      scripts/m5/fixtures/known-message-screen-mocks.json，供 Gate 反向断言使用。）
   */
-  const [suggestions, setSuggestions] = useState<User[]>([
-    users.u5,
-    users.u6,
-    users.u7,
-    users.u8,
-    users.u9,
-    users.u10,
-    users.u11,
-    users.u1,
-    users.u2,
-  ])
-  const [applied, setApplied] = useState<Record<string, boolean>>({})
-  const [target, setTarget] = useState<User | null>(null)
-  const [request, setRequest] = useState('')
-  const [inviteOpen, setInviteOpen] = useState(false)
 
   /** 邀请卡的显示名：来自**真实会话**（此前是 mock，与底部 tab 栏不一致） */
   const [meName] = useState<string>(() => getSession()?.user?.displayName?.trim() || '我')
@@ -131,17 +129,13 @@ export function MessageScreen() {
     else navigate('chat', { id: t.id })
   }
 
-  function openRequest(user: User) {
-    setTarget(user)
-    setRequest(`你好我是${meName}`)
-  }
-
-  function sendRequest() {
-    if (!target) return
-    setApplied((prev) => ({ ...prev, [target.id]: true }))
-    setTarget(null)
-    setRequest('')
-  }
+  /*
+    ⚠️ M5 WO#10：`openRequest()` 与 `sendRequest()` 已删除 —— 它们就是那条"假成功"链路的实现：
+      openRequest: setTarget(user) + setRequest(`你好我是${meName}`)  ← 预填看起来像真的
+      sendRequest: setApplied(...) + setTarget(null)                  ← **零网络请求**却标记"已申请"
+    删掉它们（连同上面的 state）才是真的把假能力移除；
+    只隐藏按钮而留着函数，等于把 fake affordance 从 UI 挪进了死代码。
+  */
 
   const groupThreads = threads.filter((t) => t.kind === 'group')
   const directThreads = threads.filter((t) => t.kind !== 'group')
@@ -188,9 +182,26 @@ export function MessageScreen() {
             */}
           </div>
         </div>
-        <button className="invite__btn" onClick={() => setInviteOpen(true)}>
-          邀请同学
-        </button>
+        {/*
+          ⚠️ M5 WO#10：原来这里是一个「邀请同学」按钮，点了打开分享面板。
+          按审核记录 51 的更严格要求（**入口本身也不能是假的**），
+          在没有任何真实分享能力之前，这个按钮**不再渲染**：
+
+            原状：点「邀请同学」→ 打开面板 → 5 个"分享目标"点了只关面板
+                  = fake affordance 藏在第二层
+            审核要求：这类入口必须**隐藏/禁用并明确不可用**，而不是保留一个空弹层
+
+          真实分享需要原生能力（系统分享面板 / 微信 SDK 等），属独立工作单；
+          在那之前"没有这个按钮"比"有这个按钮但什么都不做"诚实得多 ——
+          后者会让用户以为自己分享成功了。
+
+          ⚠️ 与 1:1 目标的关系（如实记录，不假装）：原版**确实有**分享入口与分享面板。
+          因此这一处是**有意的功能后撤**（为了不撒谎），已登记为 conformance backlog：
+              ORIGINAL_SHARE_UI_EXISTS: 有（M0/M1 只读观察）
+              OUR_SHARE_ENTRY:          不渲染（无可用的真实分享能力）
+              BACKLOG:                  待实现真实分享后再恢复该入口与面板
+          Gate 对应：NO_INERT_SHARE_ENTRY（不允许"看着可操作但其实什么都不做"的分享流程）
+        */}
       </section>
 
       {/* ---------------------------------------------------------------
@@ -259,7 +270,33 @@ export function MessageScreen() {
           ))}
       </section>
 
-      {/* 可能认识的同学（⚠️ MOCK_NOT_WIRED：后端无推荐/好友申请能力，接线单见 NEXT-ACTIONS WO#10） */}
+      {/*
+        ⚠️ M5 WO#10：**移除假推荐 + 假好友申请**，保留区块结构壳。
+
+        审核记录 51 的冻结口径：
+          SUGGEST_SECTION_STRUCTURE:   PRESERVED      （原版确有这一区域 → 不制造"原版没有"的新偏差）
+          SUGGEST_ROWS:                NONE           （不再伪造 9 个"真实同学"）
+          SUGGEST_EMPTY_PRESENTATION:  OUR_DESIGN_CHOICE
+          ORIGINAL_EMPTY_STATE:        NOT_EVALUATED
+
+        为什么删而不是保留 + 打标：
+          推荐区的每一行都是"看起来来自真实业务状态"的内容 —— 头像、昵称、
+          「相同学校」标签、MBTI/星座、学院-专业、年级，以及一个**点了会显示"已申请"
+          但其实不发任何请求**的「添加」按钮。
+          审核记录 51 把本单的完成判据冻结为一句话：
+            **用户在 MessageScreen 上不得再看到任何会被合理理解为
+              "来自真实业务状态"或"执行了真实业务操作"的 mock 内容。**
+          推荐规则、好友关系模型、学校数据**都不存在** → 本单**删除虚假能力**，
+          而**不**临时设计后端（不造列、不造接口）。
+
+        ⚠️ 空态文案必须是**中性的**（审核 51 明确禁止暗示我们掌握了某类数据）：
+          ❌ "暂无同校同学"            → 暗示我们掌握了"同校"
+          ❌ "暂时没有符合你学院的推荐"  → 暗示我们掌握了学院
+          ❌ "完善资料即可发现更多同学"  → 暗示有推荐算法
+          ✅ "暂无可显示的推荐"         → 中性，不断言任何业务事实
+        文案标 OUR_DESIGN_CHOICE；Gate **只**验证"有明确空态 + 无 mock 行 + 无假 CTA +
+        无虚构业务事实"，**不**把具体文案升级成原版 conformance。
+      */}
       <section className="suggest" data-mock-region="suggestions">
         <header className="suggest__head">
           <h3 className="suggest__title">更多同学</h3>
@@ -267,94 +304,41 @@ export function MessageScreen() {
             <IconSearch size={18} />
           </button>
         </header>
-        {suggestions.map((u) => (
-          <div key={u.id} className="srow">
-            <img className="srow__avatar" src={u.avatar} alt="" />
-            <div className="srow__main">
-              <div className="srow__name">
-                {u.name}
-                <span className="tag tag--grey">相同学校</span>
-              </div>
-              {u.mbti && (
-                <div className="srow__meta">
-                  {u.mbti} {u.zodiac}
-                </div>
-              )}
-              <div className="srow__meta">
-                {u.college}
-                {u.major ? `-${u.major}` : ''}
-              </div>
-              <div className="srow__meta">{u.grade}</div>
-            </div>
-            <button
-              className={`srow__btn ${applied[u.id] ? 'is-done' : ''}`}
-              onClick={() => !applied[u.id] && openRequest(u)}
-            >
-              {applied[u.id] ? '已申请' : '添加'}
-            </button>
-            <button
-              className="srow__remove"
-              onClick={() => setSuggestions((prev) => prev.filter((x) => x.id !== u.id))}
-              aria-label="移除"
-            >
-              <IconClose size={16} />
-            </button>
-          </div>
-        ))}
-        {suggestions.length === 0 && <p className="suggest__empty">暂时没有更多推荐了</p>}
+        <p className="suggest__empty" data-suggest-empty>
+          暂无可显示的推荐
+        </p>
       </section>
 
-      {/* 好友申请弹窗（原版实测：点「添加」后弹出） */}
-      {target && (
-        <div className="dialog">
-          <div className="dialog__mask" onClick={() => setTarget(null)} />
-          <div className="dialog__panel">
-            <h3 className="dialog__title">好友申请</h3>
-            <textarea
-              className="dialog__input"
-              value={request}
-              maxLength={30}
-              onChange={(e) => setRequest(e.target.value)}
-              placeholder="说一句话介绍自己"
-            />
-            <div className="dialog__count">
-              {request.length}/30
-            </div>
-            <div className="dialog__actions">
-              <button className="dialog__btn" onClick={() => setTarget(null)}>
-                取消
-              </button>
-              <button className="dialog__btn dialog__btn--primary" onClick={sendRequest}>
-                发送
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/*
+        ⚠️ M5 WO#10：好友申请弹窗**整块移除**（连同上方的「添加」按钮一起）。
 
-      {/* 邀请分享面板 */}
-      {inviteOpen && (
-        <div className="dialog">
-          <div className="dialog__mask" onClick={() => setInviteOpen(false)} />
-          <div className="dialog__sheet">
-            <div className="dialog__sheetTitle">分享我的校园卡</div>
-            <div className="dialog__targets">
-              {['微信好友', '朋友圈', 'QQ', '复制链接', '二维码'].map((t) => (
-                <button
-                  key={t}
-                  className="dialog__target"
-                  onClick={() => setInviteOpen(false)}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-            <button className="dialog__btn dialog__btn--block" onClick={() => setInviteOpen(false)}>
-              取消
-            </button>
-          </div>
-        </div>
-      )}
+        为什么必须整块删而不是禁用「发送」：
+          这个弹窗存在的唯一目的就是服务那个假「添加」按钮。它有三层假：
+            ① 输入框预填"你好我是{昵称}" → 像真的在写申请
+            ② 字数 x/30             → 像真的有长度限制契约
+            ③ 点「发送」后进入"已申请" → **看起来申请发出去了**
+          实测（改前证据）：点「发送」时 **fetchCountDelta = 0** ——
+          **零网络请求**，却把按钮改成"已申请"。这是最恶劣的一种：
+          用户以为完成了一次真实业务操作，实际什么都没发生。
+          审核记录 51 因此新增一条反向 Gate：NO_FAKE_FRIEND_REQUEST_STATE。
+
+        后端能力确实不存在：无好友关系表、无好友申请表、无好友申请接口
+        （`scripts/m5/probe-school-source.sh` / `probe-users-schema-for-wo10.sh` 实测）。
+        → 本单**删除**这个假操作路径；真正的推荐/好友能力属 WO#11（需先定义推荐规则与好友模型）。
+      */}
+
+      {/*
+        ⚠️ M5 WO#10：邀请分享面板 —— 按审核记录 51 **比原计划更严格一步**：
+        不仅删掉 5 个假分享目标，**入口本身也不再产生"可操作但什么都不做"的流程**。
+
+        审核 51 的原话要旨：
+          "如果仍然存在：点击'邀请/分享' → 打开一个没有任何真实动作的空面板，
+           那只是把 fake affordance 从第二层挪到了第一层。"
+        因此：没有真实分享能力时 → 不展示假 target、不产生任何"已分享/复制成功"反馈、
+        **入口本身必须隐藏/禁用并明确不可用**。
+        原版 share UI 的存在继续记录为 conformance backlog（保留 1:1 目标），
+        但不为了"结构像原版"而保留一个假的操作入口。
+      */}
     </Screen>
   )
 }
