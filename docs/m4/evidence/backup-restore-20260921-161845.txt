@@ -1,0 +1,12 @@
+﻿=== A. 联合备份（同一个 backup generation）===
+=== A0. 造演练 fixture（走真实上传接口）===
+  fixture 账号=13840427424，上传的 media: f0042465-ed80-4702-87f2-be67f043ecfe b3a60343-c317-4ce5-8b94-408d8da4e4f9
+PASS 已通过真实接口造出演练 fixture
+PASS database.dump 生成（76309 字节）
+PASS uploads.tar.zst 生成（945 字节）
+PASS manifest.json 生成（记录两侧计数与 sha256）
+  media 行数=4  盘上文件=10
+
+=== B. DATABASE_RESTORE：从 dump 恢复到全新库 ===
+/tmp/m4-backup.sh: line 133: syntax error near unexpected token `then'
+/tmp/m4-backup.sh: line 133: `R_OUTSIDER="$(PSQLD "$RESTORE_DB" "select id from users where id not in (select user_id from thread_members where thread_id = '$R_THREAD') limit 1")"if [ "$R_USERS" = "$DB_USERS" ] && [ "$R_MEDIA" = "$DB_MEDIA_ROWS" ]; then'

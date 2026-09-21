@@ -1,0 +1,33 @@
+﻿=== A. 联合备份（同一个 backup generation）===
+=== A0. 造演练 fixture（走真实上传接口）===
+  fixture 账号=13839815784，上传的 media: 45aa44fb-1a1f-4077-9486-ebe718899da5 57e18674-c3b6-429b-bd49-991df36fabb9
+PASS 已通过真实接口造出演练 fixture
+PASS database.dump 生成（76700 字节）
+PASS uploads.tar.zst 生成（738 字节）
+PASS manifest.json 生成（记录两侧计数与 sha256）
+  media 行数=6  盘上文件=6
+
+=== B. DATABASE_RESTORE：从 dump 恢复到全新库 ===
+PASS users 8==8 且 media 6==6（逐项计数一致）
+DATABASE_RESTORE: PASS
+PASS 可见性判定函数已随 schema 恢复
+PASS 恢复后：会话成员仍可读该消息（授权语义随数据一起恢复）
+PASS 恢复后：**非成员仍不可读**（授权没有被恢复过程放宽）
+PASS 恢复后：撤回消息后成员也读不到（撤回语义仍生效）
+
+=== C. MEDIA_STORE_RESTORE：媒体归档恢复到新目录 ===
+PASS 恢复文件数 6 == 备份时 6
+MEDIA_STORE_RESTORE: PASS
+
+=== D. CROSS_REFERENCE_INTEGRITY：恢复后的 DB 行 → 恢复后的文件，**逐行**核对 ===
+PASS **逐行核对通过**：6 条 media 行全部在恢复的媒体存储里找到文件
+PASS 文件 sha256 与 DB 记录**逐条一致**（内容也一致，不只是文件存在）
+PASS 反向核对（文件 → DB 行）：恢复的媒体存储里没有 DB 查不到的文件
+CROSS_REFERENCE_INTEGRITY: PASS
+
+=== E. 清理 ===
+PASS fixture 已清理（含落盘文件）
+PASS 备份 generation 保留在 /srv/campus/backups/gen-20260921-162008（便于复查；不进 git）
+
+备份 generation: /srv/campus/backups/gen-20260921-162008
+M4_BACKUP_RESTORE: PASS

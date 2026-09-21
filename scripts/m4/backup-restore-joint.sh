@@ -126,6 +126,11 @@ sudo -u postgres psql -q -c "create database $RESTORE_DB owner campus" >/dev/nul
 PGPASSWORD="$(cat /srv/campus/.db_password)" pg_restore -h 127.0.0.1 -U campus -d "$RESTORE_DB" --no-owner --no-privileges "$GEN/database.dump" >/dev/null 2>&1
 R_USERS="$(PSQLD "$RESTORE_DB" 'select count(*) from users')"
 R_MEDIA="$(PSQLD "$RESTORE_DB" 'select count(*) from media')"
+# 供 ③ 恢复后授权验证使用的真实数据（取自**恢复库**，不是原始库）
+R_THREAD="$(PSQLD "$RESTORE_DB" "select id from message_threads limit 1")"
+R_MSG="$(PSQLD "$RESTORE_DB" "select id from messages where thread_id = '$R_THREAD' and deleted_at is null limit 1")"
+R_MEMBER="$(PSQLD "$RESTORE_DB" "select user_id from thread_members where thread_id = '$R_THREAD' limit 1")"
+R_OUTSIDER="$(PSQLD "$RESTORE_DB" "select id from users where id not in (select user_id from thread_members where thread_id = '$R_THREAD') limit 1")"
 if [ "$R_USERS" = "$DB_USERS" ] && [ "$R_MEDIA" = "$DB_MEDIA_ROWS" ]; then
   ok "users $R_USERS==$DB_USERS 且 media $R_MEDIA==$DB_MEDIA_ROWS（逐项计数一致）"
   echo "DATABASE_RESTORE: PASS"
@@ -136,6 +141,30 @@ fi
 # 关键函数也要随 schema 恢复（否则可见性判定会缺失）
 FN="$(PSQLD "$RESTORE_DB" "select count(*) from pg_proc where proname in ('can_read_message','can_read_media')")"
 [ "$FN" = "2" ] && ok "可见性判定函数已随 schema 恢复" || bad "恢复后缺少判定函数（$FN）"
+
+# ③ restore 后**私有权限**必须仍然成立（M4 CLOSEOUT ③，审核记录 18 点名）
+#
+# 为什么单看"函数存在"不够：**恢复了 schema 不等于恢复了安全语义**。
+# 若函数体在恢复过程中丢失/变化（例如 dump 里没带上函数体、或恢复顺序导致函数被覆盖），
+# "函数存在"这条断言照样通过，但授权实际已经失效 —— 那是最危险的静默失败。
+# 所以这里用**恢复库里的真实数据**验证授权行为本身：
+#   · 会话成员 → can_read_message = true
+#   · **非成员** → false
+#   · 撤回该消息后 → 成员也变成 false
+if [ -n "$R_THREAD" ] && [ -n "$R_MSG" ]; then
+  C_MEM="$(PSQLD "$RESTORE_DB" "select can_read_message('$R_MEMBER','$R_MSG')")"
+  C_OUT="$(PSQLD "$RESTORE_DB" "select can_read_message('$R_OUTSIDER','$R_MSG')")"
+  [ "$C_MEM" = "t" ] && ok "恢复后：会话成员仍可读该消息（授权语义随数据一起恢复）" \
+                     || bad "恢复后成员竟然读不到（授权语义丢了）：$C_MEM"
+  [ "$C_OUT" = "f" ] && ok "恢复后：**非成员仍不可读**（授权没有被恢复过程放宽）" \
+                     || bad "恢复后非成员竟可读（授权被放宽）：$C_OUT"
+  PSQLD "$RESTORE_DB" "update messages set deleted_at = now() where id = '$R_MSG'" >/dev/null
+  C_REV="$(PSQLD "$RESTORE_DB" "select can_read_message('$R_MEMBER','$R_MSG')")"
+  [ "$C_REV" = "f" ] && ok "恢复后：撤回消息后成员也读不到（撤回语义仍生效）" \
+                     || bad "恢复后撤回不生效：$C_REV"
+else
+  bad "恢复库里没有可用于授权验证的会话/消息数据（无法验证恢复后的私有权限）"
+fi
 
 echo
 echo "=== C. MEDIA_STORE_RESTORE：媒体归档恢复到新目录 ==="
@@ -191,6 +220,14 @@ else
   bad "$SHA_MISMATCH 条文件内容与 DB 记录不符"
 fi
 # 反向：恢复的媒体存储里有没有 DB 里查不到的文件（orphan）
+#
+# **反向也必须参与判定**（M4 CLOSEOUT ②，审核记录 18 点名）。
+# 旧版这里只是 echo 一句"⚠ ... 不影响本次联合恢复判定" —— 那不是断言，是提示。
+# 为什么反向必须 FAIL：恢复出来的媒体存储里若存在 DB 里查不到的文件，
+# 说明备份/恢复的**两侧不一致**（例如备份时把未登记的文件一起打包了），
+# 这种不一致在下一次恢复时会把问题带过去。
+# 注意：这会让"当前库里本来就有 orphan"的情况直接失败 —— 而这正是应该的：
+# 先用清扫工具把库清干净再跑演练，否则演练在掩盖问题（CROSS_REFERENCE 的意义就在这里）。
 ORPHAN=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
@@ -200,9 +237,10 @@ while IFS= read -r f; do
   [ "$n" = "1" ] || ORPHAN=$((ORPHAN + 1))
 done < <(find "$RESTORE_DIR" -type f 2>/dev/null)
 if [ "$ORPHAN" = "0" ]; then
-  ok "反向核对：媒体存储里没有 DB 查不到的文件（无 orphan）"
+  ok "反向核对（文件 → DB 行）：恢复的媒体存储里没有 DB 查不到的文件"
 else
-  echo "  ⚠ 反向核对发现 $ORPHAN 个 orphan 文件（当前库里可能存在未登记文件；由清扫脚本负责，不影响本次联合恢复判定）"
+  bad "反向核对失败：恢复的媒体存储里有 $ORPHAN 个文件在 DB 里查不到（两侧不一致）"
+  echo "      → 先用 dist/cleanup.mjs 把库清干净再跑演练；不要用'提示'掩盖不一致"
 fi
 
 if [ "$FAILED" -eq 0 ]; then
