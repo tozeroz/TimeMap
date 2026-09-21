@@ -45,13 +45,37 @@ install -o campus -g campus -m 0750 /tmp/campus-admin.mjs /srv/campus/server/dis
 rm -f /tmp/campus-backend-index.mjs /tmp/campus-seed.mjs /tmp/campus-admin.mjs
 ls -l /srv/campus/server/dist/
 
-echo "== 生成 server.env（口令来自服务器本地文件，不进 git）=="
+echo "== 生成 server.env（口令与密钥来自服务器本地，不进 git）=="
 DB_PASS="$(cat /srv/campus/.db_password)"
 umask 077
-printf 'DATABASE_URL=postgresql://campus:%s@127.0.0.1:5432/campus\n' "$DB_PASS" > /srv/campus/server.env
+
+# 验证码 HMAC 密钥：首次部署时生成，之后复用（换了密钥会让已发出的验证码全部失效，
+# 但更重要的是避免每次部署都轮换 —— 轮换应当是一次有意识的运维动作）。
+KEY_FILE=/srv/campus/.login_code_hmac_key
+if [ ! -s "$KEY_FILE" ]; then
+  # 用 /dev/urandom，不用 pwgen/openssl 之类的外部命令
+  head -c 48 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-64 > "$KEY_FILE"
+  chmod 600 "$KEY_FILE"
+  echo "  已生成新的 LOGIN_CODE_HMAC_KEY（$KEY_FILE）"
+else
+  echo "  复用已有 LOGIN_CODE_HMAC_KEY"
+fi
+H_KEY="$(cat "$KEY_FILE")"
+
+# dev sink：优先 /run（tmpfs，重启即清）。**验证码只投递到这里，绝不进日志。**
+SINK_DIR=/run/campus/login-codes
+mkdir -p "$SINK_DIR"
+chown campus:campus /run/campus /run/campus/login-codes
+chmod 700 /run/campus/login-codes
+
+{
+  printf 'DATABASE_URL=postgresql://campus:%s@127.0.0.1:5432/campus\n' "$DB_PASS"
+  printf 'LOGIN_CODE_HMAC_KEY=%s\n' "$H_KEY"
+  printf 'LOGIN_CODE_SINK=%s\n' "$SINK_DIR"
+} > /srv/campus/server.env
 chown campus:campus /srv/campus/server.env
 chmod 600 /srv/campus/server.env
-echo "  server.env 已写入（内容不外显）"
+echo "  server.env 已写入（内容不外显）；dev sink: $SINK_DIR"
 
 echo "== 下发 systemd unit =="
 cat > /etc/systemd/system/campus-backend.service <<'UNIT'

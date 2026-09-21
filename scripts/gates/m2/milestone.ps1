@@ -123,8 +123,12 @@ if (-not $SkipServer) {
 
   Emit-Section 'MIGRATION/API/VERTICAL_SLICE/SYSTEMD/NGINX/RESOURCE（stage=M2）' 'BACKEND_RESULT' `
     (Run-RemoteArgs (Join-Path $repo 'scripts\m1\verify-backend.sh') 'M2')
-  Emit-Section 'AUTH_CONTRACT / AUTHOR_TRUST / CONSTRAINTS' 'AUTH_RESULT' `
-    (Run-Remote (Join-Path $repo 'scripts\m2\verify-auth.sh'))
+  # 认证组：M2 冻结的 handle+password 契约已被审核记录 08 判定 **supersede**（原版没有密码登录），
+  # 因此这个位置改为调用 M3 的 phone+OTP 脚本（当前产品真相）。
+  # 旧的 scripts/m2/verify-auth.sh 已删除 —— 保留一套"测已退休契约"的断言只会误导。
+  # 注意这段历史：M2 关于密码/scrypt 的事实仍保留在 docs/review-log/06 与 docs/m2/ 里（审计历史）。
+  Emit-Section 'AUTH（M3 起为 phone+OTP；M2 的 password 契约已 supersede）' 'AUTH_OTP_RESULT' `
+    (Run-Remote (Join-Path $repo 'scripts\m3\verify-auth-otp.sh'))
   Emit-Section 'SEED) convergent + canonical' 'SEED_RESULT' `
     (Run-Remote (Join-Path $repo 'scripts\m2\verify-seed.sh'))
   Emit-Section 'BACKUP) pg_dump -Fc + pg_restore 到全新库（四项对比）' 'BACKUP_DRILL_RESULT' `
@@ -137,8 +141,8 @@ if (-not $SkipServer) {
   $tblList = @($tbl | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
   Say "  表($($tblList.Count)): $($tblList -join ', ')"
   $expectedTables = @(
-    'announcements','board_notes','comments','group_members','groups','likes','media',
-    'message_threads','messages','places','posts','schema_migrations','sessions',
+    'announcements','board_notes','campuses','comments','group_members','groups','likes','login_challenges','media',
+    'message_threads','messages','places','posts','schema_migrations','schools','sessions',
     'thread_members','users'
   )
   $unexpected = @($tblList | Where-Object { $_ -notin $expectedTables })
@@ -154,10 +158,11 @@ if (Test-Path -LiteralPath $dm) {
   $dmText = [IO.File]::ReadAllText($dm, [Text.Encoding]::UTF8)
   $missing = @()
   foreach ($t in @('users','posts','media','places','comments','likes','message_threads',
-                   'thread_members','messages','board_notes','groups','group_members','announcements')) {
+                   'thread_members','messages','board_notes','groups','group_members','announcements',
+                   'schools','campuses','login_challenges')) {
     if ($dmText -notmatch "``$t``") { $missing += $t }
   }
-  if ($missing.Count -eq 0) { Ok 'DATA-MODEL.md 覆盖全部 13 张业务表' }
+  if ($missing.Count -eq 0) { Ok 'DATA-MODEL.md 覆盖全部 16 张业务表（含 M3 新增的 schools/campuses/login_challenges）' }
   else { Bad "DATA-MODEL.md 缺少追溯: $($missing -join ', ')" }
 } else { Bad '缺少 docs/m2/DATA-MODEL.md（scope gate 的证据）' }
 

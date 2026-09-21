@@ -1,0 +1,51 @@
+﻿=== A. 密码登录已退休 ===
+PASS POST /api/auth/login → 410（密码登录不存在；410=已退休，404=无此路径）
+PASS users 表已无 password_hash 列（凭证材料已删除）
+
+=== B. 请求验证码 ===
+PASS 非法手机号 → 400
+PASS 合法手机号 → 200
+PASS 响应明确了投递方式为 dev-sink（没有假装发短信）
+FAIL dev sink 里没有该号码的投递文件
+
+--- 验证码不得出现在普通日志里（审核记录 08 第 2 点）---
+
+=== C. 验证码以 keyed HMAC 入库（不是裸 hash）===
+  库中 code_hmac 长度 64
+PASS 存储的是 64 位 hex（HMAC-SHA256 输出）
+PASS 库里不是明文验证码
+PASS 库中不等于裸 SHA-256(code)（确认用了带密钥的 HMAC）
+PASS HMAC 消息含手机号（见 auth.ts hashLoginCode 的 | 设计，防止跨号重放）
+
+=== D. 校验验证码 ===
+PASS 错误验证码 → 401
+PASS 失败次数已落库（attempts=1，重启进程也不会重置穷举进度）
+FAIL 正确验证码期望 200，实际 400
+FAIL 未返回 token
+FAIL 验证码未标记消费
+FAIL 验证码被重复使用成功（400）
+FAIL 登录后没有创建用户
+
+=== E. 会话 ===
+FAIL me 期望 200，实际 401
+FAIL me 身份不符: {"error":"unauthorized"}
+FAIL logout 期望 204，实际 401
+PASS logout 后旧 token → 401
+
+=== D2. 登录即注册（新号码）+ 请求限流 ===
+sed: can't read /run/campus/login-codes/13800009002.json: No such file or directory
+FAIL 新号码未创建账号
+PASS 频繁请求验证码被限流（429，第 5 次触发）
+
+=== F. readiness 门禁：PG 不可用时业务路由必须 503（不是 500）===
+  PG 停止时：/api/posts=500  /api/auth/me=401  /api/health=200  /api/ready=503
+FAIL /api/posts 期望 503，实际 500
+FAIL /api/auth/me 期望 503，实际 401
+PASS liveness /api/health 仍 200（进程活着这一语义没被牵连）
+PASS readiness /api/ready → 503
+PASS PG 恢复后业务路由自动回到 200（就绪状态自愈）
+
+=== G. 清理测试数据 ===
+PASS 测试账号与挑战已清理
+
+AUTH_OTP_RESULT FAIL

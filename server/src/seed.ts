@@ -1,5 +1,4 @@
 import type { PoolClient } from 'pg'
-import { hashPassword } from './auth.ts'
 
 /**
  * Seed（M2.5）。
@@ -46,14 +45,20 @@ export interface SeedUser {
   id: string
   handle: string
   displayName: string
-  /** 仅 seed 用；真实环境不会把明文口令写进仓库 */
-  password: string
+  /**
+   * 登录身份（E.164）。
+   *
+   * M3 Slice 0B 起登录方式只有「手机号 + 一次性验证码」，所以 seed 用户也必须带手机号，
+   * 否则根本没法登录。这里用**明显是编造**的号段 138 0000 000x
+   * （13800000001/2/3），不会撞到任何真实用户。
+   */
+  phone: string
 }
 
 export const SEED_USERS: ReadonlyArray<SeedUser> = [
-  { id: U.anmoss, handle: 'anmoss', displayName: 'anmoss', password: 'seed-password-1' },
-  { id: U.lemy, handle: 'lemy', displayName: 'Lemy', password: 'seed-password-2' },
-  { id: U.azur, handle: 'azur', displayName: 'Azur冰弦', password: 'seed-password-3' },
+  { id: U.anmoss, handle: 'anmoss', displayName: 'anmoss', phone: '+8613800000001' },
+  { id: U.lemy, handle: 'lemy', displayName: 'Lemy', phone: '+8613800000002' },
+  { id: U.azur, handle: 'azur', displayName: 'Azur冰弦', phone: '+8613800000003' },
 ]
 
 type Row = Record<string, string | number | null>
@@ -93,13 +98,12 @@ export async function runSeed(client: PoolClient): Promise<SeedResult> {
     if (!tables.includes(table)) tables.push(table)
   }
 
-  // ---- users：口令哈希每次都重算（scrypt 带随机 salt，所以不参与内容哈希）----
+  // ---- users ----
   for (const u of SEED_USERS) {
-    const hash = await hashPassword(u.password)
     await put('users', u.id, {
       handle: u.handle,
       display_name: u.displayName,
-      password_hash: hash,
+      phone_e164: u.phone,
       created_at: T0,
       updated_at: T0,
     })
@@ -266,7 +270,10 @@ function hashSpecs(): HashSpec[] {
     {
       table: 'users',
       ids: SEED_USERS.map((u) => u.id),
-      cols: ['id::text', 'handle', 'display_name', ts('created_at')],
+      // M3 Slice 0B 起 users 有 phone_e164（登录身份），纳入内容哈希 ——
+      // 它现在是 seed 的核心事实之一，被改掉必须让 canonical 哈希变化。
+      // （password_hash 已随「密码登录退休」一起删除，不再需要"排除它"的说明。）
+      cols: ['id::text', 'handle', 'display_name', 'phone_e164', ts('created_at')],
     },
     {
       table: 'posts',

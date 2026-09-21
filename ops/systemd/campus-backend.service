@@ -32,5 +32,11 @@ ProtectSystem=full
 ProtectHome=true
 ReadWritePaths=/srv/campus
 
+# 验证码的 dev sink 放在 /run 下（tmpfs，重启即清，不落盘持久化）。
+# 但 /run 在每次重启后是空的 —— 靠 RuntimeDirectory 让 systemd 自动创建并交给本服务用户，
+# 否则重启后 sink 目录不存在，服务又没权限在 /run 里 mkdir，登录就会失败。
+RuntimeDirectory=campus
+RuntimeDirectoryMode=0700
+
 [Install]
 WantedBy=multi-user.target

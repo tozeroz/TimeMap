@@ -5,7 +5,16 @@ import { goBack, navigate } from '../router'
 import './login.css'
 
 export function LoginScreen() {
-  const [phone, setPhone] = useState('132 4689 2969')
+  /**
+   * 手机号默认为空。
+   *
+   * 早先这里硬编码了 '132 4689 2969' —— 那是从原版 APK 截图里抄下来的**真实手机号**
+   * （M0 之所以要在 login-sns 的截图与控件树上打码，就是因为原版输入框里留着这个号码，
+   * 它是上一位使用者输入后被 app 记住的本地状态）。
+   * 写进我们自己的源码有两个问题：一是泄漏真实个人信息，二是行为上也不对
+   * （"记住上次号码"属于本地状态，不该是代码里的默认值）。
+   */
+  const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [sent, setSent] = useState(false)
 
@@ -33,6 +42,9 @@ export function LoginScreen() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             inputMode="numeric"
+            /* 占位文字属**推断**：原版观测时输入框已有值，placeholder 未观察到。
+               这里只补一个不影响布局的占位，避免空框无任何提示。 */
+            placeholder="请输入手机号"
           />
           <button className="login__clear" onClick={() => setPhone('')}>
             ×

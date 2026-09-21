@@ -29,17 +29,41 @@ PORT1=3101
 PORT2=3102
 
 # 检查用的临时库要先建好表结构：让 API bundle 自己跑迁移（同一条代码路径）
+#
+# 两个必须做对的地方（都踩过）：
+#  1) **按 PID 杀进程，不能用 `kill %1`** —— 非交互 bash 里 job control 不生效，
+#     `%1` 杀不掉东西；残留的临时实例会继续占着端口。
+#  2) 起实例**之前**先确认端口是空的。否则残留实例会让就绪探测从"旧进程"那里
+#     立刻拿到 200，而目标库其实还没建过表，后面的 seed 就会莫名其妙地失败。
+TMP_PIDS=()
+
+free_port() { # free_port <port>
+  local port="$1" pids
+  pids="$(ss -lntp 2>/dev/null | awk -v p=":$port" '$4 ~ p {print $NF}' | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | sort -u)"
+  for pid in $pids; do
+    echo "  (清理占用 $port 的残留进程 pid=$pid)"
+    kill -9 "$pid" 2>/dev/null || true
+  done
+  sleep 1
+}
+
 start_and_migrate() { # start_and_migrate <db> <port>
   local db="$1" port="$2"
+  free_port "$port"
   DATABASE_URL="postgresql://campus:${DB_PASS}@127.0.0.1:5432/${db}" PORT="$port" \
     setsid "$NODE" "$BUNDLE" >/tmp/seedcheck-$port.log 2>&1 &
+  local pid=$!
+  TMP_PIDS+=("$pid")
   local i
   for i in $(seq 1 30); do
     [ "$(curl -s -m 2 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/api/ready")" = "200" ] && break
     sleep 1
   done
-  kill %1 2>/dev/null || true
-  pkill -f "PORT=$port" 2>/dev/null || true
+  # 就绪之后还要确认"迁移真的应用到了**这个**库"，而不是撞上别的实例
+  local applied
+  applied="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -U campus -d "$db" -Atc 'select count(*) from schema_migrations' 2>/dev/null)"
+  echo "  ($db 迁移版本数=${applied:-0})"
+  kill "$pid" 2>/dev/null || true
   sleep 1
 }
 
@@ -114,8 +138,14 @@ echo "=== F. 清理 ==="
 for db in "$DB1" "$DB2"; do
   sudo -u postgres psql -q -Atc "drop database if exists $db" >/dev/null 2>&1
 done
+# 按 PID 兜底清理本脚本起过的临时实例（避免污染下一次运行）
+for pid in "${TMP_PIDS[@]:-}"; do
+  kill -9 "$pid" 2>/dev/null || true
+done
+free_port "$PORT1"
+free_port "$PORT2"
 rm -f /tmp/seedcheck-*.log
-ok "临时库已清理"
+ok "临时库与临时实例已清理"
 
 echo
 if [ "$FAILED" -eq 0 ]; then echo "SEED_RESULT PASS"; else echo "SEED_RESULT FAIL"; fi

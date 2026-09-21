@@ -37,7 +37,7 @@ M2 冻结的认证契约是 `handle + password`（已审核通过）。观察到
 | 断言 | 证据 | 影响 |
 |---|---|---|
 | 地点需要经纬度 | poi-detail 显示「距我4公里」 | M2 已有 `places.latitude/longitude`，够用 |
-| 地址需要容纳长中文地址 | 「联和街道科丰路89号开创大道2707号万达广场负一层商场B1006铺」 | `places.address` 保持无长度上限 |
+| 地址需要容纳长中文地址 | 「联和街道科丰路89号开创大道2707号万达广场负一层商场B1006铺」30 字 | **没有观察到支持短长度上限的证据，因此 V0.1 使用 TEXT，不人为增加 CHECK**（注意：这只能证明"至少要容纳这种长度"，不能证明原版理论上无限长 —— 措辞按审核记录 08 更正） |
 | 地点与动态是一对多 | poi-detail 主体 = 该地点的动态图片 + 作者标签 | `posts.place_id → places(id)` 方向正确；`posts_place_idx` 已有 |
 
 证据：`supplements/poi-detail.json`、`screens/poi-detail/recovered-m3.png`
@@ -78,7 +78,7 @@ posts.school_campus_id → campuses(id)            -- 动态归属到某个"校�
 
 | 断言 | 证据 | 影响 |
 |---|---|---|
-| 群名有长度上限 24 字 | 创建群聊对话框右下角「0/24」 | `groups.name` 需要 `CHECK(length(name) <= 24)` |
+| 群名有长度上限 24 字 | 创建群聊对话框右下角「0/24」 | `groups.name` 需要 `CHECK(length(name) <= 24)`。**注意计数语义尚无证据**：24 字按 Unicode code point / UTF-16 code unit / grapheme cluster 计，本轮没有测（中文普通字符三种算法一致）。以后在真实 UI 上测到 emoji 再确认边界，**现在不做过度的语义声明**（审核记录 08） |
 | 群标题展示为「群名(N)」 | 群聊标题 =「GroupForEvidence(1)」 | 这是**展示层**拼接，不要把 `(N)` 存进 `name` |
 
 ### 2.4 `message_threads` / `messages` —— 关系澄清（部分结论）

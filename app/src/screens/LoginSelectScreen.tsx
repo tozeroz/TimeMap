@@ -4,20 +4,38 @@ import { navigate } from '../router'
 import './login.css'
 
 /**
- * 登录入口（原版 CampusLoginActivity）。
- * 按原版实测：整页是品牌拼贴 + 居中「Campus」标识 + 底部一个黑色胶囊按钮「登录 Campus」，
- * 按钮下方是**未勾选的协议复选框** +「我已阅读并同意《用户协议》《隐私政策》《未成年人个人信息保护规则》」。
+ * 登录入口（原版 CampusLoginActivity / campusx://login/select）。
+ *
+ * 1:1 依据（M3 Slice 0A 实测，见 docs/m3/SLICE0-LOGIN-SEMANTICS.md）：
+ *   - 整页是品牌拼贴 + 居中「Campus」标识 + 底部黑色胶囊按钮「登录 Campus」
+ *     （原版 id: cl_phone_login，内含手机图标 iv_phone + 文本 tv_phone）
+ *   - 按钮下方是**未勾选的协议复选框**（原版 id: cb_agreement）
+ *     +「我已阅读并同意《用户协议》《隐私政策》《未成年人个人信息保护规则》」
+ *   - **未勾选就点「登录 Campus」时，原版不是禁用按钮、也不是闪一下提示，
+ *     而是弹出一个模态弹窗**：
+ *         请阅读并同意以下条款
+ *         《用户协议》《隐私政策》《未成年人个人信息保护规则》
+ *         [同意并继续]        ← 原版 id: btn_agree，位置贴近底部
+ *     点「同意并继续」后既视为同意、也直接进入下一步（手机号页）。
+ *
+ * 这条行为是 M3 补采证据后修正的：此前实现成"提示 1.6 秒"，与原版不一致。
  */
 export function LoginSelectScreen() {
   const [agreed, setAgreed] = useState(false)
-  const [warn, setWarn] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   function login() {
     if (!agreed) {
-      setWarn(true)
-      window.setTimeout(() => setWarn(false), 1600)
+      setDialogOpen(true)
       return
     }
+    navigate('login')
+  }
+
+  /** 原版行为：点「同意并继续」= 同意 + 继续进入手机号页 */
+  function agreeAndContinue() {
+    setAgreed(true)
+    setDialogOpen(false)
     navigate('login')
   }
 
@@ -52,7 +70,7 @@ export function LoginSelectScreen() {
             <span>登录 Campus</span>
           </button>
 
-          <div className={`ls__agree ${warn ? 'is-warn' : ''}`}>
+          <div className="ls__agree">
             <button
               className={`ls__check ${agreed ? 'is-on' : ''}`}
               onClick={() => setAgreed((v) => !v)}
@@ -70,9 +88,25 @@ export function LoginSelectScreen() {
               <span className="login__link">《未成年人个人信息保护规则》</span>
             </span>
           </div>
-          {warn && <p className="ls__warn">请先阅读并同意相关协议</p>}
         </div>
       </div>
+
+      {/* 协议弹窗：与原版一致（未勾选点登录时出现，点「同意并继续」= 同意 + 进入下一步） */}
+      {dialogOpen && (
+        <div className="ls__dialogMask" onClick={() => setDialogOpen(false)}>
+          <div className="ls__dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <p className="ls__dialogTitle">请阅读并同意以下条款</p>
+            <p className="ls__dialogBody">
+              <span className="login__link">《用户协议》</span>
+              <span className="login__link">《隐私政策》</span>
+              <span className="login__link">《未成年人个人信息保护规则》</span>
+            </p>
+            <button className="ls__dialogBtn" onClick={agreeAndContinue}>
+              同意并继续
+            </button>
+          </div>
+        </div>
+      )}
     </Screen>
   )
 }

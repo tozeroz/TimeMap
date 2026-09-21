@@ -246,15 +246,64 @@
   color: #2f6fe0;
 }
 
-.ls__agree.is-warn .ls__agreeText {
-  color: var(--c-danger);
+/*
+  协议弹窗（原版行为，M3 Slice 0A 实测）。
+  原版：未勾选点「登录 Campus」→ 模态弹窗「请阅读并同意以下条款」
+  + 条款链接 + 贴底的「同意并继续」按钮（id/btn_agree 位于 [135,1748][945,1832]）。
+  此前的实现是"提示 1.6 秒"，与原版不一致，已按证据改掉。
+*/
+.ls__dialogMask {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.42);
 }
 
-.ls__warn {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: var(--c-danger);
+.ls__dialog {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 28px 20px 22px;
+  background: #fff;
+  border-radius: 18px 18px 0 0;
   text-align: center;
+}
+
+.ls__dialogTitle {
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.ls__dialogBody {
+  margin: 0 0 22px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--c-text-3);
+}
+
+.ls__dialogBody .login__link {
+  color: #2f6fe0;
+}
+
+/* 与原版一致：整行宽度的主按钮，贴近底部 */
+.ls__dialogBtn {
+  display: block;
+  width: 100%;
+  height: 52px;
+  border: 0;
+  border-radius: 26px;
+  background: #111;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.ls__dialogBtn:active {
+  opacity: 0.85;
 }
 
 .login__agree {
