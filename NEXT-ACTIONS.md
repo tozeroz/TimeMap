@@ -317,3 +317,19 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       自查修掉：① 把"非成员越权"与"direct 不该被接受"合成一条断言（定位会误导）→ 拆成两条
       ② 在 bash 里误用 C 风格 `/* */` 注释 → 改 `#`
 - [ ] K2.5 等审核批准 WO#9B（修订版）→ 实施：迁移 011 + 接口/读模型 + 层 A 面板
+### K2 进展（Round 260 续）
+- [ ] K2.5 ⬅ **等审核确认 BLOCKER ①② 已冻结** → 然后实施：
+      迁移 `011_mentions_all.sql` + `GET /api/threads/:id` 返回 `members[]` + 层 A 面板 + 选中状态
+- [x] K2.6 ✅ 审核 48 要求的**有界静态 trace**：`scripts/m5/probe-at-trigger-static-trace.mjs`
+      结果 `AT_TRIGGER_STATIC_TRACE: FOUND`（含**专用触发符号 openAtPanel ×1 @classes3.dex**，
+      不是泛化 startActivity）；但字符串池读不到方法体 → 保持 `AT_PANEL_TRIGGER: OUR_DESIGN_CHOICE /
+      ORIGINAL_NOT_EVALUATED`，并按指示**已停止深挖**
+- [x] K2.7 ✅ 措辞按审核 48 强制修正（**计划与门禁脚本都已改**）：
+      删掉"全体在两人会话里语义不可能" → `MENTIONS_ALL_DIRECT_POLICY: REJECT /
+      PROVENANCE: OUR_DESIGN_CHOICE / ORIGINAL_BEHAVIOR: NOT_EVALUATED`；
+      并补 `AT_ALL_PERMISSION_POLICY`（group member→allowed / non-member→404）与
+      `SERVICE_INVARIANT`（同一事务内 5 条，任一失败 → 零消息 + 零 mention 变更）
+- [x] K2.8 ✅ 门禁键名全部对齐审核 48 给定的最终清单（层 A 12 键 / 层 B 9 键 / 发送状态 2 键），
+      并把改前 FAIL 证据用**最终键名**重采
+- [x] K2.9 ✅ 自查出并修掉 3 处"断言不可靠"：① 恒 FAIL 的同义反复 ② 占位探针+错 IP
+      ③ **MIXED 断言因 `cannot_mention_self` 而"因为错误原因通过"**（诊断脚本已入库）

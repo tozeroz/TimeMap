@@ -130,8 +130,16 @@ D_AFTER="$(PSQL "select count(*) from messages where thread_id='$DIRECT'")"
 info "direct POST HTTP $D_CODE  body=$(head -c 160 /tmp/wo9b_direct.json)"
 case "$D_CODE" in
   4*) ok "direct 上 mentionsAll 被拒绝（HTTP $D_CODE）" ;;
-  *)  bad "direct 上 mentionsAll **未被拒绝**（HTTP $D_CODE）—— '全体'在两人会话里语义不可能" ;;
+  *)  bad "direct 上 mentionsAll **未被拒绝**（HTTP $D_CODE）" ;;
 esac
+# 口径（审核 48 强制要求修正）：
+#   ~~"全体在两人会话里语义不可能"~~ ← 这个说法**已被否决**：
+#     direct chat 里 @所有人 **并非逻辑上不可能**，只是**我方产品选择**不提供该语义。
+#   冻结口径：
+#     MENTIONS_ALL_DIRECT_POLICY: REJECT
+#     PROVENANCE:                 OUR_DESIGN_CHOICE
+#     ORIGINAL_BEHAVIOR:          NOT_EVALUATED
+info "口径：MENTIONS_ALL_DIRECT_POLICY=REJECT ／ PROVENANCE=OUR_DESIGN_CHOICE ／ ORIGINAL_BEHAVIOR=NOT_EVALUATED"
 if [ "$((D_AFTER - D_BEFORE))" = "0" ]; then ok "direct DB delta = 0（零 mutation）"; else bad "direct DB delta = $((D_AFTER - D_BEFORE))（期望 0）"; fi
 
 # ---------------------------------------------------------------------------
