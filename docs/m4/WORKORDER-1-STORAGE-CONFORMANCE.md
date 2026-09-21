@@ -1,5 +1,7 @@
 # M4 工作单 #1：媒体存储设计与 7 条边界的一致性比对（**实现前提交**）
 
+> **当前状态：审核记录 15「有条件批准」——§七 的 4 条（含两条 P0）已并入，可开始实现。**
+
 > 依据：审核记录 14（M4 APPROVED TO START；"第一份 M4 工作单先拿 PLAN §6 的冻结图片存储设计，
 > 逐条回答那 7 条边界，再动手实现"）+ 审核记录 13 提出的 7 条边界。
 > 性质：**只做设计比对，不改代码**。发现缺口先在这里解决，再进实现。
@@ -121,9 +123,105 @@ PLAN §6 已冻结联合备份的形态，M4 要补的是**证据**：
 3. 这项与 M2 的 DB-only 演练**分开记录**，不相互替代 ——
    M2 的 `BACKUP_DRILL_RESULT` 继续有效，但它**不覆盖媒体**。
 
-## 六、实现顺序（提交审核后执行）
+## 七、审核记录 15 补充的 4 条失败边界（**实现前必须并入**）
+
+工作单 #1 获**有条件批准**：方向与缺口 C 的修正被认可，但还要补 4 条，其中两条 P0。
+
+### P0-A：私有媒体授权必须**复用消息可见性同一个 predicate**
+
+```sql
+canReadPrivateMedia(user, media)
+  = EXISTS message
+      WHERE message references media
+        AND canReadMessage(user, message)
+        AND message not revoked
+```
+
+**不要为 media 单独发明一套可见性规则。** 否则会出现权限漂移：
+
+```
+GET /messages/:id        → 404
+GET /api/media/:mediaId  → 200     ← 同一用户、同一条消息，结论不一致
+```
+
+实现要求：`canReadMessage(user, message)` 抽成**一个 SQL 片段/函数**，
+消息接口与媒体接口**都调用它**；Gate 里加一条断言：
+**对同一组 (user, message)，两个接口的可见性结论必须一致**（这是防漂移的关键断言）。
+
+### P0-B：scope 的 **DB 级防线**（Gate 直接尝试突破）
+
+应用层"post 上传→public / message 上传→private"不够；要让非法引用**结构上不可能**：
+
+```
+post_media    → private media    必须被拒
+message_media → public media     必须被拒
+```
+
+手段：trigger，或拆分 attachment 表让错误 FK 不可能（不必拆两张 media 主表）。
+
+**Gate 断言**：直接 INSERT 一条 cross-scope 引用 → **数据库必须报错**。
+（只靠应用层校验的话，将来任何一个漏校验的 endpoint 都能重新引入"同一张图两种身份"。）
+
+### 私有下发改用 **X-Accel-Redirect**（不压在 Node 上）
+
+```
+GET /api/media/:id → Node(session + SQL authz) → X-Accel-Redirect
+  → Nginx internal location → /srv/campus/uploads/private/...
+```
+
+```nginx
+location /_private_media/ { internal; alias /srv/campus/uploads/private/; }
+```
+
+`internal` 保证外部直接访问失败，**同时字节传输不经过 Node**——
+在 396 MB 内存的机器上这是更合适的选择。
+冻结响应头：`Cache-Control: private, no-store` 与 `X-Content-Type-Options: nosniff`。
+
+> 注意：这仍然满足"私有媒体必须先过应用层授权"——
+> Node 负责**判定**，Nginx 只负责**搬运**，判定与搬运分离。
+
+### 缺口 A 补漏：上传幂等键（防"重试产生重复媒体"）
+
+`DB insert 成功 → 响应前进程死 → 客户端重试` 会产生第二份文件与第二条 media。
+V1 **采用幂等键**（审核建议现在做，成本很低）：
+
+```
+客户端为一次逻辑上传生成 upload_request_id (UUID)
+DB: UNIQUE(user_id, upload_request_id)
+相同上传重试 → 返回**原来的** media（不新建文件）
+```
+
+文件系统要求：`tmp` 与 `final` **必须在同一文件系统**，否则 rename 会退化成复制+删除，
+原子语义不成立。
+
+### 备份 key 拆四个（从 M4 起）
+
+```
+DATABASE_RESTORE:          PASS
+MEDIA_STORE_RESTORE:       PASS
+CROSS_REFERENCE_INTEGRITY: PASS      ← media 行 → 文件 hash/引用一致
+M4_BACKUP_RESTORE:         PASS
+```
+
+`pg_dump restore PASS` 从 M4 起**只能代表数据库恢复**，不能单独代表完整业务数据恢复。
+
+## 八、M4 Gate 计划断言（并入 P0-A/P0-B 后更新）
+
+原有断言（见 §六）之外新增：
+
+- **P0-A 防漂移**：同一 (user, message) 在消息接口与媒体接口的可见性结论**必须一致**
+- **P0-B DB 级防线**：直接构造 cross-scope 引用 → **数据库拒绝**
+- **幂等键**：同一 `upload_request_id` 重试 → 返回同一 media id，且 **uploads 里不新增文件**
+- **X-Accel 路径**：私有媒体走 `/_private_media/...` 时 **外部直接访问失败**（`internal` 生效）
+- **响应头**：私有媒体响应含 `Cache-Control: private, no-store` 与 `X-Content-Type-Options: nosniff`
+- **同文件系统**：`tmp` 与 `final` 的 `stat -c %d`（device）相同
+
+
+## 九、实现顺序（审核有条件批准后执行）
 
 1. schema：`media` 表（id / storage_key / scope / mime / bytes / width / height / sha256 / created_at）
+   + `upload_request_id` 幂等键（`UNIQUE(user_id, upload_request_id)`）
+   + **scope 的 DB 级防线**（P0-B）
 2. 上传路径：`POST /api/media`（multipart）→ 嗅探 → 压缩 → public/private 落盘 → INSERT
 3. 私有下发：`GET /api/media/:id`（会话 + 可见性 SQL + 流式 + `private, no-store`）
 4. 公共下发：Nginx `/media/` alias 到 `uploads/public/`
