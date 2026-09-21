@@ -21,10 +21,28 @@
  *   node dist/cleanup.mjs --apply                  # 真删（仅早于 24h 的孤儿）
  *   node dist/cleanup.mjs --apply --max-age-hours 0  # 演练用：连新文件也删
  *   node dist/cleanup.mjs --json                   # 机器可读输出（供 Gate 断言）
+ *
+ * 退出码：0 正常（含 dry-run）／2 缺 DATABASE_URL（拒绝执行）／
+ *        3 备份窗口内被屏障挡住（**一个文件都没删**）／1 其它失败
+ *
+ * ## 备份期屏障（M4，审核记录 19 的 P0）
+ *
+ * `--apply` 会**真的删磁盘文件**，属于"改变 media generation"的写路径，
+ * 因此整个删除段跑在一个**共享 advisory 锁**事务里
+ * （`acquireMediaMutationLock`，与备份进程的排他锁同一把 KEY）。
+ * 备份窗口内它拿不到锁（lock_timeout 到点抛错）→ 本轮**不删任何文件**、退出码 3，
+ * 由人工在备份结束后重跑。这样"备份 tar 与删除"不会交叠。
+ *
+ * 两点如实说明，别把保证说大：
+ *   1. 共享锁之间**互不冲突**，所以持锁期间**上传仍可并发进行** ——
+ *      这里挡的只是"清扫与备份窗口重叠"，不是"清扫期间引用集不变"。
+ *      "刚写完文件、DB 行还没落"的那类竞态仍然由 mtime 阈值（--max-age-hours）负责。
+ *   2. dry-run 只读、不删文件，**不加锁**（备份期间照样能跑，这是设计的一部分）。
  */
 import { readdir, stat, unlink } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { Pool } from 'pg'
+import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts'
 
 interface Args {
   apply: boolean
@@ -73,76 +91,110 @@ async function main(): Promise<void> {
     process.exit(2)
   }
 
-  // 1) 线上已知的 storage_key 全集（scope + key 组合）
   const pool = new Pool({ connectionString: url, max: 2 })
-  let known = new Set<string>()
+  const client = await pool.connect()
+  /** 事务是否已开启 —— 收尾时决定要不要显式 rollback */
+  let inTx = false
   try {
-    const r = await pool.query<{ k: string }>("select scope || '/' || storage_key as k from media")
-    known = new Set(r.rows.map((x) => x.k))
+    /*
+      --apply 才是"改变 media generation"的写路径，只有它需要屏障：
+      下面整个删除段都待在共享锁事务里（见文件头"备份期屏障"）。
+      dry-run 是纯读，**不加锁** —— 备份期间它照样要能用。
+    */
+    if (args.apply) {
+      await client.query('begin')
+      inTx = true
+      try {
+        await acquireMediaMutationLock(client)
+      } catch (err) {
+        await client.query('rollback').catch(() => undefined)
+        inTx = false
+        if (isBarrierTimeout(err)) {
+          // fail-closed：拿不到锁就一个文件都不删。退出码 3 与"配置缺失=2""其它失败=1"区分开
+          console.error(
+            '[cleanup] 备份窗口进行中（media mutation barrier 生效）：本轮**未删除任何文件**，退出码 3。请在备份结束后重跑。',
+          )
+          process.exitCode = 3
+          return
+        }
+        throw err
+      }
+    }
+
+    // 1) 线上已知的 storage_key 全集（scope + key 组合）—— 纯读，不需要锁
+    const r = await client.query<{ k: string }>("select scope || '/' || storage_key as k from media")
+    const known = new Set(r.rows.map((x) => x.k))
+
+    // 2) 盘上的文件
+    const files: string[] = []
+    await walk(join(args.root, 'public'), args.root, files)
+    await walk(join(args.root, 'private'), args.root, files)
+
+    const now = Date.now()
+    const orphans: Array<{ rel: string; bytes: number; ageHours: number }> = []
+    let tooNew = 0
+    let referenced = 0
+    for (const rel of files) {
+      if (known.has(rel)) {
+        referenced++
+        continue
+      }
+      let st
+      try {
+        st = await stat(join(args.root, rel))
+      } catch {
+        continue
+      }
+      const ageHours = (now - st.mtimeMs) / 3600000
+      if (ageHours < args.maxAgeHours) {
+        // 太新：可能是"刚写完文件、DB 行还没落"的正常中间态 → 这一轮不动它
+        tooNew++
+        continue
+      }
+      orphans.push({ rel, bytes: st.size, ageHours: Number(ageHours.toFixed(1)) })
+    }
+
+    const totalBytes = orphans.reduce((a, o) => a + o.bytes, 0)
+
+    if (args.json) {
+      console.log(JSON.stringify({ mode: args.apply ? 'apply' : 'dry-run', scanned: files.length, referenced, tooNew, orphans, totalBytes }))
+    } else {
+      console.log(`[cleanup] 模式=${args.apply ? 'APPLY（真删）' : 'dry-run（只打印）'}  阈值=${args.maxAgeHours}h`)
+      console.log(`[cleanup] 扫描 ${files.length} 个文件：被引用 ${referenced}，太新（跳过）${tooNew}，孤儿 ${orphans.length}`)
+      for (const o of orphans) {
+        console.log(`  孤儿 ${o.rel}  ${o.bytes} 字节  mtime 约 ${o.ageHours}h 前`)
+      }
+      if (orphans.length) console.log(`[cleanup] 孤儿合计 ${totalBytes} 字节（${(totalBytes / 1024).toFixed(1)} KB）`)
+    }
+
+    if (!args.apply) {
+      if (!args.json) console.log('[cleanup] dry-run 结束：未删除任何文件（要真删请加 --apply）')
+      return
+    }
+
+    // 3) 删除段（apply）：仍在共享锁事务内 —— 备份窗口内根本走不到这里
+    let removed = 0
+    let removedBytes = 0
+    for (const o of orphans) {
+      try {
+        await unlink(join(args.root, o.rel))
+        removed++
+        removedBytes += o.bytes
+      } catch (err) {
+        console.error(`[cleanup] 删除失败 ${o.rel}: ${(err as Error).message}`)
+      }
+    }
+    if (!args.json) console.log(`[cleanup] 已删除 ${removed} 个孤儿文件，回收 ${removedBytes} 字节`)
+    else console.log(JSON.stringify({ mode: 'apply', removed, removedBytes }))
+
+    await client.query('commit')
+    inTx = false
   } finally {
+    // 出错时不留半开的事务（xact 锁本身会随事务结束释放，显式回滚是为了语义清楚）
+    if (inTx) await client.query('rollback').catch(() => undefined)
+    client.release()
     await pool.end()
   }
-
-  // 2) 盘上的文件
-  const files: string[] = []
-  await walk(join(args.root, 'public'), args.root, files)
-  await walk(join(args.root, 'private'), args.root, files)
-
-  const now = Date.now()
-  const orphans: Array<{ rel: string; bytes: number; ageHours: number }> = []
-  let tooNew = 0
-  let referenced = 0
-  for (const rel of files) {
-    if (known.has(rel)) {
-      referenced++
-      continue
-    }
-    let st
-    try {
-      st = await stat(join(args.root, rel))
-    } catch {
-      continue
-    }
-    const ageHours = (now - st.mtimeMs) / 3600000
-    if (ageHours < args.maxAgeHours) {
-      // 太新：可能是"刚写完文件、DB 行还没落"的正常中间态 → 这一轮不动它
-      tooNew++
-      continue
-    }
-    orphans.push({ rel, bytes: st.size, ageHours: Number(ageHours.toFixed(1)) })
-  }
-
-  const totalBytes = orphans.reduce((a, o) => a + o.bytes, 0)
-
-  if (args.json) {
-    console.log(JSON.stringify({ mode: args.apply ? 'apply' : 'dry-run', scanned: files.length, referenced, tooNew, orphans, totalBytes }))
-  } else {
-    console.log(`[cleanup] 模式=${args.apply ? 'APPLY（真删）' : 'dry-run（只打印）'}  阈值=${args.maxAgeHours}h`)
-    console.log(`[cleanup] 扫描 ${files.length} 个文件：被引用 ${referenced}，太新（跳过）${tooNew}，孤儿 ${orphans.length}`)
-    for (const o of orphans) {
-      console.log(`  孤儿 ${o.rel}  ${o.bytes} 字节  mtime 约 ${o.ageHours}h 前`)
-    }
-    if (orphans.length) console.log(`[cleanup] 孤儿合计 ${totalBytes} 字节（${(totalBytes / 1024).toFixed(1)} KB）`)
-  }
-
-  if (!args.apply) {
-    if (!args.json) console.log('[cleanup] dry-run 结束：未删除任何文件（要真删请加 --apply）')
-    return
-  }
-
-  let removed = 0
-  let removedBytes = 0
-  for (const o of orphans) {
-    try {
-      await unlink(join(args.root, o.rel))
-      removed++
-      removedBytes += o.bytes
-    } catch (err) {
-      console.error(`[cleanup] 删除失败 ${o.rel}: ${(err as Error).message}`)
-    }
-  }
-  if (!args.json) console.log(`[cleanup] 已删除 ${removed} 个孤儿文件，回收 ${removedBytes} 字节`)
-  else console.log(JSON.stringify({ mode: 'apply', removed, removedBytes }))
 }
 
 main().catch((err) => {

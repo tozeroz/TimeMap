@@ -146,6 +146,29 @@ BACKUP_MUTATION_BARRIER:             PASS   （真新增）
   要求：已在事务里就地取锁、不在事务里则包成事务、锁超时返回 **503 + Retry-After**
   （语义是"稍后重试"而不是"出错了"）、**读取路径一律不加锁**。
 
+- **业务侧接入已完成**（本轮子代理执行，typecheck/build 通过；**尚未在服务器上做竞争条件实测**）：
+
+  | 写路径 | 位置 | 处置 |
+  |---|---|---|
+  | `POST /api/media` 的 INSERT | `server/src/index.ts`（`app.post('/api/media')`） | 原本不在事务里 → 包成事务：`begin` → `acquireMediaMutationLock` → 写文件 + INSERT → `commit`；锁等待超时 → **503 + `Retry-After: 5`**（`error: backup_in_progress`）。取锁**在写盘之前**，避免"先把文件落盘再等锁"自己制造不一致窗口 |
+  | 孤儿清扫 GC（真删文件） | `server/src/cleanup-entry.ts`（`--apply` 分支） | 删除段整体放进共享锁事务；拿不到锁 → **不删任何文件**、打印明确信息、**退出码 3**（与"缺 DATABASE_URL=2""其它失败=1"区分）。dry-run 是纯读，**不加锁** |
+
+  逐条 grep 确认过的"**不是**写路径"（因此刻意不加锁，避免把屏障扩大到读路径）：
+  - `POST /api/posts`、`POST /api/posts/:id/comments`、点赞/取消赞、`POST /api/board-notes/:userId`：
+    都不写 media / post_media / message_media
+  - `POST /api/threads/:id/messages`：只写 messages 与 message_mentions，且**不接受 media id**，
+    不产生 message_media 关联 → 不改变 media generation
+  - `GET /api/media/:id`、`GET /api/threads/:id/messages` 等读接口：一律不加锁
+  - **撤回消息接口目前不存在**（设计清单第 3 条）：`update messages set deleted_at` 只出现在
+    `scripts/m4/*.sh` 的 Gate 脚本里，那是**管理面** psql 直连，不在业务写路径上。
+    将来真加"撤回"接口时，必须按同一模式取共享锁（会改变 media 的 live state）
+  - `server/src/seed.ts`：会写 media / post_media，但它是**夹具/种子 CLI**（不是业务写路径，
+    且运行时机在 gate/部署准备阶段），本轮刻意未接入 —— 这是一处**明确记录下来的取舍**，
+    不是遗漏
+
+  另：`cleanup` 只删**盘上的孤儿文件**，并不 `delete from media` —— 应用代码里没有删除 media 行的写路径
+  （那些 `delete from media` 都在 Gate 脚本里，属管理面）。
+
 ### 备份侧排他锁的做法（设计已定，待实现）
 
 `scripts/m4/backup-restore-joint.sh` 里现在是：line 86 `pg_dump` → line 90 `tar`。

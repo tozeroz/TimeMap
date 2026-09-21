@@ -1093,6 +1093,8 @@ export function buildServer(deps: ServerDeps) {
    *   ⑤ 磁盘 Gate：>90% 或剩余 < 1GB → **507**；写盘 ENOSPC → 507（可恢复的外部条件）
    *   ⑥ scope 由服务端按 purpose 决定（post→public / chat→private），不接受客户端直接给 scope
    *   ⑦ 幂等键 upload_request_id：重复上传返回**同一条** media，不新建文件
+   *   ⑧ 备份期屏障：写入段（文件 + DB 行）在 media 共享锁事务内；备份窗口内返回
+   *      503 + Retry-After，而不是 500 —— 语义是"稍后重试"，不是"出错了"
    */
   app.post('/api/media', async (req, reply) => {
     const s = await resolveSession(req.headers.authorization)
@@ -1185,30 +1187,66 @@ export function buildServer(deps: ServerDeps) {
       const finalPath = join(UPLOAD_ROOT, scope, storageKey)
       const tmpPath = join(UPLOAD_ROOT, '.tmp', `${id}.${ext}`)
 
-      await mkdir(join(UPLOAD_ROOT, scope, relDir), { recursive: true, mode: 0o750 })
+      /**
+       * ★ M4 backup mutation barrier（审核记录 19 的 P0）：「写文件 + 写 DB 行」这一段
+       * 必须落在**同一个共享锁事务**内。要挡的时序是：
+       * ```
+       * 备份进程 pg_dump 已完成 → 用户上传成功（DB 行 + 文件都落）→ uploads.tar 开始
+       * ```
+       * 于是 dump 里没有这行、tar 里有这个文件 —— 备份"各自内部正确"但不属于同一时刻。
+       *
+       * 取锁位置**刻意放在写盘之前**：备份窗口内这里直接阻塞到 lock_timeout，返回 503，
+       * 而不是"先把文件落了盘再卡在锁上"——那样等于自己制造了那个不一致窗口。
+       * 拿到共享锁之后，备份的排他锁要么完全在本次写之前、要么完全在本事务提交之后。
+       *
+       * 范围边界：只包住 media 的 INSERT 与文件落盘。**读路径一律不加锁**
+       * （本函数开头的幂等键查询、GET /api/media/:id 等读接口都不受影响，这是设计的一部分）。
+       */
+      const client = await db.pool.connect()
+      /** INSERT 是否已经成功 —— 决定出错时"这个文件能不能删"（见下面的 catch） */
+      let inserted = false
       try {
+        await client.query('begin')
+        // 备份窗口内这里会阻塞；lock_timeout（5s）到点抛 55P03 → isBarrierTimeout 翻成 503
+        await acquireMediaMutationLock(client)
+
+        await mkdir(join(UPLOAD_ROOT, scope, relDir), { recursive: true, mode: 0o750 })
         await writeFile(tmpPath, buf, { mode: 0o640 })
         await rename(tmpPath, finalPath) // 同文件系统（同一个 uploads 根）→ 原子
+
+        // ④ 文件已就位，再写 DB 行
+        await client.query(
+          `insert into media (id, owner_user_id, scope, storage_key, mime, bytes, width, height, sha256, upload_request_id)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [id, s.user.userId, scope, storageKey, probe.mime, buf.length, probe.width, probe.height, sha256, uploadRequestId],
+        )
+        inserted = true
+        // 提交即释放共享锁：提交之前备份的排他锁进不来，提交之后它才可以开始
+        await client.query('commit')
       } catch (err) {
-        await unlink(tmpPath).catch(() => undefined)
+        // 已经在 commit 之前 INSERT 成功 → 失败的只是 commit，这一行到底有没有落库**不确定**
+        const commitUncertain = inserted
+        await client.query('rollback').catch(() => undefined)
+        if (!commitUncertain) {
+          /*
+            只有在"确定没有 DB 行"时才删文件：
+              - 写盘失败 / ENOSPC   → 没有行，文件是 orphan
+              - INSERT 失败（含并发撞幂等键唯一约束）→ 事务已回滚，没有行
+            而 commit 结果不确定时**保留**文件：本项目明确宁可留下能被 cleanup 清扫的
+            orphan 文件，也不要留下"DB 说有图、实际取不到"的悬空引用（见 cleanup-entry.ts 文件头）。
+          */
+          await unlink(tmpPath).catch(() => undefined)
+          await unlink(finalPath).catch(() => undefined)
+        }
+        // 备份窗口导致的锁等待超时 → 503 + Retry-After（"稍后重试"），而不是 500（"出错了"）
+        if (isBarrierTimeout(err)) return backupBarrierUnavailable(reply)
+
         const code = (err as { code?: string }).code ?? ''
         if (code === 'ENOSPC') {
           reply.code(507)
           return { error: 'insufficient_storage', reason: 'enospc' }
         }
-        throw err
-      }
 
-      // ④ 文件已就位，再写 DB
-      try {
-        await db.pool.query(
-          `insert into media (id, owner_user_id, scope, storage_key, mime, bytes, width, height, sha256, upload_request_id)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [id, s.user.userId, scope, storageKey, probe.mime, buf.length, probe.width, probe.height, sha256, uploadRequestId],
-        )
-      } catch (err) {
-        // DB 失败 → 把刚落的文件删掉（避免留下无登记的 orphan）
-        await unlink(finalPath).catch(() => undefined)
         // 并发下另一个请求可能刚插了同一个幂等键 → 返回那条
         const again = await db.pool
           .query<{ id: string; storage_key: string; mime: string }>(
@@ -1226,6 +1264,8 @@ export function buildServer(deps: ServerDeps) {
           }
         }
         throw err
+      } finally {
+        client.release()
       }
 
       reply.code(201)
