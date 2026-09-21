@@ -460,7 +460,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [ ] WO12.7 ⬅ **等审核裁定**：WO#12 是否可写 **PASS / CLOSED**；并请确认对
       「抓它的是 INVALID_PROFILE_ID_NO_FALLBACK 而非审核点名的 NO_MOCK_IDENTITY」这一分工差异是否接受
       （两条断言测不同表面：前者测坏输入用例、后者测有效资料页）
-- [ ] WO12.8 下一步（审核 53 指定）：**ProfileEditScreen**（那里可能有 fake write-success 风险）
+- [x] WO12.8 ✅ **已由 WO#13 承接**：ProfileEditScreen 的字段级 inventory 与"假写成功"确认已完成（见 WO13.1）
 
 ### 未定位故障的排查进展（Round 263）
 - [x] WO11.13-a ✅ 审核 53 裁定：接受"记录并观察 + **下次失败自动抓现场**"（不要求盲跑 10 次）
