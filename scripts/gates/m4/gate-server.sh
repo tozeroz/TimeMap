@@ -112,7 +112,13 @@ for k in M4_BACKUP_RESTORE MEDIA_ORPHAN_CLEANUP; do [ "${KEY[$k]}" = "PASS" ] ||
 for k in MEDIA_SCHEMA_RESULT MEDIA_UPLOAD_RESULT MEDIA_DELIVERY_RESULT; do [ "${KEY[$k]}" = "PASS" ] || S_FAIL=1; done
 printf '#   %-12s %s\n' "PERSISTENT" "$([ $P_FAIL -eq 0 ] && echo PASS || echo FAIL)"
 printf '#   %-12s %s\n' "STAGE" "$([ $S_FAIL -eq 0 ] && echo PASS || echo FAIL)"
-printf '#   %-12s %s\n' "REGRESSION" "NOT_RUN_IN_THIS_GATE（由 M3 gate 负责，不得默认为 PASS）"
-echo "# M4_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
+printf '#   %-12s %s\n' "REGRESSION" "NOT_RUN_IN_THIS_GATE（M4 Final Gate 必须跑完整 M3 regression）"
+# ⚠️ 这个 key **不叫** M4_GATE_RESULT（审核记录 16 的纠正）：
+#    本 gate 只覆盖**存储子系统**，而 M4 的冻结范围还包含消息消费端与 @ 提及关系。
+#    把"存储子系统过了"写成"M4 过了"属于**过度声明** —— 所以：
+#      中间/子系统结果 → M4_STORAGE_GATE_RESULT
+#      阶段最终结果     → M4_FINAL_GATE_RESULT（要等 A/C 完成并在 M4 Final Gate 上跑）
+echo "# M4_STORAGE_GATE_RESULT: $([ "$FAILED" -eq 0 ] && echo PASS || echo FAIL)"
+echo "# M4_OVERALL: IN_PROGRESS（A 消息/图片前端与 C @ 提及关系尚未完成）"
 echo "############################################################"
 exit "$FAILED"
