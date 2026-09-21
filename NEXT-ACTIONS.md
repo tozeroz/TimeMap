@@ -226,7 +226,7 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
 - [x] H4 ✅ **已完成**：`scripts/m5/run-device-gate.sh` —— 把顺序封死：① am start 到前台 ② **先建 CDP 转发** ③ 采集前 VISUAL_TARGET_VALIDITY ④ 跑 Gate ⑤ **采集后再核一次**`n      实测两次 preflight 均 PASS（此前的"CDP unreachable 假 FAIL"已消除）
       必须先建立 CDP 转发（`adb forward tcp:9222 ...`）**再**跑 preflight，
       否则 CDP 检查会假 FAIL。建议封一个 runner：建 forward → preflight → 采集 → 再核 preflight。
-- [ ] H5 **G4.1 的落地**：把"改过 .ps1 后检查前 3 字节是否 EF BB BF"做成提交前自查（本轮已用它救回 deploy 脚本）
+- [x] H5 ✅ **已完成**：`tools/check-ps1-bom.ps1`（纯 ASCII 脚本，扫全仓 .ps1）`n      规则：**含非 ASCII 的 .ps1 必须带 UTF-8 BOM**（无 BOM 会被 PowerShell 当 ANSI 读 → 中文乱码破坏语法）`n      首跑即发现**我自己新写的脚本**含中文却缺 BOM（补 BOM 后 PASS）；全仓 35 个 .ps1，0 个不合规
 
 ### 证据 backlog（等 runtime 或直接静态行为证据，**不做产品改动**）
 - composer 高度（原版 134 vs 我方 96）：群聊/单聊 confounder 未排除
