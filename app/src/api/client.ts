@@ -41,6 +41,10 @@ export interface ApiPost {
   body: string
   place: string | null
   createdAt: string
+  /** M3 Slice 2 起列表也返回计数（原版卡片上就有） */
+  likeCount?: number
+  commentCount?: number
+  likedByMe?: boolean
 }
 
 export type ApiResult<T> =
@@ -230,9 +234,10 @@ export function toFeedPost(p: ApiPost): FeedPost {
     author,
     text: p.body,
     images: [],
-    likes: 0,
-    comments: 0,
-    liked: false,
+    // M3 Slice 2：列表也用服务端计数（原版卡片上就有赞数/评论数）
+    likes: p.likeCount ?? 0,
+    comments: p.commentCount ?? 0,
+    liked: p.likedByMe ?? false,
     location: p.place ?? undefined,
     // 列表卡片用相对时间；精确时间留给详情页（M2 再补）
     createdAt: relativeTime(p.createdAt),
@@ -273,6 +278,8 @@ export interface ApiPostDetail {
   /** **含回复**的总数（原版「评论 N」的口径） */
   commentCount: number
   likeCount: number
+  /** 当前会话用户是否点过赞（未登录恒 false） */
+  likedByMe: boolean
 }
 
 /** 帖子详情。404 会返回 ok:false + status 404，调用方可据此显示"已删除" */
@@ -302,6 +309,35 @@ export async function createComment(
     body: parentId ? { body, parentId } : { body },
   })
   return r
+}
+
+// ===========================================================================
+// M3 Slice 2：点赞
+//
+// 1:1 依据（原版**只读**观察，见 supplements/slice2-likes-readonly.json）：
+//   - 点赞区是整块热区；计数是纯数字无单位
+//   - **0 赞时不渲染计数控件**（不是显示 0）
+//   - 没有「谁点了赞」的列表
+//   - 切换行为与已点赞态样式属写操作 → BLOCKED_BY_POLICY，只在本系统内验证
+// ===========================================================================
+
+export interface LikeState {
+  liked: boolean
+  likeCount: number
+  likedByMe: boolean
+}
+
+/** 点赞（服务端幂等，重复调用不会重复计数） */
+export async function likePost(postId: string): Promise<ApiResult<LikeState>> {
+  return request<LikeState>(`/api/posts/${encodeURIComponent(postId)}/like`, {
+    method: 'POST',
+    body: {},
+  })
+}
+
+/** 取消点赞（同样幂等） */
+export async function unlikePost(postId: string): Promise<ApiResult<LikeState>> {
+  return request<LikeState>(`/api/posts/${encodeURIComponent(postId)}/like`, { method: 'DELETE' })
 }
 
 // ---------------------------------------------------------------------------

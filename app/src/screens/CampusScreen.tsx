@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { listPosts, readSnapshot, toFeedPost } from '../api/client'
+import { likePost, listPosts, readSnapshot, toFeedPost, unlikePost } from '../api/client'
+import { isLoggedIn } from '../api/session'
 import { BigTitle, Screen } from '../components/Shell'
 import { IconChatBubble, IconComment, IconHeart, IconSearch } from '../components/icons'
 // 注意：这里**不再** import mock 的 `posts` —— 校园页已迁移到真实 API，
@@ -22,18 +23,24 @@ export function PostCard({
   onLike,
 }: {
   post: FeedPost
+  /** 是否已点赞（M3 Slice 2 起由服务端的 likedByMe 决定） */
   liked?: boolean
-  onLike?: (updater: (prev: Record<string, boolean>) => Record<string, boolean>) => void
+  /** 点赞/取消点赞；由外层调真实接口，卡片自己不做本地假切换 */
+  onLike?: () => void
 }) {
-  const [localLiked, setLocalLiked] = useState(post.liked)
-  const liked = likedProp ?? localLiked
-  const likes = post.likes + (liked ? 1 : 0) - (post.liked ? 1 : 0)
+  const liked = likedProp ?? post.liked
+  /**
+   * 计数一律用服务端返回值（post.likes）。
+   * **不再本地加减**：原版侧看不到切换行为（写操作禁止取证），
+   * 与其猜"点一下数字怎么变"，不如让服务端返回权威计数 —— 也避免了
+   * "本地 +1、服务端没变"这种假成功。
+   */
+  const likes = post.likes
   const hasImage = post.images.length > 0
 
   function toggleLike(e: React.MouseEvent) {
     e.stopPropagation()
-    if (onLike) onLike((prev) => ({ ...prev, [post.id]: !liked }))
-    else setLocalLiked((v) => !v)
+    onLike?.()
   }
 
   function openAuthor(e: React.MouseEvent) {
@@ -149,7 +156,6 @@ function SchoolSwitcher({
 export function CampusScreen() {
   const [school, setSchool] = useState(campusInfo.name)
   const [switcherOpen, setSwitcherOpen] = useState(false)
-  const [likedIds, setLikedIds] = useState<Record<string, boolean>>({})
   /**
    * 信息流状态（M3 Slice 1 收紧）：
    *   在线 → **API 是权威数据源**（不再混入 mock，避免"双真源"）
@@ -187,6 +193,27 @@ export function CampusScreen() {
       alive = false
     }
   }, [])
+
+  /**
+   * 点赞（M3 Slice 2）：调真实接口，用**服务端返回的权威计数**覆盖本地。
+   * 不本地假成功；未登录时提示并去登录页。
+   */
+  async function onToggleLike(post: FeedPost) {
+    if (!isLoggedIn()) {
+      navigate('loginselect')
+      return
+    }
+    const r = post.liked ? await unlikePost(post.id) : await likePost(post.id)
+    if (!r.ok) {
+      console.warn('[campus] 点赞失败：', r.reason)
+      return
+    }
+    setFeed((prev) =>
+      prev.map((p) =>
+        p.id === post.id ? { ...p, likes: r.value.likeCount, liked: r.value.likedByMe } : p,
+      ),
+    )
+  }
 
   return (
     <Screen
@@ -233,7 +260,7 @@ export function CampusScreen() {
 
       <div className="campus__grid">
         {feed.map((p) => (
-          <PostCard key={p.id} post={p} liked={likedIds[p.id]} onLike={setLikedIds} />
+          <PostCard key={p.id} post={p} liked={p.liked} onLike={() => void onToggleLike(p)} />
         ))}
         {phase === 'ready' && (
           <p className="campus__end">

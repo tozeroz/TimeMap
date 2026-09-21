@@ -3,8 +3,10 @@ import {
   createComment,
   getComments,
   getPost,
+  likePost,
   readSnapshot,
   relativeTime,
+  unlikePost,
   avatarFor,
   type ApiCommentNode,
   type ApiPostDetail,
@@ -84,6 +86,42 @@ export function FeedDetailScreen({ id }: { id: string }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  /**
+   * 点赞（M3 Slice 2）。
+   *
+   * 展示规则来自原版**只读**观察（supplements/slice2-likes-readonly.json）：
+   *   - 点赞区是整块热区；计数是**纯数字无单位**
+   *   - **0 赞时不渲染计数控件**（不是显示 0）
+   *   - 评论数在 0 时显示的是**文字「评论」**（与点赞的规则不同）
+   *
+   * 注意：点赞是**写操作**，失败绝不本地假成功（M1 冻结原则）。
+   */
+  async function toggleLike() {
+    if (busy || !post) return
+    if (!isLoggedIn()) {
+      setNotice('请先登录后再点赞')
+      navigate('loginselect')
+      return
+    }
+    setBusy(true)
+    try {
+      const r = post.likedByMe ? await unlikePost(post.id) : await likePost(post.id)
+      if (!r.ok) {
+        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${r.reason}`)
+        return
+      }
+      // 用服务端返回的权威计数覆盖本地，而不是自己加减
+      setPost({
+        ...post,
+        likeCount: r.value.likeCount,
+        likedByMe: r.value.likedByMe,
+      })
+      setNotice('')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function submitComment() {
     if (busy) return
@@ -165,9 +203,32 @@ export function FeedDetailScreen({ id }: { id: string }) {
               if (e.key === 'Enter') void submitComment()
             }}
           />
-          <button className="feed__action feed__action--text" onClick={() => void submitComment()} disabled={busy}>
+          {/* 点赞：整块热区；0 赞时刻意**不渲染计数**（对齐原版：那时没有计数控件） */}
+          <button
+            className={`feed__action ${post.likedByMe ? 'is-liked' : ''}`}
+            onClick={() => void toggleLike()}
+            disabled={busy}
+            aria-label="点赞"
+          >
+            <IconHeart size={21} filled={post.likedByMe} />
+            {post.likeCount > 0 && <span>{post.likeCount}</span>}
+          </button>
+          {/*
+            评论数：0 → 显示「评论」二字；>0 → 显示数字（含回复）。
+            **简化说明**：原版是先点输入框打开评论编辑器、在编辑器里发送；
+            这里草稿非空时点这个按钮即发送（回车等价），避免再造一个弹层。
+            这是本 demo 的有意简化，不声称与原版一致。
+          */}
+          <button
+            className="feed__action feed__action--text"
+            onClick={() => {
+              if (draft.trim()) void submitComment()
+            }}
+            disabled={busy}
+            aria-label="评论"
+          >
             <IconComment size={21} />
-            <span>{busy ? '发送中' : '发送'}</span>
+            <span>{post.commentCount > 0 ? post.commentCount : '评论'}</span>
           </button>
         </div>
       }
