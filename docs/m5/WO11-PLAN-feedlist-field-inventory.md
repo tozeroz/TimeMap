@@ -156,6 +156,78 @@ FeedListScreen 的路由是 #/feedlist，其**唯一**入径是：
   且本单的 Gate **不得**把"demo 脚手架可达"写成"用户可达"。
 ```
 
+## 一之三、⭐ **已冻结的原版基线**（`docs/original-baseline/screens/feed-list/`）
+
+项目里**已有**该页的原版基线，含 `baseline.json` + `normal.png`。
+`baseline.json` 全文（**证据级**，非线索级）：
+
+```json
+{
+  "screen_id": "feed-list",
+  "title": "校园圈",
+  "target_route": "campusx://feed/list",
+  "activity": "com.kairuotu.feed.list.FeedActivity",
+  "entry": { "preconditions": ["app_launched"], "steps": ["deep link campusx://feed/list"] },
+  "states": {
+    "loading": { "status": "not_reproducible", "evidence": [] },
+    "empty":   { "status": "not_reproducible", "evidence": [] },
+    "normal":  { "status": "not_reproducible", "evidence": [] },
+    "error":   { "status": "observed", "evidence": ["normal.png"] }
+  },
+  "interactions": [
+    "顶部「校园圈」+「北京交通大学 ▼」+ 左上关闭",
+    "中央：网络错误图标 + 「网络不给力，点击刷新试试」+ 刷新按钮"
+  ],
+  "navigation": ["关闭 → 返回上一页", "刷新 → 重新请求"],
+  "persistence": ["无"],
+  "known_unknowns": ["有后端且已登录时的正常列表长什么样（本机无法进入）"]
+}
+```
+
+### 它带来的三条结论
+
+**① 证实了我们的 3 处忠实度偏差**（原为线索级，现升为**证据级**）
+| 项 | 原版基线 | 我们的实现 | 判定 |
+|---|---|---|---|
+| 标题 | **「校园圈」** | 无标题（中间只放学校名） | ❌ 缺标题 |
+| 中间 | 「北京交通大学 **▼**」（学校 + 下拉） | 有学校名 + chevron | ✅ 基本一致 |
+| 左侧 | **左上关闭**（X，语义=关闭） | `IconBack` + `aria-label="返回"` | ❌ 图标与语义都不对 |
+| 右侧 | **未提及**（基线只列"左上关闭"） | 「发布」+ 号按钮 | ⚠️ 需再取证（基线未覆盖右侧） |
+| 导航 | **关闭 → 返回上一页** | `goBack('campus')` | ✅ 语义一致 |
+
+**② 基线本身也**没有**建立真实 UI 入口**
+```
+"entry.steps": ["deep link campusx://feed/list"]
+```
+它也是用**深链**进入的 —— 与我在设备侧发现的 `DEMO_SCAFFOLD` 是**同一类缺口**：
+两者都只证明了"页面能打开"，都**不能**证明"原版用户从哪个控件走到它"。
+→ 我此前的 `ORIGINAL_FEED_ENTRY: NOT_EVALUATED` 得到**独立佐证**：连项目自己的基线都没拿到入口。
+
+**③ ⚠️ 最重要的范围限制：原版的"正常列表"从未被观察到**
+```
+states.loading / empty / normal: 全部 not_reproducible
+known_unknowns: "有后端且已登录时的正常列表长什么样（本机无法进入）"
+"error": observed（normal.png 实为错误态截图）
+```
+→ 即：**原版 feed 的正常列表形态（条目布局、有无图片、计数位置、下拉加载等）没有任何基线可比对**。
+   因此本单接线后，"显示真实数据"这一结果**不能声称与原版一致** ——
+   它只能声称"数据来源是真实的"。
+   凡是"列表条目长什么样"的忠实度断言，必须标 `ORIGINAL_NORMAL_LIST: NOT_EVALUATED`。
+
+**④ 另有一条**支持**我原定断言的证据**
+```
+"navigation": ["刷新 → 重新请求"]
+```
+→ 原版语义明确：**刷新就是重新请求**。
+   这直接支持 `FEED_REFRESH_IS_REAL`（而当前实现是"刷新→零请求→显示 mock"，与原版语义相反）。
+
+### ⚠️ 一条自我更正（我差点报一个不存在的缺陷）
+我最初用 PowerShell `Get-Content` 读这份 json，看到的是乱码 `"title": "鏍″洯鍦?`，
+一度以为是"仓库里的证据文件编码损坏"。用 `read` 工具读同一文件 → **完好 UTF-8**。
+→ 那是 **PowerShell 控制台的编码问题，不是仓库缺陷**。
+   教训（与既有纪律同源）：**读证据必须用可靠通道**；
+   从不可靠通道得到"异常"时，先怀疑通道，再怀疑对象。
+
 ## 二、方案（分层，与 WO#8 会话列表同法）
 
 ```
