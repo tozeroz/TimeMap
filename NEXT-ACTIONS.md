@@ -801,8 +801,46 @@ posts  : 有 place_id；**4 条 post 关联了 place**
    同类风险：`schools`/`campuses`/`groups`/`announcements`/`comments`/`likes` 等也未被基线口径覆盖。
    ⇒ 待办：**扩大基线口径**（或至少给"已知会有造数的表"加残留检查）。
    ⚠️ 清理那 23 行前必须先查 `posts.place_id` 是否引用它们（有外键），**不能直接删**。
-- [ ] WO14.5a 核对 mock 的 6 个地点是否**有基线支持**（原版真实存在？）—— 无基线则按纪律标 NOT_EVALUATED
-- [ ] WO14.5b 扩大基线口径，覆盖 `places` 等未覆盖表；清理残留前先查外键引用
-- [ ] WO14.5c 判明 MapScreen 实际在用哪个地图实现（AmapMap / RealMap / TencentMap 三选一）
+- [x] WO14.5a ✅ **已完成**：见 WO15 计划更正 —— 结构化基线已找到，结论已按证据更正（详见下节）
+- [x] WO14.5b ✅ **已完成**：清理 22 行 places 残留 + 基线新增覆盖度审计（21 表：覆盖 9/未覆盖 11）+ 门禁 runner 自动清残留
+- [x] WO14.5c ✅ **已完成**：默认 provider=**tencent**（与基线的"腾讯地图 SDK"一致）；降级链 tencent→amap→raster→OfflineMap
 - [ ] WO14.5d ⚠️ mock 的 `schools` 带 `members: '12,486'`（编造成员数），
       而 `schools` 表**为空** ⇒ 无权威来源，按纪律处理（与 WO#13 删掉的同一类）
+
+### ⭐⭐ Round 265：WO14.5 与 WO15 计划的**两次自我更正**（含一个系统性发现）
+- [x] ✅ WO14.5b 完成：`places` 有 **22 行测试残留**而 `check-server-baseline.sh` **根本不查该表**
+      → 已安全清理（dry-run 默认／删前断言零引用／删后自证）
+      → 并把基线脚本升级为**覆盖度审计**（**21 张表：覆盖 9 ／ 未覆盖 11**，且声明"未覆盖 ≠ 干净"）
+      → 还找到残留**根因**：一次 8 条回归全扫 → `messages` 5→8（每个 Gate 只管造不管收）
+        已在**唯一入口** `run-device-gate.sh` 加第 8/9 步 best-effort 清理
+        对照：修复前 5→**8**（需手清）／修复后跑 WO#9B → 仍 **5**、残留 **0**
+- [x] ✅ WO14.5c 完成：默认 provider=**tencent**（与基线"腾讯地图 SDK"一致）
+- [x] ✅ WO14.5a 完成但**结论被我自己更正**（见下）
+- [x] ⭐⭐ **WO15 计划两次更正**（`docs/m5/WO15-PLAN-CORRECTION-{baseline-found,2-poi-detail-not-blocked}.md`）
+      ① **我犯的第一类错**：只做**窄搜索**（搜 6 个地名串）就断言"基线稀少"，
+         而 `docs/original-baseline/` 下有**结构化基线**（trident-map / poi-search / supplies）
+      ② **我犯的第二类错**：读了 `screens/poi-detail/baseline.json` 就下 `BLOCKED`，
+         **没查有没有 supersedes** —— 而 `supplements/poi-detail.json` 明写
+         `states.normal.status: not_reproducible → **observed**`
+- [x] ⭐⭐ **新增机械工具** `scripts/m5/baseline-inventory.mjs`：
+      基线全貌清单（**24 屏 + 10 补采**）＋ `--grep` **带分母**的全文检索（`--grep 阳光操场` → **0/32**）
+      ＋ **supersedes 追踪**。它当场揪出一个**系统性证据时效问题**：
+- [ ] ⬅ **待裁定 X4（重要）**：**6 个屏幕的 `baseline.json` 状态已被补采取代**：
+      `at-panel` / `comment-detail` / `login-select` / `login-sns` / `media-preview` / `poi-detail`
+      （例如 media-preview 与 at-panel 也是 not_reproducible → **observed**）
+      ⇒ 凡此前**只读 baseline.json** 得出的 `BLOCKED`/`NOT_EVALUATED` 判定**都可能已过期**。
+      请裁定：**单开一单逐条复核历史结论**，还是只在**新**结论上强制？
+- [ ] ⬅ **待裁定 X5**：`baseline-inventory.mjs` 是否**接入常规检查**（发现"被取代但未声明"即报错）？
+- [x] ✅ 记录**证据缺口**（不在本单修）：`feed-list`/`feed-detail` 的 observed 是 **error** 态、
+      `announce`/`chat`/`comment-detail`/`group` 的 observed 是 **empty** 态
+      ⇒ 这几屏的"正常态"基线**未采集**，引用时不得当作"原版正常态已知"
+- [x] ✅ 明确 **BLOCKED 的两种含义必须分开**：
+      `BLOCKED_BY_POLICY`（策略禁止，不得执行）vs「入口当时不可达」（**可能后来已被恢复**）
+- [x] ✅ 如实记录：`supplements/poi-detail.json` 自标 `EVIDENCE_OBTAINED_BY_POLICY_VIOLATION`
+      （`docs/POLICY-VIOLATION-2026-09-21.md`，**已登记／用户裁定 A／2026-09-21 20:47 结案**）
+      → 其**结构性结论仍有效**，但引用时必须带上该标注。我本轮**未对原版做任何写操作**，
+        且**未重新采集基线**（所有原版结论来自既有文件）
+- [ ] ⬅ 待裁定（原 6 项）：是否批准 WO15 计划／**是否批准新增 API 能力 placeLat+placeLng**／
+      方案 A、B 或其它／mock 6 条保留加注释／颜色 NOT_EVALUATED／是否先补原版 Map 只读基线采集
+- [ ] ⬅ 待裁定 2 项（追加）：**WO14.5d 是否单开 WO#16**（校园/校区选择与原版形态对齐）／
+      **视觉通道是否接入**（`vision` 工具两次返回空，故我**没有**核对过基线截图像素）
