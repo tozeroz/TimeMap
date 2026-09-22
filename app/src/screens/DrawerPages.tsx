@@ -1,18 +1,37 @@
 import { useEffect, useState } from 'react'
 import { DrawerPage } from '../components/Drawer'
 import { IconChevronRight } from '../components/icons'
-import { listSchools } from '../api/client'
+import { listSchoolColleges, listSchools } from '../api/client'
 import { goBack, navigate } from '../router'
 import './drawerpages.css'
 
-function Rows({ items }: { items: Array<{ label: string; value?: string; to?: string }> }) {
+/**
+ * label + value 的行组件。
+ *
+ * ⭐ F-004（Round 319）：新增 `onClick` 与 `hook` 两个可选字段 ——
+ *   因为「所在学院」要做成**点击打开 picker** 的行（不是跳路由）。
+ *   ```
+ *     `to`      —— 走路由（原有行为，保持不变）
+ *     `onClick` —— 就地动作（如打开同页面板）
+ *     `hook`    —— 给该按钮加 data-* 属性，供门禁精确定位（不靠文本匹配）
+ *   ```
+ */
+function Rows({
+  items,
+}: {
+  items: Array<{ label: string; value?: string; to?: string; onClick?: () => void; hook?: string }>
+}) {
   return (
     <div className="dprows">
       {items.map((it) => (
         <button
           key={it.label}
           className="dprow"
-          onClick={() => it.to && navigate(it.to)}
+          {...(it.hook ? { [it.hook]: '' } : {})}
+          onClick={() => {
+            if (it.onClick) return it.onClick()
+            if (it.to) navigate(it.to)
+          }}
         >
           <span className="dprow__label">{it.label}</span>
           <span className="dprow__value">{it.value ?? ''}</span>
@@ -84,28 +103,67 @@ export function VerifyScreen() {
   const [school, setSchool] = useState<string | null>(null)
   const [schoolState, setSchoolState] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   const [notice, setNotice] = useState('')
+  /* ⭐ F-004/F-006：学院 picker 的状态 */
+  const [schoolId, setSchoolId] = useState<string | null>(null)
+  const [colleges, setColleges] = useState<Array<{ id: string; name: string }>>([])
+  const [collegeState, setCollegeState] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  const [college, setCollege] = useState('')          // 已确认的学院
+  const [draftCollege, setDraftCollege] = useState('') // 面板里待确认的选择
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   useEffect(() => {
     void (async () => {
       const r = await listSchools()
       if (r.ok && r.value.length > 0) {
         setSchool(r.value[0].name)
+        setSchoolId(r.value[0].id)
         setSchoolState('ready')
       } else {
         setSchool(null)
+        setSchoolId(null)
         setSchoolState('unavailable')
       }
     })()
   }, [])
 
+  /*
+    ⭐ F-006 的数据侧：学院列表取**权威**（后端 colleges 表，种子来自原版观察）。
+    ⚠️ 取不到时**如实**说"不可用"，**不**回落成任何编造的学院名。
+  */
+  useEffect(() => {
+    if (!schoolId) {
+      if (schoolState === 'unavailable') {
+        setColleges([])
+        setCollegeState('unavailable')
+      }
+      return
+    }
+    void (async () => {
+      const r = await listSchoolColleges(schoolId)
+      if (r.ok) {
+        setColleges(r.value)
+        setCollegeState('ready')
+      } else {
+        setColleges([])
+        setCollegeState('unavailable')
+      }
+    })()
+  }, [schoolId, schoolState])
+
   return (
     <DrawerPage title="填写认证信息" onBack={() => goBack('me')}>
       {/*
-        ⚠️ 字段呈现的证据限度（如实标注）：
-          dump 只给了「label + value + bounds」，**没有**告诉我们那几行是"可输入的输入框"
-          还是"带箭头的选择行"（学院/专业/年级在原版是空的，看不出控件类型）。
-        ⇒ 这里沿用本项目既有的 Rows 形态（label + value），**不发明**输入控件类型；
-          要精确对齐需再做一次只读观察（点开其中一行看是否有选择器/键盘）。
+        ⭐⭐ F-004 / F-006（审核 67 批准为「一个非常小的 closeout」）
+        ═══════════════════════════════════════════════════════════════════
+        审核 67 的裁定：原版「所在学院」点击后弹 **picker**，而我们只有纯文本 Row ——
+        "这是**交互方式**，不是视觉……**用户操作能力不同**" ⇒ `EXPERIENCE_FIDELITY BLOCKER`。
+        ⇒ 现在改为**真正的 picker**：
+             点「所在学院」→ 面板（**取消 / 确认** + 学院列表 + 「没有我的学院？」）
+             与 Round 319 只读 dump 到的原版面板元素**逐字对齐**。
+        ⚠️ 学院数据的证据限度见 `listSchoolColleges` 的注释（**观察到的子集**，非完整表）。
+        ⚠️ **就读专业 / 当前年级**保持不可交互的展示行：F-005 `NOT_EVALUATED`
+           （点「就读专业」无可见反应；合理假设是"依赖已选学院"，但**未验证**）
+           ⇒ **不**编造它们的 picker（那是发明交互）。
       */}
       <Rows
         items={[
@@ -118,11 +176,79 @@ export function VerifyScreen() {
                   ? '加载中…'
                   : '未获取到（学校数据不可用）',
           },
-          { label: '所在学院', value: '' },
+          /*
+            学院行：可点击 ⇒ 打开 picker。`to` 不设（不走路由），改由 onClick 打开面板。
+            ⚠️ 这里没有复用 Rows 的 `to` 机制，因为 picker 是**同页面板**而非新页面。
+          */
+          {
+            label: '所在学院',
+            value: college ? college : collegeState === 'loading' ? '加载中…' : '',
+            onClick: () => setPickerOpen(true),
+            hook: 'data-verify-college' as const,
+          },
           { label: '就读专业', value: '' },
           { label: '当前年级', value: '' },
         ]}
       />
+
+      {/*
+        ⭐ 学院 picker 面板 —— 元素逐字对齐原版 dump：
+           ["取消", "所在学院", "确认", <学院列表…>, "没有我的学院？"]
+      */}
+      {pickerOpen && (
+        <div className="vpick" data-verify-college-picker>
+          <div className="vpick__mask" onClick={() => setPickerOpen(false)} />
+          <div className="vpick__panel">
+            <div className="vpick__head">
+              <button className="vpick__btn" onClick={() => setPickerOpen(false)}>
+                取消
+              </button>
+              <span className="vpick__title">所在学院</span>
+              <button
+                className="vpick__btn vpick__btn--primary"
+                data-verify-college-confirm
+                onClick={() => {
+                  setCollege(draftCollege)
+                  setPickerOpen(false)
+                }}
+              >
+                确认
+              </button>
+            </div>
+            <div className="vpick__list no-scrollbar">
+              {collegeState === 'loading' && <p className="vpick__hint">加载中…</p>}
+              {collegeState === 'unavailable' && (
+                <p className="vpick__hint" data-verify-college-unavailable>
+                  学院列表不可用（未能从后端取到）
+                </p>
+              )}
+              {colleges.map((c) => (
+                <button
+                  key={c.id}
+                  className={`vpick__item ${draftCollege === c.name ? 'is-active' : ''}`}
+                  onClick={() => setDraftCollege(c.name)}
+                >
+                  {c.name}
+                </button>
+              ))}
+              {/*
+                ⚠️ 「没有我的学院？」是原版 dump 里**确实存在**的入口，
+                   但其**后继流程未观察**（我们不知道点它会发生什么）
+                   ⇒ 这里只如实呈现，点击给出明确说明，**不假装**能提交/认证。
+              */}
+              <button
+                className="vpick__item vpick__item--alt"
+                data-verify-college-missing
+                onClick={() =>
+                  setNotice('「没有我的学院？」的后续流程未观察，本 demo 未接入，无法继续。')
+                }
+              >
+                没有我的学院？
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="dpcard">
         {/*

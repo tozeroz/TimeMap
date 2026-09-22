@@ -85,7 +85,7 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 | CampusScreen.tsx | api-only | — | — | isLoggedIn, likePost, listPosts, listSchoolCampuses, listSchools, readSnapshot, toFeedPost, unlikePost |
 | ChatScreen.tsx | api-only | — | — | fetchMediaBlobUrl, getSession, getThread, getThreadMessages, postThreadImageMessage, postThreadTextMessage, postThreadVoiceMessage, relativeTime, uploadMedia |
 | DailyScreen.tsx | none | — | — | — |
-| DrawerPages.tsx | api-only | — | — | listSchools |
+| DrawerPages.tsx | api-only | — | — | listSchoolColleges, listSchools |
 | FeedDetailScreen.tsx | api-only | — | — | avatarFor, createComment, isLoggedIn, likePost, mediaUrl, relativeTime, unlikePost |
 | FeedListScreen.tsx | api-only | — | — | listPosts, readSnapshot, toFeedPost |
 | LoginScreen.tsx | api-only | — | — | requestLoginCode, verifyLoginCode |

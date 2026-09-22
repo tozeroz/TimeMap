@@ -1378,6 +1378,54 @@ export function buildServer(deps: ServerDeps) {
     }
   })
 
+  /*
+    ⭐ F-004 / F-006（审核 67 批准为「一个非常小的 closeout」）：学院的**权威列表**。
+    ═══════════════════════════════════════════════════════════════════════════
+    为什么需要这个接口：审核 67 把「所在学院」原版是 **picker**、我们却是纯文本 Row
+    定为 **EXPERIENCE_FIDELITY BLOCKER**（"这是**交互方式**，不是视觉……用户操作能力不同"）。
+    而 picker **若无可选实体就只是一个空面板** ⇒ 等于把一个假功能换成另一个假功能。
+    ⇒ 所以 F-004（交互侧）与 F-006（数据侧）必须一起做，本接口就是数据侧。
+
+    数据来源与**证据限度**（不夸大）：
+      · 5 条学院名**逐字**来自 Round 319 对原版认证页「所在学院」picker 的**只读 dump**
+        （tools/tmp/orig-v4.xml，可复算）—— 不是我编的，见迁移 013 的注释。
+      · ⚠️ 该 dump 是**观察到的子集**（面板在真机上可能可滚动）⇒
+        `ORIGINAL_COLLEGE_LIST_COMPLETE: NOT_EVALUATED` ⇒ 响应里带上该字段，**不**声称完整。
+      · ⚠️ **不**返回"专业"：F-005 明确 NOT_EVALUATED（点「就读专业」无可见反应）。
+      · ⚠️ **不**返回学院→校区归属：原版未显示这种关系 ⇒ 无依据。
+  */
+  app.get('/api/schools/:id/colleges', async (req, reply) => {
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    try {
+      const sr = await db.pool.query<{ id: string }>('select id from schools where id = $1', [id])
+      if (sr.rows.length === 0) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      const cr = await db.pool.query<{ id: string; name: string }>(
+        'select id, name from colleges where school_id = $1 order by sort_order, name, id',
+        [id],
+      )
+      return {
+        items: cr.rows,
+        /* ⚠️ 如实标注证据限度：这是**观察到的子集**，不声称是完整学院表 */
+        completeness: 'OBSERVED_SUBSET',
+        originalCollegeListComplete: false,
+        note:
+          '学院名逐字来自 Round 319 对原版认证页「所在学院」picker 的只读 dump（5 条）；' +
+          '该面板可能可滚动 ⇒ ORIGINAL_COLLEGE_LIST_COMPLETE: NOT_EVALUATED。',
+      }
+    } catch (err) {
+      req.log.error({ err }, 'schools/:id/colleges failed')
+      reply.code(500)
+      return { error: 'internal' }
+    }
+  })
+
   app.get('/api/schools/:id/campuses', async (req, reply) => {
     const id = (req.params as { id?: string }).id ?? ''
     if (!/^[0-9a-f-]{36}$/i.test(id)) {

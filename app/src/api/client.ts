@@ -975,6 +975,35 @@ export async function listSchoolCampuses(schoolId: string): Promise<ApiResult<Ap
   return request<ApiSchoolCampuses>('/api/schools/' + encodeURIComponent(schoolId) + '/campuses')
 }
 
+export interface ApiCollege {
+  id: string
+  name: string
+}
+
+/**
+ * 某学校下的**学院**列表（只读）—— F-004/F-006（审核 67 批准为「一个非常小的 closeout」）。
+ *
+ * ⚠️ **证据限度（必须随用法一起理解，不夸大）**：
+ *   5 条学院名**逐字**来自 Round 319 对原版认证页「所在学院」picker 的**只读 dump**
+ *   （`tools/tmp/orig-v4.xml`，可复算），**不是我编的**；
+ *   但该 dump 是**观察到的子集**（面板在真机上可能可滚动）
+ *   ⇒ 服务端返回 `completeness: 'OBSERVED_SUBSET'` 与 `originalCollegeListComplete: false`
+ *   ⇒ **不得**声称它是完整学院表（`ORIGINAL_COLLEGE_LIST_COMPLETE: NOT_EVALUATED`）。
+ *
+ * ⚠️ **不**提供"专业"列表：F-005 明确 `NOT_EVALUATED`（点「就读专业」无可见反应，
+ *   合理假设是"专业依赖已选学院"，但**未验证**）⇒ 不编造。
+ */
+export async function listSchoolColleges(schoolId: string): Promise<ApiResult<ApiCollege[]>> {
+  const r = await request<{
+    items: ApiCollege[]
+    completeness?: string
+    originalCollegeListComplete?: boolean
+    note?: string
+  }>('/api/schools/' + encodeURIComponent(schoolId) + '/colleges')
+  if (!r.ok) return r
+  return { ok: true, value: r.value.items }
+}
+
 // ---------------------------------------------------------------------------
 // 「最后一次成功的 API 快照」缓存
 //

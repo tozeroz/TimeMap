@@ -12,6 +12,7 @@ import voiceMediaSql from './migrations/009_voice_media.sql'
 import voiceMediaStrictSql from './migrations/010_voice_media_strict.sql'
 import mentionsAllSql from './migrations/011_mentions_all.sql'
 import seedSchoolCampusesSql from './migrations/012_seed_school_campuses.sql'
+import seedCollegesSql from './migrations/013_seed_colleges.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -44,6 +45,14 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   //         审核 60：place 推不出 campus，不得为了"让数字出来"而伪造归属。
   //      该 SQL 自带断言：若本迁移产生了任何归属，会直接 raise exception。
   { version: '012_seed_school_campuses', sql: seedSchoolCampusesSql },
+
+  // 013：种下**有观察证据**的学院（F-004/F-006；审核 67 批准为「一个非常小的 closeout」）
+  //      ⚠️ 只种**学院实体本身**（5 条，逐字来自 Round 319 对原版「所在学院」picker 的
+  //         只读 dump）；**不**种任何归属（users 无 college 列；不种学院→校区；
+  //         不种专业列表 —— F-005 明确 NOT_EVALUATED）。
+  //      ⚠️ 该 dump 是**观察到的子集**（面板可能可滚动）⇒
+  //         ORIGINAL_COLLEGE_LIST_COMPLETE: NOT_EVALUATED（**不**声称完整）。
+  { version: '013_seed_colleges', sql: seedCollegesSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

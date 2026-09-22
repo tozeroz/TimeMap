@@ -264,19 +264,38 @@ systemd: campus-backend **active** ／ nginx **active** ／ postgresql **active*
 
 ---
 
-## 八、两套口径下的结论
+## 八、结论（**口径已由审核 67 冻结** —— 本节已按权威答案改写）
+
+我在 §〇 上报的口径冲突，**已由审核 67 给出权威答案**（用户已明确修改目标）：
 
 ```
-【口径 A —— 目标文本原文："最终严格 1:1 复现"】
-  M5_GLOBAL_REGRESSION_AUDIT: 见 §五
-  M5_COMPLETION_STATUS: **BLOCKED**（仍有视觉/语义类 NOT_EVALUATED 未收敛：
-      F-002 / F-004 / F-005 / F-006 + boardEmojis 字符 + 若干视觉基线）
-  理由：在这些项未评估前，"严格 1:1"无法声称达成。
-
-【口径 B —— 审核 66 转述："体验/行为等价优先，纯视觉不阻塞"】
-  M5_COMPLETION_STATUS: **趋近完成**（行为/体验类 blocker 已全部修掉；
-      仅剩视觉类与"需要写操作才能取证"的项）
-  ⚠️ 但该口径**未获我收到的目标文本支持** ⇒ 我**不**据此自行宣布完成。
+PROJECT TARGET:        **EXPERIENCE / BEHAVIOR EQUIVALENCE**
+PURE VISUAL 1:1:       **NOT REQUIRED**（图标/颜色/装饰/像素级布局后期会重新设计）
+⇒ 旧文档的"最终严格 1:1 复现"已被后来的用户决策 **SUPERSEDED**
 ```
 
-⇒ 请审核/用户**先澄清口径**，再决定关账与否。**我不自行宣布 M5 完成。**
+因此 §〇 里那两套口径（A/B）**作废**，改为**单一口径**。裁定结果：
+
+```
+M5_GLOBAL_REGRESSION_AUDIT:            PASS
+M5_ARTIFACT / DB / SERVER CONSISTENCY: PASS
+M5_MOCK_AND_FAKE_SUCCESS_ERADICATION:  PASS
+M5_EXPERIENCE_COMPLETION_STATUS:       **HOLD**
+```
+> HOLD 的原因**不是视觉**，而是"仍存在**明确的功能/交互能力缺口**"（审核 67 原话）。
+
+```
+BLOCKER：F-004 认证页「所在学院」应为 picker（"表单交互方式"属 BLOCKING）
+BLOCKER：F-006 原版有学院实体、我们没有（数据侧）
+待 Owner 做 scope 裁定：SCANNER CORE FUNCTIONALITY ／ CAMPUS VERIFICATION NEXT FLOW ／ UPGRADE FUNCTIONALITY
+NON-BLOCKING：F-002（体验等价的文案差异）／ boardEmojis 字符（视觉 backlog）／ 纯视觉项
+```
+
+⭐ 审核 67 指出的、我认为**最重要**的一点：
+> "**『没有 mock / 没有假成功』≠『体验已经等价』。**
+>  不要把所有『把假功能换成 unavailable 提示』的页面都**自动视为完成**。"
+
+⇒ 所以本审计"§① 已无可执行 mock surface = 完成"的推论**不成立**；
+   那些页面现在**诚实**了，但**体验**不等于原版。已按审核口径逐项重分类（见审核 67 文档 §四）。
+
+⚠️ 我据此**不**自行宣布 M5 完成；后续动作见 `docs/review-log/67-…md` §五。
