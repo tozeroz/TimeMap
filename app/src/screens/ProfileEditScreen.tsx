@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { me as fetchMe, patchMyDisplayName } from '../api/client'
+import { updateSessionUser } from '../api/session'
 // ⚠️ SessionUser 定义在 ./session（client.ts 只是 re-export 的引用方）——
 //    我第一版从 '../api/client' 里 import 它，类型检查会报"没有导出成员"。
 import type { SessionUser } from '../api/session'
@@ -116,6 +117,18 @@ export function ProfileEditScreen() {
     }
     // 只用**服务端权威值**提交到界面
     setIdentity((prev) => (prev ? { ...prev, displayName: r.value.displayName } : prev))
+    /*
+      ⭐ M5 WO#14（审核记录 55/56 批准的"窄函数"）：把**服务端刚返回的值**
+      同步回本地会话缓存。
+      为什么必须在这里做：`getSession()` 有模块级 cache，而「我的」页用
+      `useState(() => getSession())` 只在挂载时读一次 —— 不写回缓存的话，
+      改完昵称回「我的」，**登录行仍显示旧值**（本轮实测确认）。
+      ⚠️ 传的是 `r.value.displayName`（服务端返回值），**不是** `next`（用户输入）——
+         后者会在"写入失败但回显成功"的情形下重新制造"假成功"。
+      ⚠️ 只在**成功分支**调用：失败时绝不能动缓存（否则正是
+         `PROFILE_EDIT_FAILURE_DOES_NOT_MUTATE_SESSION_CACHE` 要抓的行为）。
+    */
+    updateSessionUser({ displayName: r.value.displayName })
     setDraft(null)
   }
 

@@ -208,3 +208,22 @@
   font-size: 10.5px;
   line-height: 1.5;
 }
+
+/* ===========================================================================
+   M5 WO#14：个人页的**权威自身身份**相关样式
+   =========================================================================== */
+
+/* 首字占位头像（users 表没有 avatar 列）。
+   ⚠️ 改前这里用 mock 生成的 SVG（`me.avatar` → data:image/svg+xml）——
+      与"编造的昵称"是同一类问题：看起来像真实资料，其实是我们画的。
+      按 WO#12/#13 的同一冻结改为首字占位，**不新增数据列**。 */
+.me__avatar--ph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--c-text-2);
+  background: var(--c-surface-sunken);
+  user-select: none;
+}

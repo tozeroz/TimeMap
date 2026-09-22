@@ -73,6 +73,34 @@ export function clearSession(): void {
   }
 }
 
+/**
+ * 把**服务端刚返回的**用户字段同步回本地会话缓存（M5 WO#14，审核记录 55/56 批准的"窄函数"）。
+ *
+ * ## 为什么必须补它（这是一个与 mock 无关的**独立**缺陷）
+ *   `getSession()` 有**模块级 cache**，各页面普遍用
+ *   `useState(() => getSession())` **只在挂载时读一次**。
+ *   而 WO#13 的 `PATCH /api/users/me` 成功后，**没有任何代码把新 displayName 写回缓存**。
+ *   实测现象：改昵称前 `cachedName == serverName == "Lemy"`（本来是同步的）；
+ *   改完回「我的」页，登录行**仍显示 Lemy**（旧缓存），而服务端已是新值。
+ *   ⇒ 即使把中心名字接上权威来源，只要不修这里，登录行仍会滞后。
+ *
+ * ## 为什么是"窄函数"而不是全局状态 / 事件总线
+ *   审核 55 明确要求补一个**窄函数**。理由：本仓库的规模与耦合度不需要发布订阅机制，
+ *   引入它只会增加"什么时候会刷新"的隐式时序。这里只做一件事：
+ *   **用调用方给的、来自服务端的权威字段，覆盖当前会话里的用户对象**。
+ *
+ * ## 边界（不夸大）
+ *   · 它**不**发请求、**不**校验、**不**处理过期 —— 纯本地写入。
+ *   · 调用方**必须**传入服务端返回值，**不得**传入用户输入（否则又变成"假成功"）。
+ *   · 无会话时**什么都不做**（不凭空造一个会话）。
+ *   · 只覆盖显式给出的字段；其余字段（token/expiresAt/handle/phone）原样保留。
+ */
+export function updateSessionUser(patch: Partial<Pick<SessionUser, 'displayName' | 'handle' | 'phone'>>): void {
+  const s = getSession()
+  if (!s) return
+  setSession({ ...s, user: { ...s.user, ...patch } })
+}
+
 /** 有会话就返回 Authorization 头，没有就返回空对象（请求照常发，由服务端决定 401） */
 export function authHeaders(): Record<string, string> {
   const s = getSession()
