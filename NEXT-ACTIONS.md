@@ -1435,3 +1435,40 @@ posts  : 有 place_id；**4 条 post 关联了 place**
         审核 64 的队列写在看到该结果之前 ⇒ 下次提交需明确告知
 - [ ] ⬅ **A3/A4 结论 + F-003 的修法裁定**尚未提交审核（要求 4：每单闭环）
 - [ ] ⬅ 然后 **A5 targeted fidelity closeout**（可量化→机械收敛；少量关键语义→定点上传 PNG）
+
+### ⭐ Round 318 续 3：A4 观察单**关闭**（三项全部有结论）
+
+- [x] ✅ **A4 三项全部有结论**（`docs/m5/A3A4-BOUNDED-OBSERVATION.md`）
+      ```
+      comments      → ✅ 已由 F-001 解答（原版**不是**独立 comments screen，评论**内联**在 FeedDetail）
+      scanner       → ✅ 入口已找到（原版抽屉「扫一扫」[307,1815][376,1850]）；
+                        我们抽屉里**缺失该入口** ⇒ 登记为缺失入口
+      media-preview → ⛔ **BLOCKED_BY_POLICY**
+      ```
+- [x] ✅ ⭐ **media-preview 为什么是策略阻塞（而不是"没做"）**：
+      我先查了**已有权威证据**（`screens/media-preview/baseline.json`），而非先去点：
+      ```
+      其 target_route = campusx://chat/media-preview，四态全 not_reproducible
+      "真实入口是**聊天消息里的图片**，而本机无聊天数据"
+      ```
+      而**要在原版里造出聊天图片数据 ⇒ 必须发消息/发图 = 写操作** ⇒ 用户硬约束**绝对禁止**
+      ⇒ 按用户要求 2 记 **BLOCKED_BY_POLICY**：`MEDIA_PREVIEW_ORIGINAL_ENTRY: BLOCKED_BY_POLICY`
+- [x] ✅ ⭐ **并主动说明我放弃的一条路径**：我本可"点 feed 卡片 → 进详情 → 点图片"试探，
+      但**没做**，理由：
+      ① 它测的是 **feed** 图片而非 media-preview（基线明确那是 **chat** 的）⇒ 价值低；
+      ② 原版 feed 卡片**点赞是"整块热区"**（已冻结观察）⇒ 盲点试探**误触即真实点赞 = 写操作**；
+      ③ 刚发生过一次误触退出登录 ⇒ 更应主动减少在他人生产界面上的盲点操作。
+      ⇒ **不为一低价值证据冒写操作风险** → 记 BLOCKED_BY_POLICY 并停手
+- [x] ✅ 队列里的 **A4 观察单据此关闭**（其中一项是**策略阻塞**，不是未完成）
+
+**⬅ 下轮从这里继续**：
+- [ ] ⬅ ⭐ **WO#19 `FeedDetail inline comments topology`**
+      · 计划**已提交审核**（Round 318，含一个待你裁定的点：`#/comments` 是**彻底移除**
+        还是保留为**内部/测试通路**但不作产品页面）
+      · 审核 64 已给出方向（"NEXT: WO19"）与两条纠正（**不是**"删掉路由就完成"；
+        调试通路迁到 FeedDetail 的真实 comment surface）
+      · ⚠️ 唯一未定的设计点就是上面那条；其余部分（把评论区做成 `#/feed` 的**内联结构**）
+        是审核 64 已明确的方向
+- [ ] ⬅ **F-003 修法**待裁定（校园认证页改表单形态）；我倾向归 WO#20 或并进 WO#19
+- [ ] ⬅ **A5 targeted fidelity closeout**（可量化→机械收敛；少量关键语义→定点上传 PNG 给审核看图）
+- [ ] ⬅ F-001 / F-002 / F-003 见 `docs/m5/FIDELITY-CLOSEOUT-BACKLOG.md`
