@@ -90,11 +90,60 @@ content correctness:       ❌ 差异大：
    —— 只记录**入口存在**这一件事（这是审核 62 要求的"entry reachability"）。
 ```
 
-## 三、A4：`media-preview` 的入口 —— 未观测（本轮未做）
+
+## 三、A4 的 media-preview：结论是 **BLOCKED_BY_POLICY**（不是"没做"，是**不能做**）
+
+### 3.1 我先查了**已有权威证据**，而不是先去点（这一步很关键）
 
 ```
-本轮只完成 A3 与 A4 的 scanner 一条。`media-preview` 的原版入口**尚未观察**。
-⇒ 下轮继续（应能通过"点开一张动态图片"这类**纯查看**路径到达）。
+docs/original-baseline/screens/media-preview/baseline.json：
+  "title": "图片预览"
+  "target_route": "campusx://chat/media-preview（实测回落到 trident）"
+  "activity": "（未落到目标 Activity）"
+  "entry": { "preconditions": ["**需要聊天中的图片资源**"],
+             "steps": ["尝试 deep link campusx://chat/media-preview → 前台仍是 TridentActivity"] }
+  "states":  loading/empty/normal/error **四态全为 not_reproducible**
+  "known_unknowns": ["预览页的缩放手势、页码指示、保存按钮位置均未观察"]
+  "blocked_reason": "deep link 无法直达；**真实入口是聊天消息里的图片**，而本机无聊天数据"
+```
+
+### 3.2 为什么这是**策略阻塞**而不是"待观察项"
+
+```
+· media-preview 的**真实入口** = **聊天消息里的图片**（不是 feed 图片、不是 deep link）
+· 而原版账号在本机**没有聊天图片数据**（基线已记录 blocked_reason）
+· 要在原版里造出这个数据 ⇒ **必须发一条消息/一张图片** = **写操作**
+  ⇒ 用户的**硬约束绝对禁止**（会改变对方服务端数据、影响真实用户，
+     且不因"取证据"而获得正当性）
+⇒ 按用户要求 2："凡是'必须做一个写操作才能拿到证据'的场景，
+   **一律记为 BLOCKED_BY_POLICY**，不得执行、不得绕道，并如实写进报告与 Gate 判定。"
+⇒ `MEDIA_PREVIEW_ORIGINAL_ENTRY: BLOCKED_BY_POLICY`
+   `MEDIA_PREVIEW_ORIGINAL_PRESENTATION: NOT_EVALUATED`（四态本来就全不可复现）
+```
+
+### 3.3 ⚠️ 我**主动放弃**的一条本可行的路径，以及理由
+
+```
+我本可以"点 feed 卡片 → 进 FeedDetail → 再点卡片里的图片"去试探是否有预览行为。
+**我没有这么做**，理由：
+  ① 它测的不是 media-preview（基线明确那是 **chat** 的图片预览，路由 `campusx://chat/media-preview`），
+     即使中了也是另一个 surface ⇒ **价值低**；
+  ② 风险高：原版 feed 卡片的**点赞是"整块热区"**（本项目已冻结的观察：
+     supplements/slice2-likes-readonly.json「点赞区是整块热区」）
+     ⇒ 在卡片上试探坐标**误触即产生真实点赞** = **写操作**
+  ③ 刚发生过一次"误触退出登录"（见 §〇）⇒ 更应**主动减少**在他人生产界面上的盲点操作。
+⇒ 结论：**为了拿一条价值低的证据而去冒写操作风险，不划算** —— 记为 BLOCKED_BY_POLICY 并停手。
+   （若将来需要，正确做法是：**只读观察 + 每一步先 dump 确认目标元素**，
+     且只在**明确非点赞热区**的坐标上操作；或由用户在有聊天图片数据的环境下代取。）
+```
+
+### 3.4 因此 A4 的三项现在**全部有结论**
+
+```
+comments     → ✅ 已由 F-001 解答（原版**不是**独立 comments screen，评论内联在 FeedDetail）
+scanner      → ✅ 入口已找到（原版抽屉「扫一扫」）；我们**缺失该入口**
+media-preview→ ⛔ **BLOCKED_BY_POLICY**（真实入口是聊天图片；造数据 = 写操作，禁止）
+⇒ **A4 观察单可关闭**（其中一项是策略阻塞，不是未完成）。
 ```
 
 ---
