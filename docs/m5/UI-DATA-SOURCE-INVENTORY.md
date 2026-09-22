@@ -91,7 +91,7 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 | FeedListScreen.tsx | api-only | — | FeedPost | listPosts, readSnapshot, toFeedPost |
 | LoginScreen.tsx | api-only | — | — | requestLoginCode, verifyLoginCode |
 | LoginSelectScreen.tsx | none | — | — | — |
-| MapScreen.tsx | api-only | — | — | listPosts, mediaUrl |
+| MapScreen.tsx | api-only | — | — | listPosts, listSchools, mediaUrl |
 | MeScreen.tsx | api-only | — | — | logout, me |
 | MediaPreviewScreen.tsx | mock-only | posts | — | — |
 | MessageScreen.tsx | api-only | — | — | getSession, getThreads, relativeTime |
