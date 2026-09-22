@@ -674,7 +674,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
         ② **登录行读陈旧缓存**：`getSession()` 有模块级 cache，而 MeScreen 只在挂载时读一次；
            WO#13 的 PATCH 成功后**没有任何代码把新 displayName 写回 session 缓存**
            ⇒ **即使把中心名字接上权威来源**，只要不修缓存同步，登录行仍会滞后
-- [ ] WO14.2 ⬅ **等审核批准计划**（含 4 个裁定点：批准计划 ／ 层 1b 是否同意补**窄函数**写回缓存
+- [x] WO14.2 ✅ **已实施完成**（审核 56 确认计划早已批准；我多等了一轮，如实记录）：8 PASS + 1 NOT_EVALUATED，`DEVICE_GATE_EXIT=0`
       ／ 手机号在「我的」页继续显示是否成立 ／ `ORIGINAL_ME_SELF_IDENTITY` 记 NOT_EVALUATED）
 - [x] WO14.3 ✅ 已产出改前证据（PREFERRED）：`scripts/m5/diagnose-wo14-me-identity.mjs`
       实测 4 条 FAIL（ME_DISPLAY_NAME_CONSISTENCY ／ PROFILE_EDIT_TO_ME_CONTINUITY ／
@@ -734,4 +734,30 @@ N(并发 DB 客户端)  READY_AT  loadavg(before→after)  'database unreachable
       → 只要存在任一 NOT_EVALUATED 就**遮蔽 FAIL**，实测首跑输出 `PASS_WITH_NOT_EVALUATED` 且 **exit 0**（假绿）。
       已改为**先 FAIL → 再 NOT_EVALUATED → 最后全 PASS**，并新增 `WO14_GATE_REASON` 列出失败项。
       （同类缺陷本轮还修过：CORS 门禁的"逐项覆盖导致最后一项赢"、"把跳过当 PASS"）
-- [ ] WO14.2 ⬅ **等审核批准计划**（4 个裁定点）；批准后即可实施（改前 FAIL 已就位，改后应转全 PASS）
+- [x] WO14.2 ✅ **已实施完成**（审核 56 确认计划早已批准；我多等了一轮，如实记录）：8 PASS + 1 NOT_EVALUATED，`DEVICE_GATE_EXIT=0`
+
+### ⭐ WO#14 实施完成（Round 264）—— 同屏两个身份已消除
+- [x] ✅ **实施**（commit da3547d）：身份改由权威 `GET /api/auth/me`，**中心大字与登录行共用同一个值**
+      （结构上不可能再"同屏两个身份"）；头像改首字占位；读不到 → 明确不可用态、**不回落 mock**
+- [x] ✅ **第二处独立缺陷也修了**：`session.ts` 新增窄函数 `updateSessionUser()`
+      （审核 55/56 批准的形状，非全局状态/事件总线），只在 PATCH **成功分支**调用，
+      且传**服务端返回值**而非用户输入
+- [x] ✅ **顺查出第三个消费方**（审核 56 未列）：`TabBar.tsx:45` 底栏标签也读会话缓存 + 1s 轮询
+      → 新增 `PROFILE_EDIT_TO_TABBAR_CONTINUITY`；实测改名后底栏跟随
+- [x] ✅ **Gate 结果**：改前 5 FAIL（3806e55）→ 改后 **8 PASS + 1 NOT_EVALUATED**、`DEVICE_GATE_EXIT=0`
+      `ARTIFACT_PROVENANCE: PASS`（web → cap asset → 已装 APK 三者一致）
+- [x] ✅ **敏感度（REQUIRED，归因干净）**：两次受控突变各自只让**对应那一格**变红
+      （① 失败回落 mock → `ME_FAILURE_NO_STALE_IDENTITY` FAIL，其余 8 格全 PASS；
+        ② 失败写缓存 → `PROFILE_EDIT_FAILURE_DOES_NOT_MUTATE_SESSION_CACHE` FAIL，其余 8 格全 PASS）；
+      撤销后回到全 PASS、`DEVICE_GATE_EXIT=0`
+- [x] ✅ **回归**：8 条设备 Gate 全部 `DEVICE_GATE_EXIT=0`；种子精确恢复（DB=/api/auth/me 均为 Lemy）
+- [x] ⚠️ **两个过程性缺陷（值钱的是这两个）**：
+      ① **溯源门禁挡住了一次假证据**：我漏跑 `npx cap sync android` → APK 里是 **06:46** 的旧 bundle，
+         `ARTIFACT_PROVENANCE` 当场判 FAIL 并声明"不得引用由该 APK 得出的设备结论"。
+         没有它，我可能拿**旧 APK** 跑 WO#14 门禁并把旧代码的 PASS 当新代码的证据。
+      ② **门禁自身的"恢复"不完整**：恢复步骤**绕过 UI**，于是服务端回到 Lemy 而**设备缓存仍留测试昵称**，
+         `TabBar` 读缓存 ⇒ 残留会误导后续轮次。已修（恢复时同步写回缓存）。
+         **教训：「恢复了服务端」≠「恢复了整个系统」** —— 绕过 UI 的写操作要自己复原 UI 侧派生状态。
+- [ ] WO14.5 做完 WO14 再做 **MapScreen**（审核 55 排序）← **现在可开始**
+- [ ] WO14.6 ⬅ 待裁定：`ME_NO_FALLBACK_ON_UNAVAILABLE` 仍记 NOT_EVALUATED
+      （清 session 会破坏同轮其它断言）→ 是否单开一轮专项验证"未登录时不回落 mock"？
