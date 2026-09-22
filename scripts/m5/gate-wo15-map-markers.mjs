@@ -509,10 +509,15 @@ const v = {
     claims && claims.locateAria === '回到定位' && claims.ctrlCount >= 1 && claims.fabAria === '发布'
       ? 'PASS'
       : 'FAIL',
-  /** 基线 known_unknowns[0]：首次进入有阻断式「**授权地理位置**」弹窗 */
-  MAP_GEO_PERMISSION_MODAL: claims && claims.geoModalPresent && claims.geoModalTitle === '授权地理位置'
-    ? 'PASS'
-    : 'FAIL',
+  /**
+   * 基线 known_unknowns[0]：阻断式「**授权地理位置**」弹窗 —— **只断言 UI 契约**。
+   * ⭐ 按审核 61 拆成两条（我先前写成一条且主张过强，被审核纠正）：
+   *   本键（_UI）：用 app 自带的 #/map?ask=1 强制弹出 ⇒ **确定性**，
+   *     验证该弹窗确实是『授权地理位置』弹窗。
+   *   另一半"会自动出现在首次进入"见下条 —— 那是**另一个 claim**。
+   */
+  MAP_GEO_PERMISSION_MODAL_UI:
+    claims && claims.geoModalPresent && claims.geoModalTitle === '授权地理位置' ? 'PASS' : 'FAIL',
   /** 基线 known_unknowns[1]：底图是**腾讯地图 SDK**（我们默认 provider 与之一致） */
   MAP_TENCENT_BASEMAP: claims && claims.providerText === '腾讯地图' && claims.hasTencentWatermark === true
     ? 'PASS'
@@ -537,6 +542,16 @@ const v = {
       : 'FAIL',
 
   /** 基线明记未知 → 只记录，不当作可通过项（也不进 KEYS，故不影响裁决） */
+  /**
+   * ⭐ 审核 61：**不要为了让它绿而把 force-stop 解释得比实际更强**。
+   *   am force-stop 只能证明**进程**重启；若某些 permission / localStorage 状态
+   *   **跨进程持久**，就不能等价于"首次进入"。
+   *   ⇒ 本项记 **NOT_EVALUATED**（我们目前的 fixture 并未显式重建"首次进入"所需的
+   *     权限状态 + app 本地状态，因此**不主张**它会自动弹出）。
+   *   要升为 PASS 需先做能显式重建那些状态的 fixture（当前不做 —— 遵循审核的
+   *   "不要继续扩张方法学工程"要求）。
+   */
+  MAP_GEO_PERMISSION_AUTO_FIRST_ENTRY: 'NOT_EVALUATED',
   MAP_PIN_COLOR_SEMANTICS_CONFORMANCE: 'NOT_EVALUATED',
   OFFLINE_MAP_PROJECTION_CONFORMANCE: 'NOT_EVALUATED',
   ORIGINAL_MAP_MARKER_CONFORMANCE: 'NOT_EVALUATED',
@@ -553,7 +568,7 @@ const v = {
     navRegion,
     navFab,
     geoModalEvidence:
-      '「会自动出现在首次进入」这一半由 scripts/m5/selftest-dismiss-modals.mjs 作证（它 am force-stop 重启 app 后确认弹窗必现）；本门禁只断言"该弹窗即『授权地理位置』弹窗"，用 app 自带的 #/map?ask=1 强制弹出（确定性，不依赖会话状态）',
+      '本门禁只断言 UI 契约（该弹窗即『授权地理位置』弹窗），用 app 自带的 #/map?ask=1 强制弹出（确定性）。⚠️ 按审核 61：「会自动出现在首次进入」是**另一个 claim**（MAP_GEO_PERMISSION_AUTO_FIRST_ENTRY），记 NOT_EVALUATED —— selftest-dismiss-modals.mjs 的 am force-stop 只证明**进程**重启，不足以等价于「首次进入」（权限/localStorage 可能跨进程持久）。',
   },
   notes: {
     判别性: '期望条数来自**服务端实况**（不写死 6）；主判据用 provider 无关的 data-marker-count',
@@ -588,7 +603,7 @@ const KEYS = [
   'MAP_REGION_TEXT',
   'MAP_MESSAGE_CONTROL',
   'MAP_BOTTOM_RIGHT_CONTROLS',
-  'MAP_GEO_PERMISSION_MODAL',
+  'MAP_GEO_PERMISSION_MODAL_UI',
   'MAP_TENCENT_BASEMAP',
   'MAP_REGION_TO_POI_CONTROL',
   'MAP_PLUS_TO_PUBLISH_CONTROL',

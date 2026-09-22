@@ -96,6 +96,38 @@ EVIDENCE_LIMITATION       证据本身的边界（**不是**缺陷、也**不是
 
 ---
 
+## D-004 校园广场页「校园广场 ▼」面板的**内容**（WO#16 层 A）
+
+```
+状态：      KNOWN_DEVIATION / **TEMPORARY**（登记于审核记录 61）
+屏 / 区域：CampusScreen → 顶部副标题「校园广场 ▼」点开后的面板
+原版行为：  点「校园广场 ▼」→ 出现**校区列表**（校本部 / 威海校区 / 东校区）
+            + 「搜索其他学校」入口
+            （依据：docs/original-baseline/supplements/schools.json 的 campus_picker；
+              注：那份证据采自**地图页**的同类控件，见 WO16-PLAN §一之二 的两页区分）
+我们的实现：
+  ① 入口**保留**（基线证明「校园广场 ▼」本身存在 —— 审核 60 特别纠正过
+     "FeedList 的 HIDE/DEFER 不能机械复制成整块控件消失"）
+  ② 但点开后**不显示任何学校列表**，只显示明确状态：
+     「学校与校区数据尚未接入」（data-school-picker="unavailable"）
+后撤理由：  schools / campuses 两表为空；三个用户 school_campus_id 全为 NULL
+            ⇒ 没有任何权威实体可渲染。按审核 60 的计数策略 A：
+              "无法由权威归属计算时给 null，**不是 0**、不由 place 推断、不伪造"
+我们的处置**优于**改前：
+  改前渲染 mock 的 8 个学校 + region + members（如 '12,486'）——**全部无出处**
+  （其中 '12,486' 正是 WO#11 从动态列表页判定为编造并移除的数字）
+批准记录：  审核记录 61：`SCHOOL_PICKER_UNAVAILABLE: ACCEPTED AS TEMPORARY OUR_DESIGN_CHOICE`
+            （并明确"它比展示 8 条编造学校和编造数字正确得多"）
+对应 Gate： scripts/m5/gate-wo16a-campus-mock.mjs（5 键；含 CAMPUS_PICKER_ENTRY_PRESENT
+            防"过度删除"、CAMPUS_PICKER_NO_MOCK_ON_OPEN 防"点开后仍是假数据"）
+恢复条件：  **WO#16 层 B**（已 APPROVED TO IMPLEMENT）：
+            seed 北交大 + 3 个基线观察到的校区；实现
+            GET /api/schools 与 GET /api/schools/:id/campuses；
+            面板改为渲染权威实体；count 不可计算时保持 null（不显示 0）
+```
+
+---
+
 ## 二、**范围限制**（不是后撤，而是"原版本身没观察到"）
 
 这三条不属于 KNOWN_DEVIATION（我们没有主动少做），而是**基线里就是未知** ——
