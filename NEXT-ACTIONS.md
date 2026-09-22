@@ -1709,7 +1709,43 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 
 ### ⭐⭐ Round 319 续 3：Owner 裁定后的三项新任务（按"从小到大"做）
 
-- [ ] ⬅ **④ 发布页「语音」接线到真实录音**（最小、能力已有）
+- [x] ✅ **④ 完成（并入 WO#21「发帖媒体附件」）**：commit 5835dfb（后端）+ 3f0a84f（客户端）
+      ```
+      ⭐ 准备 ④ 时查出**更大缺口**：post_media 表存在，但服务端对它的引用**全是 select**
+         —— 没有任何接口能把媒体挂到帖子上；客户端 createPost 也从不传图片
+         ⇒ **发布页的图片与语音都只存在于本机**。所以 ④ 的正确实现是打通"发帖媒体附件"。
+
+      后端：POST /api/posts 接受可选 mediaIds
+        · 事务内：校验（形状/存在性/scope=public/**归属当前会话用户**）→ 插帖 → 插 post_media
+        · 响应回 images（与 GET /api/posts/:id **同形状**）
+        · **向后兼容**：不传 mediaIds 时行为与旧版完全一致
+        ⇒ 服务器侧 `gate-wo21-media-attach.sh` **8/8 PASS**：
+          向后兼容／真的挂上／形状与 GET 一致／未知 id 400／**别人的媒体 403**／
+          private 媒体 400／非法形状 400／**非法媒体时不留半条帖子**（原子性）；并自清理
+      客户端：createPost({mediaIds})；PublishScreen.doPublish 逐张 uploadMedia(dataUrl→Blob,'post')
+        + 语音 uploadMedia(blob,'post',durationMs) → createPost({...,mediaIds})
+        · 任一步失败 ⇒ **明确报错、不显示成功**，草稿仍在本地（冻结原则）
+      语音：从**占位波形**改为**真实录音**（native/recorder.ts，与 ChatScreen 同一实现）
+        + 真实计时 + 完整生命周期（开始/结束/删除）；删除「录音功能尚未接入真实麦克风」
+        ⇒ 设备侧 `gate-wo21-publish-media-ui.mjs` **6/6 PASS**，真机实测：
+          「点一下开始录音」→「正在录音… 2″」→「已录制 2″（发布时一并上传）」
+
+      ⚠️ 术语口径（不夸大）：ORIGINAL_PUBLISH_VOICE_EXPERIENCE / PUBLISH_VOICE_FLOW /
+         PUBLISH_MEDIA_LAYOUT 均 **NOT_EVALUATED**（基线自己把"语音模式的真实录音交互"
+         列为 known_unknown；语音形态采用与 ChatScreen 一致 ⇒ **OUR_DESIGN_CHOICE**）
+      ⚠️ 端到端"从相册选图后发布、服务器帖子上带图"本 Gate **不验**（需相册自动化）；
+         该段由服务器侧 8 键门禁 + 代码路径共同保证
+      ⚠️ 如实记录：设备门禁初版静态检查因**我自己在注释里引用了旧文案**而误报 FAIL
+         ⇒ 已改为"先剥注释再搜"（与「断言口径错」同源）
+      ```
+- [ ] ⬅ **① 扫码实际扫码**（下一个）
+      现状：`ScannerScreen` 如实显示「扫码功能尚未实现」
+      需先选技术路线：复用 `native/liveCamera.ts` + JS 解码器／Capacitor 条码插件（需检查是否已装）
+      ⚠️ 原版**扫码后的目标页**在只读约束下不可观察 ⇒ 目标页形态 NOT_EVALUATED
+- [ ] ⬅ **③ App 自更新**
+      现状：`UpgradeDialog` 如实说明「更新流程未接入」
+      ⚠️ 原版「立即更新」的去向**未观察**（点它可能触发真实下载 ⇒ BLOCKED_BY_POLICY）
+      ⇒ 需在"不假装"的前提下做一条**真实**的更新检查/动作（例如自建版本清单接口）
       现状：`PublishScreen` 语音模式是**占位波形**（28 根装饰条）+ 诚实说明
       能力：`ChatScreen` 已在用 `startRecording` / `MediaRecorder` / 真权限 / 真上传
       ⇒ 目标：接真实录音 + 真实时长 + 真实上传（或给出明确的能力边界）
