@@ -1597,3 +1597,54 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [ ] 待裁定项：F-002 / F-004 / F-005 / F-006（最终 audit 里已逐项提请）
 - [ ] 发布前置：I1（IP 清查）/ I3（图标重绘）
 - [ ] 其他待裁定：WO10.9 / WO14.6
+
+### ⭐⭐ Round 319 续：审核 67 裁定 + **F-004/F-006 完成**（目标口径已冻结）
+
+- [x] ✅ **审核 67 落盘**：`docs/review-log/67-target-frozen-experience-equivalence.md`
+      其中**最关键**的一条：**目标口径已正式冻结** ——
+      ```
+      PROJECT TARGET:  EXPERIENCE / BEHAVIOR EQUIVALENCE
+      PURE VISUAL 1:1: **NOT REQUIRED**（图标/颜色/装饰/像素级布局后期会重新设计）
+      ⇒ 旧文档的"最终严格 1:1 复现"已被用户决策 **SUPERSEDED**
+      ```
+      并据此**改写**了 `M5-FINAL-COMPLETION-AUDIT-R319.md` §八（原先的"两套口径"已作废）
+- [x] ✅ **F-004 + F-006 完成**（审核 67 的 BLOCKER；commit 76360bd）
+      ```
+      F-006 数据侧：迁移 013 种下 **5 条观察到的学院**（逐字来自原版 picker 的只读 dump）
+                    + 接口 GET /api/schools/:id/colleges（带诚实完整度标记 OBSERVED_SUBSET）
+                    ⇒ 部署后 migrations applied=**13/13**
+      F-004 交互侧：「所在学院」改为**真正的 picker**，面板元素**逐字对齐原版 dump**
+                    （取消/所在学院/确认/学院列表/「没有我的学院？」）
+      ⚠️ 专业/年级**保持不可交互**（F-005 是 NOT_EVALUATED ⇒ 不发明交互），门禁有专门一条守这个
+      ⇒ 门禁 6 键全 PASS；敏感度**6 键全红**、归因清晰、撤销字节一致
+      ```
+- [x] ✅ 敏感度**再次抓出我两条断言没有判别力**并修正：
+      ```
+      COLLEGE_SELECT_AND_CONFIRM_WORKS  无面板时返回 INCONCLUSIVE（而非 FAIL）
+      COLLEGE_NO_FABRICATED_OPTIONS     ⚠️ `[].filter().length===0` ⇒ **真空 PASS**（恒真断言）
+      ⇒ 修正原则（与 WO#17 同一原则）：**API 已给基准时，结构缺失 = FAIL**；
+        "无编造选项"必须先**真的有选项**才可判。
+      ```
+- [x] ✅ 回归：f004/wo20/wo16b/wo16a/wo14/announce → 全 EXIT=0；服务器侧门禁 PASS；CHECK_ALL_LOCAL PASS
+
+**⬅ 下轮从这里继续**：
+- [ ] ⬅ ⭐⭐ **必须由 Owner 做一次 scope 裁定**（审核 67 明确要求；这是**产品 scope 裁定，不是工程验证**）：
+      ```
+      对以下三项选择 A（必须实现体验等价）／ B（明确排除当前项目 scope）：
+        1. Scanner **实际扫码**能力
+        2. 校园认证「下一步」之后的**真实认证流程**
+        3. App **自更新**
+      ⚠️ 审核 67 的判据："若 Owner 明确说这三项不属目标 ⇒ 可降为
+         APPROVED OUT-OF-SCOPE LIMITATION，此时只需修 F-004/F-006，M5 很可能就能关；
+         若要求全部原版功能体验一致 ⇒ 它们也必须实现，M5 还不能结束。"
+      ⚠️ 在这两项裁定前**不擅自**标为"完成"或"排除"，按审核口径记为
+         EXPERIENCE_GAP_PENDING_OWNER_SCOPE
+      ```
+- [ ] ⬅ 同时把 **F-004/F-006 的完成**提交审核（要求 4：每单闭环）
+- [ ] ⬅ ⭐ 审核 67 的**核心提醒**（已写进本队列，勿忘）：
+      "**『没有 mock / 没有假成功』≠『体验已经等价』。**
+       不要把所有『把假功能换成 unavailable 提示』的页面都**自动视为完成**。"
+- [ ] 已降级为**非阻塞**（审核 67）：F-002（体验等价的文案差异）／`boardEmojis` 字符（视觉 backlog）
+- [ ] F-005：`NOT_EVALUATED`，**不再考古**（审核 67 明确）
+- [ ] 发布前置（非完成度）：I1（IP 清查）/ I3（图标重绘）
+- [ ] 其他待裁定：WO10.9 / WO14.6
