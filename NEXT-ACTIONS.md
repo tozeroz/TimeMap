@@ -859,3 +859,46 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       方案 A、B 或其它／mock 6 条保留加注释／颜色 NOT_EVALUATED／是否先补原版 Map 只读基线采集
 - [ ] ⬅ 待裁定 2 项（追加）：**WO14.5d 是否单开 WO#16**（校园/校区选择与原版形态对齐）／
       **视觉通道是否接入**（`vision` 工具两次返回空，故我**没有**核对过基线截图像素）
+
+### ⭐ Round 265 收尾：审核 57 裁定 + WO#15 增量①（服务端坐标）已落地
+- [x] ✅ 审核 57 裁定：`X4_FULL_HISTORICAL_RECONCILIATION: **NOT REQUIRED**`（我的警报已撤回）／
+      `X4A_SOURCE_VALIDITY_PREFLIGHT: APPROVED / REQUIRED` ／
+      `X5_BASELINE_INVENTORY_REGULAR_CHECK: APPROVED` ／ `X4: CLOSED` ／
+      **`WO15: APPROVED TO IMPLEMENT`**（无需重报计划）
+- [x] ✅ **X5 完成**：`baseline-inventory.mjs --check` 成为常规完整性 Gate，并**接入 `check-all-local.sh` ④b**
+      关键口径（审核 57 明确要求）：**只抓 `UNEXPLAINED_BASELINE_MISMATCH`**，
+      而**不**把"旧快照 ≠ 权威索引"一律当 FAIL（那是 M0→M3 的合法历史）。
+      实测：`BASELINE_SOURCE_VALIDITY: PASS` ／ `BASELINE_UNEXPLAINED_MISMATCHES: 0`
+      （另有 3 处 `EXPLAINED_MISMATCH`，来自 supersedes 声明）
+      ⭐ 敏感度**两个方向都验**（只测一边会漏掉"把所有 mismatch 当 FAIL"的错口径）：
+        `scripts/m5/selftest-baseline-inventory.sh` → 基线 PASS ／ 受控拿掉 at-panel.json → FAIL ／ 还原 → PASS
+        ⇒ `SELFTEST_BASELINE_INVENTORY: PASS`
+- [x] ✅ **Source validity 纪律已沉淀**（审核 57 批准加入 validity 家族，与 Target/Fixture/Origin/
+      Artifact/Observation 并列）；并记录审核 57 的**概念区分**：
+      「屏幕状态 / 具体证据来源 / 证据可采信性**不是同一个字段**」——
+      `POI_DETAIL_CURRENT_BASELINE_STATUS: OBSERVED`（依权威 manifest）＋
+      `HISTORICAL_M0_DEEPLINK_RESULT: NOT_REPRODUCIBLE`（对那一种取法仍成立）＋
+      `RECOVERY_PROVENANCE: contains policy-violation provenance`（引用时必须带上）
+- [x] ✅ 遵守审核 57 的"**不要改写旧快照**"：本提交**未**修改任何 baseline.json / manifest.json / supplement
+- [x] ✅ **WO#15 增量①（服务端）完成**（commit 64c4cfd）：
+      `GET /api/posts` 与 `/api/posts/:id` 均 `left join places` → 新增 **`placeLat`/`placeLng`**（可空）
+      ⭐ 两个刻意细节：① 用 left join（`posts` 无坐标列；且无地点的帖子**不被过滤**，坐标给 null）
+        ② **显式 `Number()` 转换**（pg 常把数值以字符串返回，地图 SDK 需要 number；
+           **TS 编译期看不出来**，不转换则标记可能静默跑到 0,0）；无地点 → **null，绝不伪造 0,0**
+      实测（`WO15_PLACE_COORDS: PASS`）：4 条 post 全部 `float` 类型；
+         `达美乐比萨(广州萝岗万达广场)` 23.1776,113.4404 ／ `北京交通大学` 39.9519,116.3373
+       详情端点 PASS ／ 与 DB places 逐字一致 ／ 0,0 零行 ／ null 零行
+       ⚠️ §4 **如实说明**：无地点的 post 数为 **0** ⇒「null 坐标」这条**无样本可验**，
+          脚本打印"无样本可验，不假装验过"，**不**把它算成 PASS
+      回归：WO#11 feed ／ WO#13 profile-edit ／ WO#7 text-send **全部 DEVICE_GATE_EXIT=0**
+- [ ] WO15.2 ⬅ **下一步（本轮未做）**：前端把 MapScreen 的标记改由 `GET /api/posts` 派生
+      （**只保留带坐标的帖子**；无地点/读不到 → **不出标记、不回落 mock**）；
+      mock 的 6 条从渲染路径移除（**保留在 mock.ts 并加注释说明"未采用"**，理由：保留
+      "曾观察到的原版图钉（阳光操场）"这条线索，避免以后又被误当真实数据）
+- [ ] WO15.3 ⬅ 下一步：Gate `MAP_MARKERS_FROM_AUTHORITY`（每个标记能追溯到**真实 post**）／
+      `MARKER_COUNT_MATCHES_POSTS_WITH_PLACE`（**不硬编码 6**）／ `NO_FABRICATED_PLACE_DATA` ／
+      `MAP_NO_FALLBACK_ON_UNAVAILABLE`；并加敏感度（标记源改回 mock → 前两条必须 FAIL）
+- [ ] WO15.4 仍 NOT_EVALUATED（依基线原话「具体缩放级别与**标记规则未记录**」）：
+      图钉**配色规则** ／ 气泡卡片内容与出现条件 ／ 缩放级别 ／ 头像标记与照片标记的分工
+      ⚠️ 其中"标记的内容形态"**已有三处独立证据**（照片卡片+彩色图钉+地点名），
+        且发现一个**交互细节**：地图上点的是**照片缩略图**、**不是地名文字**（原版 poi-detail 补充）
