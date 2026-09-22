@@ -701,3 +701,22 @@ N(并发 DB 客户端)  READY_AT  loadavg(before→after)  'database unreachable
 **完整修复链条（三条已落实）**：Gate 互斥锁（阻止并发致因）→ 破坏性测试拆出常规回归
 （不再重启在服务的后端）→ 就绪轮询 240s（等待语义正确）。
 详见 `docs/m5/X3-COLD-START-FACTS.md` §五/§六。
+
+### ⭐ 本轮（Round 264）流程改进：把"检查"变成"流程的一步"
+- [x] ✅ **本地静态检查接进常规服务器流程**：`deploy-and-run-server-gate.sh` 新增**第 1.5 步**，
+      在**部署之前**跑 `check-all-local.sh` —— 理由：若本地就不健康（类型错/语法错/PS1 被截断），
+      那么"服务器侧门禁 PASS"是在验证一份**本身有问题**的产物；顺序上应先证本地再证服务器。
+      端到端实测：`CHECK_ALL_LOCAL: PASS` → `SERVER_ARTIFACT_PROVENANCE: PASS` →
+      `CORS_CLIENT_METHOD_COVERAGE: PASS` → `REAL_EXIT=0`（PERSISTENT/STAGE/REGRESSION PASS，
+      `M5_TMP_SELFHEAL SKIPPED_DESTRUCTIVE`）
+      → 本会话已被"忘了跑某个检查"坑过两次（solution 配置的 tsc **空过**、
+        `deploy-server.ps1` 被截断成 3 字节无人发现），故不依赖记忆而依赖流程。
+- [x] ✅ **全设备回归确认本轮改动未破坏任何东西**：本轮改了 `server/src/db.ts`（SQLSTATE 记录）、
+      CORS allow-methods（PATCH/DELETE）、gate 第 3 节（跳过语义）→
+      **8 条设备 Gate 全部 `DEVICE_GATE_EXIT=0`**：
+      WO#13 profile-edit ／ WO#12 他人主页 ／ WO#11 feed ／ WO#10 message ／ WO#8 ／
+      WO#9A 群聊 ／ WO#9B 层A ／ WO#7 文字发送
+- [x] ✅ 收尾核对：门禁残留 **0**；基线精确（`users=3 threads=3 members=5 messages=5 media=3`）；
+      WO14 诊断脚本改过的昵称**已自行恢复**（seed 无污染）
+- [x] ⚠️ 再次踩到（已记录，避免再用）：**在 PowerShell 里内联含 `||` 的 SQL** 会破解析 →
+      一律改用已有脚本（本项目早有此纪律，本轮又犯一次）
