@@ -131,3 +131,22 @@
   font-size: 12px;
   color: rgba(255, 255, 255, 0.45);
 }
+
+/* Round 319：扫码能力缺口态（**不再画假取景框/扫描线**）
+   ⚠️ 刻意保持朴素：这段 UI 不该让人以为"这个 app 能扫码"。 */
+.scan__unavailable {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--c-text-1);
+  text-align: center;
+}
+
+.scan__unavailableHint {
+  margin: 0;
+  padding: 0 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--c-text-2);
+  text-align: center;
+}

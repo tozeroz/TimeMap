@@ -171,7 +171,11 @@ fi
 #   这里只报警不判败（避免因合法的连锁而误判），但会**逐键列出**便于人工过目。
 VE="$(echo "$MUT_OUT" | grep 'VERDICT =' | head -1)"
 UNEXPECTED=""
-ALLFAIL="$(echo "$VE" | grep -o '"[A-Z_]*":"FAIL"' | sed 's/^"//;s/":"FAIL"$//' || true)"
+# ⚠️ 排除**汇总裁决字段**：门禁的 VERDICT 除逐条断言外还含一个汇总键
+#    （如 `SCANNER_GATE` / `WO18_GATE` / `WO17_GATE` / `M5_*`），它是"任一条失败即为 FAIL"的**派生值**，
+#    不是断言 ⇒ 把它当"非预期变红"会**每次都误报**归因不清（我本轮的实跑就是如此）。
+#    ⇒ 只统计真正的断言键：排除以 _GATE 结尾、以及 M5_/WO*_ 开头的汇总键。
+ALLFAIL="$(echo "$VE" | grep -o '"[A-Z_]*":"FAIL"' | sed 's/^"//;s/":"FAIL"$//' | grep -vE '_GATE$|^M5_|^INCONCLUSIVE' || true)"
 for k in $ALLFAIL; do
   hit=0
   for e in "${EXPECT_FAIL[@]}"; do [ "$k" = "$e" ] && hit=1; done

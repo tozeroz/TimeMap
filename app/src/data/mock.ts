@@ -522,7 +522,13 @@ export const upgradeInfo = {
 }
 
 /** 扫码页的提示文案 */
-export const scannerHints = ['扫描校园卡二维码', '扫描群邀请二维码', '扫描活动签到码']
+/*
+  Round 319：`scannerHints` **已移出生产代码**。
+  ⚠️ 它原本给一个**伪造的扫码屏**提供轮播提示（伴随"5.2 秒后识别成功"的假成功）。
+     该屏已改为如实呈现"扫码功能尚未实现"（无取景框、无扫描线、无假成功）。
+  ⚠️ 与 WO#16/#17/#18 同一纪律：**注释挡不住重新 import** ⇒ 数据本身也要移出。
+  → 已移出至 scripts/m5/fixtures/legacy-scanner-hints.json
+*/
 
 /*
   ⚠️ Round 266：`MapMarker`（类型）与 `mapMarkers`（6 条**编造的**标记数据）已从本文件移出。
