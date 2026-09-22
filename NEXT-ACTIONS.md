@@ -974,7 +974,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [ ] ⬅ **新发现 4**：`PoiSearchScreen` 仍渲染 mock `pois`（含**无出处的 `posts:1284`**），
       而 `PoiDetailScreen` **已走权威** `/api/places/:id`；服务端**有**详情接口、**没有**列表接口
       ⇒ 修复需**新增 API 能力**（与 WO#15 同性质）→ `docs/m5/FINDING-poi-search-screen-still-mock.md`
-- [ ] ⬅ 待裁定：以上四个发现是否立单、以及优先级（我建议先做「新发现 2 BoardScreen 的 mock 自称身份」——
+- [x] ✅ 其中「新发现 2」**已在本轮修完**（见「Round 266 修复①」）。**剩下三个**（新发现 1/3/4）待裁定是否立单：
       它最小、且与已批准的 WO#14 同类、修法已被冻结（首字占位））
 
 ### ⭐⭐ Round 266 修复①：留言板 mock 自称身份 + **两个同源缺陷**（commit f2d9205）
