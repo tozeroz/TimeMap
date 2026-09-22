@@ -1679,3 +1679,20 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [ ] ⬅ **I3 图标重绘**（若确定要公开；同上）
 - [ ] ⬅ 若 Owner 选 A 的项里有**我们可以直接做**的（例如 #4 发布页语音接线，能力已有），
       则按小步快跑做掉并各自闭环审核
+
+- [x] ✅ **I1 第一刀（图标来源核实）完成** → `docs/m5/I1-ICON-PROVENANCE-FINDING.md`
+      ```
+      ⚠️ 先说**方法失败**（否则"0 匹配"会被误读）：
+        用 unzip + 正则抓 APK 内 pathData ⇒ "1136 个文件含该字符串，但**一条值都取不到**"
+        根因：APK 里 vector drawable 是 **AXML 二进制**（值走字符串池 + 索引）⇒ 明文正则无效
+        ⚠️⚠️ 那个"0 匹配"是**仪器没工作**，**绝不**能读成"我们是清白的"
+      结论：
+        · icons-send.tsx：**已登记** COPIED_FROM_THIRD_PARTY_APK（并写明 aapt2 命令）
+        · icons.tsx（267 行 / 29 条 path）：**既无标记也无自绘声明** ⇒
+          **ASSET_ORIGIN: UNDOCUMENTED** ⇒ 已在代码头部**如实标注**（发布前必须核实）
+          ⚠️ 我**没有**把它标成"自绘" —— 那是无证据的结论
+      顺带查出**新问题**：icons-send 引用的 `aapt2 dump xmltree` **产物未留档** ⇒
+        该取证**不可复算**（本项目曾因这类记录吃过大亏：message-board 的"7 个表情"旧记录）
+      状态：**INCONCLUSIVE / 需要工具**（环境里 aapt2/apktool/androguard 均不可用）
+      ⇒ 属**发布前置**项；当前未决定公开 ⇒ **不是** M5 体验完成度的阻塞项
+      ```
