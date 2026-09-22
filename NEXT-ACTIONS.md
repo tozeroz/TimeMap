@@ -1472,3 +1472,42 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [ ] ⬅ **F-003 修法**待裁定（校园认证页改表单形态）；我倾向归 WO#20 或并进 WO#19
 - [ ] ⬅ **A5 targeted fidelity closeout**（可量化→机械收敛；少量关键语义→定点上传 PNG 给审核看图）
 - [ ] ⬅ F-001 / F-002 / F-003 见 `docs/m5/FIDELITY-CLOSEOUT-BACKLOG.md`
+
+### ⭐⭐ Round 318 续 4：**WO#19 完成**（FeedDetail 内联评论拓扑归位）
+
+- [x] ✅ **WO#19 全部完成**（commits 83bdb34 / 81ddeac / a490622）
+      ```
+      ① 删除独立 comments 产品页面：
+         App.tsx 移除 #/comments 路由（**原处留说明块**解释为什么删）
+         CommentsScreen.tsx + comments.css 已删除
+         ⚠️ 删前核对：comments.css 只定义 .cd__*（12 类），只有 CommentsScreen import；
+            FeedDetail 的 .cmt*（17 处）全在 feed.css ⇒ 删除安全
+      ② 门禁迁到真实评论表面（审核 64/65 要求），现 **6 键全 PASS**：
+         MISSING_ID_NO_ENTITY_LEAK_FEED_COMMENTS ／ MISSING_ID_NO_ENTITY_LEAK_FEED
+         COMMENTS_INLINE_IN_FEED（取代原"两屏一致"）
+         **REPLIES_NESTED_IN_PARENT**（新增；判据是 **DOM 归属**而非"有没有容器"）
+         COMMENTS_COUNT_FROM_AUTHORITY ／ NO_MOCK_COMMENT_CONTENT
+      ③ 突变重定向到 FeedDetailScreen（旧突变指向已删除文件 ⇒ 已删）
+      ④ 敏感度三阶段 PASS：4 键全红、归因清晰、撤销字节一致回绿
+      ```
+- [x] ✅ ⭐⭐ **敏感度抓出我 3 条断言"没有判别力"，并修正**（本轮最有价值的发现）
+      ```
+      根因：三条都把"**预期节点不存在**"误判成 INCONCLUSIVE（而不是 FAIL）
+            ⇒ 于是"评论区被整个换成 mock"这种最该抓的情况反而没被抓住
+      修正原则：**API/基线已给出基准时，"应有的结构缺失" = FAIL**；
+               INCONCLUSIVE 只用于**基准本身拿不到**的情况
+            （否则断言会在实现整个坏掉时照样报 PASS/INCONCLUSIVE = **恒真断言**）
+      修后：4 键全红、归因清晰（非预期键 0 个）
+      ```
+- [x] ✅ ⚠️ 如实更正**我自己计划里的一个错误**：我在 WO#19 计划里把
+      "① FeedDetailScreen 内联渲染评论区"列为待做 —— **那是错的**，它**早已**按 M3 实现
+      ⇒ 本 WO 实际改动比计划小（只删重复页面 + 迁 Gate）
+- [ ] ⬅ **WO#19 提交审核 + 取得裁定**（要求 4：每单闭环）—— 下一轮第一件事
+- [ ] ⬅ 然后按审核 65 的顺序：**WO#20 校园认证表单 fidelity（F-003）**
+      审核 65 已给出范围："改成真实表单形态；删除编造的状态卡、认证方式、认证状态等；
+      保留已观察到的字段；'下一步'后续流程仍 BLOCKED_BY_POLICY / NOT_EVALUATED；
+      **我们自己的 demo 不能假装认证成功**"
+      原版实测：标题「填写认证信息」+ 就读学校（已填北京交通大学）/ 所在学院 / 就读专业 / 当前年级 + 按钮「下一步」
+- [ ] ⬅ 之后：**A4 剩余 = scanner 最小处置**（media-preview 已 BLOCKED_BY_POLICY 结案）
+- [ ] ⬅ 然后：**A5 定点视觉 fidelity closeout**（可量化→pixel analyzer；少数语义→定点上传 PNG 核对）
+- [ ] ⬅ 最后：**M5 completion audit**（审核 65 给定的 7 个问题）
