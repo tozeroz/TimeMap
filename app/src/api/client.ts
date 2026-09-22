@@ -1,4 +1,4 @@
-import type { FeedPost, User } from '../data/mock'
+import type { FeedPost, User } from '../data/types'
 import { authHeaders, clearSession, setSession, type SessionUser } from './session'
 
 /**

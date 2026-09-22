@@ -1,0 +1,17 @@
+{
+  "_provenance": {
+    "source": "app/src/data/mock.ts（Round 319 之前）",
+    "extracted_at": "2026-09-23T02:15:00+08:00",
+    "reason": "升级弹窗原先据此展示版本号/体积/功能亮点；这些值**全部无出处**（编造）。Round 319 把该屏改为如实说明，故本数据在生产代码中已无引用。",
+    "why_must_not_be_used": "它是一组**无出处的编造发布信息**（version 2.11.0 / size 48.6 MB / 3 条 highlights）。原版 upgrade-alert 的基线（status=observed）只记到『标题 + 版本说明 +「取消」「立即更新」』，**具体版本文案未观察** ⇒ 展示这些值等于把编造当权威。",
+    "original_ts_source": "export const upgradeInfo = {\r\n  version: \u00272.11.0\u0027,\r\n  size: \u002748.6 MB\u0027,\r\n  highlights: [\r\n    \u0027校园广场支持按标签筛选\u0027,\r\n    \u0027群聊新增 @ 面板与消息引用\u0027,\r\n    \u0027修复地图定位偶发偏移\u0027,\r\n  ],\r\n}\r\n"
+  },
+  "original_baseline": {
+    "screen": "upgrade-alert",
+    "activity": "com.kairuotu.base.update.AppUpdateDialogActivity",
+    "interactions_observed": "弹窗叠在校园广场上：标题 + 版本说明 +「取消」「立即更新」",
+    "navigation_observed": "取消 → 回到广场",
+    "version_text": "NOT_EVALUATED（未观察）",
+    "update_flow": "NOT_EVALUATED（原版「立即更新」的去向未观察）"
+  }
+}

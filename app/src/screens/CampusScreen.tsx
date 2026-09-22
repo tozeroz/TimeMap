@@ -15,7 +15,7 @@ import { BigTitle, Screen } from '../components/Shell'
 import { IconChatBubble, IconComment, IconHeart } from '../components/icons'
 // 注意：这里**不再** import mock 的 `posts` —— 校园页已迁移到真实 API，
 // 在线时 API 是权威数据源（审核记录 07 的降级边界：已迁移页面不得混入 synthetic mock）。
-import type { FeedPost } from '../data/mock'
+import type { FeedPost } from '../data/types'
 import { feedAuthoritative, setServerPosts, subscribeMyPosts } from '../data/store'
 import { navigate } from '../router'
 import './campus.css'

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { getBoardNotes, postBoardNote, relativeTime, type ApiBoardNote } from '../api/client'
 import { Screen, TopBar } from '../components/Shell'
 import { IconClose } from '../components/icons'
-import { boardEmojis } from '../data/mock'
+import { boardEmojis } from '../data/uiConstants'
 import { goBack } from '../router'
 import './board.css'
 

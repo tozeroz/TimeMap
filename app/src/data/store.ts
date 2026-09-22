@@ -1,4 +1,6 @@
-import { me, type FeedPost } from './mock'
+import { type FeedPost, type User } from './types'
+import { avatarFor } from '../api/client'
+import { getSession } from '../api/session'
 
 /**
  * 本地帖子库（真实发帖的存储层）。
@@ -103,9 +105,22 @@ export function addMyPost(input: {
   place?: string
   ratio?: string
 }): FeedPost {
+  /*
+    ⭐⭐ Round 319（最终 audit 第 ② 问）：这里原来写 `author: me` ——
+       而 `me` 是 mock 里的**编造用户**（id 'u_me'、name '自定义名称6'）。
+       后果：用户发布后**本地那份**帖子的作者被写成**另一个身份**，
+       而随后同步成功的**服务端**版本用的是真实作者 ⇒ 同一帖两种作者。
+    ⇒ 现在取**会话身份**（与 `toFeedPost` 的约定一致：`u:<userId>` + displayName + avatarFor）。
+      ⚠️ 未登录时**不编造**真实姓名，而给一个**如实标注状态**的占位身份
+         （本地草稿仍可保存；服务端那份要登录才会存在）。
+  */
+  const s = getSession()
+  const author: User = s
+    ? { id: `u:${s.user.id}`, name: s.user.displayName, avatar: avatarFor(s.user.displayName) }
+    : { id: 'local:anonymous', name: '未登录', avatar: avatarFor('未登录') }
   const post: FeedPost = {
     id: `mine-${Date.now()}`,
-    author: me,
+    author,
     text: input.text.trim() || '分享了图片',
     images: input.images,
     ratio: input.ratio ?? (input.images.length > 0 ? '3 / 4' : undefined),
@@ -207,9 +222,19 @@ export function markPostSynced(localId: string, serverId: string) {
   notify()
 }
 
-/** 是不是我发的帖子（本地发过，或服务器上作者名是我的那份） */
+/**
+ * 是不是我发的帖子（本地发过，或服务器上**作者 id 是我**的那份）。
+ *
+ * ⭐⭐ Round 319：原来判据是 `fromServer.author.name === me.name` ——
+ *   拿 **mock 里那个编造用户的名字**去比。两个错：
+ *     ① 名字不是身份（同名会误判；改名会漏判）
+ *     ② `me.name` 根本不是"我"（它是 mock 的 '自定义名称6'，与我们种子用户无关）
+ *   ⇒ 改为**按 id 比**，且用**会话身份**。id 约定与 `toFeedPost` 一致（`u:<userId>`）。
+ */
 export function isMyPost(id: string): boolean {
   if (read().some((p) => p.id === id)) return true
+  const s = getSession()
+  if (!s) return false
   const fromServer = serverPosts.find((p) => p.id === id)
-  return fromServer ? fromServer.author.name === me.name : false
+  return fromServer ? fromServer.author.id === `u:${s.user.id}` : false
 }

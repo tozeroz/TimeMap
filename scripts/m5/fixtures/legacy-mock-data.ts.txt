@@ -511,15 +511,13 @@ export const poiDetail = {
 }
 
 /** 升级弹窗文案（原版 campusx://upgradeAlert） */
-export const upgradeInfo = {
-  version: '2.11.0',
-  size: '48.6 MB',
-  highlights: [
-    '校园广场支持按标签筛选',
-    '群聊新增 @ 面板与消息引用',
-    '修复地图定位偶发偏移',
-  ],
-}
+/*
+  Round 319：`upgradeInfo` **已移出生产代码**（原为升级弹窗提供**无出处的编造发布信息**）。
+  ⚠️ 同 WO#16/#17/#18 的纪律：**注释挡不住重新 import** ⇒ 数据本身也要移出。
+  → 已移出至 scripts/m5/fixtures/legacy-upgrade-info.json（附 provenance 与"为何不得使用"）
+  ⚠️ 改后 UpgradeDialog 不再展示编造的版本号/体积/亮点，改为如实说明
+     （原版「版本说明」的具体文案未观察 ⇒ 不发明）。
+*/
 
 /** 扫码页的提示文案 */
 /*

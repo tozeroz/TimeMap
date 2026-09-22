@@ -5,7 +5,7 @@ import { getThreads, relativeTime, type ApiThread } from '../api/client'
 import { getSession } from '../api/session'
 /*
   ⚠️ M5 WO#10：本文件**已不再 import 任何 mock 数据**。
-  此前是 `import { users, type User } from '../data/mock'` —— 它支撑了
+  此前是 `import { users, type User } from '../data/types'` —— 它支撑了
   「更多同学」的 9 个写死用户与好友申请链路。随那条假链路一起删除。
   这使 MessageScreen 成为本项目**第一个完全不依赖 mock 数据的页面**。
 */

@@ -78,16 +78,16 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 
 <!-- BEGIN:MACHINE-SNAPSHOT -->
 扫描范围：app/src/screens（25 个文件）
-统计：api-only=16 ／ mock+api=1 ／ mock-only=1 ／ types-only=0 ／ none=7
+统计：api-only=17 ／ mock+api=0 ／ mock-only=0 ／ types-only=0 ／ none=8
 
 | AnnounceScreen.tsx | none | — | — | — |
-| BoardScreen.tsx | mock+api | boardEmojis | — | getBoardNotes, postBoardNote, relativeTime |
-| CampusScreen.tsx | api-only | — | FeedPost | isLoggedIn, likePost, listPosts, listSchoolCampuses, listSchools, readSnapshot, toFeedPost, unlikePost |
+| BoardScreen.tsx | api-only | — | — | getBoardNotes, postBoardNote, relativeTime |
+| CampusScreen.tsx | api-only | — | — | isLoggedIn, likePost, listPosts, listSchoolCampuses, listSchools, readSnapshot, toFeedPost, unlikePost |
 | ChatScreen.tsx | api-only | — | — | fetchMediaBlobUrl, getSession, getThread, getThreadMessages, postThreadImageMessage, postThreadTextMessage, postThreadVoiceMessage, relativeTime, uploadMedia |
 | DailyScreen.tsx | none | — | — | — |
 | DrawerPages.tsx | api-only | — | — | listSchools |
 | FeedDetailScreen.tsx | api-only | — | — | avatarFor, createComment, isLoggedIn, likePost, mediaUrl, relativeTime, unlikePost |
-| FeedListScreen.tsx | api-only | — | FeedPost | listPosts, readSnapshot, toFeedPost |
+| FeedListScreen.tsx | api-only | — | — | listPosts, readSnapshot, toFeedPost |
 | LoginScreen.tsx | api-only | — | — | requestLoginCode, verifyLoginCode |
 | LoginSelectScreen.tsx | none | — | — | — |
 | MapScreen.tsx | api-only | — | — | listPosts, listSchools, mediaUrl |
@@ -103,6 +103,6 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 | ScannerScreen.tsx | none | — | — | — |
 | SchoolSearchScreen.tsx | api-only | — | — | listSchoolCampuses, listSchools |
 | SimpleScreen.tsx | none | — | — | — |
-| UpgradeDialog.tsx | mock-only | upgradeInfo | — | — |
-| UserProfileScreen.tsx | api-only | — | FeedPost | getThreads, getUser, listPosts, toFeedPost |
+| UpgradeDialog.tsx | none | — | — | — |
+| UserProfileScreen.tsx | api-only | — | — | getThreads, getUser, listPosts, toFeedPost |
 <!-- END:MACHINE-SNAPSHOT -->
