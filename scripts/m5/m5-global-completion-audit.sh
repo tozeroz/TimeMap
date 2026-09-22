@@ -27,23 +27,26 @@ ONLY_FORWARD=0
 [ "${1:-}" = "--forward" ] && ONLY_FORWARD=1
 
 # 设备门禁（按"从基础到上层"的正常执行顺序）
-DEVICE_GATES=(
-  gate-wo6-tabbar-orientation.mjs
-  gate-wo7-text-send.mjs
-  gate-wo8-message-list.mjs
-  gate-wo9a-group-slice.mjs
-  gate-wo9b-at-panel-layerA.mjs
-  gate-wo10-message-screen-mock.mjs
-  gate-wo11-feed-list.mjs
-  gate-wo12-user-profile.mjs
-  gate-wo13-profile-edit.mjs
-  gate-wo14-me-identity.mjs
-  gate-wo15-map-markers.mjs
-  gate-wo16-board-avatar.mjs
-  gate-wo16a-campus-mock.mjs
-  gate-wo16b-schools.mjs
-  gate-composer-coverage.mjs
-)
+# ⚠️ 这里修过一个**真实缺陷**：原先是**硬编码**的门禁列表，于是本轮新增的 5 个门禁
+#    （wo17 / wo18 / wo20 / scanner / media-preview）**没有被审计跑到**，
+#    而列表面上看还是"绿的" —— 典型的"**过期清单静默少测**"。
+#    ⇒ 改为**自动发现**：取 scripts/m5 下所有 gate-*.mjs（排除服务器侧那两个），
+#      这样以后新增门禁**自动纳入**，不会再漏。
+#    ⚠️ 服务器侧门禁（不在设备上跑）单独排除：
+#      · gate-place-not-campus.mjs（走 ssh 查服务器 DB + bundle）
+SERVER_SIDE_GATES="gate-place-not-campus.mjs"
+DEVICE_GATES=()
+while IFS= read -r f; do
+  b="$(basename "$f")"
+  case " $SERVER_SIDE_GATES " in *" $b "*) continue ;; esac
+  DEVICE_GATES+=("$b")
+done < <(ls scripts/m5/gate-*.mjs | sort)
+# ⚠️ 若自动发现拿不到（例如路径不对），退回空数组并**明确报错**，不静默少测
+if [ "${#DEVICE_GATES[@]}" -eq 0 ]; then
+  echo "**FATAL** 自动发现门禁失败：scripts/m5/gate-*.mjs 一个都没找到 —— 不静默继续"
+  exit 2
+fi
+echo "（自动发现设备门禁 ${#DEVICE_GATES[@]} 个：${DEVICE_GATES[*]}）"
 
 # 需要环境变量的门禁（如实列在这里，而不是靠调用方记得）
 gate_env() {
@@ -63,6 +66,13 @@ run_one() {
   local exit_line
   exit_line="$(printf '%s\n' "$out" | grep -E 'DEVICE_GATE_EXIT=' | tail -1)"
   echo "${exit_line:-无 DEVICE_GATE_EXIT（rc=$rc）}"
+  # ⭐ 修掉一个**可诊断性缺陷**：原实现只打印 DEVICE_GATE_EXIT=，把门禁的完整输出丢掉 ⇒
+  #    失败时**没有原因可查**（Round 319 我就只能靠猜）。现在把失败输出留档：
+  if [ "$rc" -ne 0 ] || printf '%s' "$exit_line" | grep -q 'DEVICE_GATE_EXIT=1'; then
+    mkdir -p tools/tmp/audit-failures
+    printf '%s\n' "$out" > "tools/tmp/audit-failures/$gate.round${AUDIT_ROUND:-x}.log"
+    echo "      ↳ 失败输出已留档 tools/tmp/audit-failures/$gate.round${AUDIT_ROUND:-x}.log"
+  fi
 }
 
 wait_lock_free() {
