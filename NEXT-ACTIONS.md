@@ -963,7 +963,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       （与 WO#12 修掉的 `?? 'u1'`、WO#13 的"假成功"**同型**）
       + 该屏**无任何 `navigate('comments')` 调用**（路由可达但无入口）
       → 详见 `docs/m5/UI-DATA-SOURCE-INVENTORY-REFRESHED.md` §3.1
-- [ ] ⬅ ⭐ **新发现 2**：`BoardScreen.tsx:149` 仍渲染 **mock 自称身份** `me.avatar`
+- [x] ⭐ **新发现 2 已修复**（commit f2d9205）：见下方「Round 266 修复①」——
       （mock.ts 的 `me = { name:'自定义名称6', avatar: avatar('我','#6b7cff') }`）
       ⇒ 与 **WO#14 在 MeScreen 修掉的是同一个编造身份**，**第二次出现在另一屏**
       ⇒ 说明"修一个屏"不足以覆盖它，需要**按类排查**
@@ -976,3 +976,27 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       ⇒ 修复需**新增 API 能力**（与 WO#15 同性质）→ `docs/m5/FINDING-poi-search-screen-still-mock.md`
 - [ ] ⬅ 待裁定：以上四个发现是否立单、以及优先级（我建议先做「新发现 2 BoardScreen 的 mock 自称身份」——
       它最小、且与已批准的 WO#14 同类、修法已被冻结（首字占位））
+
+### ⭐⭐ Round 266 修复①：留言板 mock 自称身份 + **两个同源缺陷**（commit f2d9205）
+- [x] ✅ **头像**：改前 `<img src={me.avatar}>` —— **每条留言用同一个 mock 头像**，而名字却正确区分双方
+      ⇒ **对方发的留言也显示"我"的头像**（头像与名字自相矛盾）
+      ⇒ 已改**首字占位**，且首字**取自该条留言显示的名字**（"我"/"对方"的字母由构造保证不同）
+- [x] ✅ **缺陷 A（比头像更影响可用性）**：`App.tsx` 把 peerId **硬编码兜底**成某个具体用户 UUID
+      —— **兄弟路由全是 `route.query.id ?? param ?? ''`（空串兜底），只有 board 是孤例**。
+      后果：从抽屉入口进来时 peerId = 我自己的 id ⇒ 服务端按**自指**处理 ⇒ **板为空且看不出原因**
+      ⇒ 已改为与兄弟路由一致
+- [x] ✅ **缺陷 B**：无 peer 时 composer 仍可输入并发送 ⇒ 必然 404
+      ⇒ 已改为不渲染 composer + 明确说明；并新增 **no-peer 态**（与"空板"分开：
+      「未指定留言对象」vs「可以给同学留言噢」是两件不同的事）
+- [x] ✅ **Gate** `scripts/m5/gate-wo16-board-avatar.mjs`（**只读**）：4 键中 3 PASS + 1 INCONCLUSIVE
+      `BOARD_NOTE_AVATAR_NOT_MOCK` PASS ／ `BOARD_NOTE_AVATAR_INITIAL_MATCHES_NAME` PASS（initial "L" == "Lemy"[0]）
+      ／ `BOARD_NO_PEER_COMPOSER_DISABLED` PASS ／ `BOARD_NOTE_AVATAR_TWO_PARTIES_DIFFER` **INCONCLUSIVE**（只有一方，如实标注）
+      ⭐ 判别力核心是第 2 条（**占位逐条取自各自名字** ⇒ 名字不同则字母必不同），而非"有占位"
+- [x] ✅ **回归**：wo16-board ／ wo15 ／ wo14 ／ wo13 ／ wo11 ／ wo9a ／ wo8 **全部 `DEVICE_GATE_EXIT=0`**
+- [x] ⭐ **④c 漂移检查当场生效**：我改完 BoardScreen 后，它在本地检查里**FAIL 并精确报出**
+      `boardEmojis, me` → `boardEmojis` 的差异 ⇒ `--write` 更新快照后回到 PASS
+      （—— 机械检查抓住了**我自己修复造成的文档漂移**）
+- [ ] ⬅ **待裁定**：`DrawerPages.tsx:48` 在「校园认证」页里放了一个文案为「**去认证**」的按钮，
+      但它 `navigate('board')` → **跳到留言板**。与 WO#13 修掉的"5 个 Me 条目全跳 profile-edit"同型。
+      ⚠️ 需先判明"原版里那个位置到底是什么入口"（可能是"认证后可用"的说明位）
+      ⇒ 本轮**只记录不擅自改**（不能凭空发明一个认证流程）
