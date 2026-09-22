@@ -249,7 +249,17 @@ E1–E4 auth hygiene       DONE（cleanup-auth + 4 条状态型 Gate 键）
 > 当前定位是**私有复刻 demo**（对照学习/演示），本区**不阻塞**现有工作；
 > 但若将来要**公开或商业发布**，必须先清完这一区。
 
-- [ ] I1 **发布前 IP 清查**：逐一核对下列"逐字复制自第三方 APK"的资产，
+      ```
+      结果：icons.tsx 30 条 path vs APK 的 1831 条矢量 path ⇒ **0 命中** ⇒ 标 `ORIGINAL_WORK`（附方法/自检/边界）
+            icons-send.tsx 3 条 ⇒ **2 条命中 `res/JA.xml`** ⇒ 其 `COPIED_FROM_THIRD_PARTY_APK` 自述**被机械验证为正确**
+      ⭐ 关键：前两次"0 匹配"都**不可信**（① AXML 二进制取不到值 ② 我的资源表正则写错）
+         ⇒ 是**我加的自检**抓住的（"已知 icons-send 必须 ≥1 命中"）
+         ⇒ 可复用纪律：**任何"未发现 X"的结论，必须先证明"仪器能发现 X"**
+      取证可复算性已补：结果归档 docs/m5/i1-icon-provenance-result.json（刻意不落盘 APK 的 1831 条 path）
+      详见 docs/m5/I1-ICON-PROVENANCE-FINDING.md
+      ```
+      ⚠️ 仍属**发布前置**：本项目当前未决定公开 ⇒ 不阻塞 M5 体验完成度
+- [x] ✅ **I1 完成**（Round 319）：用 **aapt2 全量比对**原版 APK 的矢量 path + **方法自检 PASS**
       决定 保留 / 替换为自绘等价物 / 移除：
       ```
       1. app/src/components/icons-send.tsx        发送按钮 vector pathData（res/JA.xml）
