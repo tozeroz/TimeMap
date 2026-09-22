@@ -213,6 +213,55 @@ log('MAP_SNAPSHOT', {
   bodyTextHead: String(snap.bodyText || '').slice(0, 200),
 })
 
+// ---------- 2a-2) ⭐ AUDIT.7：基线**逐条核对**的测量块 ----------
+console.log('')
+console.log('=== 2a-2) BASELINE_CLAIMS 测量（把 manifest 里每条 claim 的设备事实取下来）===')
+/*
+  ⭐ AUDIT.7（队列里的一条纪律）：**每个 WO 的 Gate 都要加"基线逐条核对"层**。
+  做法（照既有 6 屏的先例，见 scripts/m5/fixtures/baseline-manifest.json）：
+    · 在本 Gate 里**实测**该屏基线各条 claim 对应的界面事实
+    · 把 claim + status + **指向本 Gate 测量值**的 evidence 冻结进 manifest
+    · 之后 manifest 检查器保证"结论不漂移"（同一事实不会这次判 MATCH、下次判 DEVIATION）
+  本屏基线：docs/original-baseline/screens/trident-map/baseline.json
+    interactions: 顶部大标题 Map + 地区选择「北京交通大学（校本部）」+ 右上消息图标 ／
+                  主体：地图 + 用户头像标记 + 深色气泡卡片 ／ 右下：定位复位按钮 + 黑色圆形 +
+    navigation:   地区名 → 选点页（poi/search） ／ + → 发布页
+    known_unknowns: 首次进入有阻断式「授权地理位置」弹窗（本次采集未出现）／
+                    底图是腾讯地图 SDK；具体缩放级别与标记规则未记录
+  ⚠️ 只测**可从 DOM/文本确证**的部分；"深色气泡卡片"这类**视觉属性**不在此断言
+     （那需要像素证据，且目前仍是 NOT_EVALUATED —— 不得用 DOM 存在性冒充视觉一致）。
+*/
+const claims = await evaluate(`(() => {
+  const q = (sel) => document.querySelector(sel)
+  const txt = (sel) => { const e = q(sel); return e ? (e.textContent || '').trim() : null }
+  const aria = (sel) => { const e = q(sel); return e ? e.getAttribute('aria-label') : null }
+  const body = document.body.innerText || ''
+  return {
+    /*
+      ⚠️ 这里修过一个**我自己的选择器错误**：第一版写 txt('.bigtitle__main')，
+      但**地图页不用 BigTitle 组件** —— 它有自己的标题结构
+      （MapScreen.tsx:520 <h1 className="map__title">Map</h1>）。
+      ⇒ 于是测量值恒为 null ⇒ MAP_TITLE_LITERAL **假 FAIL**。
+      ⚠️ 同类错误本会话已出现多次（整页 imgCount 判头像 / 整页文本判 mock 地点 /
+        模板字面量内反引号…）：**"在错误的节点上测量"与"实现错了"在输出上无法区分**。
+      教训：写断言前先确认真实的 DOM 结构（本次即用读源码确认）。
+    */
+    bigTitle: txt('.map__title'),
+    regionText: txt('.map__region'),
+    msgAria: aria('.map__msg'),
+    locateAria: aria('.map__ctrl'),
+    ctrlCount: document.querySelectorAll('.map__ctrl').length,
+    fabAria: aria('.map__fab'),
+    geoModalTitle: txt('.map__modal-title'),
+    geoModalPresent: !!q('.map__modal'),
+    hasTencentWatermark: /Tencent|腾讯/.test(body),
+    providerText: (body.match(/腾讯地图|高德地图|在线地图|离线自绘底图/) || [null])[0],
+    /* ⚠️ 以下刻意**不测**：深色气泡卡片的"深色"、图钉配色语义、用户头像标记的形态
+       —— 属视觉/语义，仍 NOT_EVALUATED（不得用 DOM 存在性冒充） */
+  }
+})()`)
+log('BASELINE_CLAIMS_MEASURED', claims)
+
 // ---------- 2b) 离线路径单独验 `.map__marker` DOM ----------
 console.log('')
 console.log('=== 2b) 离线自绘地图路径的标记 DOM（provider 无关量之外的独立验证）===')
@@ -385,12 +434,44 @@ const v = {
     return allMatched ? 'PASS' : 'FAIL'
   })(),
 
+  /*
+    ⭐ AUDIT.7：基线**逐条核对**（每条对应 trident-map/baseline.json 里的一句）
+    只对"可从 DOM/文本确证"的 claim 下断言；视觉/语义类的**保持 NOT_EVALUATED**。
+  */
+  /** 基线 interactions[0]「大标题 **Map**」 */
+  MAP_TITLE_LITERAL: claims && claims.bigTitle === 'Map' ? 'PASS' : 'FAIL',
+  /** 基线 interactions[0]「地区选择『北京交通大学（校本部）』」 */
+  MAP_REGION_TEXT: claims && typeof claims.regionText === 'string' && claims.regionText.includes('北京交通大学')
+    ? 'PASS'
+    : 'FAIL',
+  /** 基线 interactions[0]「右上**消息图标**」 */
+  MAP_MESSAGE_CONTROL: claims && claims.msgAria === '消息' ? 'PASS' : 'FAIL',
+  /** 基线 interactions[2]「右下：**定位复位按钮** + 黑色圆形 +」 */
+  MAP_BOTTOM_RIGHT_CONTROLS:
+    claims && claims.locateAria === '回到定位' && claims.ctrlCount >= 1 && claims.fabAria === '发布'
+      ? 'PASS'
+      : 'FAIL',
+  /** 基线 known_unknowns[0]：首次进入有阻断式「**授权地理位置**」弹窗 */
+  MAP_GEO_PERMISSION_MODAL: claims && claims.geoModalPresent && claims.geoModalTitle === '授权地理位置'
+    ? 'PASS'
+    : 'FAIL',
+  /** 基线 known_unknowns[1]：底图是**腾讯地图 SDK**（我们默认 provider 与之一致） */
+  MAP_TENCENT_BASEMAP: claims && claims.providerText === '腾讯地图' && claims.hasTencentWatermark === true
+    ? 'PASS'
+    : 'FAIL',
+  /** 基线 navigation[0]「地区名 → **选点页（poi/search）**」——用源码+设备控件存在性共同支撑 */
+  MAP_REGION_TO_POI_CONTROL: claims && typeof claims.regionText === 'string' && claims.regionText.length > 0
+    ? 'PASS'
+    : 'FAIL',
+  /** 基线 navigation[1]「+ → **发布页**」 */
+  MAP_PLUS_TO_PUBLISH_CONTROL: claims && claims.fabAria === '发布' ? 'PASS' : 'FAIL',
+
   /** 基线明记未知 → 只记录，不当作可通过项（也不进 KEYS，故不影响裁决） */
   MAP_PIN_COLOR_SEMANTICS_CONFORMANCE: 'NOT_EVALUATED',
   OFFLINE_MAP_PROJECTION_CONFORMANCE: 'NOT_EVALUATED',
   ORIGINAL_MAP_MARKER_CONFORMANCE: 'NOT_EVALUATED',
 
-  detail: { expected, snap: { ...snap, bodyText: undefined }, snapOffline, stub, expectedCount, leakedInNormal, markerCards: (snap && snap.markerCards) || [] },
+  detail: { expected, snap: { ...snap, bodyText: undefined }, snapOffline, stub, expectedCount, leakedInNormal, markerCards: (snap && snap.markerCards) || [], baselineClaims: claims },
   notes: {
     判别性: '期望条数来自**服务端实况**（不写死 6）；主判据用 provider 无关的 data-marker-count',
     /*
@@ -419,6 +500,15 @@ const KEYS = [
   'NO_FABRICATED_PLACE_DATA',
   'MAP_NO_FALLBACK_ON_UNAVAILABLE',
   'MAP_MARKER_CARD_DATA_AUTHORITY',
+  /* ⭐ AUDIT.7 基线逐条核对（对应 trident-map/baseline.json 的 interactions/navigation/known_unknowns） */
+  'MAP_TITLE_LITERAL',
+  'MAP_REGION_TEXT',
+  'MAP_MESSAGE_CONTROL',
+  'MAP_BOTTOM_RIGHT_CONTROLS',
+  'MAP_GEO_PERMISSION_MODAL',
+  'MAP_TENCENT_BASEMAP',
+  'MAP_REGION_TO_POI_CONTROL',
+  'MAP_PLUS_TO_PUBLISH_CONTROL',
 ]
 const anyFail = KEYS.some((k) => v[k] === 'FAIL')
 const anyNotEval = KEYS.some((k) => v[k] === 'NOT_EVALUATED')
