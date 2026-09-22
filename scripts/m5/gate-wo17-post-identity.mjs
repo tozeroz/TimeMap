@@ -298,12 +298,19 @@ const v = {
       ⭐ 观测点改为**确实带回复**的那条动态（从 API 推导，不硬编码）。
       ⚠️ 上一版绑在 feedReal（= exp.items[0]，实测 total=0）⇒ 没样本 ⇒ INCONCLUSIVE。
     */
+    /*
+      ⚠️ 本键修过一次"判别力"缺陷（敏感度抓出）：第一版把 containers===0 当作
+         "没样本" ⇒ INCONCLUSIVE。但**我们能走到这里，就说明 API 已确认该动态有回复**
+         （它选自 exp.postsWithReplies）⇒ "该有嵌套结构却没有" 必须是 **FAIL**。
+      ⇒ 只有"服务端确实没有任何带回复的动态可选"时才是 INCONCLUSIVE（此时 view 为 null）。
+    */
     const view = replyPostView
-    if (!view || !view.nested) return 'INCONCLUSIVE'
+    if (!view || !view.nested) return 'INCONCLUSIVE' // 连页面都没取到
     const n = view.nested
+    /* API 既然给了带回复的动态（replyPostId 存在）⇒ 页面必须真有嵌套结构 */
+    const apiSaidHasReplies = !!replyPostId
     if (n.containers === 0 || n.allReplies === 0) {
-      // 服务端确实没有任何回复样本 ⇒ 不假装通过
-      return 'INCONCLUSIVE'
+      return apiSaidHasReplies ? 'FAIL' : 'INCONCLUSIVE'
     }
     return n.flat === 0 && n.nested === n.allReplies ? 'PASS' : 'FAIL'
   })(),
@@ -312,10 +319,18 @@ const v = {
    * ⭐ WO#19：观测点 = **FeedDetail 的** .feed__comments-title（旧屏已删）。
    */
   COMMENTS_COUNT_FROM_AUTHORITY: (() => {
+    /*
+      ⚠️ 本键也修过判别力缺陷：第一版 countText===null 就 INCONCLUSIVE，
+         于是"「评论 N」整块消失"反而被判成"没样本"。
+      ⇒ API 明确给了 total（是个数）⇒ 页面**必须**有可解析的计数文本，否则 **FAIL**。
+    */
     const view = feedReal || commentsReal
-    if (!view || !exp || !view.countText) return 'INCONCLUSIVE'
+    if (!view || !exp) return 'INCONCLUSIVE' // 页面/期望都没拿到
+    const apiTotal = Number(exp.items[0].total)
+    if (!Number.isFinite(apiTotal)) return 'INCONCLUSIVE'
+    if (!view.countText) return 'FAIL' // API 有基准，页面却没有计数文本
     const shown = Number(String(view.countText).replace(/[^0-9]/g, ''))
-    return shown === Number(exp.items[0].total) ? 'PASS' : 'FAIL'
+    return shown === apiTotal ? 'PASS' : 'FAIL'
   })(),
   /**
    * ⭐ 0 评论的动态必须显示**空态**。
@@ -324,7 +339,14 @@ const v = {
    * ⭐ WO#19：空态与"零评论行"都改在 **FeedDetail 的真实评论表面**上判：
    *   `.feed__noComments` 存在，且 `.cmt[data-comment-id]` 行数为 0。
    */
-  NO_MOCK_COMMENT_CONTENT: !zeroComment || !hasNewHooks
+  /*
+    ⚠️ 本键修过判别力缺陷：第一版要求 `hasNewHooks`（钩子存在），
+       而突变把整个评论区换掉后钩子全没了 ⇒ hasNewHooks=false ⇒ INCONCLUSIVE
+       ⇒ **"评论区被换成 mock"这种最该抓的情况反而没被抓住**。
+    ⇒ 改为：只要 **API 给出了 0 评论的动态**，页面就**必须**满足
+       「评论 0」+ 空态 + 零评论行；任一不满足即 FAIL。
+  */
+  NO_MOCK_COMMENT_CONTENT: !zeroComment
     ? 'INCONCLUSIVE'
     : await (async () => {
         const view = await goto(`#/feed?id=${zeroComment.id}`)
