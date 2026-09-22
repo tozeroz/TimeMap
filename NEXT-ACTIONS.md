@@ -1268,11 +1268,11 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       · 不再保留"一真一假"的双数据源
       ⚠️ 审核明确："不要趁机重做整个评论系统"（目标尽量窄）
       ```
-- [ ] ⬅ **WO#18 `WO18_POI_SEARCH_AUTHORITY`（A2，第二优先）**
+- [x] ✅ **WO#18（A2）已完成**（commit 797ee55）—— 详见下方 Round 318：
       `GET /api/places`（最小 read model 按**实际 UI 字段**设计，不要扩成完整 POI 平台）；
       `posts: 1284` 若 UI 需要"该地点动态数"⇒ 用 `COUNT(posts WHERE place_id = places.id)`
       **真实计算**；不能可靠表达则 null/不渲染，**绝不能继续留 mock 数字**
-- [ ] ⬅ **A3/A4：一次有界的只读观察**（合并取证，**不**分别开四个考古单）
+- [x] ✅ **A3/A4 条目已并入 Round 318 的新条目**（同一下方详述；此处保留以免丢失历史语境）
       只回答 **entry** ／ **navigation target** ／ **最低可见 contract**
       ⚠️ 审核强调：「**存在原版 screen baseline**」≠「我们已经知道它的**用户入口**」
       ⇒ 必须把 **destination correctness** 与 **entry reachability** 分开
@@ -1308,7 +1308,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       · 评论**作者头像**与**点赞数**无服务端来源 ⇒ 不渲染（不编造）；属能力缺口
 
 **⬅ 下轮从这里继续（WO#17 只剩两项）**：
-- [ ] ⬅ **WO#17 的必要 Gate + sensitivity**
+- [x] ✅ **WO#17 的必要 Gate + sensitivity 已完成**（gate-wo17-post-identity 5 键；敏感度三阶段 PASS）
       判据（两条，都要能红）：
       ```
       ① 身份完整性：不存在的 id 下，页面**不得出现任何真实动态的正文**
@@ -1319,7 +1319,62 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       ```
       ⚠️ 按审核 61：新 Gate 要**声明 fixture 依赖**（本 Gate 依赖 DB 的 4 条种子动态 + 网络可达；
          **不**依赖登录态与权限）
-- [ ] ⬅ **WO#17 提交审核 + 取得裁定**（要求 4：每单完整闭环）
-- [ ] ⬅ 然后 **WO#18（A2）**：`GET /api/places` + `PoiSearchScreen` 去 mock（`posts:1284` 用真实 COUNT 或 null）
+- [x] ✅ **WO#17 已提交并取得裁定**：审核 63 → **PASS / CLOSED**
+- [x] ✅ **WO#18 已实现并提交裁定**（`GET /api/places` + 去 mock；`posts` 用**真实** postCount）
 - [ ] ⬅ 全仓仍有 mock 依赖的屏（供 A4/WO#18 参考）：`MediaPreviewScreen`（mock `posts`）／
       `PoiSearchScreen`（mock `pois`）／`ScannerScreen`（`scannerHints`）／`UpgradeDialog`（`upgradeInfo`）
+
+### ⭐⭐ Round 318：WO#17 **PASS/CLOSED**（审核 63）；WO#18 完成并提交；Source Validity 裁决一处冲突并揭示 F-001
+
+**已完成并提交**（HEAD=797ee55，已推送，工作区干净）：
+- [x] ✅ **审核 63 落盘**：`docs/review-log/63-wo17-closed-and-comment-detail-source-validity.md`
+      ```
+      WO17_POST_IDENTITY_AND_COMMENT_AUTHORITY: PASS / CLOSED
+      POST_IDENTITY_CORRUPTION: RESOLVED ／ COMMENTS_DOUBLE_DATA_SOURCE: REMOVED
+      MOCK_COMMENT_DATA_IN_PRODUCTION: REMOVED ／ COMMENT_FAKE_LOCAL_WRITE: RESOLVED
+      ```
+      审核明确："**因此不需要再给 WO#17 增加 Gate**"／认可 mock 数据整体移出生产代码
+      ⭐ 并给出一条**要保持的原则**："成功后的 UI 应来自**服务端返回结果**或**重新读取的权威结果**"
+      （我的实现是成功后 `await load()` 重新读取 ⇒ 合规）
+- [x] ✅ **WO#18（A2）完成**（commit 797ee55）：
+      · 新增 `GET /api/places`（+ `?q=` **服务端**过滤）；最小 read model 按 UI **实际渲染**的字段定
+        （`category`/`posts` 本就**未被渲染** ⇒ 不返回 category；`posts` 用**真实** `postCount` 取代）
+      · `PoiSearchScreen` 去 mock、接权威；`distance` 客户端有定位才算、**无定位不渲染**
+      · mock `pois` 与死类型 `Poi` **移出生产代码** → `fixtures/legacy-pois.json`
+      · 门禁 **7 键全 PASS**／敏感度**三阶段 PASS**（突变 4 键全红、归因清晰）
+      · ⭐ 区分清楚：`postCount` **可以是真值**（`posts.place_id` 是直接外键、归属已存在），
+        与 `campusCircleCount` **必须为 null**（归属列全空）**不可类比**
+- [x] ✅ **审核要求的 Source Validity 检查已做，并作出裁决**：
+      · R-001 comment-detail **空态冲突已裁决** —— 基线的「页面全白」是 **deep-link 无参数的假象**，
+        其 `known_unknowns` 已被 `supplements/comment-detail.json` 显式 `supersedes`
+        ⇒ **不必**进 A3/A4
+      · ⭐⭐ **F-001（新，结构保真缺陷）**：原版评论区是**内联在 `FeedDetailActivity` 里的一页**
+        （ViewPager `id/vp_detail`），**不是独立屏** ⇒ 我们的独立路由 `#/comments` 是**结构层面自造的屏**；
+        这也解释了长期记录的"comments 路由可达但**无 in-app 入口**"（**同一件事的两面**）
+        ⚠️ 不推翻 WO#17（那是数据层，这是结构层）⇒ 已提交审核**请裁定修法**
+- [x] ✅ **F-002 登记**：`FEED_DETAIL_ERROR_PRESENTATION: **KNOWN_MISMATCH**`
+      （审核 63 明确"**不要为了它重新进入原版**"；且 404/not_found 与网络错误**分别记录**、
+       **不**为改文案把两种语义混起来）
+- [x] ✅ 新建 `docs/m5/FIDELITY-CLOSEOUT-BACKLOG.md` 汇集 F-xxx（保真缺陷）/ R-xxx（已裁决结论）/
+      G-xxx（能力缺口），供最终 fidelity closeout 逐个销项
+- [x] ✅ **审核 63 关于评论头像/点赞数的裁定**：`UNAVAILABLE → HIDE`（已如此实现）／`NEW API WORK: DEFER`
+      ⚠️ 并在 backlog 里**区分开**"原版**确实有**评论头像（目标形态）"与"我们无来源先隐藏（能力缺口）"
+
+**⬅ 下轮从这里继续（按审核 63 给的顺序）**：
+- [ ] ⬅ **等待审核 63 对 WO#18 与 F-001 的裁定**（已提交；⚠️ 按纪律**不**因此停下）
+- [ ] ⬅ **A3/A4：一次**有界的只读观察**（合并取证，不分别开考古单）
+      ```
+      A3：DrawerPages.tsx:48「去认证」按钮 navigate('board')（错跳）
+          → 需判明"原版那个位置到底是什么入口/目标"
+      A4：scanner / media-preview 两屏**路由可达但无入口**
+          → 需判明"原版分别从哪里进入"
+          ⚠️ 审核 62 提醒：必须把 **destination correctness** 与 **entry reachability** 分开；
+             「存在原版 screen baseline」≠「我们知道它的用户入口」
+          ⚠️ **`comments` 已不必观察** —— F-001 已给出答案（原版无此独立入口，评论内联）
+      只回答三件事：**entry** ／ **navigation target** ／ **最低可见 contract**
+      ```
+- [ ] ⬅ 然后 **targeted fidelity closeout / A5**
+      · 可机械测量的 claim（色相/bbox/几何/ROI/颜色族）⇒ 用现有 pixel analyzer 收敛
+      · 少量关键视觉语义 ⇒ 把具体 baseline/current PNG **上传到审核会话**（定点人工/远端核对）
+      · 非关键 ⇒ 保留 known limitation
+      ⚠️ **不**建设新 vision 基础设施；但也**不能**无限全挂 NOT_EVALUATED 后宣布完成（最终目标严格 1:1）
