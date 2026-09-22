@@ -13,7 +13,20 @@
 ### F-001 ⭐⭐ `#/comments` 独立屏在原版里**不存在**（评论是内联的）
 
 ```
-状态：  KNOWN_STRUCTURAL_MISMATCH（待裁定修法；**不是** evidence gap）
+状态：  ⭐⭐ **CONFIRMED FIDELITY BLOCKER**（审核 64 选 (a)；**不是** evidence gap）
+       审核 64 认定 Source Validity **已足够强**，不需要再回 A3/A4 做原版观察：
+         ORIGINAL_COMMENT_TOPOLOGY = **inline within FeedDetail**（CONFIRMED）
+         CURRENT                   = separate CommentsScreen / #/comments
+       ⚠️⚠️ **两条必须记住的纠正（否则会把修法做小）**：
+         ① "**请不要把修复理解成：'删掉 #/comments 就完成了。'**
+            真正的产品[目标]是让 comments 作为用户页面的**结构**[内联]。"
+         ② "如果 #/comments 只是 Gate/调试为了方便直接打开页面，可以把**测试方式迁到
+            FeedDetail 的真实 comment surface**；**不要为了测试方便永久保留一个
+            原版不存在的产品页面。**"
+       ✅ 并**销掉**长期遗留项"comments 路由可达但没有入口"：
+          "**没有入口并不是'入口还没找到'，而是因为原版根本不是独立 comments screen。**"
+       ⇒ 立项 **WO#19 FeedDetail inline comments topology**
+         ⚠️ **只**解决"评论区在哪儿"；**不**趁机扩评论字段（头像/点赞仍走 §三 G-001/G-002）
 发现：  Round 318，做审核 63 要求的 Source Validity 检查时发现
 依据：  docs/original-baseline/supplements/comment-detail.json （**权威**）
         "activity": "com.kairuotu.feed.detail.FeedDetailActivity

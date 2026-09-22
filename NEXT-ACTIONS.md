@@ -1401,3 +1401,37 @@ posts  : 有 place_id；**4 条 post 关联了 place**
         可能命中「退出/注销/删除」的区域；对会弹框的路径**优先点取消**；收尾必须核实账号状态
 - [ ] ⬅ **A4 剩余**：`media-preview` 的原版入口**尚未观察**（应能通过"点开一张动态图片"到达）
 - [ ] ⬅ **A3/A4 结论需提交审核**（含 F-003 的修法裁定；要求 4：每单闭环）
+
+### ⭐⭐ Round 318 续 2：审核 64 落盘 —— WO#18 **PASS/CLOSED**；F-001 升级为 CONFIRMED BLOCKER；立项 WO#19
+
+- [x] ✅ **审核 64 落盘**：`docs/review-log/64-wo18-closed-and-comment-topology-confirmed-blocker.md`
+      ```
+      WO18_POI_SEARCH_AUTHORITY: PASS / CLOSED
+      COMMENTS_TOPOLOGY_FINDING: CONFIRMED FIDELITY BLOCKER（选 (a)）
+      POI_LEGACY_TYPE_REMOVAL: APPROVED（删死的 Poi 类型，不用回退）
+      ```
+      并记：`POI_DISTANCE_ABSENT_WITHOUT_FIX: NOT_EVALUATED` **不阻塞** WO#18
+      ⚠️ 审核的一条记录要求：`postCount` 若 UI 没展示，**不要**因为 API 有了就顺手加进界面
+         （它是权威数据，但**不是自动产生的新 UI contract**）—— 我已遵守（未接进任何 UI）
+- [x] ✅ **F-001 升级为 CONFIRMED FIDELITY BLOCKER**，并**逐字**记入审核的两条纠正：
+      · 修法**不是**"删掉 #/comments"，而是让 comments 成为 FeedDetail 的**内联结构**
+      · Gate/调试通路应迁到 **FeedDetail 的真实 comment surface**；
+        **不**为了测试方便永久保留一个**原版不存在的产品页面**
+      · ✅ 销掉长期遗留项"comments 路由可达但没有入口"——
+        "**没有入口并非'入口还没找到'，而是原版根本不是独立 comments screen**"
+- [x] ✅ **不重开 WO#17**（审核 64 明确：WO#19 只是把**已经正确**的数据/身份逻辑
+      放回**正确的信息架构位置**）
+- [x] ✅ 评论头像/点赞**仍不扩 API**（审核 64）：`original comment avatar: OBSERVED`（不再是未知），
+      但 `CURRENT_AUTHORITY: unavailable` ⇒ 明确 fidelity/capability gap，进最终 A5/backlog；
+      WO#19 **只**解决"评论区在哪儿"
+- [ ] ⬅ ⭐ **WO#19 `FeedDetail inline comments topology`**（下一步）
+      范围（严格按审核 64）：**只解决"评论区在哪儿"** —— 把评论区做成 `#/feed` 的**内联结构**
+      （M3 证据：ViewPager `id/vp_detail` 的一页；控件 `id/comment_number`「评论 N」/
+      `id/comment_college` 容器 / `id/cl_feed_detail_comment_message` 父评论整行…）
+      ⚠️ **不**扩评论字段（头像/点赞）；⚠️ **不**重新研究 comment-detail（证据已足够）
+      ⚠️ 需先按 要求 4 提交**计划**并取得裁定，再执行（每单独立闭环）
+- [ ] ⬅ **A4 剩余唯一一项**：`media-preview` 的原版入口（应能通过"点开一张动态图片"这类**纯查看**路径到达）
+      ⚠️ A3「去认证」与 scanner entry **本轮已完成**（见 `docs/m5/A3A4-BOUNDED-OBSERVATION.md`）；
+        审核 64 的队列写在看到该结果之前 ⇒ 下次提交需明确告知
+- [ ] ⬅ **A3/A4 结论 + F-003 的修法裁定**尚未提交审核（要求 4：每单闭环）
+- [ ] ⬅ 然后 **A5 targeted fidelity closeout**（可量化→机械收敛；少量关键语义→定点上传 PNG）
