@@ -78,16 +78,16 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 
 <!-- BEGIN:MACHINE-SNAPSHOT -->
 扫描范围：app/src/screens（26 个文件）
-统计：api-only=13 ／ mock+api=1 ／ mock-only=5 ／ types-only=0 ／ none=7
+统计：api-only=14 ／ mock+api=1 ／ mock-only=4 ／ types-only=0 ／ none=7
 
 | AnnounceScreen.tsx | none | — | — | — |
 | BoardScreen.tsx | mock+api | boardEmojis | — | getBoardNotes, postBoardNote, relativeTime |
 | CampusScreen.tsx | api-only | — | FeedPost | isLoggedIn, likePost, listPosts, listSchoolCampuses, listSchools, readSnapshot, toFeedPost, unlikePost |
 | ChatScreen.tsx | api-only | — | — | fetchMediaBlobUrl, getSession, getThread, getThreadMessages, postThreadImageMessage, postThreadTextMessage, postThreadVoiceMessage, relativeTime, uploadMedia |
-| CommentsScreen.tsx | mock-only | comments, posts | — | — |
+| CommentsScreen.tsx | api-only | — | — | createComment, isLoggedIn |
 | DailyScreen.tsx | none | — | — | — |
 | DrawerPages.tsx | none | — | — | — |
-| FeedDetailScreen.tsx | api-only | — | — | avatarFor, createComment, getComments, getPost, isLoggedIn, likePost, mediaUrl, readSnapshot, relativeTime, unlikePost |
+| FeedDetailScreen.tsx | api-only | — | — | avatarFor, createComment, isLoggedIn, likePost, mediaUrl, relativeTime, unlikePost |
 | FeedListScreen.tsx | api-only | — | FeedPost | listPosts, readSnapshot, toFeedPost |
 | LoginScreen.tsx | api-only | — | — | requestLoginCode, verifyLoginCode |
 | LoginSelectScreen.tsx | none | — | — | — |

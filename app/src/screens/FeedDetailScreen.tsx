@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   createComment,
-  getComments,
-  getPost,
   likePost,
   mediaUrl,
-  readSnapshot,
   relativeTime,
   unlikePost,
   avatarFor,
   type ApiCommentNode,
   type ApiPostDetail,
 } from '../api/client'
+import { resolvePostAndComments } from '../data/postIdentity'
 import { isLoggedIn } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack, IconComment, IconHeart, IconShare } from '../components/icons'
@@ -39,7 +37,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
   const [post, setPost] = useState<ApiPostDetail | null>(null)
   const [comments, setComments] = useState<ApiCommentNode[]>([])
   const [total, setTotal] = useState(0)
-  const [state, setState] = useState<'loading' | 'ready' | 'offline' | 'error'>('loading')
+  const [state, setState] = useState<'loading' | 'ready' | 'offline' | 'not_found' | 'error'>('loading')
   const [fromSnapshot, setFromSnapshot] = useState(false)
   const [errorText, setErrorText] = useState('')
 
@@ -51,37 +49,41 @@ export function FeedDetailScreen({ id }: { id: string }) {
   const [replyDraft, setReplyDraft] = useState('')
 
   const load = useCallback(async () => {
-    // 没有 id 就别发请求：如实说"未指定动态"，不要拿 mock 默认值冒充
-    if (!id) {
-      setErrorText('未指定动态（缺少 id 参数）')
-      setState('error')
-      return
-    }
+    /*
+      ⭐ WO#17（审核 62 要求③）：身份解析改为调用**共享**的
+        `../data/postIdentity` —— 与 CommentsScreen 用**同一处实现**。
+      改前这里自己写了一遍 getPost+getComments+快照降级；
+      只要还是两套实现，就必然再次分叉（"一真一假"就是这么来的）。
+      ⚠️ 行为**保持**：ready / offline（只回落同一 id 的快照）/ error 的语义都没变；
+         新增区分 `not_found`（服务端明确说这个 id 不存在），
+         以免把"内容不存在"和"加载失败"混为一谈。
+      ⚠️ **绝不**在取不到时显示**另一条**动态 —— 那是身份篡改。
+    */
     setState('loading')
-    const [pr, cr] = await Promise.all([getPost(id), getComments(id)])
-    if (pr.ok && cr.ok) {
-      setPost(pr.value)
-      setComments(cr.value.items)
-      setTotal(cr.value.total)
-      setFromSnapshot(false)
-      setState('ready')
-      return
+    const r = await resolvePostAndComments(id)
+    switch (r.state) {
+      case 'ready':
+      case 'offline':
+        setPost(r.post)
+        setComments(r.comments)
+        setTotal(r.total)
+        setFromSnapshot(r.fromSnapshot)
+        setState(r.state)
+        return
+      case 'not_found':
+        setPost(null)
+        setComments([])
+        setTotal(0)
+        setErrorText('这条动态不存在（可能已被删除）')
+        setState('not_found')
+        return
+      default:
+        setPost(null)
+        setComments([])
+        setTotal(0)
+        setErrorText(r.reason)
+        setState('error')
     }
-    // 在线取不到 → 只允许降级到"最后一次成功过的快照"
-    const ps = readSnapshot<ApiPostDetail>(`post:${id}`)
-    const cs = readSnapshot<{ items: ApiCommentNode[]; total: number }>(`comments:${id}`)
-    if (ps && cs) {
-      setPost(ps.value)
-      setComments(cs.value.items)
-      setTotal(cs.value.total)
-      setFromSnapshot(true)
-      setState('offline')
-      return
-    }
-    // 连快照都没有 → 如实报错（不拿 mock 冒充）
-    const why = !pr.ok ? `加载失败：${pr.reason}` : !cr.ok ? `评论加载失败：${cr.reason}` : '加载失败'
-    setErrorText(why)
-    setState('error')
   }, [id])
 
   useEffect(() => {
@@ -176,7 +178,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
     )
   }
 
-  if (state === 'error' || !post) {
+  if (state === 'error' || state === 'not_found' || !post) {
     return (
       <Screen header={<TopBar left={<BackBtn />} right={<ShareBtn />} />}>
         <div className="feed__state">
