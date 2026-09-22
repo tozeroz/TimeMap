@@ -681,3 +681,23 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       NO_MOCK_SELF_IDENTITY ／ ME_AVATAR_PLACEHOLDER），并证明 `PATCH` 未同步会话缓存
 - [ ] X3.2 待观察：若再出现慢启动，`[migrate] ...: code=<SQLSTATE> ...` 会给出可归因证据
 
+
+### ⭐ X3.1 结论（Round 264 追加）
+**争用假设已由受控实验证明**，不再是"只一致"：
+```
+N(并发 DB 客户端)  READY_AT  loadavg(before→after)  'database unreachable' 次数
+0                 13s       0.41 → 1.05            0
+8                 18s       1.45 → 3.93            0
+20                **180s**  5.08 → **24.97**       1
+```
+→ `COLD_START_TIME_SCALES_WITH_CONCURRENT_DB_CLIENTS: PROVEN`
+→ `HISTORICAL_176S_EPISODE_EXPLAINED_BY_CONTENTION: STRONGLY SUPPORTED`（180s ≈ 记录的 176s）
+
+**关键洞察（反直觉）**：三档 `conn_before` **都是 2** —— 变的是**连接 churn**（worker 用
+`psql -c` 每次建连即退）与 **CPU 排队**，不是稳态连接数。
+⭐ 这**反向印证审核 55 的裁定**：问题不在 `max_connections=15`，
+所以**提高它不会解决**（清洁启动时连接数只有 2）。
+
+**完整修复链条（三条已落实）**：Gate 互斥锁（阻止并发致因）→ 破坏性测试拆出常规回归
+（不再重启在服务的后端）→ 就绪轮询 240s（等待语义正确）。
+详见 `docs/m5/X3-COLD-START-FACTS.md` §五/§六。
