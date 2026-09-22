@@ -99,7 +99,7 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 | PoiDetailScreen.tsx | api-only | — | — | avatarFor, getPlace, relativeTime |
 | PoiSearchScreen.tsx | api-only | — | — | listPlaces |
 | ProfileEditScreen.tsx | api-only | — | — | me, patchMyDisplayName, updateSessionUser |
-| PublishScreen.tsx | api-only | — | — | createPost, toFeedPost |
+| PublishScreen.tsx | api-only | — | — | createPost, toFeedPost, uploadMedia |
 | ScannerScreen.tsx | none | — | — | — |
 | SchoolSearchScreen.tsx | api-only | — | — | listSchoolCampuses, listSchools |
 | SimpleScreen.tsx | none | — | — | — |

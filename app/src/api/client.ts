@@ -608,14 +608,27 @@ export function patchMyDisplayName(displayName: string): Promise<ApiResult<ApiUs
 }
 
 /**
- * 发一条文本帖子。
+ * 发一条帖子（可带媒体）。
  * **注意输入里没有 author**：M2 起作者只能由服务端会话决定，
  * 客户端一旦提交 author/authorId 会被服务端 strict 400 拒绝（见 server/src/index.ts）。
  * 这里把字段从类型里去掉，让"想传也传不了"。
+ *
+ * ⭐ WO#21（Round 319）：新增可选 `mediaIds` —— 让发布页的**图片与语音**真正随帖入库。
+ *   ```
+ *   背景：post_media 表一直存在，但服务端对它的引用**全是 select** ⇒ 没有任何接口能挂媒体；
+ *        而本文件的 createPost 也从不传图片 ⇒ **发布页的图片与语音都只存在于本机**。
+ *   ```
+ *   ⚠️ 服务端会**严格校验**每个 id：必须存在、scope='public'（聊天媒体挂不上）、
+ *      且**属于当前会话用户**（否则 403）。所以调用方必须先 `uploadMedia(f, 'post', ...)`
+ *      拿到 id 再传进来。
+ *   ⚠️ 顺序：**先传媒体、再发帖**。反过来会先产生一条没图的帖子，
+ *      而补挂媒体的接口我们没有（服务端只有"发帖时一并挂"这一条路）。
  */
 export function createPost(input: {
   body: string
   place?: string
+  /** 已上传的 **public** 媒体 id（图片/语音）；顺序即展示顺序 */
+  mediaIds?: string[]
 }): Promise<ApiResult<ApiPost>> {
   return request<ApiPost>('/api/posts', { method: 'POST', body: input })
 }
