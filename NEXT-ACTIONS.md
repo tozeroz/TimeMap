@@ -1638,7 +1638,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ✅ 回归：f004/wo20/wo16b/wo16a/wo14/announce → 全 EXIT=0；服务器侧门禁 PASS；CHECK_ALL_LOCAL PASS
 
 **⬅ 下轮从这里继续**：
-- [ ] ⬅ ⭐⭐ **必须由 Owner 做一次 scope 裁定**（审核 67 明确要求；这是**产品 scope 裁定，不是工程验证**）：
+- [x] ✅ **Owner scope 裁定已收到**（2026-09-23 07:29）：**只排除 ② 认证「下一步」流程**；① 扫码 / ③ App 自更新 / ④ 发布页语音录音 ⇒ **必须实现体验等价**（详见 docs/m5/OWNER-SCOPE-DECISION-REQUIRED.md）
       ```
       对以下三项选择 A（必须实现体验等价）／ B（明确排除当前项目 scope）：
         1. Scanner **实际扫码**能力
@@ -1683,7 +1683,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       ⚠️ 裁定前统一记为 `EXPERIENCE_GAP_PENDING_OWNER_SCOPE`，**不擅自**标"完成"或"排除"
 
 **⬅ 下轮从这里继续**：
-- [ ] ⬅ **等 Owner 对四项选 A/B**（这是**产品裁定**，只有 Owner 能定）
+- [x] ✅ **已裁定**（同上）：② 排除；① ③ ④ 必须实现
       ⚠️ 但按用户硬规则**不因此停下** ⇒ 同时推进**不依赖该裁定**的项：
 - [x] ✅ **第一刀已完成**（`docs/m5/I1-ICON-PROVENANCE-FINDING.md`）：⚠️ **方法失败已如实记录**（APK 内是 AXML 二进制 ⇒ "0 匹配"是仪器没工作，**不是**清白）；`icons.tsx` 来源如实标为 **UNDOCUMENTED**（发布前必须核实，**不**偷换成"自绘"）；顺带查出 `icons-send` 引用的 aapt2 产物**未留档 ⇒ 取证不可复算**。状态 `INCONCLUSIVE / 需要工具`（环境里 aapt2 不可用）
 - [ ] ⬅ **I3 图标重绘**（若确定要公开；同上）
@@ -1706,3 +1706,21 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       状态：**INCONCLUSIVE / 需要工具**（环境里 aapt2/apktool/androguard 均不可用）
       ⇒ 属**发布前置**项；当前未决定公开 ⇒ **不是** M5 体验完成度的阻塞项
       ```
+
+### ⭐⭐ Round 319 续 3：Owner 裁定后的三项新任务（按"从小到大"做）
+
+- [ ] ⬅ **④ 发布页「语音」接线到真实录音**（最小、能力已有）
+      现状：`PublishScreen` 语音模式是**占位波形**（28 根装饰条）+ 诚实说明
+      能力：`ChatScreen` 已在用 `startRecording` / `MediaRecorder` / 真权限 / 真上传
+      ⇒ 目标：接真实录音 + 真实时长 + 真实上传（或给出明确的能力边界）
+      ⚠️ 原版该交互在基线里是 `known_unknowns` ⇒ 对齐目标形态记 NOT_EVALUATED／OUR_DESIGN_CHOICE
+- [ ] ⬅ **① 扫码实际扫码**
+      现状：`ScannerScreen` 如实显示「扫码功能尚未实现」
+      ⇒ 目标：接入真实扫码（需选技术路线：复用 liveCamera + JS 解码器／Capacitor 条码插件）
+      ⚠️ 原版**扫码后的目标页**在只读约束下不可观察 ⇒ 目标页形态 NOT_EVALUATED
+- [ ] ⬅ **③ App 自更新**
+      现状：`UpgradeDialog` 如实说明「更新流程未接入」
+      ⚠️ 原版「立即更新」的去向**未观察**（点它可能触发真实下载 ⇒ BLOCKED_BY_POLICY）
+      ⇒ 需在"不假装"的前提下做一条**真实**的更新检查/动作
+- [ ] ⬅ 每项做完都要：门禁 + 敏感度 + 提交审核 + 落盘（要求 4：每单闭环）
+- [ ] ⬅ ⚠️ 审核 67 口径：③④ 修完后**仍要**区分 `TRUTHFULNESS: PASS` 与 `FEATURE_PARITY`
