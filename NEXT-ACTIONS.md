@@ -1000,3 +1000,42 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       但它 `navigate('board')` → **跳到留言板**。与 WO#13 修掉的"5 个 Me 条目全跳 profile-edit"同型。
       ⚠️ 需先判明"原版里那个位置到底是什么入口"（可能是"认证后可用"的说明位）
       ⇒ 本轮**只记录不擅自改**（不能凭空发明一个认证流程）
+
+### ⭐⭐ Round 266：WO#15 **closeout 三项全部完成**（审核 58 的 HOLD 已可解除）
+- [x] ✅ **closeout ①**：`legacy mapMarkers` 离开生产 `mock.ts`
+      6 条编造数据 → `scripts/m5/fixtures/legacy-map-markers.json`；
+      `MapMarker` **类型** → `app/src/native/mapApi.ts`（地图抽象层）；
+      4 个 import 点改完 ⇒ **生产模块不再 export 任何地图标记数据**，
+      三个地图组件（AmapMap/RealMap/TencentMap）**已完全不 import mock**
+- [x] ✅ **closeout ②**：**offline 模式不再渲染权威标记**（审核 58 的选项 A）
+      `OfflineMap` 内部恒渲染空数组；新增徽标态 `offline-unsupported`「离线底图不支持标记显示」；
+      门禁新增 `OFFLINE_RENDERS_NO_GEO_MARKERS`（要求离线标记数 == 0 且徽标为该态）
+      ⚠️ 理由（审核 58 原话意译 + 我补的一条）：**不能**只把投影一致性写成 NOT_EVALUATED
+      却仍把标记画给用户看 —— 首先是"**我们画的位置对不对**"的 correctness 问题；
+      且实测 4 条里含「广州达美乐」，而底图是**校园级** SVG，未校准换算更不可能安全表达
+- [x] ✅ **closeout ③**：Gate 键名改为 `MARKER_COUNT_MATCHES_POSTS_WITH_VALID_COORDS`
+      （真实 policy 是 `placeLat/lng 同时为 number`，**不是** `place_id != null`；
+      否则将来"合法但无坐标"的 place 会让 Gate **因错误的原因 FAIL**），
+      并显式写出 `OUR_MARKER_CARDINALITY_POLICY` ／ `ORIGINAL_MARKER_CARDINALITY: NOT_EVALUATED`
+      ／ `OFFLINE_MARKER_RENDERING_POLICY`
+- [x] ✅ ⭐ **顺带修掉一个我引入的回归**：三个地图实现原本 `posts.find(p => p.id === m.postId)`
+      去 **mock** 里查帖子 —— 而 WO#15 之后那是**真实 UUID**，find **永远 undefined**
+      ⇒ **标记卡片封面与文字都空白**（标记仍画得出、地名也在，所以**很难发现**）
+      ⇒ 已把卡片数据放进 marker（`coverUrl`/`excerpt`），由 `markersFromPosts` 从权威帖子填
+      ⇒ 实测卡片现在显示权威正文片段（"这家真的好好吃，肉多"／"图书馆四楼靠窗的位置"）
+      ⚠️ 而**我的 WO#15 门禁没抓到它** —— 那批断言没覆盖"卡片可见内容"，
+        属**断言覆盖面缺口**（已如实记录）
+- [x] ✅ ⭐ **顺带修掉一个我自己的假 FAIL**：`NO_FABRICATED_PLACE_DATA` 原用"**整页文本**"
+      判"是否仍在渲染 mock 地点"，而权威帖子的**正文**里有「图书馆四楼靠窗的位置」⇒ 误判
+      ⇒ 改为按**标记地点名集合**判定（新增测试钩子 `data-marker-places`）
+      （同类"断言口径过宽"在本会话已是**第三次**：WO#14 的整页 imgCount===0 也在其中）
+- [x] ✅ **Gate 最终**：5 键全 PASS（`MAP_MARKERS_FROM_AUTHORITY` ／
+      `MARKER_COUNT_MATCHES_POSTS_WITH_VALID_COORDS` ／ `OFFLINE_RENDERS_NO_GEO_MARKERS` ／
+      `NO_FABRICATED_PLACE_DATA` ／ `MAP_NO_FALLBACK_ON_UNAVAILABLE`）；3 项 NOT_EVALUATED 如实保留
+- [x] ✅ **回归：10 条设备 Gate 全 `DEVICE_GATE_EXIT=0`**
+- [x] ✅ 按审核 58 修正**两处过强措辞**：绿色结论改为
+      `NO GREEN HIGH-SATURATION COMPONENT UNDER ANALYZER THRESHOLDS`（不再写"原图完全不存在绿色"）；
+      WO15.6 的否定结论限定为 `AUTO_BLOCKING_OVERLAY_NAMED_PATTERN_SURVEY: PASS`（含 scope 声明）
+- [x] ✅ 按建议**不**把全量像素统计接入常规 Gate；混淆变量处理归入
+      **Comparison Validity / Confound Control**（与 Source/Observation/Fixture 同族）
+- [ ] ⬅ **等审核**：WO#15 是否可写 **PASS / CLOSED**（三项 closeout 已完成，无待办）
