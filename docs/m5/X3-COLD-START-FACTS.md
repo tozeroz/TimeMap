@@ -102,48 +102,82 @@ N   READY_AT_s  loadavg(before→after)  conn_before  'database unreachable' 次
 且 N=20 时 loadavg 冲到 **24.97**（2 vCPU），启动期**真的出现了 `database unreachable`**
 —— 与 06:49 那次 176 秒的日志形态一致，耗时也几乎重合（180 vs 176）。
 
-→ 因此状态从 `CONSISTENT BUT NOT PROVEN` 升级为：
+⚠️ **精确措辞（审核记录 56 修正）**：本实验里 N **同时改变了多个东西** ——
+`psql 进程创建 ／ 连接 churn ／ DB 工作量 ／ CPU 调度压力 ／ 系统负载 ／ 可能的瞬时连接槽竞争`。
+所以**不能**说"连接 churn 本身已被证明是根因"。正确冻结：
 ```
-COLD_START_TIME_SCALES_WITH_CONCURRENT_DB_CLIENTS: **PROVEN**（受控实验，3 档单调上升）
-HISTORICAL_176S_EPISODE_EXPLAINED_BY_CONTENTION:   **STRONGLY SUPPORTED**
-  （受控复现出 180s ≈ 记录中的 176s，且同样是启动期 DB 不可达）
+COLD_START_DEGRADES_UNDER_CONCURRENT_DB_CLIENT_LOAD:  **PROVEN**
+SPECIFIC_SUBMECHANISM
+  (CPU scheduling vs process churn vs connection churn vs transient slot pressure):
+                                                    **NOT ISOLATED**
+HISTORICAL_176S_EPISODE_EXPLAINED_BY_CONTENTION:      **STRONGLY SUPPORTED**
 ```
+（历史事件**不升级为 PROVEN**：180s 与 176s、相同启动阶段、相同 `database unreachable`
+形态已使归因非常有カ，但历史那一轮没有当时的完整因果观测。）
 
-### 5.1 一个反直觉但重要的细节：**是"连接churn"而不是"常驻连接数"**
+### 5.1 一个反直觉的观察：稳态连接数很低，但耗时差 14 倍
 三档里 `conn_before` 都是 **2**，但耗时差 14 倍。
 原因：负载 worker 用 `psql -c '...'` —— **每跑一次就建一次连接、跑完即退**。
 所以瞬时连接数很低，但**连接建立/销毁的频率极高**。
-这也解释了为什么"看 `pg_stat_activity` 当前连接数"不足以诊断这类问题 ——
-要看**连接churn 与 CPU 排队**（loadavg），而不是稳态连接数。
+
+⚠️ **但这不足以排除 max_connections 相关！**（审核记录 56 的修正）
+`conn_before=2` 只是**某个采样时点的稳态快照** —— worker 是短生命周期，
+**不能排除**负载期间出现**瞬时连接峰值**。20 个 worker 对一个
+`max_connections=15` + `reserved=3` 的实例施压时，**瞬时连接槽竞争是一个合理候选**。
+正确写法：
+```
+MAX_CONNECTIONS_AS_ROOT_CAUSE:      **NOT ESTABLISHED**
+NO EVIDENCE JUSTIFYING RAISING IT:  YES
+```
+若后续压力实验里新加的 SQLSTATE 捕获出现 `too_many_connections` 之类，
+**反而会成为证据**；只有明确捕获到**其它**连接/调度故障、**且**连续采样证明峰值远低于上限，
+才可以进一步排除。**这不改变操作结论：现在不要提高 max_connections。**
 
 ### 5.2 边界（不夸大）
-· 本实验只变"**并发 DB 客户端数**"这一维；真实 gate 负载还含 HTTP 请求、媒体上传等，
-  故结论只覆盖 **DB 争用/CPU 排队**这一分量。
+· 本实验只变"**并发 DB 客户端数**"这一维；真实 gate 负载还含 HTTP 请求、媒体上传等。
 · N=20 是**刻意压到极端**（loadavg 25）以验证灵敏度，**不代表**日常工作负载。
   8 档（loadavg 3.9）已使耗时从 13s 升到 18s —— 日常并发就在这个量级。
+· 采样的**采样率是 1 Hz**，"瞬时峰值"可能被漏采 —— 这也是"NOT ESTABLISHED"而非"已排除"的原因之一。
 
-## 六、结论与**不**做的事（含 X3.1 后的完整链条）
+## 六、最终账本（**按审核记录 56 的建议冻结**，含两处精度修正）
 
 ```
-CONFIRMED / PROVEN:
-  · 清洁冷启动 **11~20 秒**（实测 3 次），清洁窗口内**无资源耗尽**
-  · ⭐ **冷启动耗时随并发 DB 客户端数急剧上升**（13s → 18s → 180s，受控实验）→ 争用假设 **PROVEN**
-  · 176s 那次由并发争用导致：**STRONGLY SUPPORTED**（受控复现 180s ≈ 记录的 176s）
-  · "重启后过早放行流量会失败"这一**机制**成立（等待策略修正是对的）
-  · 原先"资源（内存/连接数上限）是根因层"的断言**不成立**（已按审核 55 更正）
+X3_CLEAN_COLD_START:                                  PASS
+    观察到 11–20s（多次独立清洁启动）
+CONCURRENT_DB_CLIENT_LOAD_CAUSES_READINESS_DEGRADATION:
+                                                      **PROVEN IN CONTROLLED EXPERIMENT**
+    0 → 13s ／ 8 → 18s ／ 20 → 180s
+EXACT_LOW_LEVEL_BOTTLENECK:                           **NOT ISOLATED**
+    （CPU 调度 / 进程 churn / 连接 churn / 瞬时连接槽竞争：本轮无法区分）
+HISTORICAL_176S_EVENT:                                STRONGLY CONSISTENT WITH /
+                                                      SUPPORTED BY CONTENTION MECHANISM
+MEMORY_EXHAUSTION_AS_ROOT_CAUSE:                      NOT SUPPORTED BY CLEAN-START EVIDENCE
+MAX_CONNECTIONS_AS_ROOT_CAUSE:                        **NOT ESTABLISHED**
+CAPACITY_CHANGE:                                      NOT WARRANTED BY CURRENT EVIDENCE
+```
+审核 56 的理由：这比"176s 已完全证明由连接 churn 导致"**更经得起以后复审**。
 
-FIX CHAIN（三条已各自落实，合起来覆盖这一问题）:
-  ① **Gate 互斥锁**（gate-lock.sh）→ 阻止"多个 Gate 并发跑"这一**致因**
-  ② **破坏性测试已从常规回归拆出**（X2）→ 常规回归**不再重启**正在服务的后端
-  ③ **就绪轮询**（/api/ready，超时 240s）→ 万一真发生慢启动，等待语义正确
-     （deploy-server.ps1 也从"等 liveness"改成"等 readiness"）
+### FIX CHAIN（三条已各自落实，合起来覆盖这一问题）
+```
+① **Gate 互斥锁**（gate-lock.sh）→ 阻止"多个 Gate 并发跑"这一**致因**
+② **破坏性测试已从常规回归拆出**（X2）→ 常规回归**不再重启**正在服务的后端
+③ **就绪轮询**（/api/ready，超时 240s；deploy-server.ps1 也从"等 liveness"改成"等 readiness"）
+```
 
-DO NOT（审核 55）:
-  · 不提高 max_connections —— 实测清洁启动时连接数只有 2；
-    真正的问题是**连接churn + 2 vCPU 被压满**，不是连接上限
-  · 不加 swap 当作"修复"
+### 容量决策（审核 56 确认）
+```
+max_connections: UNCHANGED ／ swap: UNCHANGED ／ machine size: UNCHANGED   ← 正确
+```
+已证明：清洁启动 11–20s、MemAvailable ~216–225MB、swap 增量 0、无 OOM、应用侧 DB 并发很低
+⇒ **没有证据**支持"机器在正常负载下无法运行"，而真正该先做的三个工程修复已经完成。
+⇒ 扩容保持为 **SEPARATE OPERATIONS / CAPACITY DECISION**，不是 M5 correctness fix。
+以后若正常工作负载下仍频繁出现持续内存压力／swap-in-out／readiness 延迟／
+DB 连接饥饿／不可接受的用户延迟，再用**实际容量数据**决定。
 
-仍待观察:
-  · 若再次出现慢启动，`[migrate] ...: code=<SQLSTATE> ...` 会给出可归因证据
-  · 长期：这台 2 vCPU / 396MB 的机器同时承担 Node + PostgreSQL + Nginx 确实很紧；
-    是否扩容属**独立运维决策**（审核 55：不作为任何 WO 的关账条件）
+### DO NOT
+· 不提高 max_connections（`MAX_CONNECTIONS_AS_ROOT_CAUSE: NOT ESTABLISHED`；
+  但注意**并非"已排除"** —— 见 §5.1 的采样局限）· 不加 swap 当作"修复"
+
+### 仍待观察
+· 若再次出现慢启动，`[migrate] ...: code=<SQLSTATE> ...` 会给出可归因证据
+  （若真出现 `too_many_connections` 之类，**反而会成为** max_connections 相关的证据）
