@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { likePost, listPosts, readSnapshot, toFeedPost, unlikePost } from '../api/client'
 import { isLoggedIn } from '../api/session'
 import { BigTitle, Screen } from '../components/Shell'
-import { IconChatBubble, IconComment, IconHeart, IconSearch } from '../components/icons'
+import { IconChatBubble, IconComment, IconHeart } from '../components/icons'
 // 注意：这里**不再** import mock 的 `posts` —— 校园页已迁移到真实 API，
 // 在线时 API 是权威数据源（审核记录 07 的降级边界：已迁移页面不得混入 synthetic mock）。
-import { campusInfo, schools, type FeedPost } from '../data/mock'
+import type { FeedPost } from '../data/mock'
 import { feedAuthoritative, setServerPosts, subscribeMyPosts } from '../data/store'
 import { navigate } from '../router'
 import './campus.css'
@@ -114,57 +114,65 @@ export function PostCard({
   )
 }
 
-/** 学校切换面板（原版：点「校园广场 ▼」后出现「搜索其他学校」） */
-function SchoolSwitcher({
-  current,
-  onPick,
-  onClose,
-}: {
-  current: string
-  onPick: (name: string) => void
-  onClose: () => void
-}) {
-  const [keyword, setKeyword] = useState('')
-  const list = schools.filter((s) => (keyword ? s.name.includes(keyword) || s.region.includes(keyword) : true))
-
+/**
+ * 学校/校区数据**尚未接入**时的面板（M5 WO#16 · 层 A，审核 60 批准）
+ *
+ * ## 为什么不再是原来那个"学校切换面板"
+ *   原实现渲染 `mock.schools` 的 **8 个学校**，每行还带 `region` 与 `members`
+ *   （如 `'12,486'`）—— 这些**都没有出处**（`schools` / `campuses` 两表为空、
+ *   三个用户 `school_campus_id` 全为 NULL）。
+ *   审核 60 明确：**不许**继续用 mock 学校数据。
+ *
+ * ## 但**不能**把整个控件删掉（这是审核 60 对我原计划的修正）
+ *   基线证明「**校园广场 ▼**」这个入口**本身存在**：
+ *     `screens/trident-campus/baseline.json` interactions[1] =
+ *     「顶部：大标题 Campus + 副标题「校园广场 ▼」+ 右上消息气泡」
+ *   ⇒ 所以**保留入口形态**，只**移除伪造数据**。
+ *   （审核原话："FeedList 的 HIDE/DEFER 裁定**不能机械复制**成
+ *     'CampusScreen 整块顶部控件消失'"。）
+ *
+ * ## 为什么显示"尚未接入"而不是"0 条校园圈"
+ *   审核 60 的计数策略 A：**无法由权威归属计算时给 null —— 不给 0、不推断、不伪造**；
+ *   并建议"计数字段干脆不渲染"。这里连权威实体都还没有，所以只给一个**明确状态**。
+ *
+ * ⚠️ `OUR_DESIGN_CHOICE`：**这不是原版的呈现** —— 原版此处是一个校区列表
+ *    （校本部/威海校区/东校区 + 「搜索其他学校」）。
+ *    我们因为**没有权威数据**而暂时显示状态说明；层 B 接入
+ *    `GET /api/schools` + `GET /api/schools/:id/campuses` 后应改为真列表。
+ *    ⇒ 措辞上**不得**把本状态说成"原版就是这么显示的"。
+ */
+function SchoolPickerUnavailable({ onClose }: { onClose: () => void }) {
   return (
-    <div className="switcher">
+    <div className="switcher" data-school-picker="unavailable">
       <div className="switcher__mask" onClick={onClose} />
       <div className="switcher__panel">
-        <div className="switcher__search">
-          <IconSearch size={17} />
-          <input
-            className="switcher__input"
-            placeholder="搜索其他学校"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            autoFocus
-          />
-        </div>
-        <ul className="switcher__list no-scrollbar">
-          {list.map((s) => (
-            <li key={s.id}>
-              <button
-                className={`switcher__item ${s.name === current ? 'is-current' : ''}`}
-                onClick={() => onPick(s.name)}
-              >
-                <span className="switcher__name">{s.name}</span>
-                <span className="switcher__meta">
-                  {s.region} · {s.members} 位同学
-                </span>
-              </button>
-            </li>
-          ))}
-          {list.length === 0 && <li className="switcher__empty">没有找到「{keyword}」相关的学校</li>}
-        </ul>
+        <p className="switcher__empty" data-school-picker-note>
+          学校与校区数据尚未接入
+        </p>
       </div>
     </div>
   )
 }
 
+/**
+ * 顶部副标题：**逐字**取自基线。
+ *   `screens/trident-campus/baseline.json` interactions[1] =
+ *   「顶部：大标题 Campus + **副标题「校园广场 ▼」** + 右上消息气泡」
+ * ⚠️ 「▼」不是本常量的一部分 —— 它由 `BigTitle` 组件自己附加（渲染一个 chevron）。
+ * ⚠️ 这里**刻意不写学校名**：按审核 60，原版该位置是固定标签而非当前学校名。
+ */
+const CAMPUS_SUBTITLE = '校园广场'
+
 export function CampusScreen() {
-  const [school, setSchool] = useState(campusInfo.name)
-  const [switcherOpen, setSwitcherOpen] = useState(false)
+  /*
+    ⭐ WO#16 层 A（审核 60）：这里原先有一个 `school` state，初值取自 **mock** 的
+    `campusInfo.name`（"北京交通大学"），并把它显示为顶部副标题。
+      · 按基线（trident-campus/baseline.json interactions[1]）副标题应是「**校园广场** ▼」，
+        那是**固定标签**，不是学校名 —— 显示 mock 学校名本身即偏差；
+      · 而 mock 学校数据按审核 60 一律**不得**再用于界面。
+    ⇒ 删掉该 state；副标题改用基线逐字支持的常量（见下方 CAMPUS_SUBTITLE）。
+  */
+  const [pickerOpen, setPickerOpen] = useState(false)
   /**
    * 信息流状态（M3 Slice 1 收紧）：
    *   在线 → **API 是权威数据源**（不再混入 mock，避免"双真源"）
@@ -228,7 +236,8 @@ export function CampusScreen() {
     <Screen
       header={
         <header className="campus__head">
-          <BigTitle title="Campus" sub={school} onSubClick={() => setSwitcherOpen(true)} />
+          {/* 副标题**逐字**用基线的「校园广场」；▼ 由 BigTitle 自己附加（它渲染一个 chevron） */}
+          <BigTitle title="Campus" sub={CAMPUS_SUBTITLE} onSubClick={() => setPickerOpen(true)} />
           <button className="iconbtn campus__msg" onClick={() => navigate('message')} aria-label="消息">
             <IconChatBubble size={22} />
           </button>
@@ -274,22 +283,11 @@ export function CampusScreen() {
         {phase === 'ready' && (
           <p className="campus__end">
             已加载全部 · {feed.length} 条动态
-            <br />
-            {school}
           </p>
         )}
       </div>
 
-      {switcherOpen && (
-        <SchoolSwitcher
-          current={school}
-          onPick={(name) => {
-            setSchool(name)
-            setSwitcherOpen(false)
-          }}
-          onClose={() => setSwitcherOpen(false)}
-        />
-      )}
+      {pickerOpen && <SchoolPickerUnavailable onClose={() => setPickerOpen(false)} />}
     </Screen>
   )
 }

@@ -78,11 +78,11 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 
 <!-- BEGIN:MACHINE-SNAPSHOT -->
 扫描范围：app/src/screens（25 个文件）
-统计：api-only=11 ／ mock+api=2 ／ mock-only=5 ／ types-only=0 ／ none=7
+统计：api-only=12 ／ mock+api=1 ／ mock-only=5 ／ types-only=0 ／ none=7
 
 | AnnounceScreen.tsx | none | — | — | — |
 | BoardScreen.tsx | mock+api | boardEmojis | — | getBoardNotes, postBoardNote, relativeTime |
-| CampusScreen.tsx | mock+api | campusInfo, schools | FeedPost | isLoggedIn, likePost, listPosts, readSnapshot, toFeedPost, unlikePost |
+| CampusScreen.tsx | api-only | — | FeedPost | isLoggedIn, likePost, listPosts, readSnapshot, toFeedPost, unlikePost |
 | ChatScreen.tsx | api-only | — | — | fetchMediaBlobUrl, getSession, getThread, getThreadMessages, postThreadImageMessage, postThreadTextMessage, postThreadVoiceMessage, relativeTime, uploadMedia |
 | CommentsScreen.tsx | mock-only | comments, posts | — | — |
 | DailyScreen.tsx | none | — | — | — |

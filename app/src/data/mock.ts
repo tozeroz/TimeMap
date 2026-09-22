@@ -496,12 +496,24 @@ export const dailyFeed = [
   { id: 'd4', title: '今天的心情', desc: '给自己打个分', color: '#fff3c4' },
 ]
 
-export const campusInfo = {
-  name: '北京交通大学',
-  region: '北京市·海淀区',
-  members: '12,486',
-  posts: '38,920',
-}
+/*
+  ⚠️ WO#16 层 A（审核 60）：`campusInfo` 与 `schools` 已从本文件**移出**。
+     · 数据 → `scripts/m5/fixtures/legacy-schools.json`（保留溯源，**不进生产包**）
+  为什么不是"留着加注释"（审核 58/60 的要求）：
+     注释里写「不要用」**挡不住**以后另一处重新 import —— 本项目已在
+     `CommentsScreen`（FeedData 已接真实、它仍读 mock）与 `BoardScreen`
+     （WO#14 在 MeScreen 修掉后它仍用 mock 自称身份）上**各栽一次**。
+  为什么这段数据本身**不得使用**：
+     · `campusInfo.members = '12,486'` 与 `posts = '38,920'` 是**编造**的
+       —— 其中 '12,486' 正是 WO#11 从动态列表页判定为编造并移除的那个数字；
+     · `schools` 的 8 条，其成员数全无出处，`region` 字段基线里根本没有；
+       且这 8 条的集合与基线观察到的原版搜索结果**并不相同** ⇒ 当初是凭印象拼的。
+  正确做法（审核 60）：
+     · 计数 = `COUNT(posts WHERE school_campus_id = campus.id)`；
+       无法由**权威归属**计算时给 **unavailable/null**，**不是 0**、不由 `place` 推断；
+     · 实体种子只许种**有基线观察证据**的：北京交通大学 + 校本部/威海校区/东校区，
+       且必须标为 baseline-derived fixture。
+*/
 
 /* ============ 以下为补充页面所需数据 ============ */
 
@@ -566,16 +578,7 @@ export const scannerHints = ['扫描校园卡二维码', '扫描群邀请二维�
   ⇒ 生产模块里**不再 export 任何地图标记数据**。
 */
 /** 可切换的学校（对应原版点「校园广场 ▼」后的「搜索其他学校」） */
-export const schools = [
-  { id: 's1', name: '北京交通大学', region: '北京市·海淀区', members: '12,486' },
-  { id: 's2', name: '清华大学', region: '北京市·海淀区', members: '38,021' },
-  { id: 's3', name: '北京大学', region: '北京市·海淀区', members: '42,138' },
-  { id: 's4', name: '中国人民大学', region: '北京市·海淀区', members: '28,905' },
-  { id: 's5', name: '北京航空航天大学', region: '北京市·海淀区', members: '31,672' },
-  { id: 's6', name: '北京师范大学', region: '北京市·海淀区', members: '26,410' },
-  { id: 's7', name: '复旦大学', region: '上海市·杨浦区', members: '33,204' },
-  { id: 's8', name: '上海交通大学', region: '上海市·闵行区', members: '40,558' },
-]
+/* schools 8 条已移出（同上的完整说明见上方 campusInfo 处的注释块）→ scripts/m5/fixtures/legacy-schools.json */
 
 /** 按用户取动态（他人主页用） */
 export function postsByUser(userId: string): FeedPost[] {
