@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { MapMarker } from '../data/mock'
-import { posts } from '../data/mock'
+import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
 import { hasTencentKey, TENCENT_MAP_KEY } from './keys'
 import type { MapHandle } from './mapApi'
@@ -100,8 +99,7 @@ interface PlacedItem {
 
 /** 标记的 DOM 结构：照片卡片 + 图钉 + 地点名（与 Leaflet 版同构） */
 function buildMarkerElement(m: MapMarker): HTMLDivElement {
-  const post = posts.find((p) => p.id === m.postId)
-  const cover = post?.images[0]
+    const cover = m.coverUrl
   const el = document.createElement('div')
   el.className = 'rm'
   el.dataset.markerId = m.id
@@ -117,7 +115,7 @@ function buildMarkerElement(m: MapMarker): HTMLDivElement {
   } else {
     const span = document.createElement('span')
     span.className = 'rm__img rm__img--text'
-    span.textContent = (post?.text ?? '').slice(0, 10)
+    span.textContent = (m.excerpt ?? '').slice(0, 10)
     card.appendChild(span)
   }
   const name = document.createElement('span')

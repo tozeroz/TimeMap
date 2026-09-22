@@ -555,54 +555,16 @@ export const upgradeInfo = {
 /** 扫码页的提示文案 */
 export const scannerHints = ['扫描校园卡二维码', '扫描群邀请二维码', '扫描活动签到码']
 
-/**
- * 地图上的动态标记。
- * 原版实测样式：一张图片卡片 + 彩色图钉 + 地点名，点击进入该条动态。
- * x/y 是地图世界坐标（与 MapScreen 里 SVG 的 viewBox 同一坐标系）。
- */
-export interface MapMarker {
-  id: string
-  place: string
-  color: string
-  userId: string
-  postId: string
-  x: number
-  y: number
-  /** 真实经纬度（接入在线地图后用） */
-  lat: number
-  lng: number
-}
-
-/**
- * ⚠️⚠️ **M5 WO#15：本数组已不在渲染路径上（未采用）—— 请勿当作真实数据引用。**
- *
- * ## 为什么保留（而不是物理删除）
- *   它是历史上"我们以为原版地图长这样"的记录，其中一条**确实有原版证据**：
- *     · `docs/original-interaction-map.md:38` 记录原版实测有**红色图钉「阳光操场」**
- *       （同处还记录了黄色图钉「达美乐比萨(广州萝岗万达广场)」）
- *   保留这段线索，是为了**避免以后有人再把这 6 条当成真实地点**（本项目已两次踩到
- *   "编造数据被后来的人当真"），而不是因为它在被使用。
- *
- * ## WO#15 之后的正确来源
- *   地图标记改由**权威**数据派生：`MapScreen.markersFromPosts(GET /api/posts 的结果)` ——
- *   只保留**同时有 placeLat/placeLng** 的帖子（坐标来自 `posts.place_id → places`）。
- *   实证：原版模型就是"标记 = 一条真实动态锚定在一个真实地点"
- *   （`supplements/poi-detail.json`：地图上点的是**照片图钉的照片缩略图**，不是地名文字）。
- *
- * ## 这 6 条与权威数据的实际关系（本轮已核对）
- *   · 6 个地点在 `places` 表里**全部 0 行**（即权威侧没有它们）
- *   · 只有「阳光操场」在原版观察记录里有据；其余 5 个**只出现在本文件与 MapScreen 自身**
- *   · 因此**不得**把它们作为"原版一致性"的证据；它们在 `places` 里没有对应实体。
- */
-export const mapMarkers: MapMarker[] = [
-  { id: 'm1', place: '阳光操场', color: '#f5453b', userId: 'u1', postId: 'p1', x: 430, y: 1030, lat: 39.9512, lng: 116.3381 },
-  { id: 'm2', place: '教育超市', color: '#f2b800', userId: 'u11', postId: 'p7', x: 560, y: 1660, lat: 39.9495, lng: 116.3372 },
-  { id: 'm3', place: '图书馆', color: '#f5453b', userId: 'u5', postId: 'p8', x: 980, y: 640, lat: 39.9521, lng: 116.3412 },
-  { id: 'm4', place: '逸夫教学楼', color: '#2f9e44', userId: 'u2', postId: 'p2', x: 900, y: 1020, lat: 39.9502, lng: 116.3428 },
-  { id: 'm5', place: '思源楼', color: '#f2b800', userId: 'u4', postId: 'p4', x: 1180, y: 1120, lat: 39.9491, lng: 116.3439 },
-  { id: 'm6', place: '学苑公寓', color: '#2f9e44', userId: 'u7', postId: 'p6', x: 340, y: 1220, lat: 39.9487, lng: 116.3362 },
-]
-
+/*
+  ⚠️ Round 266：`MapMarker`（类型）与 `mapMarkers`（6 条**编造的**标记数据）已从本文件移出。
+     · **类型** → `app/src/native/mapApi.ts`（地图抽象层；生产类型不该住在 mock 模块里）
+     · **数据** → `scripts/m5/fixtures/legacy-map-markers.json`（保留溯源，但**不进生产包**）
+  为什么不是"留着加注释"（审核记录 58 的要求）：
+     注释里写「不要用」**挡不住**以后另一处重新 import —— 本项目已在
+     `CommentsScreen`（同一数据 FeedDetail 已接真实、它仍读 mock）与
+     `BoardScreen`（WO#14 在 MeScreen 修掉后它仍用 mock 自称身份）上**各栽一次**。
+  ⇒ 生产模块里**不再 export 任何地图标记数据**。
+*/
 /** 可切换的学校（对应原版点「校园广场 ▼」后的「搜索其他学校」） */
 export const schools = [
   { id: 's1', name: '北京交通大学', region: '北京市·海淀区', members: '12,486' },

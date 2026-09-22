@@ -5,7 +5,7 @@
  *   审核 57：`WO15: APPROVED TO IMPLEMENT`。计划
  *   `docs/m5/WO15-PLAN-map-marker-authority.md`（+ 两份更正）给出的键：
  *     MAP_MARKERS_FROM_AUTHORITY            每个标记能追溯到**一条真实 post**
- *     MARKER_COUNT_MATCHES_POSTS_WITH_PLACE 标记数 == **有坐标的帖子数**（**不硬编码 6**）
+ *     MARKER_COUNT_MATCHES_POSTS_WITH_VALID_COORDS 标记数 == **有坐标的帖子数**（**不硬编码 6**）
  *     NO_FABRICATED_PLACE_DATA              不得出现"无出处"的地名（尤其 mock 那 6 个）
  *     MAP_NO_FALLBACK_ON_UNAVAILABLE        读到失败 → 明确不可用态，**不回落 mock**
  *   另有两条**基线明记未知**，故只记录不改判：
@@ -13,7 +13,7 @@
  *     OFFLINE_MAP_PROJECTION_CONFORMANCE:  NOT_EVALUATED（像素换算无基线）
  *
  * ## ⚠️ 断言的**判别性**设计（这是本文件最要紧的部分）
- *   1) `MARKER_COUNT_MATCHES_POSTS_WITH_PLACE` 若只断言"有标记"就**没有判别力** ——
+ *   1) `MARKER_COUNT_MATCHES_POSTS_WITH_VALID_COORDS` 若只断言"有标记"就**没有判别力** ——
  *      mock 也有 6 条，一样"有标记"。所以必须**把期望值算出**来对：
  *        期望 = 服务端 `GET /api/posts` 里**同时有 placeLat/placeLng** 的条数
  *        实际 = 页面上 `.map__marker` 的个数
@@ -131,6 +131,8 @@ const snapMap = () =>
     phase: badge ? badge.getAttribute('data-marker-phase') : null,
     badgeCount: badge ? badge.getAttribute('data-marker-count') : null,
     badgeText: badge ? (badge.textContent || '').trim() : null,
+    /** ⭐ 标记地点名（测试钩子；用 \\u001f 分隔） */
+    markerPlaces: badge && badge.getAttribute('data-marker-places') ? badge.getAttribute('data-marker-places').split('\\u001f') : [],
     /** provider 无关：由同一个 markers 状态驱动 */
     declaredCount: badge && badge.getAttribute('data-marker-count') ? Number(badge.getAttribute('data-marker-count')) : (badge && badge.getAttribute('data-marker-phase') === 'empty' ? 0 : null),
     /** 只有离线自绘地图才有这些 DOM 节点 */
@@ -215,6 +217,8 @@ const stub = await evaluate(`(async () => {
   return {
     phase: badge ? badge.getAttribute('data-marker-phase') : null,
     badgeText: badge ? (badge.textContent || '').trim() : null,
+    /** ⭐ 标记地点名（测试钩子；用 \\u001f 分隔） */
+    markerPlaces: badge && badge.getAttribute('data-marker-places') ? badge.getAttribute('data-marker-places').split('\\u001f') : [],
     declaredCount: badge && badge.getAttribute('data-marker-count') ? Number(badge.getAttribute('data-marker-count')) : null,
     offlineMarkerDomCount: cards.length,
     leakedMockNames: ${JSON.stringify(MOCK_ONLY_PLACES)}.filter((n) => bodyText.includes(n)),
@@ -231,7 +235,15 @@ const expectedCount = expected && expected.ok ? expected.withCoords : null
 /** 服务端出现的全部地名（用于"页面上每个地名都要能对上"） */
 const serverPlaces = (expected && expected.allPlaces) || []
 /** 整页文本里"泄漏"的 mock 地名（两种底图都会渲染地名文本） */
-const leakedInNormal = MOCK_ONLY_PLACES.filter((n) => String(snap && snap.bodyText).includes(n))
+/*
+  ⭐ Round 266：改为按**标记地点名集合**判定，而不是"整页文本里是否出现该词"。
+  改前用整页文本 → 一次**假 FAIL**：权威帖子的正文里出现「图书馆四楼靠窗的位置」，
+  那个"图书馆"是**帖子内容**、不是标记地点，但被算成了"仍在渲染 mock 地点"。
+  ⇒ 现在只看 `data-marker-places`（标记真实使用的地点名）。
+  （同类教训：WO#14 用整页 imgCount===0 判头像，被帖子里的图片干扰。）
+*/
+const markerPlaces = (snap && snap.markerPlaces) || []
+const leakedInNormal = MOCK_ONLY_PLACES.filter((n) => markerPlaces.includes(n))
 
 const v = {
   /**
@@ -244,15 +256,24 @@ const v = {
     expected && expected.ok && snap && snap.declaredCount !== null &&
     snap.declaredCount === expectedCount &&
     leakedInNormal.length === 0 &&
-    serverPlaces.some((p) => String(snap.bodyText).includes(p))
+    markerPlaces.length > 0 && markerPlaces.every((p) => serverPlaces.includes(p))
       ? 'PASS'
       : 'FAIL',
 
-  /** 声明条数 == 服务端有坐标的帖子数（**不硬编码 6**）；且离线 DOM 路径的节点数一致 */
-  MARKER_COUNT_MATCHES_POSTS_WITH_PLACE:
-    expectedCount !== null &&
-    snap && snap.declaredCount === expectedCount &&
-    snapOffline && snapOffline.offlineMarkerDomCount === expectedCount
+  /**
+   * 声明条数 == 服务端**有有效坐标对**的帖子数（**不硬编码 6**）。
+   * ⚠️ Round 266（审核 58 closeout 第 2/3 项）改了**离线那半条**：
+   *   改前要求离线 DOM 也等于 expectedCount（= 4）—— 那是**错的**：
+   *   离线底图是未校准投影的 SVG，**不该**渲染权威标记（见 App 侧说明）。
+   *   ⇒ 现在要求离线 DOM **等于 0**，且徽标明确说"离线底图不支持标记显示"。
+   *   （这不是"放宽"，而是**换成一个更正确的断言**：从"离线也画 4 个"变成"离线必须不画"。）
+   */
+  MARKER_COUNT_MATCHES_POSTS_WITH_VALID_COORDS:
+    expectedCount !== null && snap && snap.declaredCount === expectedCount ? 'PASS' : 'FAIL',
+  /** ⭐ 离线底图必须**不渲染**权威标记（未校准投影，画出来可能错位且用户无法察觉） */
+  OFFLINE_RENDERS_NO_GEO_MARKERS:
+    snapOffline && snapOffline.offlineMarkerDomCount === 0 &&
+    snapOffline.phase === 'offline-unsupported'
       ? 'PASS'
       : 'FAIL',
 
@@ -273,13 +294,30 @@ const v = {
 
   detail: { expected, snap: { ...snap, bodyText: undefined }, snapOffline, stub, expectedCount, leakedInNormal },
   notes: {
-    判别性: '期望条数来自**服务端实况**（不写死 6）；主判据用 provider 无关的 data-marker-count；离线 DOM 路径单独再验一次',
+    判别性: '期望条数来自**服务端实况**（不写死 6）；主判据用 provider 无关的 data-marker-count',
+    /*
+      ⭐ Round 266（审核记录 58 closeout 第 3 项）：**键名要反映真实 policy**。
+        改前叫 `MARKER_COUNT_MATCHES_POSTS_WITH_PLACE`，但实现的判定其实是
+          `placeLat != null && placeLng != null` → marker
+        而**不是** `place_id != null` → marker。
+        ⇒ 名字与 policy 不符的后果是具体的：以后若出现一条**合法但没有坐标**的
+          place（places.latitude/longitude 可为 NULL），旧名字会让人以为
+          "应该按 place_id 计数"，于是 Gate 会因为**错误的原因** FAIL。
+        所以改名 + 把 policy 显式写出来。
+    */
+    OUR_MARKER_CARDINALITY_POLICY:
+      'one marker per post with a valid coordinate pair（placeLat 与 placeLng 同时为 number）',
+    ORIGINAL_MARKER_CARDINALITY: 'NOT_EVALUATED（原版每帖是否恰好一个标记未观测）',
+    OFFLINE_MARKER_RENDERING_POLICY:
+      'offline 底图**不渲染**权威标记（未校准投影）；见 App 侧说明 —— ' +
+      '审核 58：不能只把投影一致性写成 NOT_EVALUATED 却仍把标记画给用户看',
     仍未知: '图钉配色规则 / 气泡卡片 / 缩放级别 / 头像标记与照片标记的分工 —— 依基线原话「标记规则未记录」',
   },
 }
 const KEYS = [
   'MAP_MARKERS_FROM_AUTHORITY',
-  'MARKER_COUNT_MATCHES_POSTS_WITH_PLACE',
+  'MARKER_COUNT_MATCHES_POSTS_WITH_VALID_COORDS',
+  'OFFLINE_RENDERS_NO_GEO_MARKERS',
   'NO_FABRICATED_PLACE_DATA',
   'MAP_NO_FALLBACK_ON_UNAVAILABLE',
 ]

@@ -7,9 +7,9 @@ import {
   IconLocation,
   IconPlus,
 } from '../components/icons'
-import { listPosts } from '../api/client'
+import { listPosts, mediaUrl } from '../api/client'
 import type { ApiPost } from '../api/client'
-import type { MapMarker } from '../data/mock'
+import type { MapMarker } from '../native/mapApi'
 import { AmapMap } from '../native/AmapMap'
 import { RealMap } from '../native/RealMap'
 import { TencentMap } from '../native/TencentMap'
@@ -92,6 +92,17 @@ export function markersFromPosts(
         y: Math.round(1000 - dyM * PX_PER_M),
         lat,
         lng,
+        /*
+          ⭐ Round 266：把**卡片所需的数据**一并放进 marker，来源就是这条权威帖子。
+          为什么必须这样做：三个地图实现改前都写 posts.find(p => p.id === m.postId)
+          去 **mock** 里查帖子 —— 而 WO#15 之后 m.postId 是真实帖子的 UUID
+          （mock 里是 p1/p2…），那个 find **永远 undefined**，
+          于是卡片封面与文字都是空的（标记仍画得出来，所以很难发现）。
+          ⇒ 让**构造 marker 的这里**（手里就有帖子对象）把数据带过去；
+            地图组件从此不需要知道帖子从哪来，也就**不再 import mock**。
+        */
+        coverUrl: p.images && p.images.length > 0 ? mediaUrl(p.images[0].id) : undefined,
+        excerpt: p.body ? p.body.slice(0, 10) : undefined,
       }
     })
 }
@@ -104,9 +115,27 @@ const MAX_SCALE = 3
  * 在线瓦片连续加载失败（无网络 / 被墙 / 无 key）时使用，保证地图区域不是空白。
  * 拖拽、双击、捏合的数据都在这里处理。
  *
- * ⚠️ WO#15：标记**不再**从 `mock.mapMarkers` 读，而是由调用方把**权威派生**的
- *    `markers` 传进来（见 `markersFromPosts`）。空数组 = 没有可显示的标记
- *    （**不回落 mock**）。
+ * ⭐⭐ Round 266（审核记录 58 closeout 第 2 项）：**本组件不渲染权威标记**。
+ *
+ * ## 为什么（这是 correctness，不只是"原版一致性未评估"）
+ *   · 权威数据只有 **lat/lng**（`posts.place_id → places`）
+ *   · 而本组件是 **SVG 像素坐标系**（viewBox 1400×2000），需要 **x/y**
+ *   · 我先前用"按 CAMPUS_CENTER 线性近似"把 lat/lng 换成 x/y，
+ *     但**那个投影从未校准**（没有地理 bounds、没有参考锚点、没有误差 Gate）
+ *   ⇒ 只要换算不准，标记就**画在错误位置**，而用户**无法察觉** ——
+ *     这比"不显示"更糟：**它展示的是看似可信但可能错位的空间信息**。
+ *     实测那 4 条权威标记里还有「广州达美乐」一项，而本底图是**校园级**的，
+ *     一个未验证的换算更不可能安全表达它。
+ *
+ * ## 审核 58 的裁定（二选一）
+ *   A（**已采用**）：offline 模式**不渲染**权威 geo 标记，并明确说明"离线不支持标记"
+ *   B（将来可做）：定义 SVG 的地理 bounds / 投影 / 参考锚点 → 做**误差 Gate** → 再允许渲染
+ *   ⚠️ 审核 58 特别指出：**不能**只把 `OFFLINE_MAP_PROJECTION_CONFORMANCE` 写成 NOT_EVALUATED
+ *      却仍把标记画给用户看 —— 未评估的是"与原版是否一致"，
+ *      而这里首先是"**我们画的位置对不对**"的 correctness 问题。
+ *
+ * 因此下面渲染 `offlineRenderable`（**恒为空**），并在页面上给出明确说明。
+ * 将来若做 B，应把换算连同它的**误差 Gate** 一起加回来。
  */
 function OfflineMap({
   view,
@@ -114,9 +143,12 @@ function OfflineMap({
   onTilesMeta,
 }: {
   view: ViewState
+  /** 权威派生的标记；**本组件刻意不渲染它们**（见上方说明） */
   markers: MapMarker[]
   onTilesMeta?: (el: HTMLDivElement | null) => void
 }) {
+  const offlineRenderable: MapMarker[] = []
+  void markers
   const inv = 1 / view.scale
   return (
     <div
@@ -153,7 +185,8 @@ function OfflineMap({
         </g>
       </svg>
       <div className="map__markers" ref={onTilesMeta}>
-        {markers.map((m) => (
+        {/* ⭐ Round 266：恒为空 —— 未校准投影前不计渲染权威标记（见组件头说明） */}
+        {offlineRenderable.map((m) => (
           <div
             key={m.id}
             className="map__marker"
@@ -544,7 +577,17 @@ export function MapScreen() {
             unavailable → 读不到 → 明确说"标记不可用"，**不回落 mock**
           ⚠️ 刻意**不**写成"没有标记就显示演示数据"那一套 —— 那正是 WO#12/#14 反复修掉的行为。
         */}
-        {markerPhase !== 'ready' ? (
+        {/*
+          ⭐ Round 266：**离线模式单独一条说明**（审核 58 closeout 第 2 项）。
+          为什么要显式说：offline 下我们**不渲染**权威标记（未校准投影），
+          如果不说明，用户会以为"这块校园没人发过带地点的动态" ——
+          而事实是"**离线底图不支持标记**"。这两件事必须能被区分。
+        */}
+        {offline ? (
+          <span className="map__markerBadge" data-marker-phase="offline-unsupported">
+            离线底图不支持标记显示
+          </span>
+        ) : markerPhase !== 'ready' ? (
           <span className="map__markerBadge" data-marker-phase={markerPhase}>
             {markerPhase === 'loading' ? '标记加载中…' : '标记不可用（读取失败或未登录）'}
           </span>
@@ -553,7 +596,21 @@ export function MapScreen() {
             暂无带地点的动态
           </span>
         ) : (
-          <span className="map__markerBadge" data-marker-phase="ready" data-marker-count={String(markers.length)}>
+          /*
+            ⭐ `data-marker-places`：**测试钩子**，把"标记地点名"显式暴露出来。
+            为什么需要它（Round 266 的一次**假 FAIL**）：门禁原本用"整页文本里是否出现
+            mock 地名"来判断"是否仍在渲染 mock 地点"，结果**权威帖子的正文**里
+            出现了「图书馆四楼靠窗的位置」—— 那个"图书馆"是**帖子内容**，不是标记地点。
+            ⇒ 于是门禁把一个正确的实现判成 FAIL。
+            正确做法：断言**标记的地点名集合**，而不是"整页出现过某个词"。
+            （同类教训本会话已出现：WO#14 用整页 imgCount===0 判断头像，被帖子图片干扰。）
+          */
+          <span
+            className="map__markerBadge"
+            data-marker-phase="ready"
+            data-marker-count={String(markers.length)}
+            data-marker-places={markers.map((m) => m.place).join('\u001f')}
+          >
             {markers.length} 个标记
           </span>
         )}
