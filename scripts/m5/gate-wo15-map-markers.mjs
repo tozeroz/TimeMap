@@ -354,7 +354,7 @@ const v = {
    * ⚠️ 若卡片一个都读不到（`.rm` = 0），记 **INCONCLUSIVE** —— **不**当作 PASS
    *   （"没样本"与"内容正确"是两件事）。
    */
-  MARKER_CARD_CONTENT_FROM_AUTHORITY: (() => {
+  MAP_MARKER_CARD_DATA_AUTHORITY: (() => {
     const cards = (snap && snap.markerCards) || []
     const exp = (expected && expected.cardExpect) || []
     if (cards.length === 0 || exp.length === 0) return 'INCONCLUSIVE'
@@ -418,7 +418,7 @@ const KEYS = [
   'OFFLINE_RENDERS_NO_GEO_MARKERS',
   'NO_FABRICATED_PLACE_DATA',
   'MAP_NO_FALLBACK_ON_UNAVAILABLE',
-  'MARKER_CARD_CONTENT_FROM_AUTHORITY',
+  'MAP_MARKER_CARD_DATA_AUTHORITY',
 ]
 const anyFail = KEYS.some((k) => v[k] === 'FAIL')
 const anyNotEval = KEYS.some((k) => v[k] === 'NOT_EVALUATED')

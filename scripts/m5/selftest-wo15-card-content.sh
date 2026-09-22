@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 自测：`MARKER_CARD_CONTENT_FROM_AUTHORITY` 这条断言**真的能红**吗？
+# 自测：`MAP_MARKER_CARD_DATA_AUTHORITY` 这条断言**真的能红**吗？
 #
 # ════════════════════════════════════════════════════════════════════
 # 为什么必须有它（本项目的核心纪律）
@@ -11,7 +11,7 @@
 #     而标记仍画得出来、地名也还在 ⇒ 表现为"卡片没内容"，**极难发现**。
 #   ⚠️ **当时那批断言完全没覆盖卡片内容** ⇒ 那是断言覆盖面的**缺口**。
 #
-#   Round 267 补了 `MARKER_CARD_CONTENT_FROM_AUTHORITY`。
+#   Round 267 补了 `MAP_MARKER_CARD_DATA_AUTHORITY`。
 #   但"补了一条断言"本身**不构成**保障 —— 它可能是**没有判别力**的
 #   （比如永远返回 PASS）。本项目已反复强调：**断言必须被证明能红**。
 #
@@ -20,7 +20,7 @@
 # ════════════════════════════════════════════════════════════════════
 #   ① 基线   ：当前代码 ⇒ 期望 6 键全 PASS、DEVICE_GATE_EXIT=0
 #   ② 突变   ：把卡片内容改回"空"（等价于旧代码在 mock 里查不到帖子的后果）
-#               ⇒ 期望 **只有** MARKER_CARD_CONTENT_FROM_AUTHORITY 变 FAIL，
+#               ⇒ 期望 **只有** MAP_MARKER_CARD_DATA_AUTHORITY 变 FAIL，
 #                 其余 5 键仍 PASS（**归因清晰**：证明是这个原因导致的红），
 #                 且 DEVICE_GATE_EXIT=1
 #   ③ 还原   ：从备份还原 ⇒ 断言 `git diff --exit-code` **字节一致**，
@@ -36,7 +36,7 @@ cd "G:/demo map" 2>/dev/null || cd "$(dirname "$0")/../.." || exit 2
 MUT="scripts/m5/mutate-card-content.mjs"
 GATE="scripts/m5/gate-wo15-map-markers.mjs"
 TARGET="app/src/native/TencentMap.tsx"
-KEY="MARKER_CARD_CONTENT_FROM_AUTHORITY"
+KEY="MAP_MARKER_CARD_DATA_AUTHORITY"
 
 restore_if_needed() {
   if [ -f "tools/tmp/TencentMap.orig.txt" ]; then

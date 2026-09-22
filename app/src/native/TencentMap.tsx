@@ -99,7 +99,7 @@ interface PlacedItem {
 
 /** 标记的 DOM 结构：照片卡片 + 图钉 + 地点名（与 Leaflet 版同构） */
 function buildMarkerElement(m: MapMarker): HTMLDivElement {
-    const cover = m.coverUrl
+  const cover = m.coverUrl
   const el = document.createElement('div')
   el.className = 'rm'
   el.dataset.markerId = m.id

@@ -1,14 +1,32 @@
 /**
- * 敏感度实验辅助：把"标记卡片内容"改回**空**，模拟 Round 266 那个回归
+ * 受控突变：把"标记卡片的**数据来源**"重新接错到 **mock**，重现 Round 266 那个真实回归
  *
- * 目的（这是本次实验的核心）：证明我新加的断言
- *   `MARKER_CARD_CONTENT_FROM_AUTHORITY` **真的能红** ——
- *   即：把卡片内容退化回"空"时，它必须 FAIL。
- * 若它在这种情况下仍然 PASS，那它就是一条**没有判别力**的断言
- * （本项目已多次强调：断言必须被证明能红）。
+ * ════════════════════════════════════════════════════════════════════
+ * 为什么突变要**忠实重现历史 bug**，而不是随便把值弄空
+ * ════════════════════════════════════════════════════════════════════
+ *   审核 59 的原话要求是：
+ *     "做 sensitivity，证明以后把卡片**重新接错到 mock 或错误 post** 时 Gate 必然会红。"
+ *   ⇒ 所以要突变的**不是"值变空"这个结果**，而是**"数据来源接错"这个原因**。
+ *     只把值弄空能证明"断言对空值敏感"，但证明不了"断言能抓出接错源" ——
+ *     而后者才是真正要防的（将来有人可能又写 posts.find(...) 去 mock 里查）。
  *
- * 用法：node tools/tmp/mutate-card-content.mjs inject   # 注入突变
- *       node tools/tmp/mutate-card-content.mjs restore  # 还原（从 .orig 备份）
+ *   本突变把实现**逐字还原成改前那段代码**：
+ *     · 加回 import { posts } from '../data/mock'
+ *     · const cover = m.coverUrl  →  const post = posts.find((p) => p.id === m.postId) + const cover = post?.images[0]
+ *     · (m.excerpt ?? '').slice(0, 10)  →  (post?.text ?? '').slice(0, 10)
+ *   因为 m.postId 现在是**真实帖子的 UUID**，而 mock 里的 id 是 p1/p2…，
+ *   那个 find **必然 undefined** ⇒ 卡片封面与文字都空 ⇒ 断言必须变红。
+ *
+ * ════════════════════════════════════════════════════════════════════
+ * 用法
+ * ════════════════════════════════════════════════════════════════════
+ *   node scripts/m5/mutate-card-content.mjs inject    # 注入（会先备份）
+ *   node scripts/m5/mutate-card-content.mjs restore   # 还原（并删除备份）
+ *
+ * ⚠️ 突变必须保证**语法有效**：我第一版生成过 span.textContent = '')（多一个右括号），
+ *    ⇒ tsc 失败 ⇒ 构建失败 ⇒ 自测在②阶段中断。
+ *    那会让自测验的是"构建会不会崩"，而**不是**"断言能不能红" —— 两件完全不同的事。
+ *    所以本脚本对每一处替换都断言"确实发生了"（未命中即报错退出，不静默什么都不改）。
  */
 import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs'
 
@@ -16,28 +34,45 @@ const FILE = 'G:\\demo map\\app\\src\\native\\TencentMap.tsx'
 const ORIG = 'G:\\demo map\\tools\\tmp\\TencentMap.orig.txt'
 const mode = process.argv[2]
 
+/** 逐条替换；任何一条没命中就报错退出（避免"静默什么都没改"却当成突变成功） */
+function replaceAll(src, pairs) {
+  let out = src
+  const missed = []
+  for (const [from, to] of pairs) {
+    if (!out.includes(from)) {
+      missed.push(from)
+      continue
+    }
+    out = out.replace(from, to)
+  }
+  if (missed.length) {
+    console.error('FAIL 以下目标字符串未命中（说明实现已变化，需先确认）：')
+    for (const m of missed) console.error('   · ' + m)
+    process.exit(1)
+  }
+  return out
+}
+
 if (mode === 'inject') {
   const src = readFileSync(FILE, 'utf8')
   if (!existsSync(ORIG)) writeFileSync(ORIG, src, 'utf8')
-  // ① 封面 → undefined（等价于"mock 里查不到帖子"）
-  let out = src.replace('const cover = m.coverUrl', 'const cover = undefined')
-  // ② 正文片段 → 空串（旧代码是 (post?.text ?? '')，帖子查不到时就是空串）
-  //    ⚠️ 我第一版写成 `"''')"`（多了一个右括号）→ 生成 `span.textContent = '')`
-  //       ⇒ tsc 报 TS1005 ⇒ 构建失败 ⇒ 自测在②阶段就中断。
-  //       教训：**突变本身也要保证语法有效** —— 否则验的不是"断言能不能红"，
-  //       而是"构建会不会崩"，两者是完全不同的问题。
-  const before = out
-  out = out.replace("(m.excerpt ?? '').slice(0, 10)", "''")
-  if (out === before) {
-    console.error('FAIL 文本片段那一处没有替换成功（目标字符串变了？）')
-    process.exit(1)
-  }
-  if (out === src) {
-    console.error('FAIL 没有发生任何替换 —— 说明目标字符串不在文件里（先确认实现）')
-    process.exit(1)
-  }
+
+  const out = replaceAll(src, [
+    // ① 重新引入 mock 依赖 —— 这一步是"接错源"的本体
+    [
+      "import { hasTencentKey, TENCENT_MAP_KEY } from './keys'",
+      "import { hasTencentKey, TENCENT_MAP_KEY } from './keys'\nimport { posts } from '../data/mock'",
+    ],
+    // ② 把封面的权威来源换成"去 mock 里查帖子"
+    [
+      'const cover = m.coverUrl',
+      'const post = posts.find((p) => p.id === m.postId)\n  const cover = post?.images[0]',
+    ],
+    // ③ 把正文片段的权威来源也换成 mock 帖子
+    ["span.textContent = (m.excerpt ?? '').slice(0, 10)", "span.textContent = (post?.text ?? '').slice(0, 10)"],
+  ])
   writeFileSync(FILE, out, 'utf8')
-  console.log('  已注入突变：cover=undefined ／ excerpt 片段=空串')
+  console.log('  已注入突变：卡片数据来源**重新接错到 mock**（还原成改前那段代码）')
 } else if (mode === 'restore') {
   if (!existsSync(ORIG)) {
     console.error('FAIL 没有备份文件，无法还原')
@@ -47,7 +82,7 @@ if (mode === 'inject') {
   /*
     ⚠️ 还原后**顺手删掉备份**：否则 tools/tmp 里会留一个"看起来像源码"的副本，
     下次可能有人把它当成真实文件。本项目对"残留物被后来的人当真"已有多次教训
-    （例如 mock 数据被当成真实地点、旧快照被当成权威索引）。
+    （mock 数据被当成真实地点、旧快照被当成权威索引、mock 自己身份被渲染到界面…）。
   */
   rmSync(ORIG, { force: true })
   console.log('  已从备份还原 TencentMap.tsx，并删除备份文件')
