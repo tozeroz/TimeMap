@@ -89,7 +89,19 @@ export default function App() {
            **绝不**再回退到任何 mock id（那是"看起来成功"的假状态）。
       */}
       {root === 'chat' && <ChatScreen id={route.query.id ?? param ?? ''} />}
-      {root === 'board' && <BoardScreen peerId={param ?? '22222222-2222-4222-8222-222222222222'} />}
+      {/*
+        ⚠️ M5 Round 266 修正：这里原先是
+            <BoardScreen peerId={param ?? '22222222-2222-4222-8222-222222222222'} />
+        即**硬编码兜底到某个具体用户的 UUID**（种子账号 Lemy 的 id）。两个问题：
+          ① 与**所有兄弟路由**不一致 —— feed / comments / chat / poidetail / group 一律是
+             `route.query.id ?? param ?? ''`（**空串兜底**），只有 board 是孤例
+          ② 实际后果：从抽屉页入口（`navigate('board')`，不带参数）进来时，
+             peerId 会变成"我自己的 id" ⇒ 服务端按**自指**处理（留言板是双方语义，
+             自指无意义）⇒ **板是空的**。这既掩盖了真实行为，也让人误以为"功能没数据"。
+        ⇒ 改为与兄弟路由一致的兜底；由 BoardScreen 显示"未指定留言对象"的**明确不可用态**
+          （与 WO#12/#14「不回落、不假装有数据」同一纪律）。
+      */}
+      {root === 'board' && <BoardScreen peerId={route.query.id ?? param ?? ''} />}
       {root === 'daily' && <DailyScreen />}
       {root === 'poi' && <PoiSearchScreen />}
       {root === 'publish' && <PublishScreen />}

@@ -81,7 +81,7 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 统计：api-only=11 ／ mock+api=2 ／ mock-only=5 ／ types-only=0 ／ none=7
 
 | AnnounceScreen.tsx | none | — | — | — |
-| BoardScreen.tsx | mock+api | boardEmojis, me | — | getBoardNotes, postBoardNote, relativeTime |
+| BoardScreen.tsx | mock+api | boardEmojis | — | getBoardNotes, postBoardNote, relativeTime |
 | CampusScreen.tsx | mock+api | campusInfo, schools | FeedPost | isLoggedIn, likePost, listPosts, readSnapshot, toFeedPost, unlikePost |
 | ChatScreen.tsx | api-only | — | — | fetchMediaBlobUrl, getSession, getThread, getThreadMessages, postThreadImageMessage, postThreadTextMessage, postThreadVoiceMessage, relativeTime, uploadMedia |
 | CommentsScreen.tsx | mock-only | comments, posts | — | — |
