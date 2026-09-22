@@ -1109,3 +1109,32 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       **不**把它写成"设备已验证跳转"。真机点击落点列为待办。
 - [ ] ⬅ **本纪律对其余 WO 仍然适用**：后续每做一单（含 WO#16）都要照此补一屏的 claim 到 manifest
 - [ ] ⬅ 待办（本轮新增）：地图页**真机点击落点验证**（region → poi ／ fab → publish）
+
+### ⏸ 暂停点（用户要求暂停并报告）：WO#16 层 A **做了第一部分**
+
+> 用户指令：2026-09-22 14:47「先暂时暂停工作，将我们目前使用的技术栈和进度详细报告」
+> 全部工作已提交并推送，**本地 HEAD = 远端 HEAD = 2e0d3a6**，工作区干净。
+> 暂停前刚经历一次**本地断电**（服务端未受影响），已按"设备上装的是哪个版本"的思路完成恢复。
+
+**先补这个（下轮从这里继续）**：
+- [ ] ⬅ **WO#16 层 A 的第二部分**（代码改了但**未验证**，按纪律不算完成）：
+      · 层 A 的门禁（至少覆盖：副标题为「校园广场」、CampusScreen 不出现 mock 8 校与 members）
+      · ⭐ **审核 60 明确要求的 Gate `PLACE_DOES_NOT_IMPLY_CAMPUS`**
+        敏感度：故意写"`post.place == 北京交通大学` → 自动归属校本部" ⇒ **必须 FAIL**
+        （审核原话：这正是最容易为了"让数字出来"而重新引入的**数据伪造路径**）
+      · 设备验证（构建+安装+跑通）+ 敏感度（用 `scripts/m5/selftest-mutation.sh` 通用驱动）
+- [ ] ⬅ **WO#16 层 B**（审核 60 已批准范围）：
+      · seed `北京交通大学` + `校本部/威海校区/东校区`（标为 **baseline-derived fixture**）
+      · `GET /api/schools` ／ `GET /api/schools/:id/campuses`
+        （`campusCircleCount: number | null`；**null = 无法由权威归属计算**，不是 0）
+      · MapScreen 的学校/校区选择改用权威实体；学校搜索页用权威实体
+      · ⚠️ 计数策略 **A**：**不**给现有 4 条 post 补 campus attribution；
+        `posts.school_campus_id` 未知就保持 NULL
+- [x] ✅ **WO#15**：审核 60 已写 **PASS / CLOSED**（无需再做）
+- [ ] ⬅ 收窄 `docs/m5/A-D-LIST.md:220` 那条笼统的"✅ 一致"（审核 60 要求）：
+      `Campus switcher presence/rough structure: PARTIAL` ／
+      `subtitle text: MISMATCH`（current=北京交通大学 / original=校园广场 ▼）／
+      `mock school/member data: MISMATCH / unsupported`
+- [ ] ⬅ 把 `SchoolPickerUnavailable` 这个 **OUR_DESIGN_CHOICE** 登记进 KNOWN-DEVIATIONS
+      （它不是原版呈现；原版此处是校区列表）
+- [ ] ⬅ 敏感度覆盖：余下 10 个门禁按 `docs/m5/SENSITIVITY-COVERAGE-AUDIT.md` 的顺序补齐
