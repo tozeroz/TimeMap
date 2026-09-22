@@ -804,7 +804,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] WO14.5a ✅ **已完成**：见 WO15 计划更正 —— 结构化基线已找到，结论已按证据更正（详见下节）
 - [x] WO14.5b ✅ **已完成**：清理 22 行 places 残留 + 基线新增覆盖度审计（21 表：覆盖 9/未覆盖 11）+ 门禁 runner 自动清残留
 - [x] WO14.5c ✅ **已完成**：默认 provider=**tencent**（与基线的"腾讯地图 SDK"一致）；降级链 tencent→amap→raster→OfflineMap
-- [ ] WO14.5d ⚠️ mock 的 `schools` 带 `members: '12,486'`（编造成员数），
+- [x] ✅ **WO14.5d 已被 WO#16 覆盖**：mock 的 `schools`（含编造 `members: '12,486'`）已**移出生产**（→ `scripts/m5/fixtures/legacy-schools.json`，commit 2e0d3a6）；顶部改「校园广场 ▼」、面板改接权威实体（层 A/B）
       而 `schools` 表**为空** ⇒ 无权威来源，按纪律处理（与 WO#13 删掉的同一类）
 
 ### ⭐⭐ Round 265：WO14.5 与 WO15 计划的**两次自我更正**（含一个系统性发现）
@@ -857,7 +857,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
         且**未重新采集基线**（所有原版结论来自既有文件）
 - [x] ✅ 原 6 项已由审核 57 覆盖：**WO15: APPROVED TO IMPLEMENT**（含方案 A 坐标字段，已实现）
       方案 A、B 或其它／mock 6 条保留加注释／颜色 NOT_EVALUATED／是否先补原版 Map 只读基线采集
-- [ ] ⬅ 待裁定：**WO14.5d 是否单开 WO#16**（校园/校区选择与原版形态对齐；顶部应为校区列表、`N条校园圈` 而非 `N位同学`）／**视觉通道是否接入**（vision 两次返回空，我未核对过基线截图像素）
+- [x] ✅ **WO14.5d 立单问题已解决**：审核 60/61 直接批准为 **WO#16**（不再需要单独裁定）；「顶部应为校区列表、`N条校园圈` 而非 `N位同学`」已实现（搜索页行格式照基线 + 计数 null 时不渲染）；**视觉通道**问题仍开放（见「新发现」区与 WO15.4/15.5 的 NOT_EVALUATED）
       **视觉通道是否接入**（`vision` 工具两次返回空，故我**没有**核对过基线截图像素）
 
 ### ⭐ Round 265 收尾：审核 57 裁定 + WO#15 增量①（服务端坐标）已落地
@@ -1070,7 +1070,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       ④ ⚠️ 自测③阶段的"字节一致"判据**设计错了**：原用 `git diff` 比 **HEAD**，
          而我测试前留了一处**未提交的合法改动** ⇒ 把"我还没提交"误判成"突变有残留"
          ⇒ 已改为比 **本自测开始前的 sha256**（正确要求是"还原到测试前状态"，无论是否已提交）
-- [ ] ⬅ **下一步：WO#16（学校/校区选择与原版对齐）** —— 审核 59 已明确"**预计单开 WO#16**"并给出关键约束：
+- [x] ✅ **WO#16 已立单并推进**（审核 59 预告 → 60/61 批准）：层 A 关账（审核 61 PASS/COMPLETE）；层 B 已完成 6/10 条，剩第 8 与第 9/10 条
       > 原版顶部是"当前学校的**校区列表**"；当前实现却直接放了 8 个学校；
       > 当前显示"X 位同学"，原版对应位置是"X **条校园圈**"；
       > 目前 schools/campuses 数据**还是空的**，因此**不能简单造数据把 UI 拼成原版**。
@@ -1108,7 +1108,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       **落点由源码确认**（`navigate('poi')` / `navigate('publish')`），真机点击未验 ——
       **不**把它写成"设备已验证跳转"。真机点击落点列为待办。
 - [ ] ⬅ **本纪律对其余 WO 仍然适用**：后续每做一单（含 WO#16）都要照此补一屏的 claim 到 manifest
-- [ ] ⬅ 待办（本轮新增）：地图页**真机点击落点验证**（region → poi ／ fab → publish）
+- [x] ✅ 地图页**真机点击落点验证**已完成（commit 596d5ca）：`MAP_REGION_TO_POI_CONTROL` 与 `MAP_PLUS_TO_PUBLISH_CONTROL` 均由真机点击实测（`#/map→#/poi`、`#/map→#/publish`），并已证明"接错导航目标时两条会红"
 
 ### ⏸ 暂停点（用户要求暂停并报告）：WO#16 层 A **做了第一部分**
 
@@ -1117,13 +1117,16 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 > 暂停前刚经历一次**本地断电**（服务端未受影响），已按"设备上装的是哪个版本"的思路完成恢复。
 
 **先补这个（下轮从这里继续）**：
-- [ ] ⬅ **WO#16 层 A 的第二部分**（代码改了但**未验证**，按纪律不算完成）：
+- [x] ✅ **WO#16 层 A 两部分都已完成并验证**：第一部分 2e0d3a6；第二部分（门禁 5 键 + 敏感度）e6e0473 —— 敏感度当场抓出我 2 条断言"没有判别力"并修正
       · 层 A 的门禁（至少覆盖：副标题为「校园广场」、CampusScreen 不出现 mock 8 校与 members）
       · ⭐ **审核 60 明确要求的 Gate `PLACE_DOES_NOT_IMPLY_CAMPUS`**
         敏感度：故意写"`post.place == 北京交通大学` → 自动归属校本部" ⇒ **必须 FAIL**
         （审核原话：这正是最容易为了"让数字出来"而重新引入的**数据伪造路径**）
       · 设备验证（构建+安装+跑通）+ 敏感度（用 `scripts/m5/selftest-mutation.sh` 通用驱动）
-- [ ] ⬅ **WO#16 层 B**（审核 60 已批准范围）：
+- [ ] ⬅ **WO#16 层 B（审核 60/61 已批准范围）—— 进度 6/10 条**：
+      ✅ 已完成：① seed 北交大+3 校区（迁移 012）② 两个只读 API ③ count=null 策略
+      ✅ ④ MapScreen 接权威实体 ⑤ 学校搜索页 `#/schools` ⑥ CampusScreen 保持「校园广场 ▼」
+      ⏳ 未完成：⑧ 必要 Gate+敏感度 ⑨停止局部扩张 ⑩ M5 全局 audit（见下两条）
       · seed `北京交通大学` + `校本部/威海校区/东校区`（标为 **baseline-derived fixture**）
       · `GET /api/schools` ／ `GET /api/schools/:id/campuses`
         （`campusCircleCount: number | null`；**null = 无法由权威归属计算**，不是 0）
@@ -1131,13 +1134,23 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       · ⚠️ 计数策略 **A**：**不**给现有 4 条 post 补 campus attribution；
         `posts.school_campus_id` 未知就保持 NULL
 - [x] ✅ **WO#15**：审核 60 已写 **PASS / CLOSED**（无需再做）
-- [ ] ⬅ 收窄 `docs/m5/A-D-LIST.md:220` 那条笼统的"✅ 一致"（审核 60 要求）：
+- [ ] ⬅ **层 B 第 8 条：必要 Gate + 必要 sensitivity**（⚠️ 我的清理脚本曾误删此条，已补回）
+      · 学校搜索页（`#/schools`）与校区面板的**专门断言**（目前只有 wo16a 覆盖 CampusScreen 侧）
+      · 把 `MAP_REGION_CAMPUS_PART: OMITTED_NO_AUTHORITATIVE_SELECTION` 做成可断言项并进 manifest
+      · ⚠️ 按审核 61：新/改 Gate 必须**声明 fixture 依赖**（session/permission/DB/device state）并自行建立
+      · 突变用 `scripts/m5/selftest-mutation.sh` 通用驱动证明能红
+- [ ] ⬅ **层 B 第 9/10 条：做完后停止局部扩张，提交 M5 GLOBAL COMPLETION AUDIT**（⚠️ 同上，已补回）
+      · 审核建议上限：**正常顺序** + **反向顺序**各跑一次完整回归；verdict 一致即停
+      · 下一次审核关注点会变：不再是"还能加什么 Gate"，而是"M5 距最终关账还剩哪些**真正的产品 blocker**"
+- [ ] ⬅ **收窄 `docs/m5/A-D-LIST.md:220` 那条笼统的"✅ 一致"**（审核 60 要求；唯一保留的一条，原先重复 3 次）
+      应拆成：`Campus switcher presence/rough structure: PARTIAL` ／
+      `subtitle text: MISMATCH`（current=北京交通大学 / original=校园广场 ▼）／
+      `mock school/member data: MISMATCH / unsupported`
       `Campus switcher presence/rough structure: PARTIAL` ／
       `subtitle text: MISMATCH`（current=北京交通大学 / original=校园广场 ▼）／
       `mock school/member data: MISMATCH / unsupported`
-- [ ] ⬅ 把 `SchoolPickerUnavailable` 这个 **OUR_DESIGN_CHOICE** 登记进 KNOWN-DEVIATIONS
+- [x] ✅ **已登记 D-004**（commit a2106f2）：`docs/m5/KNOWN-DEVIATIONS.md` 的 D-004 = 校园广场页「校园广场 ▼」面板的**内容**（TEMPORARY，恢复条件=层 B）；层 B 已在本轮把面板改接权威实体
       （它不是原版呈现；原版此处是校区列表）
-- [ ] ⬅ 敏感度覆盖：余下 10 个门禁按 `docs/m5/SENSITIVITY-COVERAGE-AUDIT.md` 的顺序补齐
 
 ### ⭐⭐ Round 316：审核 61 落实 + WO#16 层 A 关账 + **层 B 第 1 部分完成**
 
@@ -1166,18 +1179,14 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       wo16a 门禁 5 键 PASS，回归 wo16a/wo11/wo15/wo14 全 EXIT=0；CHECK_ALL_LOCAL PASS
 
 **⬅ 下轮从这里继续（层 B 剩余 3 项，均有审核 61 的明确要求）**：
-- [ ] ⬅ **层 B 第 4 条：MapScreen 的学校/校区选择接权威实体**
+- [x] ✅ **层 B 第 4 条已完成**（commit 763533c）：MapScreen 地区控件改接权威实体（`GET /api/schools`）；⭐ 守住两处边界——只取学校名（`current selected campus` 是 DO NOT INFER，故去掉无依据的「（校本部）」）且**不改点击行为**（该 claim 已冻结为 MATCH）
       （现在地图页地区控件仍是**硬编码**文案「北京交通大学（校本部）」；
         应改为取自 `GET /api/schools` + `/campuses` 的权威值）
       ⚠️ 注意两页形态**不同**（审核 60/61）：地图页顶部显示**学校（校区）**；
       校园广场页保持「校园广场 ▼」固定标签 —— **不要把 Map picker 套到 CampusScreen**
-- [ ] ⬅ **层 B 第 8 条：层 B 的必要 Gate + sensitivity**
       （校区面板/搜索页的专门断言；突变应"把数据源接回 mock"并证明能红）
       ⚠️ 按审核 61：新/改 Gate 必须**声明其 fixture 依赖**（session / permission / DB / device state）并自行建立
-- [ ] ⬅ **层 B 第 9/10 条**：完成后**停止局部扩张**，提交 **M5 GLOBAL COMPLETION AUDIT**
       （审核建议上限：正常顺序 + **反向顺序**各跑一次完整回归；verdict 一致即停）
-- [ ] ⬅ 收窄 `docs/m5/A-D-LIST.md:220` 那条笼统的"✅ 一致"（审核 60 要求，仍未做）
-- [ ] 敏感度覆盖：余下门禁按 `docs/m5/SENSITIVITY-COVERAGE-AUDIT.md` 补齐
       ⚠️ 但按审核 61：**不要**现在启动专项工程；只在"flaky / 顺序相关 / 明显共享可变状态"时才查
 
 ### ⭐ Round 316 续：层 B 第 4 条完成（MapScreen 接权威实体）
@@ -1204,11 +1213,8 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       ⇒ 纪律：**改动代码的脚本必须自己保证可回滚**。
 
 **⬅ 下轮从这里继续（层 B 只剩 2 项）**：
-- [ ] ⬅ **层 B 第 8 条：必要 Gate + 必要 sensitivity**
       · 学校搜索页（`#/schools`）与校区面板的**专门断言**（目前只有 wo16a 覆盖了 CampusScreen 侧）
       · 把 `MAP_REGION_CAMPUS_PART: OMITTED_NO_AUTHORITATIVE_SELECTION` 做成可断言项并进 manifest
       · ⚠️ 按审核 61：新/改 Gate 必须**声明其 fixture 依赖**（session/permission/DB/device state）并自行建立
       · 突变应"把数据源接回 mock"并证明能红（用 `scripts/m5/selftest-mutation.sh` 通用驱动）
-- [ ] ⬅ **层 B 第 9/10 条：完成后停止局部扩张，提交 M5 GLOBAL COMPLETION AUDIT**
       （审核建议上限：正常顺序 + **反向顺序**各跑一次完整回归；verdict 一致即停）
-- [ ] ⬅ 收窄 `docs/m5/A-D-LIST.md:220` 那条笼统的"✅ 一致"（审核 60 要求，仍未做）
