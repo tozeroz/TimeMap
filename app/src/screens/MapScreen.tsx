@@ -602,7 +602,19 @@ export function MapScreen() {
         </button>
 
         {tipOpen && (
-          <div className="map__modal-wrap">
+          /*
+            ⭐ 给"自动弹出的阻断式覆盖层"一个**显式登记位**（M5 WO15.6）：
+            收尾脚本 `scripts/m5/dismiss-blocking-modals.mjs` 会按
+            `[data-blocking-modal]` 找到它并点里面的关闭控件。
+            为什么要有这个通用钩子：以后新增同类弹窗时只要带上这个属性就会被自动清理，
+            **不必回来改清理脚本**（而"忘了改"正是 WO#15 那次跨 Gate 残留的成因）。
+            ⚠️ 注意注释不能写成 JSX 的那种花括号注释形式并放在括号表达式的第一位 ——
+              那不是合法 JSX（括号里必须是单个元素）。用普通块注释即可。
+            ⚠️ 另：注释正文里也**不要**写出"斜杠星号"那种字符组合 ——
+              它会**提前结束本块注释**，把后面的内容变成代码。
+              （我今天在 JSDoc 里写 `screens/*` + `/baseline.json` 时刚踩过同一个坑。）
+          */
+          <div className="map__modal-wrap" data-blocking-modal="geo-permission">
             <div className="map__modal">
               <h3 className="map__modal-title">授权地理位置</h3>
               <p className="map__modal-desc">在地图上，标记属于你的校园生活</p>
