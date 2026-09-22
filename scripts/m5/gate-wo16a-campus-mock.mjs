@@ -186,11 +186,20 @@ const v = {
    * ⚠️ 这条是**防过度删除**的：如果谁把整块控件删了，它会红。
    */
   CAMPUS_PICKER_ENTRY_PRESENT: snap.hasEntry && snap.hasSubCaret === true ? 'PASS' : 'FAIL',
-  /** 点开后不得出现学校列表（只能是不用态） */
+  /**
+   * 点开后的面板内容（⭐ WO#16 层 B 改了这里的**期望形态**，并如实说明为什么）：
+   *   层 A 时：面板是"尚未接入"占位（panelState='unavailable'，0 行）
+   *   层 B 时：面板改为渲染**权威校区实体**（panelState='campuses'，
+   *            行名来自 GET /api/schools/:id/campuses ⇒ 校本部/威海校区/东校区）
+   * ⇒ 本键的**不变内核**是"**不得出现 mock 学校数据**"，
+   *    而"用什么形态呈现权威数据"由层的设计决定（层 B 已获审核 61 批准）。
+   *   因此判定改为：面板存在、**有真实校区行**、且**不出现任何 mock-only 学校名**。
+   *   ⚠️ 同时断言面板**不是**"不可用"态 —— 否则层 B 白做了（那会退化成层 A 的占位）。
+   */
   CAMPUS_PICKER_NO_MOCK_ON_OPEN:
     opened.panelPresent === true &&
-    opened.panelState === 'unavailable' &&
-    (opened.panelSchoolRows || 0) === 0 &&
+    opened.panelState === 'campuses' &&
+    (opened.panelSchoolRows || 0) >= 1 &&
     openedLeakedSchools.length === 0
       ? 'PASS'
       : 'FAIL',

@@ -346,3 +346,23 @@
   color: #fff;
   font-size: 14px;
 }
+
+/* WO#16 层 B：校区面板的标题与「搜索其他学校」入口（基线里后者是**面板内的一个项**，
+   不是搜索框的 placeholder —— 这是层 A 时被纠正过的概念混淆） */
+.switcher__title {
+  margin: 0 0 6px;
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text-1);
+}
+
+.switcher__item--entry {
+  width: 100%;
+  justify-content: center;
+  margin-top: 6px;
+  border-top: 1px solid var(--c-line);
+  border-bottom: 0;
+  color: var(--c-text-2);
+  font-size: 13px;
+}

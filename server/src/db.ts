@@ -11,6 +11,7 @@ import messageMentionsSql from './migrations/008_message_mentions.sql'
 import voiceMediaSql from './migrations/009_voice_media.sql'
 import voiceMediaStrictSql from './migrations/010_voice_media_strict.sql'
 import mentionsAllSql from './migrations/011_mentions_all.sql'
+import seedSchoolCampusesSql from './migrations/012_seed_school_campuses.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -37,6 +38,12 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   // 011：群聊 @所有人 —— messages.mentions_all（M5 WO#9B 层 B；审核记录 48 §3 批准）
   //      只加列，不用 CHECK/trigger 表达"与逐人提及互斥"（那是 service 事务不变量）
   { version: '011_mentions_all', sql: mentionsAllSql },
+  // 012：种下**有基线观察证据**的学校与校区（WO#16 层 B；审核 61 批准）
+  //      ⚠️ 只种**实体**（北京交通大学 + 校本部/威海校区/东校区），
+  //         **不**种任何 campus 归属（users/posts.school_campus_id 仍全为 NULL）——
+  //         审核 60：place 推不出 campus，不得为了"让数字出来"而伪造归属。
+  //      该 SQL 自带断言：若本迁移产生了任何归属，会直接 raise exception。
+  { version: '012_seed_school_campuses', sql: seedSchoolCampusesSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

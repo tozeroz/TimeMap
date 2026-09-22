@@ -3,6 +3,7 @@ import { Shell } from './components/Shell'
 import { TabBar, type TabKey } from './components/TabBar'
 import { useRoute } from './router'
 import { CampusScreen } from './screens/CampusScreen'
+import { SchoolSearchScreen } from './screens/SchoolSearchScreen'
 import { MeScreen } from './screens/MeScreen'
 import { MapScreen } from './screens/MapScreen'
 import { FeedDetailScreen } from './screens/FeedDetailScreen'
@@ -104,6 +105,14 @@ export default function App() {
       {root === 'board' && <BoardScreen peerId={route.query.id ?? param ?? ''} />}
       {root === 'daily' && <DailyScreen />}
       {root === 'poi' && <PoiSearchScreen />}
+      {/*
+        ⭐ WO#16 层 B（审核 61）：学校搜索**独立页**。
+        基线（supplements/schools.json 的 school_search）里它是**独立页**
+        （activity=com.xingin.xhsreactnative.ui.XhsReactActivity），
+        而行格式是「学校名 (校区名)」+「N条校园圈」—— 与校区选择面板**不是同一个东西**。
+        ⇒ 所以这里单开一条路由，而**不是**把面板塞进 CampusScreen/MapScreen。
+      */}
+      {root === 'schools' && <SchoolSearchScreen />}
       {root === 'publish' && <PublishScreen />}
       {root === 'login' && <LoginScreen />}
       {root === 'onboarding' && <OnboardingScreen />}

@@ -1272,6 +1272,96 @@ export function buildServer(deps: ServerDeps) {
   })
 
   // -------------------------------------------------------------------------
+  // WO#16 层 B（审核 61 APPROVED TO IMPLEMENT）：学校 / 校区 —— **只读**
+  //
+  // 为什么只有「列出」而没有「按 school 过滤的全局 campus 搜索」：
+  //   domain 本身是 School 1 → N Campus，两层接口比 /api/campuses?schoolId=
+  //   更能表达层级，也不会把"全局 campus 搜索"与"某学校的 campuses"混成一个接口。
+  //   （审核 60 选了这条形状。）
+  //
+  // ⭐ campusCircleCount 的语义（审核 60 的计数策略 A，**最要紧的一处**）：
+  //     count = COUNT(posts WHERE posts.school_campus_id = campus.id)
+  //   但**只有存在权威归属时这个数才有意义**。我们的现状是：
+  //     posts.school_campus_id 与 users.school_campus_id **全为 NULL**
+  //     （没有任何权威来源能确定动态属于哪个校区）
+  //   ⇒ 此时返回 **null**（"无法由权威归属计算"），**不是 0**、不由 place 推断、不伪造。
+  //   ⚠️ 为什么不能给 0：0 会被读成"这个校区确实没有动态"，
+  //      而事实是"我们根本还不知道"——这两件事完全不同（审核 60 原话）。
+  //   ⚠️ 也**不得**用 posts.place_id → places.name 去推：
+  //      place='北京交通大学' 只说明一个**地理 POI**，推不出 school_campus='校本部'
+  //      —— 这正是 Gate PLACE_DOES_NOT_IMPLY_CAMPUS 守的线。
+  //   ⇒ 判定规则（可测）：平台里**一条非空归属都没有** ⇒ 归属机制未建立 ⇒ 全 campus 返回 null。
+  //     将来只要出现真实归属，计数自然变为真实 COUNT，无需改接口形状。
+  // -------------------------------------------------------------------------
+  app.get('/api/schools', async (_req, reply) => {
+    try {
+      const r = await db.pool.query<{ id: string; name: string }>(
+        'select id, name from schools order by name, id',
+      )
+      return { items: r.rows.map((row) => ({ id: row.id, name: row.name })) }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  app.get('/api/schools/:id/campuses', async (req, reply) => {
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    try {
+      const sr = await db.pool.query<{ id: string }>('select id from schools where id = $1', [id])
+      if (sr.rows.length === 0) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      const cr = await db.pool.query<{ id: string; name: string }>(
+        'select id, name from campuses where school_id = $1 order by name, id',
+        [id],
+      )
+      /*
+        ⭐ 归属机制是否已建立？看**全平台**有没有任何一条非空归属。
+          （不是只看本 school：归属机制是全局性的；只要平台里出现过真实归属，
+            计数就有意义，届时该 campus 若确实为 0 也应如实给 0。）
+      */
+      const attr = await db.pool.query<{ n: string }>(
+        'select (' +
+          '(select count(*) from posts where school_campus_id is not null) + ' +
+          '(select count(*) from users where school_campus_id is not null)' +
+          ')::text as n',
+      )
+      const attributionEstablished = Number(attr.rows[0]?.n ?? '0') > 0
+
+      let counts = new Map<string, number>()
+      if (attributionEstablished) {
+        const cc = await db.pool.query<{ school_campus_id: string; n: string }>(
+          'select school_campus_id, count(*)::text as n from posts ' +
+            'where school_campus_id is not null group by school_campus_id',
+        )
+        counts = new Map(cc.rows.map((row) => [row.school_campus_id, Number(row.n)]))
+      }
+
+      return {
+        schoolId: id,
+        items: cr.rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          // null = 无法由权威归属计算（**不是 0**）；见上方说明
+          campusCircleCount: attributionEstablished ? (counts.get(row.id) ?? 0) : null,
+        })),
+        attributionEstablished,
+      }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  // -------------------------------------------------------------------------
   // M4：媒体下发（审核记录 13 第 6 条 + 记录 15 的 P0-A / X-Accel）
   //
   // 设计要点：

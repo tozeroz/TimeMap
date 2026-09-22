@@ -1,0 +1,73 @@
+/* 学校搜索页（WO#16 层 B）—— 行格式照基线「学校名 (校区名)」+ 计数
+   ⚠️ 计数只在权威可算时渲染（null ⇒ 不渲染，见 SchoolSearchScreen 文件头说明）。 */
+
+.ss__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 16px 0;
+  padding: 9px 12px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+}
+
+.ss__input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--c-text-1);
+  font-size: 14px;
+}
+
+.ss__group {
+  margin: 18px 16px 6px;
+  font-size: 12px;
+  color: var(--c-text-2);
+}
+
+.ss__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px;
+}
+
+.ss__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 0;
+  border: 0;
+  border-bottom: 1px solid var(--c-line);
+  background: transparent;
+  color: var(--c-text-1);
+  font-size: 15px;
+  text-align: left;
+}
+
+.ss__name {
+  font-weight: 500;
+}
+
+.ss__count {
+  flex: none;
+  font-size: 13px;
+  color: var(--c-text-2);
+}
+
+.ss__hint {
+  margin: 14px 16px;
+  font-size: 12px;
+  color: var(--c-text-2);
+}
+
+.ss__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--c-text-2);
+}

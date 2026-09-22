@@ -890,6 +890,49 @@ export async function getPlace(id: string): Promise<ApiResult<ApiPlaceDetail>> {
 }
 
 // ---------------------------------------------------------------------------
+// 学校 / 校区（M5 WO#16 层 B；审核 61 批准）
+//
+// ⭐ `campusCircleCount` 的语义（审核 60 的计数策略 A，**最容易搞错的一处**）：
+//     `number` = 由**权威归属**算出的该校园圈动态数
+//     `null`   = **无法由权威归属计算** —— ⚠️ **不是 0**！
+//   为什么要区分：0 会被读成"这个校区确实没有动态"，
+//   而 null 表示"我们还不知道"。审核 60 明确要求不得把两者混为一谈，
+//   也**不得**用 `posts.place_id → places.name` 去推（place 只是地理 POI）。
+//   ⇒ UI 侧规则：`null` 时**不渲染计数字段**（而不是显示"0条校园圈"）。
+// ---------------------------------------------------------------------------
+
+export interface ApiSchool {
+  id: string
+  name: string
+}
+
+export interface ApiCampus {
+  id: string
+  name: string
+  /** 见上方语义说明：null = 无法由权威归属计算，**不是 0** */
+  campusCircleCount: number | null
+}
+
+export interface ApiSchoolCampuses {
+  schoolId: string
+  items: ApiCampus[]
+  /** 归属机制是否已建立（false 时所有 campusCircleCount 都是 null） */
+  attributionEstablished: boolean
+}
+
+/** 学校列表（只读）。目前只有 1 所（种子），这是**数据驱动的差异**，不是实现缺陷。 */
+export async function listSchools(): Promise<ApiResult<ApiSchool[]>> {
+  const r = await request<{ items: ApiSchool[] }>('/api/schools')
+  if (!r.ok) return r
+  return { ok: true, value: r.value.items }
+}
+
+/** 某学校下的校区（只读）。`campusCircleCount` 的 null 语义见上方注释。 */
+export async function listSchoolCampuses(schoolId: string): Promise<ApiResult<ApiSchoolCampuses>> {
+  return request<ApiSchoolCampuses>('/api/schools/' + encodeURIComponent(schoolId) + '/campuses')
+}
+
+// ---------------------------------------------------------------------------
 // 「最后一次成功的 API 快照」缓存
 //
 // 审核记录 07 对离线降级的边界：

@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react'
-import { likePost, listPosts, readSnapshot, toFeedPost, unlikePost } from '../api/client'
+import {
+  likePost,
+  listPosts,
+  listSchoolCampuses,
+  listSchools,
+  readSnapshot,
+  toFeedPost,
+  unlikePost,
+  type ApiCampus,
+  type ApiSchool,
+} from '../api/client'
 import { isLoggedIn } from '../api/session'
 import { BigTitle, Screen } from '../components/Shell'
 import { IconChatBubble, IconComment, IconHeart } from '../components/icons'
@@ -141,26 +151,117 @@ export function PostCard({
  *    `GET /api/schools` + `GET /api/schools/:id/campuses` 后应改为真列表。
  *    ⇒ 措辞上**不得**把本状态说成"原版就是这么显示的"。
  */
-function SchoolPickerUnavailable({ onClose }: { onClose: () => void }) {
+/**
+ * 校区选择面板（WO#16 层 B；审核 61 批准）—— 点 CampusScreen 的「校园广场 ▼」后打开。
+ *
+ * ## 基线依据
+ * `docs/original-baseline/supplements/schools.json` 的 campus_picker：
+ * ```
+ * 标题：「北京交通大学（当前学校）」
+ * 项： 校本部 ／ 威海校区 ／ 东校区 ／ **搜索其他学校**
+ * ```
+ * ⇒ 本组件按此渲染：**标题 = 当前学校名**、**项 = 该校校区**、**末尾 = 「搜索其他学校」入口**。
+ *
+ * ## ⚠️ 两处与基线不同之处（都是数据驱动，且已获批登记）
+ * 1. **计数不渲染**：基线的搜索页行有「N条校园圈」，而这里（校区列表面板）基线**未记计数**；
+ *    即便有，我们的 `campusCircleCount` 目前是 `null`（无权威归属）⇒ 一律不渲染。
+ * 2. **规模**：我们只有 1 所学校（种子）⇒ 列表很短。
+ *    审核 61 `SEARCH_CONTENT_SCALE_DIFFERENCE: ACCEPTABLE / DOCUMENTED`。
+ *
+ * ## 与 D-004 的关系
+ * 层 A 时这个面板只是个"尚未接入"的占位（登记为 D-004 TEMPORARY）。
+ * **本组件（层 B）就是 D-004 的恢复**：面板改为渲染**权威实体**。
+ * ⚠️ 但 D-004 的"恢复"指的是**内容**变了；**计数**仍为 null（归属未建模），
+ *    因此 `CAMPUS_CIRCLE_COUNT_NULL_NOT_ZERO` 仍成立。
+ */
+function CampusPickerPanel({ onClose }: { onClose: () => void }) {
+  const [schools, setSchools] = useState<ApiSchool[]>([])
+  const [campuses, setCampuses] = useState<ApiCampus[]>([])
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    void (async () => {
+      setState('loading')
+      const sr = await listSchools()
+      if (!sr.ok) {
+        setErr(sr.reason)
+        setState('error')
+        return
+      }
+      setSchools(sr.value)
+      const first = sr.value[0]
+      if (!first) {
+        setCampuses([])
+        setState('ready')
+        return
+      }
+      const cr = await listSchoolCampuses(first.id)
+      if (!cr.ok) {
+        setErr(cr.reason)
+        setState('error')
+        return
+      }
+      setCampuses(cr.value.items)
+      setState('ready')
+    })()
+  }, [])
+
+  const current = schools[0]
+
   return (
-    <div className="switcher" data-school-picker="unavailable">
+    <div className="switcher" data-school-picker="campuses">
       <div className="switcher__mask" onClick={onClose} />
       <div className="switcher__panel">
-        <p className="switcher__empty" data-school-picker-note>
-          学校与校区数据尚未接入
-        </p>
+        {state === 'loading' && <p className="switcher__empty">加载中…</p>}
+        {state === 'error' && (
+          <p className="switcher__empty" data-school-picker-note>
+            网络错误：{err}
+          </p>
+        )}
+        {state === 'ready' && (
+          <>
+            {/* 标题逐字照基线：「<学校名>（当前学校）」 */}
+            {current && (
+              <p className="switcher__title" data-school-picker-title>
+                {current.name}（当前学校）
+              </p>
+            )}
+            <ul className="switcher__list no-scrollbar" data-school-picker-list>
+              {campuses.map((c) => (
+                <li key={c.id}>
+                  <button className="switcher__item" data-campus-row onClick={onClose}>
+                    <span className="switcher__name">{c.name}</span>
+                    {/*
+                      ⭐ 计数只在**权威可算**时渲染。
+                      当前 campusCircleCount === null（无权威归属）⇒ **不渲染**，
+                      而不是显示"0条校园圈"（那会把"不知道"说成"没有"）。
+                    */}
+                    {c.campusCircleCount !== null && (
+                      <span className="switcher__meta">{c.campusCircleCount}条校园圈</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+              {campuses.length === 0 && (
+                <li className="switcher__empty">暂无可选校区</li>
+              )}
+            </ul>
+            {/* 基线里这是面板内的**一个入口项**，不是搜索框的 placeholder */}
+            <button
+              className="switcher__item switcher__item--entry"
+              data-school-search-entry
+              onClick={() => navigate('schools')}
+            >
+              搜索其他学校
+            </button>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
-/**
- * 顶部副标题：**逐字**取自基线。
- *   `screens/trident-campus/baseline.json` interactions[1] =
- *   「顶部：大标题 Campus + **副标题「校园广场 ▼」** + 右上消息气泡」
- * ⚠️ 「▼」不是本常量的一部分 —— 它由 `BigTitle` 组件自己附加（渲染一个 chevron）。
- * ⚠️ 这里**刻意不写学校名**：按审核 60，原版该位置是固定标签而非当前学校名。
- */
 const CAMPUS_SUBTITLE = '校园广场'
 
 export function CampusScreen() {
@@ -287,7 +388,7 @@ export function CampusScreen() {
         )}
       </div>
 
-      {pickerOpen && <SchoolPickerUnavailable onClose={() => setPickerOpen(false)} />}
+      {pickerOpen && <CampusPickerPanel onClose={() => setPickerOpen(false)} />}
     </Screen>
   )
 }
