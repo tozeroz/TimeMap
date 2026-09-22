@@ -1,0 +1,297 @@
+/**
+ * WO#15 设备侧 Gate：MapScreen 的标记**数据来源**（mock → 权威）
+ *
+ * ## 依据
+ *   审核 57：`WO15: APPROVED TO IMPLEMENT`。计划
+ *   `docs/m5/WO15-PLAN-map-marker-authority.md`（+ 两份更正）给出的键：
+ *     MAP_MARKERS_FROM_AUTHORITY            每个标记能追溯到**一条真实 post**
+ *     MARKER_COUNT_MATCHES_POSTS_WITH_PLACE 标记数 == **有坐标的帖子数**（**不硬编码 6**）
+ *     NO_FABRICATED_PLACE_DATA              不得出现"无出处"的地名（尤其 mock 那 6 个）
+ *     MAP_NO_FALLBACK_ON_UNAVAILABLE        读到失败 → 明确不可用态，**不回落 mock**
+ *   另有两条**基线明记未知**，故只记录不改判：
+ *     MAP_PIN_COLOR_SEMANTICS_CONFORMANCE: NOT_EVALUATED（原版配色规则未记录）
+ *     OFFLINE_MAP_PROJECTION_CONFORMANCE:  NOT_EVALUATED（像素换算无基线）
+ *
+ * ## ⚠️ 断言的**判别性**设计（这是本文件最要紧的部分）
+ *   1) `MARKER_COUNT_MATCHES_POSTS_WITH_PLACE` 若只断言"有标记"就**没有判别力** ——
+ *      mock 也有 6 条，一样"有标记"。所以必须**把期望值算出**来对：
+ *        期望 = 服务端 `GET /api/posts` 里**同时有 placeLat/placeLng** 的条数
+ *        实际 = 页面上 `.map__marker` 的个数
+ *      两者相等才 PASS。**且期望值来自服务端实况**，不是写死的 6。
+ *   2) `NO_FABRICATED_PLACE_DATA` 不能只搜"阳光操场"一个词 —— 那只能抓到一条。
+ *      必须把 mock 那 6 个地名**全部**作为禁用集合，并额外断言
+ *      "页面上出现的每个地名，都能在服务端 places/帖子里找到"。
+ *   3) `MAP_NO_FALLBACK_ON_UNAVAILABLE` 用**受控 stub**（拦 `GET /api/posts` 返回 500），
+ *      断言标记数归零且出现明确不可用态 —— 否则"读不到就拿 mock 顶上"会静默通过。
+ */
+import { writeFileSync } from 'node:fs'
+
+const OUT = 'G:\\demo map\\tools\\tmp\\wo15-gate.json'
+const API_ORIGIN = process.env.CAMPUS_API_ORIGIN || 'https://8.148.156.146'
+/** mock 里那 6 个"我们自己编的"地点名 —— 出现即说明 mock 仍在渲染路径上 */
+const MOCK_ONLY_PLACES = ['阳光操场', '教育超市', '图书馆', '逸夫教学楼', '思源楼', '学苑公寓']
+
+const report = { startedAt: new Date().toISOString(), steps: [] }
+const log = (k, v) => {
+  report.steps.push({ at: new Date().toISOString(), k, v })
+  writeFileSync(OUT, JSON.stringify(report, null, 2), 'utf8')
+  console.log(k, '=', JSON.stringify(v))
+}
+writeFileSync(OUT, JSON.stringify(report, null, 2), 'utf8')
+
+const list = await (await fetch('http://127.0.0.1:9222/json')).json()
+const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl)
+if (!page) {
+  console.error('FATAL 没有 CDP page target（用 scripts/m5/run-device-gate.sh 跑）')
+  process.exit(2)
+}
+const ws = new WebSocket(page.webSocketDebuggerUrl)
+await new Promise((res, rej) => {
+  ws.addEventListener('open', res, { once: true })
+  ws.addEventListener('error', rej, { once: true })
+})
+let id = 0
+const pending = new Map()
+ws.addEventListener('message', (e) => {
+  const m = JSON.parse(e.data)
+  if (m.id && pending.has(m.id)) {
+    pending.get(m.id)(m)
+    pending.delete(m.id)
+  }
+})
+const send = (method, params) =>
+  new Promise((r) => {
+    const i = ++id
+    pending.set(i, r)
+    ws.send(JSON.stringify({ id: i, method, params }))
+  })
+async function evaluate(expression, timeoutMs = 30000) {
+  const p = send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+  const r = await Promise.race([p, new Promise((res) => setTimeout(() => res({ TIMEOUT: true }), timeoutMs))])
+  if (r.TIMEOUT) return { TIMEOUT: true }
+  if (r.result && r.result.exceptionDetails) return { ERROR: r.result.exceptionDetails.text }
+  return r.result && r.result.result ? r.result.result.value : null
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// ---------- 1) 期望值：服务端实况（**不写死**）----------
+console.log('=== 1) 期望值：服务端里"有坐标的帖子"条数（不硬编码）===')
+const expected = await evaluate(`(async () => {
+  try {
+    const res = await fetch('${API_ORIGIN}/api/posts')
+    if (!res.ok) return { ok: false, status: res.status }
+    const d = await res.json()
+    const items = d.items || []
+    const withCoords = items.filter(
+      (p) => typeof p.placeLat === 'number' && typeof p.placeLng === 'number',
+    )
+    return {
+      ok: true,
+      total: items.length,
+      withCoords: withCoords.length,
+      places: withCoords.map((p) => p.place),
+      // 服务端的全部地名（用于"页面上每个地名都要能对上"的判定）
+      allPlaces: [...new Set(items.map((p) => p.place).filter(Boolean))],
+      hasCoordFields: items.length > 0 ? 'placeLat' in items[0] && 'placeLng' in items[0] : null,
+    }
+  } catch (e) {
+    return { ok: false, why: String(e && e.message) }
+  }
+})()`)
+log('EXPECTED_FROM_SERVER', expected)
+
+// ---------- 2) 进入地图页并读 DOM ----------
+console.log('')
+console.log('=== 2) 地图页快照（徽标 / 标记 / 地名）===')
+/*
+  ⚠️⚠️ 这里有一处我**第一版做错**的地方，必须写清楚（它正是一次"假 FAIL"）：
+
+  第一版我直接数 `.map__marker` 这个 class 的节点数，然后拿它跟服务端期望比。
+  设备实测：徽标显示 **"4 个标记"**（说明 `markers` 状态里确实是 4 条，数据链是对的），
+  但 `.map__marker` 计数是 **0** —— 因为**当前走的是腾讯地图**（页面里有 "©2026 Tencent" 水印），
+  而**原生地图把自己的标记渲染在 SDK 图层里**，根本不是我的 DOM 节点。
+
+  ⇒ 即：`.map__marker` 只存在于**离线自绘地图**（OfflineMap）那条路径上。
+    我把"某一条渲染路径的 DOM 结构"当成了"全平台的标记事实"。
+
+  正确做法（本版）：
+    · **主判据用 provider 无关的量**：徽标 `data-marker-count`（它由**同一个 `markers` 状态**驱动，
+      与用哪个底图无关）
+    · 再**单独跑一次离线路径**（`#/map?offline=1`）来验证 `.map__marker` 的 DOM 渲染确实存在
+      —— 两条路径**各自**都要验，而不是拿一条的结果代表另一条。
+    · 地名判据用整页文本（两种底图都会渲染地名文本），而不是某个特定 class。
+*/
+const snapMap = () =>
+  evaluate(`(() => {
+  const badge = document.querySelector('[data-marker-phase]')
+  const cards = [...document.querySelectorAll('.map__marker')]
+  const bodyText = document.body.innerText || ''
+  return {
+    hash: location.hash,
+    phase: badge ? badge.getAttribute('data-marker-phase') : null,
+    badgeCount: badge ? badge.getAttribute('data-marker-count') : null,
+    badgeText: badge ? (badge.textContent || '').trim() : null,
+    /** provider 无关：由同一个 markers 状态驱动 */
+    declaredCount: badge && badge.getAttribute('data-marker-count') ? Number(badge.getAttribute('data-marker-count')) : (badge && badge.getAttribute('data-marker-phase') === 'empty' ? 0 : null),
+    /** 只有离线自绘地图才有这些 DOM 节点 */
+    offlineMarkerDomCount: cards.length,
+    provider: (document.body.innerText.match(/腾讯地图|高德地图|在线地图|离线自绘底图/) || [null])[0],
+    bodyText,
+  }
+})()`)
+
+/*
+  ⚠️⚠️ 第二条"我第一版做错"的地方（它造成了**跨次运行的假 FAIL**）：
+
+  我第一版是直接 `location.hash = '#/map'`。问题：**若页面已经在地图页，
+  设置同一个 hash 不会让组件重新挂载**，于是 MapScreen 的 `useEffect` 不重跑，
+  它会**沿用上一轮遗留的状态** —— 上一轮（stub 段）把页面留在 `unavailable`，
+  这一轮第一次快照就"继承"了那个失败态，于是我读到 `phase='unavailable'`，
+  误以为产品坏了。
+
+  ⇒ 教训：**Gate 必须自己保证"起始状态"是干净的**，不能假定"上次结束后页面是好的"。
+    做法：先导航到**另一个页面**（强制卸载），再回到目标页（强制重新挂载）。
+    这与本项目"Fixture validity（前置条件要自己建立并证明）"是同一条纪律。
+*/
+await evaluate(`location.hash = '#/campus'`)
+await sleep(1500)
+await evaluate(`location.hash = '#/map'`)
+await sleep(3200)
+const snap = await snapMap()
+log('MAP_SNAPSHOT', {
+  hash: snap.hash,
+  phase: snap.phase,
+  badgeCount: snap.badgeCount,
+  badgeText: snap.badgeText,
+  declaredCount: snap.declaredCount,
+  offlineMarkerDomCount: snap.offlineMarkerDomCount,
+  provider: snap.provider,
+  bodyTextHead: String(snap.bodyText || '').slice(0, 200),
+})
+
+// ---------- 2b) 离线路径单独验 `.map__marker` DOM ----------
+console.log('')
+console.log('=== 2b) 离线自绘地图路径的标记 DOM（provider 无关量之外的独立验证）===')
+// 同样先离开再回来，避免继承上一次的状态（见 §2 的说明）
+await evaluate(`location.hash = '#/campus'`)
+await sleep(1500)
+await evaluate(`location.hash = '#/map?offline=1'`)
+await sleep(3200)
+const snapOffline = await snapMap()
+log('MAP_SNAPSHOT_OFFLINE', {
+  hash: snapOffline.hash,
+  phase: snapOffline.phase,
+  declaredCount: snapOffline.declaredCount,
+  offlineMarkerDomCount: snapOffline.offlineMarkerDomCount,
+  markerNamesFromDom: await evaluate(
+    `[...document.querySelectorAll('.map__markerName')].map(e => (e.textContent||'').trim())`,
+  ),
+})
+await evaluate(`location.hash = '#/map'`)
+await sleep(2000)
+
+// ---------- 3) 受控 stub：拦 GET /api/posts → 必须不回落 mock ----------
+console.log('')
+console.log('=== 3) MAP_NO_FALLBACK_ON_UNAVAILABLE：拦住 posts → 不得回落 mock ===')
+const stub = await evaluate(`(async () => {
+  const orig = window.fetch
+  window.fetch = async (u, o) => {
+    const url = typeof u === 'string' ? u : (u && u.url) || ''
+    if (/\\/api\\/posts(\\?|$)/.test(url)) {
+      return new Response(JSON.stringify({ error: 'injected_posts_failure' }), {
+        status: 500, headers: { 'content-type': 'application/json' },
+      })
+    }
+    return orig(u, o)
+  }
+  location.hash = '#/campus'
+  await new Promise(r => setTimeout(r, 1500))
+  location.hash = '#/map'
+  await new Promise(r => setTimeout(r, 3200))
+  const badge = document.querySelector('[data-marker-phase]')
+  const cards = [...document.querySelectorAll('.map__marker')]
+  const bodyText = document.body.innerText || ''
+  window.fetch = orig
+  return {
+    phase: badge ? badge.getAttribute('data-marker-phase') : null,
+    badgeText: badge ? (badge.textContent || '').trim() : null,
+    declaredCount: badge && badge.getAttribute('data-marker-count') ? Number(badge.getAttribute('data-marker-count')) : null,
+    offlineMarkerDomCount: cards.length,
+    leakedMockNames: ${JSON.stringify(MOCK_ONLY_PLACES)}.filter((n) => bodyText.includes(n)),
+  }
+})()`)
+log('UNAVAILABLE_STUB', stub)
+
+// 回到正常态，供人工/后续 Gate 观察
+await evaluate(`location.hash = '#/map'`)
+await sleep(3000)
+
+// ---------- 判定 ----------
+const expectedCount = expected && expected.ok ? expected.withCoords : null
+/** 服务端出现的全部地名（用于"页面上每个地名都要能对上"） */
+const serverPlaces = (expected && expected.allPlaces) || []
+/** 整页文本里"泄漏"的 mock 地名（两种底图都会渲染地名文本） */
+const leakedInNormal = MOCK_ONLY_PLACES.filter((n) => String(snap && snap.bodyText).includes(n))
+
+const v = {
+  /**
+   * 每个标记都能追溯到真实 post。
+   * 判据：① provider 无关的声明条数 == 服务端有坐标的帖子数
+   *       ② 整页文本里出现的**服务端地名**数目合理，且**没有** mock 专有地名
+   * （不依赖某个 class —— 见 §2 的说明）
+   */
+  MAP_MARKERS_FROM_AUTHORITY:
+    expected && expected.ok && snap && snap.declaredCount !== null &&
+    snap.declaredCount === expectedCount &&
+    leakedInNormal.length === 0 &&
+    serverPlaces.some((p) => String(snap.bodyText).includes(p))
+      ? 'PASS'
+      : 'FAIL',
+
+  /** 声明条数 == 服务端有坐标的帖子数（**不硬编码 6**）；且离线 DOM 路径的节点数一致 */
+  MARKER_COUNT_MATCHES_POSTS_WITH_PLACE:
+    expectedCount !== null &&
+    snap && snap.declaredCount === expectedCount &&
+    snapOffline && snapOffline.offlineMarkerDomCount === expectedCount
+      ? 'PASS'
+      : 'FAIL',
+
+  /** 不得出现 mock 那 6 个"无出处"的地名（正常态整页文本） */
+  NO_FABRICATED_PLACE_DATA: leakedInNormal.length === 0 ? 'PASS' : 'FAIL',
+
+  /** 读不到 → 明确不可用态，不回落 mock */
+  MAP_NO_FALLBACK_ON_UNAVAILABLE:
+    stub && stub.phase === 'unavailable' && stub.declaredCount === null &&
+    stub.offlineMarkerDomCount === 0 && (stub.leakedMockNames || []).length === 0
+      ? 'PASS'
+      : 'FAIL',
+
+  /** 基线明记未知 → 只记录，不当作可通过项（也不进 KEYS，故不影响裁决） */
+  MAP_PIN_COLOR_SEMANTICS_CONFORMANCE: 'NOT_EVALUATED',
+  OFFLINE_MAP_PROJECTION_CONFORMANCE: 'NOT_EVALUATED',
+  ORIGINAL_MAP_MARKER_CONFORMANCE: 'NOT_EVALUATED',
+
+  detail: { expected, snap: { ...snap, bodyText: undefined }, snapOffline, stub, expectedCount, leakedInNormal },
+  notes: {
+    判别性: '期望条数来自**服务端实况**（不写死 6）；主判据用 provider 无关的 data-marker-count；离线 DOM 路径单独再验一次',
+    仍未知: '图钉配色规则 / 气泡卡片 / 缩放级别 / 头像标记与照片标记的分工 —— 依基线原话「标记规则未记录」',
+  },
+}
+const KEYS = [
+  'MAP_MARKERS_FROM_AUTHORITY',
+  'MARKER_COUNT_MATCHES_POSTS_WITH_PLACE',
+  'NO_FABRICATED_PLACE_DATA',
+  'MAP_NO_FALLBACK_ON_UNAVAILABLE',
+]
+const anyFail = KEYS.some((k) => v[k] === 'FAIL')
+const anyNotEval = KEYS.some((k) => v[k] === 'NOT_EVALUATED')
+v.WO15_GATE = anyFail ? 'FAIL' : anyNotEval ? 'PASS_WITH_NOT_EVALUATED' : 'PASS'
+v.WO15_GATE_REASON = anyFail
+  ? `有 FAIL：${KEYS.filter((k) => v[k] === 'FAIL').join(', ')}`
+  : anyNotEval
+    ? `无 FAIL，但有未评估项：${KEYS.filter((k) => v[k] === 'NOT_EVALUATED').join(', ')}`
+    : '全部 PASS'
+log('VERDICT', v)
+
+ws.close()
+process.exit(anyFail ? 1 : 0)

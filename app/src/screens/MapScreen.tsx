@@ -7,7 +7,9 @@ import {
   IconLocation,
   IconPlus,
 } from '../components/icons'
-import { mapMarkers } from '../data/mock'
+import { listPosts } from '../api/client'
+import type { ApiPost } from '../api/client'
+import type { MapMarker } from '../data/mock'
 import { AmapMap } from '../native/AmapMap'
 import { RealMap } from '../native/RealMap'
 import { TencentMap } from '../native/TencentMap'
@@ -33,6 +35,67 @@ interface ViewState {
   scale: number
 }
 
+/**
+ * 把**权威**帖子派生成地图标记（M5 WO#15）。
+ *
+ * ## 为什么要有这个函数（而不是直接用 mock.mapMarkers）
+ *   改前标记来自 `mock.mapMarkers`：6 条**硬编码**的校园建筑（阳光操场/教育超市/图书馆/…）
+ *   带**我们自己编的**坐标与颜色。而原版实测证据指向的是另一种模型：
+ *     · `trident-map/baseline.json`：「主体：地图 + 用户头像标记 + 深色气泡卡片」
+ *     · `docs/original-interaction-map.md:38`：「照片卡片 + 彩色图钉 + 地点名」
+ *     · `supplements/poi-detail.json`：「地图上点『用户发布的照片图钉』的**照片缩略图**
+ *       （不是地名文字）」→ 进动态详情
+ *   ⇒ 即：**标记 = 一条真实动态锚定在一个真实地点**。而我们服务端**恰好就是这个模型**
+ *     （`posts.place_id → places`，且实测 4 条 post 都有地点）。
+ *   所以正确做法是**从 posts 派生**，而不是继续渲染一份编造的清单。
+ *
+ * ## 只保留"能定位"的帖子
+ *   必须**同时**有 `placeLat` 与 `placeLng`（服务端 left join places 得到）。
+ *   缺任一个 → **不出标记**（而不是给个默认坐标 —— 那会把标记放到几内亚湾，
+ *   而且用户无法察觉是假的）。
+ *
+ * ## 关于 color / x / y（**不夸大的部分**）
+ *   · `color`：原版**确实**有红/黄图钉，但**配色规则未知**
+ *     （`trident-map/baseline.json` 的 known_unknowns 原话：「具体缩放级别与**标记规则未记录**」）。
+ *     ⇒ 因此这里用**单一确定色**，并在代码里显式标注 NOT_EVALUATED，**不假装知道规则**。
+ *   · `x` / `y`：只有离线自绘地图（SVG，viewBox 1400×2000）用像素坐标；权威数据只有经纬度，
+ *     故按 `CAMPUS_CENTER` 做**线性近似**换算。该换算的**正确性记 NOT_EVALUATED**
+ *     （无基线可比），仅用于降级路径不空白。
+ */
+export function markersFromPosts(
+  posts: ApiPost[],
+  center: [number, number] = CAMPUS_CENTER,
+): MapMarker[] {
+  // 像素换算：以校区中心为基准，1 度纬度 ≈ 111_320 m；经度按纬度收缩。
+  // 这里只求"方向与相对位置大致正确"，不追求地理精确（见上方 NOT_EVALUATED 说明）。
+  const M_PER_DEG_LAT = 111_320
+  const M_PER_DEG_LNG = 111_320 * Math.cos((center[0] * Math.PI) / 180)
+  // 把"米"映射到 SVG 像素：取 1 px ≈ 1 m 的量级（viewBox 是 1400×2000，
+  // 一张校园尺度地图用这个比例刚好铺满中心区域）
+  const PX_PER_M = 1
+  return posts
+    .filter((p) => typeof p.placeLat === 'number' && typeof p.placeLng === 'number')
+    .map((p) => {
+      const lat = p.placeLat as number
+      const lng = p.placeLng as number
+      const dxM = (lng - center[1]) * M_PER_DEG_LNG
+      const dyM = (lat - center[0]) * M_PER_DEG_LAT
+      return {
+        id: p.id,
+        place: p.place ?? '',
+        // ⚠️ 单一确定色：原版配色规则 NOT_EVALUATED（见函数头注释）
+        color: '#f5453b',
+        userId: p.authorId ?? '',
+        postId: p.id,
+        // SVG 像素空间：中心 = (700, 1000)；纬度越大越靠北 → y 越小
+        x: Math.round(700 + dxM * PX_PER_M),
+        y: Math.round(1000 - dyM * PX_PER_M),
+        lat,
+        lng,
+      }
+    })
+}
+
 const MIN_SCALE = 0.6
 const MAX_SCALE = 3
 
@@ -40,8 +103,20 @@ const MAX_SCALE = 3
  * 离线自绘地图 —— **降级方案**。
  * 在线瓦片连续加载失败（无网络 / 被墙 / 无 key）时使用，保证地图区域不是空白。
  * 拖拽、双击、捏合的数据都在这里处理。
+ *
+ * ⚠️ WO#15：标记**不再**从 `mock.mapMarkers` 读，而是由调用方把**权威派生**的
+ *    `markers` 传进来（见 `markersFromPosts`）。空数组 = 没有可显示的标记
+ *    （**不回落 mock**）。
  */
-function OfflineMap({ view, onTilesMeta }: { view: ViewState; onTilesMeta?: (el: HTMLDivElement | null) => void }) {
+function OfflineMap({
+  view,
+  markers,
+  onTilesMeta,
+}: {
+  view: ViewState
+  markers: MapMarker[]
+  onTilesMeta?: (el: HTMLDivElement | null) => void
+}) {
   const inv = 1 / view.scale
   return (
     <div
@@ -78,7 +153,7 @@ function OfflineMap({ view, onTilesMeta }: { view: ViewState; onTilesMeta?: (el:
         </g>
       </svg>
       <div className="map__markers" ref={onTilesMeta}>
-        {mapMarkers.map((m) => (
+        {markers.map((m) => (
           <div
             key={m.id}
             className="map__marker"
@@ -155,6 +230,37 @@ export function MapScreen() {
   const [providerState, setProviderState] = useState<'tencent' | 'amap' | 'raster'>('tencent')
   const provider = forced ?? providerState
   const offline = forceOffline || tileFailed
+
+  /*
+    ⭐ WO#15：标记改由**权威**数据派生（`GET /api/posts` 里带坐标的那些帖子）。
+    ## 三态与"不撒谎"的纪律（与 WO#12/#13/#14 同一冻结）
+      loading      → 明确"加载中"，**不显示标记**（不拿 mock 顶上）
+      ready        → 显示派生标记（可能为空数组 —— 那是**诚实的空**，不是错误）
+      unavailable  → 读到失败/未登录 → 明确不可用态 + **不显示标记**
+    ⚠️ 刻意**没有** `|| mapMarkers` 这种回落：那正是 WO#12/#14 反复修掉的
+       "用编造数据冒充真实"。
+  */
+  const [markers, setMarkers] = useState<MapMarker[]>([])
+  const [markerPhase, setMarkerPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const r = await listPosts()
+      if (!alive) return
+      if (!r.ok) {
+        setMarkers([])
+        setMarkerPhase('unavailable')
+        return
+      }
+      // 只保留**能定位**的帖子（同时有 lat/lng）→ 其余不出标记
+      setMarkers(markersFromPosts(r.value))
+      setMarkerPhase('ready')
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
   // ---- 真实定位 ----
   const [fix, setFix] = useState<GeoFix | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
@@ -403,10 +509,10 @@ export function MapScreen() {
         onTouchEnd={onTouchEnd}
       >
         {offline ? (
-          <OfflineMap view={view} />
+          <OfflineMap view={view} markers={markers} />
         ) : provider === 'tencent' ? (
           <TencentMap
-            markers={mapMarkers}
+            markers={markers}
             here={fix}
             onMarkerClick={handleMarkerClick}
             onSdkFailed={handleTencentFailed}
@@ -414,7 +520,7 @@ export function MapScreen() {
           />
         ) : provider === 'amap' ? (
           <AmapMap
-            markers={mapMarkers}
+            markers={markers}
             here={fix}
             onMarkerClick={handleMarkerClick}
             onSdkFailed={handleAmapFailed}
@@ -422,7 +528,7 @@ export function MapScreen() {
           />
         ) : (
           <RealMap
-            markers={mapMarkers}
+            markers={markers}
             here={fix}
             onMarkerClick={handleMarkerClick}
             onTilesFailed={handleTilesFailed}
@@ -430,6 +536,27 @@ export function MapScreen() {
           />
         )}
 
+        {/*
+          ⭐ WO#15：标记来源的**诚实状态**。三种态都要能被看见（也给出 Gate 一个 DOM 钩子）：
+            loading     → 加载中（**不显示标记**）
+            ready + 0   → "暂无带地点的动态"（**诚实的空**，不是错误）
+            ready + n   → 显示 n 个标记（数据来自 GET /api/posts）
+            unavailable → 读不到 → 明确说"标记不可用"，**不回落 mock**
+          ⚠️ 刻意**不**写成"没有标记就显示演示数据"那一套 —— 那正是 WO#12/#14 反复修掉的行为。
+        */}
+        {markerPhase !== 'ready' ? (
+          <span className="map__markerBadge" data-marker-phase={markerPhase}>
+            {markerPhase === 'loading' ? '标记加载中…' : '标记不可用（读取失败或未登录）'}
+          </span>
+        ) : markers.length === 0 ? (
+          <span className="map__markerBadge" data-marker-phase="empty">
+            暂无带地点的动态
+          </span>
+        ) : (
+          <span className="map__markerBadge" data-marker-phase="ready" data-marker-count={String(markers.length)}>
+            {markers.length} 个标记
+          </span>
+        )}
         {offline && (
           <span className="map__offlineBadge">
             {forceOffline ? '离线自绘底图（演示模式）' : '离线自绘底图（在线瓦片不可用）'}
