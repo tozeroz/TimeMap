@@ -77,7 +77,12 @@ states: 全部 not_reproducible
 blocked_reason: "deep link 无法直达，且需要登录态下的真实地点数据才能进入"
 known_unknowns: 真实入口应是地图/动态里的地点点击；真实结构需在有内容时才能观察
 ```
-⇒ `ORIGINAL_POI_DETAIL_STRUCTURE: **BLOCKED**`（既有基线已记为 blocked，**不重复劳动**）。
+> ⚠️⚠️ **本小节已被我自己的第二次更正推翻**：`supplements/poi-detail.json` **明确 supersedes 它** ——
+> `states.normal.status: not_reproducible → **observed**`（真实入口＝「动态详情 → 点地点区」）。
+> 我在这里犯了本回合**第三次**同族错误：读了 `baseline.json` 就下 `BLOCKED`，
+> **没有先查有没有更新的记录取代它**。正确状态见
+> `docs/m5/WO15-PLAN-CORRECTION-2-poi-detail-not-blocked.md`。
+> ⚠️ 另：`BLOCKED_BY_POLICY`（策略禁止）与"入口不可达造成的 blocked"**必须分开表述**。
 ⚠️ 注意这与 `BLOCKED_BY_POLICY` 不同：这是**入口不可达**造成的 blocked，不是策略禁止。
 
 ## 四、⭐⭐ `supplements/schools.json` —— 直接证实 **WO14.5d 是一处真实偏差**
