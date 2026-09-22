@@ -18,7 +18,7 @@ set -uo pipefail
 PW="$(cat /srv/campus/.db_password)"
 PSQL() { PGPASSWORD="$PW" psql -h 127.0.0.1 -U campus -d campus -Atc "$1" 2>&1; }
 
-echo "=== 种子口径（WO#9A 起；WO14.5b 追加 places）==="
+echo "=== 种子口径（WO#9A 起；WO14.5b 追加 places；Round 267 追加 schools/campuses/归属列）==="
 PSQL "select 'users=' || (select count(*) from users)
       || ' message_threads=' || (select count(*) from message_threads)
       || ' thread_members=' || (select count(*) from thread_members)
@@ -27,9 +27,20 @@ PSQL "select 'users=' || (select count(*) from users)
       || ' message_media=' || (select count(*) from message_media)
       || ' message_mentions=' || (select count(*) from message_mentions)
       || ' board_notes=' || (select count(*) from board_notes)
-      || ' places=' || (select count(*) from places)"
+      || ' places=' || (select count(*) from places)
+      || ' schools=' || (select count(*) from schools)
+      || ' campuses=' || (select count(*) from campuses)
+      || ' posts_with_campus=' || (select count(*) from posts where school_campus_id is not null)
+      || ' users_with_campus=' || (select count(*) from users where school_campus_id is not null)"
 echo "  期望：users=3 message_threads=3 thread_members=5 messages=5 media=3 message_media=1 message_mentions=0 board_notes=1 places=2"
+echo "        schools=0 campuses=0 posts_with_campus=0 users_with_campus=0"
 echo "  （places 期望 2：北京交通大学 + 达美乐比萨(广州萝岗万达广场)——后者是**原版基线实测到**的地点）"
+echo "  ⚠️ 为什么把 schools/campuses/归属列也纳入基线（Round 267 补）："
+echo "     我做 PLACE_DOES_NOT_IMPLY_CAMPUS 的敏感度时造了 schools/campuses 行，"
+echo "     而**撤销只删了 campuses、没删 schools** ⇒ 残留 1 行；"
+echo "     当时本脚本**不含这几张表** ⇒ 残留**没被报出来**。"
+echo "     ⇒ 与之前 places 22 行残留同一类教训：**清理不完整 + 检查未覆盖该表**。"
+echo "     归属列期望全 0：审核 60 的计数策略 A —— 不得由 place 推断 campus 归属。"
 
 echo
 echo "=== WO#9B 新增列 / 标记分布 ==="

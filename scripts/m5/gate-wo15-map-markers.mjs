@@ -231,6 +231,26 @@ console.log('=== 2a-2) BASELINE_CLAIMS 测量（把 manifest 里每条 claim 的
   ⚠️ 只测**可从 DOM/文本确证**的部分；"深色气泡卡片"这类**视觉属性**不在此断言
      （那需要像素证据，且目前仍是 NOT_EVALUATED —— 不得用 DOM 存在性冒充视觉一致）。
 */
+/*
+  ⭐⭐ 这里修过一个**我自己引入的 flaky 断言**（由回归实测抓出，值得写清楚）：
+    我先前把 `MAP_GEO_PERMISSION_MODAL` 写成"当前页面上有没有那个弹窗"。
+    但该弹窗是**首次进入地图页**才出现，而权限状态在**同一 app 会话内被缓存** ⇒
+      · 前一个门禁跑过地图页（且 run-device-gate.sh 第 8 步会把它关掉）之后，
+        轮到本门禁时弹窗**不再出现** ⇒ 断言 FAIL。
+    实跑证据：回归时 14 键里**只有** MAP_GEO_PERMISSION_MODAL 变红，其余全 PASS；
+    而单独重跑又有可能过 —— 即**依赖会话状态**的 flaky 断言。
+    ⇒ 违反的是本项目已有的 **Fixture validity** 纪律："前置条件要**自己建立并证明**"。
+  ⇒ 正确做法（两步，各证一件事）：
+     ① 「这个弹窗**是**『授权地理位置』弹窗吗」——用 app **自带的** `#/map?ask=1`
+        强制弹出（MapScreen.tsx:256 `forceAsk = route.query.ask === '1'`，
+        注释写明"验收真实触摸用"）⇒ **确定性**、不依赖会话状态；
+     ② 「它会在**首次进入**时自动弹吗」——由 `selftest-dismiss-modals.mjs` 作证
+        （它 `am force-stop` 重启 app 后确认弹窗必现），本门禁只写**证据指针**，
+        不再用一条会飘的断言冒充。
+*/
+/* ⭐ 先建立前置条件：用 app 自带的 ask=1 强制弹出授权说明（确定性，不依赖会话） */
+await evaluate(`location.hash = '#/map?ask=1'`)
+await sleep(2500)
 const claims = await evaluate(`(() => {
   const q = (sel) => document.querySelector(sel)
   const txt = (sel) => { const e = q(sel); return e ? (e.textContent || '').trim() : null }
@@ -521,7 +541,20 @@ const v = {
   OFFLINE_MAP_PROJECTION_CONFORMANCE: 'NOT_EVALUATED',
   ORIGINAL_MAP_MARKER_CONFORMANCE: 'NOT_EVALUATED',
 
-  detail: { expected, snap: { ...snap, bodyText: undefined }, snapOffline, stub, expectedCount, leakedInNormal, markerCards: (snap && snap.markerCards) || [], baselineClaims: claims, navRegion, navFab },
+  detail: {
+    expected,
+    snap: { ...snap, bodyText: undefined },
+    snapOffline,
+    stub,
+    expectedCount,
+    leakedInNormal,
+    markerCards: (snap && snap.markerCards) || [],
+    baselineClaims: claims,
+    navRegion,
+    navFab,
+    geoModalEvidence:
+      '「会自动出现在首次进入」这一半由 scripts/m5/selftest-dismiss-modals.mjs 作证（它 am force-stop 重启 app 后确认弹窗必现）；本门禁只断言"该弹窗即『授权地理位置』弹窗"，用 app 自带的 #/map?ask=1 强制弹出（确定性，不依赖会话状态）',
+  },
   notes: {
     判别性: '期望条数来自**服务端实况**（不写死 6）；主判据用 provider 无关的 data-marker-count',
     /*

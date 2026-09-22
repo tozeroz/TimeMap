@@ -39,7 +39,10 @@
 #        BOARD_NOTE_AVATAR_NOT_MOCK BOARD_NOTE_AVATAR_INITIAL_MATCHES_NAME
 #
 # 环境变量：
-#   MUT_TARGET=<相对路径>   突变所修改的源文件（用于 sha256 比对；必填）
+#   MUT_TARGET=<相对路径...> 突变所修改的源文件（用于 sha256 比对；必填）
+#                            ⚠️ 支持**多个**（空格分隔）——有些突变天然跨两文件。例：WO#16 层 A 的突变
+#                            ① 把 mock.ts 里已移出的 schools/campusInfo 加回去 ② CampusScreen 改回用它们；
+#                            只对其中一个做比对，就会漏掉另一个的还原验证。
 #   GATE_ENV="K=V K2=V2"    跑门禁时需要的环境变量（如 WO_BOARD_PEER_ID）
 set -uo pipefail
 
@@ -53,12 +56,22 @@ EXPECT_FAIL=("$@")
 
 if [ -z "$GATE" ] || [ -z "$MUT" ] || [ "${#EXPECT_FAIL[@]}" -eq 0 ]; then
   echo "用法: bash scripts/m5/selftest-mutation.sh <gate> <mutate-script> <期望变红的键...>"
-  echo "      （并设置 MUT_TARGET=<被突变的源文件>）"
+  echo "      （并设置 MUT_TARGET=<被突变的源文件，多个用空格分隔>）"
   exit 2
 fi
 
+# 多文件支持：MUT_TARGET 可含空格分隔的多个路径
+read -r -a MUT_TARGETS <<< "$MUT_TARGET"
+hash_all() {
+  for p in "${MUT_TARGETS[@]}"; do sha256sum "$p"; done | sha256sum | cut -d' ' -f1
+}
 restore_if_needed() {
-  if [ -f "$MUT_TARGET" ] && [ -f "tools/tmp/$(basename "$MUT_TARGET").orig.txt" ]; then
+  # 只要**任一**目标文件旁边存在 .orig 备份，就尝试还原一次（mutate 脚本自己会清备份）
+  local need=0
+  for p in "${MUT_TARGETS[@]}"; do
+    [ -f "tools/tmp/$(basename "$p").orig.txt" ] && need=1
+  done
+  if [ "$need" = "1" ]; then
     node "$MUT" restore >/dev/null 2>&1 || true
     echo "  （trap）已确保工作区回到未突变状态"
   fi
@@ -107,7 +120,7 @@ wait_lock_free() {
 key_val() { echo "$1" | grep -o "\"$2\":\"[A-Z_]*\"" | head -1 | sed 's/.*:"//;s/"//'; }
 
 fail=0
-PRE_HASH="$(sha256sum "$MUT_TARGET" | cut -d' ' -f1)"
+PRE_HASH="$(hash_all)"
 echo "（测试前：$MUT_TARGET sha256=${PRE_HASH:0:12}…）"
 echo "门禁：$GATE"
 echo "期望变红的键：${EXPECT_FAIL[*]}"
@@ -152,10 +165,31 @@ else
   fail=1
 fi
 
+# ⭐ 归因清晰性：突变下**不该**有"非预期键"变红。
+#   为什么要有这条：若一次突变把一堆无关键也打红了，就说明
+#   "是这两条抓到的"这个归因**不成立**（可能是整个 Gate 崩了 / 突变有副作用）。
+#   这里只报警不判败（避免因合法的连锁而误判），但会**逐键列出**便于人工过目。
+VE="$(echo "$MUT_OUT" | grep 'VERDICT =' | head -1)"
+UNEXPECTED=""
+ALLFAIL="$(echo "$VE" | grep -o '"[A-Z_]*":"FAIL"' | sed 's/^"//;s/":"FAIL"$//' || true)"
+for k in $ALLFAIL; do
+  hit=0
+  for e in "${EXPECT_FAIL[@]}"; do [ "$k" = "$e" ] && hit=1; done
+  [ "$hit" = "0" ] && UNEXPECTED="$UNEXPECTED $k"
+done
+if [ -z "$UNEXPECTED" ]; then
+  # ⚠️ 措辞按**实际**变红的条数报，不要写"预期的那 N 键"——
+  #    第一次跑时我只数了"非预期 FAIL"为 0 就打印"只打红了预期的 4 键"，
+  #    而当时实际只有 2 键变红（另 2 键没有判别力）。**报告与实际不符**本身就是缺陷。
+  echo "  PASS 归因清晰：非预期键 0 个（预期 ${#EXPECT_FAIL[@]} 键中实际变红 $(echo "$ALLFAIL" | wc -w) 个）"
+else
+  echo "  ⚠ 归因待查：突变下另有非预期键变红 →$UNEXPECTED"
+fi
+
 echo
 echo "════════ ③ 还原：应回到测试前状态且全绿 ════════"
 node "$MUT" restore || { echo "  **FAIL** 还原失败"; exit 1; }
-if [ "$(sha256sum "$MUT_TARGET" | cut -d' ' -f1)" = "$PRE_HASH" ]; then
+if [ "$(hash_all)" = "$PRE_HASH" ]; then
   echo "  PASS 与本自测**开始前**的内容字节一致"
 else
   echo "  **FAIL** 还原后与测试前不一致（有残留）"
