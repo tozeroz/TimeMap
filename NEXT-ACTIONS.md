@@ -586,7 +586,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
 - [x] WO14.3 ✅ 计划已冻结：头像首字 placeholder、**不加列**
 - [x] WO14.4 ✅ 理由已记录；实测比预判更直接：**同屏两个身份**
       WO#13 已让它通往真实 ProfileEdit → 若不同步，会产生**新的跨页面 identity inconsistency**
-- [ ] WO14.5 做完 WO14 再做 **MapScreen**（审核 55 排序）
+
 
 ### ⭐ Cross-cutting（审核 55 指定，独立跟踪）
 - [x] X1 ✅ 已完成（见下方 X1/X2/X3 节）：按审核 55 的修正后不变量实现并按客户端实际调用验证
