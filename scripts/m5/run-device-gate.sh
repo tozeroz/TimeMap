@@ -62,12 +62,13 @@ PKG='com.campusx.demo'
 PREFLIGHT='G:\demo map\scripts\m5\preflight-capture.ps1'
 API_ORIGIN_PREFLIGHT='G:\demo map\scripts\m5\preflight-api-origin.mjs'
 PROVENANCE_CHECK='G:\demo map\scripts\m5\check-artifact-provenance.sh'
+DISMISS_HELPER='G:\demo map\scripts\m5\dismiss-blocking-modals.mjs'
 
-echo "=== 1/9 把目标 App 带到前台（am start，不做 force-stop）==="
+echo "=== 1/10 把目标 App 带到前台（am start，不做 force-stop）==="
 "$ADB" -s "$SERIAL" shell am start -n "$PKG/.MainActivity" >/dev/null 2>&1
 sleep 3
 
-echo "=== 2/9 建 CDP 转发（必须早于 preflight 的 CDP 检查）==="
+echo "=== 2/10 建 CDP 转发（必须早于 preflight 的 CDP 检查）==="
 PID="$("$ADB" -s "$SERIAL" shell pidof "$PKG" | tr -d '\r')"
 if [ -z "$PID" ]; then echo "  FATAL 拿不到 $PKG 的 pid"; exit 1; fi
 "$ADB" -s "$SERIAL" forward --remove-all >/dev/null 2>&1
@@ -75,13 +76,13 @@ if [ -z "$PID" ]; then echo "  FATAL 拿不到 $PKG 的 pid"; exit 1; fi
 sleep 1
 echo "  forward tcp:9222 → webview_devtools_remote_$PID"
 
-echo "=== 3/9 VISUAL_TARGET_VALIDITY（采集前）==="
+echo "=== 3/10 VISUAL_TARGET_VALIDITY（采集前）==="
 powershell -NoProfile -Command "& '$PREFLIGHT' -ExpectPackage $PKG -ExpectCdpUrl localhost" || {
   echo "  VISUAL_TARGET_VALIDITY: FAIL → 证据作废，终止（这不是产品 FAIL）"
   exit 1
 }
 
-echo "=== 4/9 ARTIFACT_PROVENANCE（web → cap asset → 已装 APK 三者一致）==="
+echo "=== 4/10 ARTIFACT_PROVENANCE（web → cap asset → 已装 APK 三者一致）==="
 # 为什么要有它（真实事故；审核记录 50 建议做成机械证明）：
 #   我改完前端只跑了 pnpm build + build-android.ps1，**漏跑 npx cap sync android**，
 #   装机后跑的是**旧 bundle**，而设备 Gate 照样有输出 ——
@@ -94,7 +95,7 @@ bash "$PROVENANCE_CHECK" || {
   exit 3
 }
 
-echo "=== 5/9 API_E2E_ORIGIN_VALIDITY（采集前；审核记录 47 要求的机械前置）==="
+echo "=== 5/10 API_E2E_ORIGIN_VALIDITY（采集前；审核记录 47 要求的机械前置）==="
 # 为什么要有它（本项目**已踩两次**的坑）：
 #   在 Capacitor WebView 里用**相对路径** fetch 会打到 WebView 自己的本地服务器
 #   （https://localhost），并且**返回 HTML 且状态码 200** → json() 得 {}，
@@ -110,19 +111,39 @@ if [ "$RC_ORIGIN" -ne 0 ]; then
   exit 2
 fi
 
-echo "=== 6/9 跑 Gate: $GATE ==="
+echo "=== 6/10 跑 Gate: $GATE ==="
 node "$GATE" "$@"
 RC=$?
 
-echo "=== 7/9 VISUAL_TARGET_VALIDITY（采集后复核：确认期间没被切走）==="
+echo "=== 7/10 VISUAL_TARGET_VALIDITY（采集后复核：确认期间没被切走）==="
 powershell -NoProfile -Command "& '$PREFLIGHT' -ExpectPackage $PKG -ExpectCdpUrl localhost" || {
   echo "  VISUAL_TARGET_VALIDITY(after): FAIL → 本次证据作废"
   exit 1
 }
 
-# ---------------------------------------------------------------- 7.5 清理 DB 残留
+# ---------------------------------------------------------------- 7.5 关掉阻断式弹窗
 echo
-echo "=== 8/9 清理本次 Gate 可能留下的 DB 残留（best-effort）==="
+echo "=== 8/10 关闭本次 Gate 可能留下的**阻断式弹窗**（best-effort）==="
+# ## 为什么在**共用入口**做这件事（一次真实的间歇性失败）
+#   跑"全设备回归"时 **WO#14 门禁偶发 exit=1，单独重跑就 PASS**。定位到：
+#   地图页会弹一个**全屏**弹窗「授权地理位置 / … / 暂时不要 · 授权」（CSS 是 inset:0 覆盖层），
+#   顺序跑门禁时**前一个 Gate（地图）把它留在页面上**，
+#   后一个 Gate 开始读 DOM 时可能仍被覆盖层挡着 → 读到不完整状态。
+#   ⇒ 与下面"DB 残留"同一处置理由：设备侧 10+ 个 Gate，各造状态、各不管收；
+#     放在**唯一入口**才能保证"跑完就是干净的"。
+# ## 纪律
+#   · best-effort：拿不到 CDP / 点不动 → 安静跳过，**绝不影响门禁 RC**（判定与环境复位是两件事）
+#   · 只点**已知的非破坏性关闭控件**（「暂时不要」等），**不点「授权」**
+#     —— 那会触发系统权限弹窗，反而引入新的不确定性
+if [ -f "$DISMISS_HELPER" ]; then
+  node "$DISMISS_HELPER" 2>&1 | sed 's/^/  /' || true
+else
+  echo "  WARN 找不到 $DISMISS_HELPER（跳过弹窗清理）"
+fi
+
+# ---------------------------------------------------------------- 7.6 清理 DB 残留
+echo
+echo "=== 9/10 清理本次 Gate 可能留下的 DB 残留（best-effort）==="
 # ## ⭐ 为什么放在 **runner** 而不是每个 Gate 自己
 #   本项目已有 8+ 个设备 Gate，各自都会造数（消息 / 媒体 / 账号 / 会话）。
 #   实测证据（2026-09-22 Round 264→265）：
@@ -151,6 +172,6 @@ else
 fi
 
 echo
-echo "=== 9/9 汇总 ==="
+echo "=== 10/10 汇总 ==="
 echo "DEVICE_GATE_EXIT=$RC"
 exit $RC
