@@ -778,3 +778,31 @@ N(并发 DB 客户端)  READY_AT  loadavg(before→after)  'database unreachable
       · 另有三个原生地图实现 `native/{AmapMap,RealMap,TencentMap}.tsx` + `native/mapApi.ts`
         + `native/mapTiles.ts`，与 `CAMPUS_CENTER` 常量 → inventory 必须覆盖"哪个实现真正在用"
       **按纪律**：**先 inventory，不要直接改**（与 WO#14 同）；并**先取证再断言**。
+
+### ⭐⭐ WO14.5 inventory **第一批硬事实**（Round 264 结束，含一个意外发现）
+**探针**：`scripts/m5/probe-map-authority.sh`（只读）
+```
+places : 24 行  列 = id, name, address, latitude, longitude, created_at
+schools: **0 行**（空壳）      campuses: **0 行**（空壳）
+posts  : 有 place_id；**4 条 post 关联了 place**
+```
+**⭐ 意外发现：`places` 的 24 行里 23 行是测试残留**：
+```
+唯一真实行：北京交通大学 | 西直门外上园村3号 | 39.9519,116.3373
+其余 23 行：同名地点<10位随机数> | 同名A的地址（31.1,121.1）／同名B的地址（39.9,116.3）
+            ← 明显的"同名地点"测试造数（上海/北京的假坐标）
+```
+**⇒ 两个结论**
+1. **地图标记的"权威来源"实质上只有 1 条真实地点**，而 mock 有 **6 条**标记
+   （阳光操场／教育超市／图书馆／逸夫教学楼／思源楼／学苑公寓）→ 两边**对不上**。
+   故 WO14.5 的正确处置**不是**简单"把 mock 换权威"，而要先判断：
+   这 6 个地点是**原版真实存在**的（需基线证据）还是我们自己编的（则应删/标 NOT_EVALUATED）。
+2. ⭐ **`check-server-baseline.sh` 不覆盖 `places` 表** → 这 23 行残留**长期不可见**。
+   同类风险：`schools`/`campuses`/`groups`/`announcements`/`comments`/`likes` 等也未被基线口径覆盖。
+   ⇒ 待办：**扩大基线口径**（或至少给"已知会有造数的表"加残留检查）。
+   ⚠️ 清理那 23 行前必须先查 `posts.place_id` 是否引用它们（有外键），**不能直接删**。
+- [ ] WO14.5a 核对 mock 的 6 个地点是否**有基线支持**（原版真实存在？）—— 无基线则按纪律标 NOT_EVALUATED
+- [ ] WO14.5b 扩大基线口径，覆盖 `places` 等未覆盖表；清理残留前先查外键引用
+- [ ] WO14.5c 判明 MapScreen 实际在用哪个地图实现（AmapMap / RealMap / TencentMap 三选一）
+- [ ] WO14.5d ⚠️ mock 的 `schools` 带 `members: '12,486'`（编造成员数），
+      而 `schools` 表**为空** ⇒ 无权威来源，按纪律处理（与 WO#13 删掉的同一类）
