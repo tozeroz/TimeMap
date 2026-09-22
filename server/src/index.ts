@@ -42,8 +42,21 @@ const DISPLAY_MAX = 40
 const COMMENT_MAX = 500
 const LIST_LIMIT = 50
 
-/** POST /api/posts 只接受这两个字段，多一个就 400 */
-const POST_ALLOWED_KEYS = ['body', 'place'] as const
+/**
+ * POST /api/posts 只接受这几个字段，多一个就 400。
+ *
+ * ⭐ WO#21（Round 319）：新增**可选** `mediaIds` —— 让发布页的**图片与语音**真正随帖入库。
+ *   为什么需要它：在 Owner 裁定"④ 发布页语音真实录音必须实现体验等价"之后我去查后端，
+ *   发现 **post_media 表存在、但服务端对它的引用全是 select**（没有任何接口能挂媒体），
+ *   而 `PublishScreen.doPublish` 的注释自己写着"图片留在本地"。
+ *   ⇒ 发布页的图片与语音**都只存在于本机**，从未随帖子进入服务器。
+ *
+ * ⚠️ **向后兼容**：`mediaIds` 可选；不传时行为与旧版**完全一致** ⇒ 既有 Gate/客户端不受影响。
+ */
+const POST_ALLOWED_KEYS = ['body', 'place', 'mediaIds'] as const
+
+/** 一条帖子最多挂几个媒体（超出直接 400，**不静默截断**） */
+const POST_MEDIA_MAX = 9
 
 /**
  * PATCH /api/users/me 只接受这一个字段（M5 WO#13，审核记录 54 冻结的契约）。
@@ -817,6 +830,34 @@ export function buildServer(deps: ServerDeps) {
     if (!body) errors.push('body 不能为空')
     else if (body.length > BODY_MAX) errors.push(`body 不能超过 ${BODY_MAX} 字`)
     if (placeRaw.length > PLACE_MAX) errors.push(`place 不能超过 ${PLACE_MAX} 字`)
+
+    /*
+      ⭐ WO#21：可选 mediaIds 的解析与校验。
+      ⚠️ 一律"**拒绝**"而不是"忽略" —— 与既有契约一致（strict schema：错就 400，不静默丢字段）。
+      校验三道：
+        ① 形状：数组、元素是 uuid 字符串、数量 ≤ POST_MEDIA_MAX、**无重复**
+        ② 存在性与 scope：必须存在且 scope='public'
+           （post_media 的复合外键本来就把 scope 钉死为 public ⇒ private 的聊天媒体挂不上，
+             这里显式判一次是为了给出**可读的 400**而不是让 DB 抛外键错）
+        ③ ⭐ **归属**：必须属于**当前会话用户**
+           ⚠️ 这是 OUR_DESIGN_CHOICE：原版是否也这样**未观察**；但不做的话
+              任何登录用户都能把**别人的**媒体挂到自己帖子上（越权引用）。
+              安全优先 ⇒ 做，并在提交审核时明确标注这一点。
+    */
+    let mediaIds: string[] = []
+    if (payload.mediaIds !== undefined) {
+      if (!Array.isArray(payload.mediaIds)) {
+        errors.push('mediaIds 必须是字符串数组')
+      } else if (payload.mediaIds.length > POST_MEDIA_MAX) {
+        errors.push(`mediaIds 最多 ${POST_MEDIA_MAX} 个`)
+      } else if (!payload.mediaIds.every((v) => typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v))) {
+        errors.push('mediaIds 含非法 id')
+      } else {
+        mediaIds = payload.mediaIds as string[]
+        if (new Set(mediaIds).size !== mediaIds.length) errors.push('mediaIds 不能重复')
+      }
+    }
+
     if (errors.length) {
       reply.code(400)
       return { error: 'invalid_payload', details: errors }
@@ -849,22 +890,96 @@ export function buildServer(deps: ServerDeps) {
         // 2 个及以上候选 → 仍然是 NULL（同名歧义，不猜）
       }
 
-      // 作者完全来自服务端会话；author_name 存为快照（用户以后改名也保留当时的展示名）
-      const r = await db.pool.query<PostRow>(
-        `insert into posts (id, author_name, author_id, body, place, place_id)
-         values ($1, $2, $3, $4, $5, $6)
-         returning id, author_name, author_id, body, place, created_at`,
-        [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, place, placeId],
-      )
-      const row = r.rows[0]!
-      reply.code(201)
-      return {
-        id: row.id,
-        author: row.author_name,
-        authorId: row.author_id,
-        body: row.body,
-        place: row.place,
-        createdAt: row.created_at.toISOString(),
+      /*
+        ⭐ WO#21：把"插帖 + 挂媒体"放进**同一个事务**。
+        为什么必须原子：若先插帖成功、挂媒体失败，就会留下一条**少图的帖子**，
+        而客户端拿到的是 201 ⇒ 用户以为发出去了、图片却永久丢了（且没有任何自愈路径）。
+
+        ⚠️ 媒体校验（存在性 / scope=public / **归属当前会话用户**）放在事务**内**，
+          在插入前完成；任一不合法 ⇒ 400 并回滚，不留下半条帖子。
+
+        用 `db.pool.connect()` + begin/commit 的写法与既有的 POST /api/media（行 ~1787）一致。
+      */
+      const client = await db.pool.connect()
+      let inserted = false
+      try {
+        await client.query('begin')
+
+        if (mediaIds.length > 0) {
+          const mr = await client.query<{ id: string; owner_user_id: string; scope: string }>(
+            'select id, owner_user_id, scope from media where id = any($1::uuid[])',
+            [mediaIds],
+          )
+          const byId = new Map(mr.rows.map((x) => [x.id, x]))
+          for (const mid of mediaIds) {
+            const m = byId.get(mid)
+            if (!m) {
+              await client.query('rollback')
+              reply.code(400)
+              return { error: 'invalid_media', details: [`媒体不存在: ${mid}`] }
+            }
+            if (m.scope !== 'public') {
+              await client.query('rollback')
+              reply.code(400)
+              return { error: 'invalid_media', details: [`媒体不是公图/公语音（scope=${m.scope}）: ${mid}`] }
+            }
+            /* ⭐ 归属校验 —— 不允许把**别人**的媒体挂到自己的帖子上（OUR_DESIGN_CHOICE，安全优先） */
+            if (m.owner_user_id !== session.userId) {
+              await client.query('rollback')
+              reply.code(403)
+              return { error: 'media_not_owned', details: [`该媒体不属于当前用户: ${mid}`] }
+            }
+          }
+        }
+
+        // 作者完全来自服务端会话；author_name 存为快照（用户以后改名也保留当时的展示名）
+        const r = await client.query<PostRow>(
+          `insert into posts (id, author_name, author_id, body, place, place_id)
+           values ($1, $2, $3, $4, $5, $6)
+           returning id, author_name, author_id, body, place, created_at`,
+          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, place, placeId],
+        )
+
+        /* 挂媒体：position 按传入顺序递增（0..n-1），与 GET 的口径一致 */
+        for (let i = 0; i < mediaIds.length; i++) {
+          await client.query(
+            'insert into post_media (post_id, media_id, media_scope, position) values ($1, $2, $3, $4)',
+            [id, mediaIds[i], 'public', i],
+          )
+        }
+
+        await client.query('commit')
+        inserted = true
+
+        const row = r.rows[0]!
+        /*
+          响应里带回 images —— 与 `GET /api/posts/:id` **同一形状**
+          （{id,width,height} 数组，按 position 排序），这样客户端发布后
+          不需要再发一次请求就能把媒体渲染出来。
+        */
+        const imgRes = await db.pool.query<{ id: string; width: number | null; height: number | null }>(
+          `select m.id, m.width, m.height
+             from post_media pm join media m on m.id = pm.media_id
+            where pm.post_id = $1 and m.scope = 'public'
+            order by pm.position`,
+          [id],
+        )
+        reply.code(201)
+        return {
+          id: row.id,
+          author: row.author_name,
+          authorId: row.author_id,
+          body: row.body,
+          place: row.place,
+          createdAt: row.created_at.toISOString(),
+          images: imgRes.rows,
+        }
+      } catch (e) {
+        /* ⚠️ commit 之前失败才回滚；commit 之后失败说明帖已落库，不能再 rollback */
+        if (!inserted) await client.query('rollback').catch(() => undefined)
+        throw e
+      } finally {
+        client.release()
       }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
