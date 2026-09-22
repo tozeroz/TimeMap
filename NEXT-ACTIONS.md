@@ -825,7 +825,22 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ⭐⭐ **新增机械工具** `scripts/m5/baseline-inventory.mjs`：
       基线全貌清单（**24 屏 + 10 补采**）＋ `--grep` **带分母**的全文检索（`--grep 阳光操场` → **0/32**）
       ＋ **supersedes 追踪**。它当场揪出一个**系统性证据时效问题**：
-- [ ] ⬅ **待裁定 X4（重要）**：**6 个屏幕的 `baseline.json` 状态已被补采取代**：
+- [x] ✅ **X4 已自查完成并三次更正**（`docs/m5/X4-SELF-AUDIT-superseded-baseline-impact.md` 更正版）：
+      ⭐ 最终真相：**权威索引 `docs/original-baseline/manifest.json` 是正确的**
+      （`expected_screen_count=22`，与 `docs/m3/EVIDENCE-PROVENANCE-AUDIT.md:98` 的
+      「22 observed / 0 evidence-blocked」一致）；只有 **3 份屏内旧快照**未回写
+      （`at-panel`/`media-preview`/`poi-detail`），其取代关系**已记在 supplements 的 supersedes 里**。
+      ⇒ 我先前"6 屏被取代 ⇒ 既有结论可能过期"的警报**夸大了**，根因是
+        **我的工具读错了来源**（读了屏内快照而不是权威索引）。
+      ⇒ 已就地更正 `FIDELITY-GAP-AUDIT` 的 at-panel 小节（结论不受影响，仅前提句按权威索引读）
+      ⇒ 工具已改为「**权威索引优先 + 快照不一致即 MISMATCH**」
+- [x] ✅ **沉淀纪律**：`Source validity（来源权威性）` —— 与本项目已有的 Target/Fixture/Origin/
+      Artifact/Observation validity 同族：**同一事实可能有多个副本且副本会过期**；
+      引用前必须确认"读的是不是权威那份"；**否定性结论**（没有/未知/BLOCKED）门槛更高：
+      必须先证明 ①搜索范围完整 ②来源权威 ③无更新记录取代
+- [x] ✅ 本轮同一类错误共犯 **3 次**（窄搜索 → 读错来源 → 又窄搜索），三个都如实记录在案
+- [ ] ⬅ **待裁定 X4'**：是否认可"**不全量重审**、只做 A（机械前置，已实现）+ B（复核 at-panel 一处，已做）"？
+      （我原提议"单开一单逐条复核"**已自行撤回**）**6 个屏幕的 `baseline.json` 状态已被补采取代**：
       `at-panel` / `comment-detail` / `login-select` / `login-sns` / `media-preview` / `poi-detail`
       （例如 media-preview 与 at-panel 也是 not_reproducible → **observed**）
       ⇒ 凡此前**只读 baseline.json** 得出的 `BLOCKED`/`NOT_EVALUATED` 判定**都可能已过期**。
