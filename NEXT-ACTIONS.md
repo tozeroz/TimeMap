@@ -898,7 +898,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] WO15.3 ✅ **已完成**（`gate-wo15-map-markers.mjs`，`DEVICE_GATE_EXIT=0`）：4 键全 PASS；敏感度**受控突变证明能红**（注入编造地名 → 3 键 FAIL、fallback 仍 PASS；撤销后回全 PASS）
       `MARKER_COUNT_MATCHES_POSTS_WITH_PLACE`（**不硬编码 6**）／ `NO_FABRICATED_PLACE_DATA` ／
       `MAP_NO_FALLBACK_ON_UNAVAILABLE`；并加敏感度（标记源改回 mock → 前两条必须 FAIL）
-- [ ] WO15.4 仍 NOT_EVALUATED（依基线原话「具体缩放级别与**标记规则未记录**」）：
+- [x] WO15.4 ✅ **本轮用机械像素分析取得部分证据**（见下「Round 266」节）：图钉配色**族**已测出、mock 调色板**无支撑**；语义仍 NOT_EVALUATED
       图钉**配色规则** ／ 气泡卡片内容与出现条件 ／ 缩放级别 ／ 头像标记与照片标记的分工
       ⚠️ 其中"标记的内容形态"**已有三处独立证据**（照片卡片+彩色图钉+地点名），
         且发现一个**交互细节**：地图上点的是**照片缩略图**、**不是地名文字**（原版 poi-detail 补充）
@@ -927,8 +927,52 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       **教训：新加的"修复"本身也必须被证明会生效**（与"新断言必须证明能红"同一纪律）；
       且**"猜几何形状"不如"按已知选择器"** —— 前者会随样式微调**静默失效**。
 - [x] ✅ **全设备回归 10 条全 `DEVICE_GATE_EXIT=0`**（WO#15 ／ 14 ／ 13 ／ 12 ／ 11 ／ 10 ／ 8 ／ 9A ／ 9B ／ 7）
-- [ ] WO15.5 ⬅ **待裁定/下一步**：`MAP_PIN_COLOR_SEMANTICS_CONFORMANCE` 等三项仍 **NOT_EVALUATED**
+- [x] WO15.5 ✅ 已用**机械像素分析**部分推进（见下节）；剩余语义项属「测量给不出」的部分，如实保留 NOT_EVALUATED
       （依基线原话「具体缩放级别与标记规则未记录」）→ 若接入可用图像通道，
       可用 `recovered-m3-map-pins.png` 等把"图钉配色/气泡卡片"升格为视觉直接证据
-- [ ] WO15.6 ⬅ 下一步（可选）：把 `dismiss-blocking-modals` 的经验推广 ——
+- [x] WO15.6 ✅ **已完成**：全 app 排查"首次进入自动弹出的覆盖层" ⇒ **只有地图页那一个**（已修），并加了 `data-blocking-modal` 通用登记位（自测证明该选择器真的命中）
       检查其它页是否也有"首次进入弹窗"会跨 Gate 残留（如 onboarding / upgrade-alert）
+
+### ⭐⭐ Round 266：视觉证据通道的**替代方案** + UI 数据源盘点**机械重建**
+- [x] ✅ **机械像素分析通道**（替代不可用的 vision）：新增
+      `scripts/m5/analyze-baseline-pixels.py`（色相直方图 + 连通域，输出含方法学阈值）
+      + `scripts/m5/selftest-pixel-analyzer.py`（**已知答案的合成图**上验证工具测对了）
+      实测 `SELFTEST_PIXEL_ANALYZER: PASS`（含**反向样本**：低饱和灰块不被计入；
+      含**绿色灵敏度**：否则"基线无绿色"可能是**工具盲区**而非事实）
+      → `docs/m5/WO15-VISUAL-EVIDENCE-mechanical-pixel-analysis.md`
+      ⭐ 结论：基线 `recovered-m3-map-pins.png` 里
+        **红/橙族 ≈20000px ／ 蓝/青/紫族 ≈3300px ／ 黄族 605px ／ 绿色族 = 0px**；
+        三个红族色块聚集(x≈868–974)；**两个蓝块 28×28 与 63×48 垂直相接、水平仅差 4px**
+        ⇒ 与「蓝色定位点 + 方向扇形」**不矛盾**（但**哪个是点/扇形：NOT_EVALUATED**）
+        ⇒ `MOCK_PIN_PALETTE_SUPPORTED_BY_BASELINE: **NO**`（mock 的绿 #2f9e44 无对应物）
+      ⚠️ **我撤回过一个归因**：我原想说"`normal.png` 没有标记"，但查了**混淆变量**后
+        发现它地图区的量化色只有 **10 种（79.85% 同一灰）** ⇒ **地图很可能没加载**，
+        而 map-pins 有 **145 种**。⇒ 两图加载状态不同，**不能**据此推断标记有无。
+- [x] ✅ **WO15.6**：全 app（35 个 tsx + 10 个枚举模式）排查自动覆盖层 ⇒ **只有地图页那一个**；
+      并加 `data-blocking-modal` 通用登记位（**自测证明**该选择器真的被命中）
+- [x] ✅ **UI 数据源盘点改成机械生成 + 漂移检查**（`ui-data-source-inventory.mjs`）
+      · 起因：原 `UI-DATA-SOURCE-INVENTORY.md` 写在 WO#8 之后，而 WO#11–15 已把其中**多屏**
+        从 mock 改成权威 ⇒ 它会把**已接完权威的屏**报成"纯 mock"，从而**选错下一单**
+      · 修正两处**误报**：① 区分 **type-only** 导入（MapScreen/FeedListScreen/UserProfileScreen
+        的 mock 导入只是**类型**）② **只认行首 import**（注释里也写着 import，
+        见 `MessageScreen:8`、`FeedListScreen:25`）
+      · 结果：`api-only` 7 → 9 → **11**；`mock+api` 6 → 4 → **2**；`mock-only` **5**
+      · 已接入常规检查 **④c**（`--check` 双向自测：改一行即 FAIL 并精确报差异、还原即 PASS）
+- [ ] ⬅ ⭐ **新发现 1（建议立单）**：`CommentsScreen` 与 `FeedDetailScreen` 对**同一数据一真一假**
+      + `CommentsScreen` 有 `posts.find(...) ?? **posts[0]**` 的**静默兜底**
+      （与 WO#12 修掉的 `?? 'u1'`、WO#13 的"假成功"**同型**）
+      + 该屏**无任何 `navigate('comments')` 调用**（路由可达但无入口）
+      → 详见 `docs/m5/UI-DATA-SOURCE-INVENTORY-REFRESHED.md` §3.1
+- [ ] ⬅ ⭐ **新发现 2**：`BoardScreen.tsx:149` 仍渲染 **mock 自称身份** `me.avatar`
+      （mock.ts 的 `me = { name:'自定义名称6', avatar: avatar('我','#6b7cff') }`）
+      ⇒ 与 **WO#14 在 MeScreen 修掉的是同一个编造身份**，**第二次出现在另一屏**
+      ⇒ 说明"修一个屏"不足以覆盖它，需要**按类排查**
+- [ ] ⬅ **新发现 3（待裁定）**：`scanner` / `media-preview` / `comments` 三屏
+      **在 App.tsx 挂着但全仓无任何 navigate 入口**（**路由可达、无入口**）。
+      ⚠️ 与 WO#13 删掉的"编造孤儿路由"形态相同，但**这次不同**：这三条**都有原版基线屏**
+      ⇒ **不能直接删**，需先判明"原版里它们由什么入口进入"。本轮**只记录不删不改**。
+- [ ] ⬅ **新发现 4**：`PoiSearchScreen` 仍渲染 mock `pois`（含**无出处的 `posts:1284`**），
+      而 `PoiDetailScreen` **已走权威** `/api/places/:id`；服务端**有**详情接口、**没有**列表接口
+      ⇒ 修复需**新增 API 能力**（与 WO#15 同性质）→ `docs/m5/FINDING-poi-search-screen-still-mock.md`
+- [ ] ⬅ 待裁定：以上四个发现是否立单、以及优先级（我建议先做「新发现 2 BoardScreen 的 mock 自称身份」——
+      它最小、且与已批准的 WO#14 同类、修法已被冻结（首字占位））
