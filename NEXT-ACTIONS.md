@@ -761,3 +761,20 @@ N(并发 DB 客户端)  READY_AT  loadavg(before→after)  'database unreachable
 - [ ] WO14.5 做完 WO14 再做 **MapScreen**（审核 55 排序）← **现在可开始**
 - [ ] WO14.6 ⬅ 待裁定：`ME_NO_FALLBACK_ON_UNAVAILABLE` 仍记 NOT_EVALUATED
       （清 session 会破坏同轮其它断言）→ 是否单开一轮专项验证"未登录时不回落 mock"？
+
+### ⭐ WO14.5 开工种子：MapScreen inventory 的**第一手事实**（Round 264 结尾，未深入）
+- [ ] WO14.5 MapScreen（`app/src/screens/MapScreen.tsx`，**500 行**）—— review 55 排序：WO14 之后再做
+      **已有事实（本轮到这一步为止）**：
+      · 它 `import { mapMarkers } from '../data/mock'`（第 10 行）→ 标记可能全是 mock
+      · mock 的 `mapMarkers` 每条形如
+        `{ id, place:'阳光操场', color:'#f5453b', userId:'u1', postId:'p1', x:430, y:1030, lat, lng }`
+        —— 即**同时**带"屏幕像素坐标(x,y)"与"经纬度(lat,lng)"两套定位，共 6 条
+      · ⭐ **服务端可能已有权威来源**：迁移 `003_data_model_v01.sql` 里有 **`places` 表**，
+        且 `004_m3_model_revisions.sql` 里有 **`schools` / `campuses`** 表
+        → 所以第一件事是查：`places` 里到底有没有数据？标记能否由 `posts`+`places` 推出？
+          （若能，则与 WO#12/WO#14 同一命题：**把 mock 换成权威**）
+      · ⚠️ mock 的 `schools` 里带 `members: '12,486'` —— **编造的成员数**，
+        与我在 WO#13 删掉的那个"12,486 位同学已加入"**同一类**（值得同源处理）
+      · 另有三个原生地图实现 `native/{AmapMap,RealMap,TencentMap}.tsx` + `native/mapApi.ts`
+        + `native/mapTiles.ts`，与 `CAMPUS_CENTER` 常量 → inventory 必须覆盖"哪个实现真正在用"
+      **按纪律**：**先 inventory，不要直接改**（与 WO#14 同）；并**先取证再断言**。
