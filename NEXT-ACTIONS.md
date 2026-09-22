@@ -1321,7 +1321,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
          **不**依赖登录态与权限）
 - [x] ✅ **WO#17 已提交并取得裁定**：审核 63 → **PASS / CLOSED**
 - [x] ✅ **WO#18 已实现并提交裁定**（`GET /api/places` + 去 mock；`posts` 用**真实** postCount）
-- [ ] ⬅ 全仓仍有 mock 依赖的屏（供 A4/WO#18 参考）：`MediaPreviewScreen`（mock `posts`）／
+- [x] ✅ **已解决**（Round 319）：`mock.ts` 已**整体退出现代代码**（类型→`data/types.ts`、`boardEmojis`→`data/uiConstants.ts`、数据→`fixtures/legacy-mock-data.ts.txt`）⇒ **生产代码零 mock 引用**（grep 复核）；`MediaPreviewScreen` 的 mock + 跨实体兜底也已修（门禁 5 键全 PASS）
       `PoiSearchScreen`（mock `pois`）／`ScannerScreen`（`scannerHints`）／`UpgradeDialog`（`upgradeInfo`）
 
 ### ⭐⭐ Round 318：WO#17 **PASS/CLOSED**（审核 63）；WO#18 完成并提交；Source Validity 裁决一处冲突并揭示 F-001
@@ -1471,7 +1471,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
         是审核 64 已明确的方向
 - [x] ✅ **F-003 修法已实施**：审核 65 直接批准为 **WO#20**（校园认证表单 fidelity），commit d99d417 已完成并提交审核
 - [x] ✅ 已并入下方的「A5 定点视觉 fidelity closeout」条（本行保留以免丢失历史语境）
-- [ ] ⬅ F-001 / F-002 / F-003 见 `docs/m5/FIDELITY-CLOSEOUT-BACKLOG.md`
+- [x] ✅ **已有结论**：F-001 已由 WO#19 修复（评论内联在 FeedDetail）／F-003 已由 WO#20 修复（表单形态）／**F-002 经审核 67 降为 NON-BLOCKING**（"不要求文案逐字相同"）⇒ 见 `docs/m5/FIDELITY-CLOSEOUT-BACKLOG.md`
 
 ### ⭐⭐ Round 318 续 4：**WO#19 完成**（FeedDetail 内联评论拓扑归位）
 
@@ -1508,9 +1508,9 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       保留已观察到的字段；'下一步'后续流程仍 BLOCKED_BY_POLICY / NOT_EVALUATED；
       **我们自己的 demo 不能假装认证成功**"
       原版实测：标题「填写认证信息」+ 就读学校（已填北京交通大学）/ 所在学院 / 就读专业 / 当前年级 + 按钮「下一步」
-- [ ] ⬅ 之后：**A4 剩余 = scanner 最小处置**（media-preview 已 BLOCKED_BY_POLICY 结案）
+- [x] ✅ **已完成**：入口实测**本来就 MATCH**（我上轮结论有误，已更正）；真正的问题是扫码页是 **fake-success**（5.2s 无条件报「识别成功」+ 假取景）⇒ 已删，改为如实「扫码功能尚未实现」；门禁 6 键全 PASS + 敏感度 4 键全红
 - [x] ✅ 已并入下方的「A5 定点视觉 fidelity closeout」条（本行保留以免丢失历史语境）
-- [ ] ⬅ 最后：**M5 completion audit**（审核 65 给定的 7 个问题）
+- [x] ✅ **已完成** → `docs/m5/M5-FINAL-COMPLETION-AUDIT-R319.md`（逐条回答 7 问）；审核 67 裁定 `M5_EXPERIENCE_COMPLETION_STATUS: **HOLD**`（原因=能力缺口，非视觉）
 
 ### ⭐⭐ Round 318 续 5：**WO#20 完成**（F-003 校园认证表单 fidelity）
 
@@ -1586,16 +1586,16 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ✅ 已提交审核（含 **6 个具体问题**，其中第 1 个是必须澄清的口径冲突）
 
 **⬅ 下轮从这里继续**：
-- [ ] ⬅ **等审核对最终 audit 的裁定**（⚠️ 按纪律**不**因此停下；同时继续做 A5）
-- [ ] ⬅ **A5 定点视觉 fidelity closeout**（审核 65 口径；**当前唯一剩余的大项**）：
+- [x] ✅ **已到**（审核 67；含**目标口径正式冻结**：`EXPERIENCE/BEHAVIOR EQUIVALENCE` / `PURE VISUAL 1:1: NOT REQUIRED`）
+- [x] ✅ **第一轮切片已完成**（`docs/m5/A5-TARGETED-VISUAL-FIDELITY-R319.md`）：机械核对基线里**被明确引用**的屏上文字（30 条：FOUND 17/CLUE 8/NEEDS_HUMAN 5），逐条判读后**修掉 3 处真实偏差**（announce 标题+3 条编造公告／scanner 有意取舍／两处"界面陈述与事实不符"含编造版本号）。⚠️ 纯视觉项经审核 67 **降为 NON-BLOCKING**（`PURE VISUAL 1:1: NOT REQUIRED`）
       · 可机械量化（色相/bbox/几何/ROI/颜色族）⇒ 用**现有** pixel analyzer 收敛
       · 真正需要语义判断的**少数**截图 ⇒ 把具体 PNG **上传到审核会话**做定点核对
       · 非关键/非默认 fallback ⇒ 保留 known limitation
       ⚠️ **不**建设新 vision 基础设施；但**不能**无限全挂 NOT_EVALUATED 后宣布完成
       ⚠️ ⚠️ 其范围受 §〇 **口径冲突**影响（"严格 1:1" 下视觉项阻塞；"体验优先" 下不阻塞）
           ⇒ 澄清前按**原口径**做（不擅自放松）
-- [ ] 待裁定项：F-002 / F-004 / F-005 / F-006（最终 audit 里已逐项提请）
-- [ ] 发布前置：I1（IP 清查）/ I3（图标重绘）
+- [x] ✅ **审核 67 已逐项裁定**：F-002 NON-BLOCKING／**F-004 已修**（学院 picker）／F-005 NOT_EVALUATED（不再考古）／**F-006 已修**（迁移 013 种下 5 条观察到的学院）
+- [x] ✅ **见上方两条**：I1 第一刀已完成（INCONCLUSIVE/需要工具）；I3 仍取决于"是否公开"的 Owner 决定
 - [ ] 其他待裁定：WO10.9 / WO14.6
 
 ### ⭐⭐ Round 319 续：审核 67 裁定 + **F-004/F-006 完成**（目标口径已冻结）
@@ -1640,13 +1640,13 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       ⚠️ 在这两项裁定前**不擅自**标为"完成"或"排除"，按审核口径记为
          EXPERIENCE_GAP_PENDING_OWNER_SCOPE
       ```
-- [ ] ⬅ 同时把 **F-004/F-006 的完成**提交审核（要求 4：每单闭环）
+- [x] ✅ **已提交**（含 5 个具体问题）
 - [ ] ⬅ ⭐ 审核 67 的**核心提醒**（已写进本队列，勿忘）：
       "**『没有 mock / 没有假成功』≠『体验已经等价』。**
        不要把所有『把假功能换成 unavailable 提示』的页面都**自动视为完成**。"
-- [ ] 已降级为**非阻塞**（审核 67）：F-002（体验等价的文案差异）／`boardEmojis` 字符（视觉 backlog）
-- [ ] F-005：`NOT_EVALUATED`，**不再考古**（审核 67 明确）
-- [ ] 发布前置（非完成度）：I1（IP 清查）/ I3（图标重绘）
+- [x] ✅ **已按审核 67 降级**：F-002 = `NON-BLOCKING EXPERIENCE-EQUIVALENT VARIATION`；`ORIGINAL_EMOJI_CHARACTERS` = `VISUAL_DESIGN_BACKLOG`（"不要为了这 6 个字符再进入原版取证"）
+- [x] ✅ **按审核 67 结案**：F-005 保持 `NOT_EVALUATED`，**明确不考古**（原版该行为未知，非已确认 mismatch）
+- [x] ✅ **重复行** —— 同上（I1 第一刀已完成；I3 待"是否公开"决定）
 - [ ] 其他待裁定：WO10.9 / WO14.6
 
 ### ⭐⭐ Round 319 续 2：Owner Scope Decision 已编制（含我新发现的**第 4 项**缺口）
@@ -1675,7 +1675,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 **⬅ 下轮从这里继续**：
 - [ ] ⬅ **等 Owner 对四项选 A/B**（这是**产品裁定**，只有 Owner 能定）
       ⚠️ 但按用户硬规则**不因此停下** ⇒ 同时推进**不依赖该裁定**的项：
-- [ ] ⬅ **I1 发布前 IP 清查**（队列里既有的、与裁定无关的已批准项）
+- [x] ✅ **第一刀已完成**（`docs/m5/I1-ICON-PROVENANCE-FINDING.md`）：⚠️ **方法失败已如实记录**（APK 内是 AXML 二进制 ⇒ "0 匹配"是仪器没工作，**不是**清白）；`icons.tsx` 来源如实标为 **UNDOCUMENTED**（发布前必须核实，**不**偷换成"自绘"）；顺带查出 `icons-send` 引用的 aapt2 产物**未留档 ⇒ 取证不可复算**。状态 `INCONCLUSIVE / 需要工具`（环境里 aapt2 不可用）
 - [ ] ⬅ **I3 图标重绘**（若确定要公开；同上）
 - [ ] ⬅ 若 Owner 选 A 的项里有**我们可以直接做**的（例如 #4 发布页语音接线，能力已有），
       则按小步快跑做掉并各自闭环审核
