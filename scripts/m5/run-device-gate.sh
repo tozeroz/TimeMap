@@ -63,11 +63,11 @@ PREFLIGHT='G:\demo map\scripts\m5\preflight-capture.ps1'
 API_ORIGIN_PREFLIGHT='G:\demo map\scripts\m5\preflight-api-origin.mjs'
 PROVENANCE_CHECK='G:\demo map\scripts\m5\check-artifact-provenance.sh'
 
-echo "=== 1/8 把目标 App 带到前台（am start，不做 force-stop）==="
+echo "=== 1/9 把目标 App 带到前台（am start，不做 force-stop）==="
 "$ADB" -s "$SERIAL" shell am start -n "$PKG/.MainActivity" >/dev/null 2>&1
 sleep 3
 
-echo "=== 2/8 建 CDP 转发（必须早于 preflight 的 CDP 检查）==="
+echo "=== 2/9 建 CDP 转发（必须早于 preflight 的 CDP 检查）==="
 PID="$("$ADB" -s "$SERIAL" shell pidof "$PKG" | tr -d '\r')"
 if [ -z "$PID" ]; then echo "  FATAL 拿不到 $PKG 的 pid"; exit 1; fi
 "$ADB" -s "$SERIAL" forward --remove-all >/dev/null 2>&1
@@ -75,13 +75,13 @@ if [ -z "$PID" ]; then echo "  FATAL 拿不到 $PKG 的 pid"; exit 1; fi
 sleep 1
 echo "  forward tcp:9222 → webview_devtools_remote_$PID"
 
-echo "=== 3/8 VISUAL_TARGET_VALIDITY（采集前）==="
+echo "=== 3/9 VISUAL_TARGET_VALIDITY（采集前）==="
 powershell -NoProfile -Command "& '$PREFLIGHT' -ExpectPackage $PKG -ExpectCdpUrl localhost" || {
   echo "  VISUAL_TARGET_VALIDITY: FAIL → 证据作废，终止（这不是产品 FAIL）"
   exit 1
 }
 
-echo "=== 4/8 ARTIFACT_PROVENANCE（web → cap asset → 已装 APK 三者一致）==="
+echo "=== 4/9 ARTIFACT_PROVENANCE（web → cap asset → 已装 APK 三者一致）==="
 # 为什么要有它（真实事故；审核记录 50 建议做成机械证明）：
 #   我改完前端只跑了 pnpm build + build-android.ps1，**漏跑 npx cap sync android**，
 #   装机后跑的是**旧 bundle**，而设备 Gate 照样有输出 ——
@@ -94,7 +94,7 @@ bash "$PROVENANCE_CHECK" || {
   exit 3
 }
 
-echo "=== 5/8 API_E2E_ORIGIN_VALIDITY（采集前；审核记录 47 要求的机械前置）==="
+echo "=== 5/9 API_E2E_ORIGIN_VALIDITY（采集前；审核记录 47 要求的机械前置）==="
 # 为什么要有它（本项目**已踩两次**的坑）：
 #   在 Capacitor WebView 里用**相对路径** fetch 会打到 WebView 自己的本地服务器
 #   （https://localhost），并且**返回 HTML 且状态码 200** → json() 得 {}，
@@ -110,17 +110,47 @@ if [ "$RC_ORIGIN" -ne 0 ]; then
   exit 2
 fi
 
-echo "=== 6/8 跑 Gate: $GATE ==="
+echo "=== 6/9 跑 Gate: $GATE ==="
 node "$GATE" "$@"
 RC=$?
 
-echo "=== 7/8 VISUAL_TARGET_VALIDITY（采集后复核：确认期间没被切走）==="
+echo "=== 7/9 VISUAL_TARGET_VALIDITY（采集后复核：确认期间没被切走）==="
 powershell -NoProfile -Command "& '$PREFLIGHT' -ExpectPackage $PKG -ExpectCdpUrl localhost" || {
   echo "  VISUAL_TARGET_VALIDITY(after): FAIL → 本次证据作废"
   exit 1
 }
 
+# ---------------------------------------------------------------- 7.5 清理 DB 残留
 echo
-echo "=== 8/8 汇总 ==="
+echo "=== 8/9 清理本次 Gate 可能留下的 DB 残留（best-effort）==="
+# ## ⭐ 为什么放在 **runner** 而不是每个 Gate 自己
+#   本项目已有 8+ 个设备 Gate，各自都会造数（消息 / 媒体 / 账号 / 会话）。
+#   实测证据（2026-09-22 Round 264→265）：
+#     一次"8 条回归全扫"跑完后，`messages` 从 **5** 变成 **8**，残留 3 条：
+#       WO9B-SEL-SUCCESS／WO9B-SEL-CANCEL／WO7-GATE-<ts>
+#   即：**每个 Gate 只管造、不管收**。逐个去改 8 个 Gate 既慢又必然漏；
+#   放在**唯一的入口**上，才能保证"跑完就是干净的"。
+# ## 纪律
+#   · **绝不**让清理失败影响门禁结论（RC 已在上一步固化）——
+#     "门禁判定"与"环境是否干净"是两件事，不能互相污染。
+#   · 清理是**只删已知测试形态**（WO 前缀等），不是清空表。
+#   · 拿不到凭据/连不上就当跳过（打印 WARN），不报错。
+CLEAN_HELPER='G:\demo map\scripts\m5\cleanup-all-gate-residue.sh'
+SSH_KEY='G:\demo map\TimeMap.pem'
+SSH_HOST='root@8.148.156.146'
+if [ -f "$CLEAN_HELPER" ]; then
+  if scp -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=8 "$CLEAN_HELPER" "$SSH_HOST:/tmp/" >/dev/null 2>&1; then
+    CLEAN_OUT="$(ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=8 "$SSH_HOST" \
+      'bash /tmp/cleanup-all-gate-residue.sh' 2>&1 || true)"
+    printf '%s\n' "$CLEAN_OUT" | grep -aE '清理后基线|剩余 WO\* 残留|已删除' | sed 's/^/  /'
+  else
+    echo "  WARN 无法把清理脚本送到服务器（跳过；**基线可能不干净**，请手动核对）"
+  fi
+else
+  echo "  WARN 找不到 $CLEAN_HELPER（跳过清理）"
+fi
+
+echo
+echo "=== 9/9 汇总 ==="
 echo "DEVICE_GATE_EXIT=$RC"
 exit $RC
