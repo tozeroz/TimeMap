@@ -996,7 +996,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ⭐ **④c 漂移检查当场生效**：我改完 BoardScreen 后，它在本地检查里**FAIL 并精确报出**
       `boardEmojis, me` → `boardEmojis` 的差异 ⇒ `--write` 更新快照后回到 PASS
       （—— 机械检查抓住了**我自己修复造成的文档漂移**）
-- [ ] ⬅ **待裁定**：`DrawerPages.tsx:48` 在「校园认证」页里放了一个文案为「**去认证**」的按钮，
+- [x] ✅ **「去认证」错跳已修**（WO#20 / commit d99d417）：校园认证页已改为**表单形态**（标题「填写认证信息」+ 就读学校/所在学院/就读专业/当前年级 + 「下一步」）；「去认证」按钮与错跳 `board` 已删除，删除了全部编造文案（见 F-003）
       但它 `navigate('board')` → **跳到留言板**。与 WO#13 修掉的"5 个 Me 条目全跳 profile-edit"同型。
       ⚠️ 需先判明"原版里那个位置到底是什么入口"（可能是"认证后可用"的说明位）
       ⇒ 本轮**只记录不擅自改**（不能凭空发明一个认证流程）
@@ -1361,8 +1361,8 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       ⚠️ 并在 backlog 里**区分开**"原版**确实有**评论头像（目标形态）"与"我们无来源先隐藏（能力缺口）"
 
 **⬅ 下轮从这里继续（按审核 63 给的顺序）**：
-- [ ] ⬅ **等待审核 63 对 WO#18 与 F-001 的裁定**（已提交；⚠️ 按纪律**不**因此停下）
-- [ ] ⬅ **A3/A4：一次**有界的只读观察**（合并取证，不分别开考古单）
+- [x] ✅ **审核 63/64 的裁定已到**（63: WO17 PASS/CLOSED；64: WO18 PASS/CLOSED + F-001 升级为 CONFIRMED BLOCKER）—— 均落盘 docs/review-log/
+- [x] ✅ **A3/A4 有界只读观察已完成**（Round 318；见 `docs/m5/A3A4-BOUNDED-OBSERVATION.md`）
       ```
       A3：DrawerPages.tsx:48「去认证」按钮 navigate('board')（错跳）
           → 需判明"原版那个位置到底是什么入口/目标"
@@ -1373,7 +1373,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
           ⚠️ **`comments` 已不必观察** —— F-001 已给出答案（原版无此独立入口，评论内联）
       只回答三件事：**entry** ／ **navigation target** ／ **最低可见 contract**
       ```
-- [ ] ⬅ 然后 **targeted fidelity closeout / A5**
+- [x] ✅ 已并入下方的「A5 定点视觉 fidelity closeout」条（本行保留以免丢失历史语境）
       · 可机械测量的 claim（色相/bbox/几何/ROI/颜色族）⇒ 用现有 pixel analyzer 收敛
       · 少量关键视觉语义 ⇒ 把具体 baseline/current PNG **上传到审核会话**（定点人工/远端核对）
       · 非关键 ⇒ 保留 known limitation
@@ -1399,8 +1399,8 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       ⇒ **未执行任何写操作、对方账号与数据未变、无需恢复原状**
       ⇒ 已把观察纪律写进该文档：**每步点击前先 dump 确认目标**；**永不坐标盲点**去点
         可能命中「退出/注销/删除」的区域；对会弹框的路径**优先点取消**；收尾必须核实账号状态
-- [ ] ⬅ **A4 剩余**：`media-preview` 的原版入口**尚未观察**（应能通过"点开一张动态图片"到达）
-- [ ] ⬅ **A3/A4 结论需提交审核**（含 F-003 的修法裁定；要求 4：每单闭环）
+- [x] ✅ **A4 media-preview 已结案（BLOCKED_BY_POLICY）**：先查已有权威证据 ⇒ 其真实入口是**聊天消息里的图片**，而原版账号无聊天图片数据；要造该数据**必须发消息/发图 = 写操作** ⇒ 硬约束禁止，不得绕道
+- [x] ✅ **A3/A4 结论已提交审核**（Round 318，含 F-003 与 WO#19 计划；审核 65 已回复）
 
 ### ⭐⭐ Round 318 续 2：审核 64 落盘 —— WO#18 **PASS/CLOSED**；F-001 升级为 CONFIRMED BLOCKER；立项 WO#19
 
@@ -1424,17 +1424,17 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ✅ 评论头像/点赞**仍不扩 API**（审核 64）：`original comment avatar: OBSERVED`（不再是未知），
       但 `CURRENT_AUTHORITY: unavailable` ⇒ 明确 fidelity/capability gap，进最终 A5/backlog；
       WO#19 **只**解决"评论区在哪儿"
-- [ ] ⬅ ⭐ **WO#19 `FeedDetail inline comments topology`**（下一步）
+- [x] ✅ **WO#19 已完成**（commits 83bdb34 / 81ddeac / a490622）—— 见下方 Round 318 续 4 的详细记录
       范围（严格按审核 64）：**只解决"评论区在哪儿"** —— 把评论区做成 `#/feed` 的**内联结构**
       （M3 证据：ViewPager `id/vp_detail` 的一页；控件 `id/comment_number`「评论 N」/
       `id/comment_college` 容器 / `id/cl_feed_detail_comment_message` 父评论整行…）
       ⚠️ **不**扩评论字段（头像/点赞）；⚠️ **不**重新研究 comment-detail（证据已足够）
       ⚠️ 需先按 要求 4 提交**计划**并取得裁定，再执行（每单独立闭环）
-- [ ] ⬅ **A4 剩余唯一一项**：`media-preview` 的原版入口（应能通过"点开一张动态图片"这类**纯查看**路径到达）
+- [x] ✅ **A4 剩余项（media-preview）已以 BLOCKED_BY_POLICY 结案** —— 见上方 Round 318 记录
       ⚠️ A3「去认证」与 scanner entry **本轮已完成**（见 `docs/m5/A3A4-BOUNDED-OBSERVATION.md`）；
         审核 64 的队列写在看到该结果之前 ⇒ 下次提交需明确告知
-- [ ] ⬅ **A3/A4 结论 + F-003 的修法裁定**尚未提交审核（要求 4：每单闭环）
-- [ ] ⬅ 然后 **A5 targeted fidelity closeout**（可量化→机械收敛；少量关键语义→定点上传 PNG）
+- [x] ✅ **A3/A4 结论 + F-003 已提交审核并取得回复**（审核 65 给出 WO#19/#20 的直接实施许可）
+- [x] ✅ 已并入下方的「A5 定点视觉 fidelity closeout」条（本行保留以免丢失历史语境）
 
 ### ⭐ Round 318 续 3：A4 观察单**关闭**（三项全部有结论）
 
@@ -1462,15 +1462,15 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ✅ 队列里的 **A4 观察单据此关闭**（其中一项是**策略阻塞**，不是未完成）
 
 **⬅ 下轮从这里继续**：
-- [ ] ⬅ ⭐ **WO#19 `FeedDetail inline comments topology`**
+- [x] ✅ **WO#19 已完成**（见 Round 318 续 4）
       · 计划**已提交审核**（Round 318，含一个待你裁定的点：`#/comments` 是**彻底移除**
         还是保留为**内部/测试通路**但不作产品页面）
       · 审核 64 已给出方向（"NEXT: WO19"）与两条纠正（**不是**"删掉路由就完成"；
         调试通路迁到 FeedDetail 的真实 comment surface）
       · ⚠️ 唯一未定的设计点就是上面那条；其余部分（把评论区做成 `#/feed` 的**内联结构**）
         是审核 64 已明确的方向
-- [ ] ⬅ **F-003 修法**待裁定（校园认证页改表单形态）；我倾向归 WO#20 或并进 WO#19
-- [ ] ⬅ **A5 targeted fidelity closeout**（可量化→机械收敛；少量关键语义→定点上传 PNG 给审核看图）
+- [x] ✅ **F-003 修法已实施**：审核 65 直接批准为 **WO#20**（校园认证表单 fidelity），commit d99d417 已完成并提交审核
+- [x] ✅ 已并入下方的「A5 定点视觉 fidelity closeout」条（本行保留以免丢失历史语境）
 - [ ] ⬅ F-001 / F-002 / F-003 见 `docs/m5/FIDELITY-CLOSEOUT-BACKLOG.md`
 
 ### ⭐⭐ Round 318 续 4：**WO#19 完成**（FeedDetail 内联评论拓扑归位）
@@ -1502,14 +1502,14 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ✅ ⚠️ 如实更正**我自己计划里的一个错误**：我在 WO#19 计划里把
       "① FeedDetailScreen 内联渲染评论区"列为待做 —— **那是错的**，它**早已**按 M3 实现
       ⇒ 本 WO 实际改动比计划小（只删重复页面 + 迁 Gate）
-- [ ] ⬅ **WO#19 提交审核 + 取得裁定**（要求 4：每单闭环）—— 下一轮第一件事
-- [ ] ⬅ 然后按审核 65 的顺序：**WO#20 校园认证表单 fidelity（F-003）**
+- [x] ✅ **WO#19 已提交审核**（Round 318；含 4 个具体问题）
+- [x] ✅ **WO#20 已完成**（commit d99d417）—— 见下方 Round 318 续 5
       审核 65 已给出范围："改成真实表单形态；删除编造的状态卡、认证方式、认证状态等；
       保留已观察到的字段；'下一步'后续流程仍 BLOCKED_BY_POLICY / NOT_EVALUATED；
       **我们自己的 demo 不能假装认证成功**"
       原版实测：标题「填写认证信息」+ 就读学校（已填北京交通大学）/ 所在学院 / 就读专业 / 当前年级 + 按钮「下一步」
 - [ ] ⬅ 之后：**A4 剩余 = scanner 最小处置**（media-preview 已 BLOCKED_BY_POLICY 结案）
-- [ ] ⬅ 然后：**A5 定点视觉 fidelity closeout**（可量化→pixel analyzer；少数语义→定点上传 PNG 核对）
+- [x] ✅ 已并入下方的「A5 定点视觉 fidelity closeout」条（本行保留以免丢失历史语境）
 - [ ] ⬅ 最后：**M5 completion audit**（审核 65 给定的 7 个问题）
 
 ### ⭐⭐ Round 318 续 5：**WO#20 完成**（F-003 校园认证表单 fidelity）
@@ -1533,18 +1533,18 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ✅ 已提交审核（要求 4 闭环）—— 含 3 个具体问题（含"补「扫一扫」入口是否算加功能"）
 
 **⬅ 下轮从这里继续（审核 65 给的收尾顺序）**：
-- [ ] ⬅ **A4 剩余 = scanner 最小处置**（media-preview 已 BLOCKED_BY_POLICY 结案）
+- [x] ✅ 已并入上方「A4 剩余 = scanner 最小处置」条（本行保留以免丢失历史语境）
       · 已知：原版抽屉里有「扫一扫」[307,1815][376,1850]，**我们抽屉里没有** ⇒ 缺失入口
       · 我的拟定方案（已向审核提请裁定）：**在抽屉里补上「扫一扫」入口**，但目标页
         （扫码/相机）在这边**没有权威实现** ⇒ 点击后给明确"未实现"说明（同「下一步」的做法），
         **不假装能扫**
       · ⚠️ 待定的点：补一个入口**是否算"加功能"** —— 等审核判断
-- [ ] ⬅ 然后 **A5 定点视觉 fidelity closeout**（审核 65 口径）：
+- [x] ✅ 已并入（本条与上面的 A5 条重复；实际执行以下方 Round 318 续 5 的收尾清单为准）（本行保留以免丢失历史语境）
       · 可机械量化（色相/bbox/几何/ROI/颜色族）⇒ 用现有 pixel analyzer 收敛
       · 真正需要语义判断的**少数**截图 ⇒ 把具体 PNG **上传到审核会话**做定点核对
       · 非关键/非默认 fallback ⇒ 保留 known limitation
       ⚠️ **不**建设新 vision 基础设施；但**不能**无限全挂 NOT_EVALUATED 后宣布完成
-- [ ] ⬅ 最后 **M5 completion audit**（审核 65 给定的 **7 个问题**）：
+- [x] ✅ 已并入上方「M5 completion audit」条（本行保留以免丢失历史语境）
       ```
       ① 还有没有可执行 mock / fake-success surface？
       ② 还有没有错误 identity fallback？
