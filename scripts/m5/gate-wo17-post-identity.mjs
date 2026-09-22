@@ -116,6 +116,18 @@ const READ = `(() => {
     hasNoCommentsText: !!fn,
     cmtBodies: [...document.querySelectorAll('.cmt[data-comment-id]')].map((n) => (n.querySelector('.cmt__text')||{}).innerText || ''),
     repliesOf: [...document.querySelectorAll('[data-replies-of]')].map((n) => n.getAttribute('data-replies-of')),
+    /*
+      ⭐ WO#19：回复的**嵌套归属关系**（不只看"有没有容器"，而是看 DOM 包含关系）。
+      flatReplies = 有 .cmt--reply 但**不在**任何 [data-replies-of] 容器内的那些
+        ⇒ 非空即说明"回复被平铺到顶层"，应判 FAIL。
+    */
+    nested: (() => {
+      const containers = [...document.querySelectorAll('[data-replies-of]')]
+      const allReplies = [...document.querySelectorAll('.cmt--reply')]
+      const nestedReplies = allReplies.filter((r) => containers.some((c) => c.contains(r)))
+      const flatReplies = allReplies.filter((r) => !containers.some((c) => c.contains(r)))
+      return { containers: containers.length, allReplies: allReplies.length, nested: nestedReplies.length, flat: flatReplies.length }
+    })(),
     text: txt.replace(/\\s+/g,' ').trim().slice(0, 600),
     hasHooks: !!q('[data-cd-state]') || !!q('[data-cd-count]') || !!q('[data-cd-author]') || !!ft,
   }
@@ -143,7 +155,20 @@ const expected = await evaluate(`(async () => {
       const cj = cr.ok ? await cr.json() : { total: null }
       out.push({ id: p.id, author: p.author, body: p.body, total: cj.total })
     }
-    return { ok: true, items: out }
+    /*
+      ⭐ WO#19：额外找出**确实带回复**的动态（用于嵌套断言）。
+        判据来自**服务端**：该动态的评论里存在 parentId 非空者 ⇒ 有嵌套可测。
+        ⚠️ 不硬编码 id —— 换种子后本段仍然有效。
+    */
+    const postsWithReplies = []
+    for (const p of out) {
+      const cr = await fetch('${API}/api/posts/' + encodeURIComponent(p.id) + '/comments')
+      if (!cr.ok) continue
+      const cj = await cr.json()
+      const hasReply = (cj.items || []).some((c) => (c.replies || []).length > 0)
+      if (hasReply) postsWithReplies.push(p.id)
+    }
+    return { ok: true, items: out, postsWithReplies }
   } catch (e) { return { ok: false, why: String(e && e.message) } }
 })()`)
 log('EXPECTED_FROM_SERVER', expected)
@@ -190,6 +215,16 @@ if (exp && exp.items[0]) {
   commentsReal = feedReal
   log('COMMENTS_REAL', commentsReal)
   log('FEED_REAL', feedReal)
+}
+/*
+  ⭐ WO#19：为"带回复的动态"单独取一次页面（嵌套断言的观测样本）。
+    若服务端没有这样的样本 ⇒ replyPostView 为 null ⇒ 该键 INCONCLUSIVE。
+*/
+let replyPostView = null
+const replyPostId = exp && exp.postsWithReplies ? exp.postsWithReplies[0] : null
+if (replyPostId) {
+  replyPostView = await goto(`#/feed?id=${replyPostId}`)
+  log('FEED_WITH_REPLIES', replyPostView)
 }
 if (zeroComment) {
   console.log('  （0 评论的动态：' + zeroComment.id.slice(0, 8) + ' / total=' + zeroComment.total + '）')
@@ -252,6 +287,27 @@ const v = {
     return samePage && hasPostBody && hasCommentTitle ? 'PASS' : 'FAIL'
   })(),
   /**
+   * ⭐ WO#19：**回复必须嵌套在父评论内部**（M3 的"决定性证据"）。
+   *   判据：存在 [data-replies-of] 容器，且其中的回复行**确实**是该容器的后代
+   *        （父评论行 .cmt 之内），**且不得**有"不在任何容器内"的回复行。
+   *   ⚠️ 这比"有嵌套容器"更强：平铺实现可能渲染空容器或把回复放在容器外。
+   *   ⚠️ 需要**有回复的样本**；没有样本 ⇒ INCONCLUSIVE（不假装通过）。
+   */
+  REPLIES_NESTED_IN_PARENT: (() => {
+    /*
+      ⭐ 观测点改为**确实带回复**的那条动态（从 API 推导，不硬编码）。
+      ⚠️ 上一版绑在 feedReal（= exp.items[0]，实测 total=0）⇒ 没样本 ⇒ INCONCLUSIVE。
+    */
+    const view = replyPostView
+    if (!view || !view.nested) return 'INCONCLUSIVE'
+    const n = view.nested
+    if (n.containers === 0 || n.allReplies === 0) {
+      // 服务端确实没有任何回复样本 ⇒ 不假装通过
+      return 'INCONCLUSIVE'
+    }
+    return n.flat === 0 && n.nested === n.allReplies ? 'PASS' : 'FAIL'
+  })(),
+  /**
    * 评论区的「评论 N」== API 的评论总数（不读 mock）。
    * ⭐ WO#19：观测点 = **FeedDetail 的** .feed__comments-title（旧屏已删）。
    */
@@ -288,6 +344,8 @@ const v = {
     commentsReal,
     feedReal,
     zeroComment: zeroComment ? { id: zeroComment.id, total: zeroComment.total } : null,
+    replyPostId: replyPostId || null,
+    replyPostView: replyPostView || null,
     /** 钩子可用性：只作**证据强度**信息，不作判定依据（见 noLeakVerdict 上方说明） */
     hookAvailability: {
       comments: !!(commentsReal && commentsReal.hasHooks),
@@ -308,6 +366,7 @@ const KEYS = [
   'MISSING_ID_NO_ENTITY_LEAK_FEED_COMMENTS',
   'MISSING_ID_NO_ENTITY_LEAK_FEED',
   'COMMENTS_INLINE_IN_FEED',
+  'REPLIES_NESTED_IN_PARENT',
   'COMMENTS_COUNT_FROM_AUTHORITY',
   'NO_MOCK_COMMENT_CONTENT',
 ]
