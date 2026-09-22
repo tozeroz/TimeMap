@@ -428,7 +428,7 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       已排除限流/sink/服务不可用；时间线显示失败发生在服务进程重启（05:23:45）**之前**。
       **未复现、未定位根因、不声称已修**。若再现需抓现场（建议：失败时快照 journalctl + pg_stat_activity）
 - [x] WO11.14 ✅ **已由 WO#12 承接**：UserProfileScreen 的字段级 inventory 与改前 FAIL 已完成（见 WO12.1/WO12.2）
-- [ ] AUDIT.7 后续每个 WO 的 Gate 都要按纪律加"基线逐条核对"层（manifest 已就位）
+- [x] ⭐ **AUDIT.7 已对 WO#15 落地**（commit 13e972d）：地图页补了 BASELINE_CLAIMS_MEASURED 测量块 + 8 条逐条断言（全 PASS），并把 **11 条 claim 冻结进 manifest 的 trident-map 段**（MATCH 9／NOT_EVALUATED 2）。⚠️ 该纪律**对其余 WO 仍然适用**（每做一单就补一屏的 claim）⇒ 见下「Round 267 续」
 ### WO#12 进展（Round 262 收尾）
 - [x] WO12.1 ✅ 字段级 inventory + **高严重度发现**：`UserProfileScreen.tsx:14` 的
       `const user = users[id] ?? users.u1` —— 传入的 id 形如 `u:<uuid>`（client.ts 的 toFeedPost 产出），
@@ -1076,3 +1076,36 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       > 目前 schools/campuses 数据**还是空的**，因此**不能简单造数据把 UI 拼成原版**。
       ⇒ 本项**已从"待裁定"转为"已批准方向"**，下一步先出 **WO#16 计划**
         （含"数据为空时如何如实呈现"的处置）
+
+### ⭐ Round 267 续：AUDIT.7 首度落地（给 WO#15 的地图页补"基线逐条核对"层）
+- [x] ✅ **AUDIT.7 是什么**（队列里原有的一条纪律）：后续每个 WO 的 Gate 都要加"**基线逐条核对**"层。
+      做法（照 manifest 里既有 6 屏的先例）：在 Gate 里**实测**该屏基线各条 claim 对应的界面事实，
+      再把 claim + status + **指向本 Gate 测量值**的 evidence 冻结进
+      `scripts/m5/fixtures/baseline-manifest.json` ⇒ 之后同一事实不会这次判 MATCH、下次判 DEVIATION。
+      ⚠️ 冻结前发现：manifest 已覆盖 6 屏（feed-list / message / group / user-profile /
+      profile-edit / at-panel），但 **WO#15 的地图页不在其中** —— 正是本条纪律要补的。
+- [x] ✅ Gate 新增 **`BASELINE_CLAIMS_MEASURED`** 测量块 + **8 条逐条断言**，对齐
+      `trident-map/baseline.json` 的 interactions / navigation / known_unknowns：
+      `MAP_TITLE_LITERAL` ／ `MAP_REGION_TEXT` ／ `MAP_MESSAGE_CONTROL` ／
+      `MAP_BOTTOM_RIGHT_CONTROLS` ／ `MAP_GEO_PERMISSION_MODAL` ／ `MAP_TENCENT_BASEMAP` ／
+      `MAP_REGION_TO_POI_CONTROL` ／ `MAP_PLUS_TO_PUBLISH_CONTROL` —— **8 条全 PASS**
+      （Gate 现共 **14 键**：6 条 WO#15 功能 + 8 条基线核对；`DEVICE_GATE_EXIT=0`）
+      实测值：`bigTitle="Map"` ／ `regionText="北京交通大学（校本部）"` ／ `msgAria="消息"` ／
+      `locateAria="回到定位"` `ctrlCount=2` ／ `fabAria="发布"` ／ `geoModalTitle="授权地理位置"` ／
+      `hasTencentWatermark=true` `providerText="腾讯地图"`
+- [x] ✅ 冻结 **11 条 claim** 进 manifest 的 `trident-map` 段（**MATCH 9 ／ NOT_EVALUATED 2**）；
+      `BASELINE_MANIFEST_CONSISTENCY: PASS`（字段齐全／词汇合法／引用无悬空／claim id 唯一）
+      · NOT_EVALUATED 的 2 条：`MAP_MARKER_PRESENTATION`（"深色气泡卡片""用户头像标记"属视觉/语义，
+        DOM 存在性证明不了；且与 supplements/poi-detail 的「图钉＝照片缩略图」表述不一致）、
+        `MAP_ZOOM_AND_MARKER_RULES`（基线明记"未记录"）
+      · 另加 `MAP_OFFLINE_RENDERING`：基线**没有**离线自绘这回事（无原版可比），
+        但**我们自己画得对不对**可判 ⇒ 按审核 58 选项 A 记为 MATCH（不渲染 + 明确说明）
+- [x] ✅ ⭐ **过程中修掉一个我自己的选择器错误**：第一版用 `.bigtitle__main` 量地图页标题 ⇒ 恒为 `null`
+      ⇒ `MAP_TITLE_LITERAL` **假 FAIL**。实际地图页**不用 BigTitle 组件**，有自己的 `.map__title`
+      （MapScreen.tsx:520）。⚠️ 同类错误本会话已多次（整页 imgCount 判头像／整页文本判 mock 地点／
+      **在错误的节点上测量**与"实现错了"在输出上无法区分）⇒ 写断言前先用源码确认真实 DOM 结构。
+- [x] ✅ 两条导航 claim **如实标注 `_known_gap`**：设备侧只验了"控件存在 + 文案"，
+      **落点由源码确认**（`navigate('poi')` / `navigate('publish')`），真机点击未验 ——
+      **不**把它写成"设备已验证跳转"。真机点击落点列为待办。
+- [ ] ⬅ **本纪律对其余 WO 仍然适用**：后续每做一单（含 WO#16）都要照此补一屏的 claim 到 manifest
+- [ ] ⬅ 待办（本轮新增）：地图页**真机点击落点验证**（region → poi ／ fab → publish）
