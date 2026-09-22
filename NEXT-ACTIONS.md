@@ -1179,3 +1179,36 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [ ] ⬅ 收窄 `docs/m5/A-D-LIST.md:220` 那条笼统的"✅ 一致"（审核 60 要求，仍未做）
 - [ ] 敏感度覆盖：余下门禁按 `docs/m5/SENSITIVITY-COVERAGE-AUDIT.md` 补齐
       ⚠️ 但按审核 61：**不要**现在启动专项工程；只在"flaky / 顺序相关 / 明显共享可变状态"时才查
+
+### ⭐ Round 316 续：层 B 第 4 条完成（MapScreen 接权威实体）
+
+- [x] ✅ **MapScreen 地区控件改接权威实体**（commit 763533c + d696f67）
+      · 硬编码「北京交通大学（校本部）」→ `{school.name}`（来自 `GET /api/schools`，新增 `listSchools()`）
+      · 加 `data-region-phase` / `data-region-school` 作为可断言钩子
+      ⭐ **守住两处边界**：
+      ① **只取学校名，去掉「（校本部）」** —— 该部分是"**当前选中校区**"的表达，
+         而审核 60 明确把 `current selected campus` 列为 **DO NOT INFER**
+         （我们无任何权威依据说当前选的是校本部）⇒ 登记
+         `MAP_REGION_CAMPUS_PART: OMITTED_NO_AUTHORITATIVE_SELECTION`
+      ② **不改点击行为**（仍 `navigate('poi')`）—— 该 claim 已由真机点击实测并在**审核 60 冻结为 MATCH**，
+         改文案不该顺手改行为（否则一条已冻结的 claim 会失效）
+      · 读不到学校时显示「学校未知」而**不回落**硬编码文案（延续"不回落"纪律）
+      实测：`regionText="北京交通大学"`；`MAP_REGION_TEXT` / `MAP_REGION_TO_POI_CONTROL` /
+      `MAP_GEO_PERMISSION_MODAL_UI` 全 PASS；`DEVICE_GATE_EXIT=0`（14 键）
+- [x] ✅ **顺带修正**：上一提交漏更新 UI 数据源清单快照（MapScreen 现接入 listSchools）
+      ⇒ 被 ④c 漂移检查抓出 ⇒ 已补（d696f67）。CHECK_ALL_LOCAL 回 PASS
+- [x] ✅ ⚠️ 脚本自身缺陷再记一条（与 mutation 脚本同类）：
+      写 MapScreen 的脚本第一版**锚点不唯一**（`useEffect(() => {` 在文件里出现 3 次）
+      且**失败不回滚** ⇒ 把文件留在半成品状态。
+      已改为唯一锚点 + 任何失败先 `rollback()` 再退出。
+      ⇒ 纪律：**改动代码的脚本必须自己保证可回滚**。
+
+**⬅ 下轮从这里继续（层 B 只剩 2 项）**：
+- [ ] ⬅ **层 B 第 8 条：必要 Gate + 必要 sensitivity**
+      · 学校搜索页（`#/schools`）与校区面板的**专门断言**（目前只有 wo16a 覆盖了 CampusScreen 侧）
+      · 把 `MAP_REGION_CAMPUS_PART: OMITTED_NO_AUTHORITATIVE_SELECTION` 做成可断言项并进 manifest
+      · ⚠️ 按审核 61：新/改 Gate 必须**声明其 fixture 依赖**（session/permission/DB/device state）并自行建立
+      · 突变应"把数据源接回 mock"并证明能红（用 `scripts/m5/selftest-mutation.sh` 通用驱动）
+- [ ] ⬅ **层 B 第 9/10 条：完成后停止局部扩张，提交 M5 GLOBAL COMPLETION AUDIT**
+      （审核建议上限：正常顺序 + **反向顺序**各跑一次完整回归；verdict 一致即停）
+- [ ] ⬅ 收窄 `docs/m5/A-D-LIST.md:220` 那条笼统的"✅ 一致"（审核 60 要求，仍未做）
