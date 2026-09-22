@@ -1258,7 +1258,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ✅ **WO#16 状态**：**PASS / CLOSED**（层 A + 层 B 全部交付，唯一 blocker 已修并双向证明）
 
 **⬅ 下轮从这里继续（审核 62 已给定优先级）**：
-- [ ] ⬅ **WO#17 `WO17_POST_IDENTITY_AND_COMMENT_AUTHORITY`（A1，**第一优先**）**
+- [x] ✅ **WO#17（A1，第一优先）核心已完成**（commit 7dc6cb8）—— 详见下方 Round 317 续：
       审核指出它的优先级**高于** A2，因为它不只是"显示假数据"，而是 **identity corruption**：
       "请求/点击的是 post A，页面显示的是 post B"（与 WO#12 的 `users[id] ?? users.u1` 完全同型）
       ```
@@ -1281,3 +1281,45 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       · 少量关键视觉语义 ⇒ 把具体 baseline/current PNG **上传到审核会话**，由远端 reviewer 看图核对
       · 非关键/非默认 fallback ⇒ 保留 known limitation
       ⚠️ **不**建设新 vision 基础设施；但也**不能**无限全挂 NOT_EVALUATED 后宣布完成（最终目标严格 1:1）
+
+### ⭐ Round 317 续：WO#17（A1）核心已实现并有设备证据；剩门禁/敏感度/提交
+
+- [x] ✅ **WO#17 核心（commit 7dc6cb8）**：修掉 `CommentsScreen` 的**身份篡改**与**双数据源**
+      ```
+      新增 app/src/data/postIdentity.ts —— **唯一**的"按 id 取动态"实现：
+        resolvePostAndComments(id) → ready | offline | not_found | error
+        ⚠️ 任何分支都**不**返回另一条动态（这正是被修的漏洞）
+      FeedDetailScreen 的 load() 改为调用它（行为保持）⇒ 两屏身份解析只有一处实现
+      CommentsScreen：去掉 `?? posts[0]`；**不再 import 任何 mock**；
+        send() 改走**真实** createComment（改前是本地假追加，违反"写操作不假成功"）
+      ```
+      ⭐ **设备证据**（探针 `probe-wo17-post-identity.mjs`，核心判据=审核 62 的定义）：
+      ```
+      #/comments?id=<不存在> → state="not_found"、author=null、**泄漏的真实动态 = []**
+                               （改前这里会显示 posts[0] 的正文与作者）
+      #/feed?id=<不存在>     → 泄漏 = []（两屏一致）
+      有效 id                → 两屏都显示 **Lemy**（同一实体）
+      ```
+- [x] ✅ **如实登记 3 处未解决的保真/能力问题**（已写进 CommentsScreen 文件头与提交信息）
+      · `feed-detail` 错误态**文案不一致**（基线观察到「网络不给力，点击刷新试试」+ 刷新；
+        我们显示「网络错误/这条动态不存在/刷新」）⇒ 归 A3/A4 观察
+      · `comment-detail` 空态**证据冲突**（基线=「页面全白，无列表内容」；原注释=气泡+「留下你的评论吧～」）
+        ⇒ 本 WO 只改数据源、**不动**视觉，冲突交 A3/A4
+      · 评论**作者头像**与**点赞数**无服务端来源 ⇒ 不渲染（不编造）；属能力缺口
+
+**⬅ 下轮从这里继续（WO#17 只剩两项）**：
+- [ ] ⬅ **WO#17 的必要 Gate + sensitivity**
+      判据（两条，都要能红）：
+      ```
+      ① 身份完整性：不存在的 id 下，页面**不得出现任何真实动态的正文**
+         （探针已证明现为 []；Gate 要把这条固化成断言）
+      ② 单一数据源：CommentsScreen 不得再 import mock
+         （UI 数据源清单已能机械检出 ⇒ 可复用其机制）
+      敏感度：恢复 `?? posts[0]` ⇒ ①必须变红；恢复 mock import ⇒ ②必须变红
+      ```
+      ⚠️ 按审核 61：新 Gate 要**声明 fixture 依赖**（本 Gate 依赖 DB 的 4 条种子动态 + 网络可达；
+         **不**依赖登录态与权限）
+- [ ] ⬅ **WO#17 提交审核 + 取得裁定**（要求 4：每单完整闭环）
+- [ ] ⬅ 然后 **WO#18（A2）**：`GET /api/places` + `PoiSearchScreen` 去 mock（`posts:1284` 用真实 COUNT 或 null）
+- [ ] ⬅ 全仓仍有 mock 依赖的屏（供 A4/WO#18 参考）：`MediaPreviewScreen`（mock `posts`）／
+      `PoiSearchScreen`（mock `pois`）／`ScannerScreen`（`scannerHints`）／`UpgradeDialog`（`upgradeInfo`）
