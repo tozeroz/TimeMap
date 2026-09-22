@@ -172,13 +172,36 @@ export function BlacklistScreen() {
   )
 }
 
+/**
+ * 版本信息（抽屉条目「版本信息」；原版该条目**已由 Round 318 只读观察确认存在**）。
+ *
+ * ⚠️⚠️ Round 319（A5 机械切片外溢发现）：本页改前有**两处不实信息**
+ * ```
+ *   ① <div className="dpcard__version">v2.10.0</div>   ← **编造的版本号**（无任何出处）
+ *      ⚠️ `docs/original-baseline/screens/` 的 24 个基线目录里**没有**本屏
+ *         ⇒ 原版「版本信息」页的**内容/版本号从未被观察** ⇒ `ORIGINAL_VERSION_INFO_PAGE: NOT_EVALUATED`
+ *   ② <p>本 demo 为本地复刻版本，**数据全部为 mock，无任何网络请求**。</p>
+ *      ← **与事实不符**：应用现在处处走自建后端 API，mock.ts 也已整体退出现代代码
+ * ```
+ * ⇒ 处置：删掉编造版本号（改为如实说明"版本信息不可用"）、把那句笼统断言改成如实描述。
+ * ⚠️ 教训（与 MoreScreen 同类）：**界面陈述会随时间变成假话** ——
+ *    不要在 UI 里写"全部/无/纯"这类绝对化断言。
+ */
 export function AboutScreen() {
   return (
     <DrawerPage title="版本信息" onBack={() => goBack('me')}>
       <div className="dpcard dpcard--center">
         <div className="dpcard__brand">Campus</div>
-        <div className="dpcard__version">v2.10.0</div>
-        <p className="dpcard__desc">本 demo 为本地复刻版本，数据全部为 mock，无任何网络请求。</p>
+        {/*
+          ⚠️ 刻意**不**写版本号：原版本页的内容与版本号**未观察**，写任何一个具体值都是编造。
+        */}
+        <div className="dpcard__version" data-version-unavailable>
+          版本信息不可用
+        </div>
+        <p className="dpcard__desc">
+          本 demo 数据来自自建后端 API；未实现的能力会在对应页面如实标注。
+        </p>
+        {/* 「检查更新」只是打开升级弹窗（该弹窗现已如实说明"更新流程未接入"），不声称更新成功 */}
         <button className="dpcard__btn" onClick={() => navigate('upgrade')}>
           检查更新
         </button>

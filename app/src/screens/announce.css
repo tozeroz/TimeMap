@@ -44,3 +44,16 @@
   line-height: 1.6;
   color: var(--c-text-2);
 }
+
+/* Round 319：群公告的**如实空态**（原版 observed 即"内容区为空"；那 3 条编造公告已删）
+   ⚠️ 刻意保持朴素 —— 原版的空态**是否**长这样未观察 ⇒ 不发明样式。
+   ⚠️ 下方 .ann__item/.ann__head/.ann__tag/.ann__time/.ann__title/.ann__body
+      现已**无使用者**（随编造公告一并作废）。保留而非删除，是因为它们没有被
+      任何"假数据"驱动 —— 只是布局声明；删除与否不影响本次修复的正确性。 */
+.ann__empty {
+  margin: 0;
+  padding: 48px 16px;
+  font-size: 14px;
+  color: var(--c-text-2);
+  text-align: center;
+}
