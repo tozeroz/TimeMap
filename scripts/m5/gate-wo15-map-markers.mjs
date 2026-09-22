@@ -262,6 +262,44 @@ const claims = await evaluate(`(() => {
 })()`)
 log('BASELINE_CLAIMS_MEASURED', claims)
 
+// ---------- 2a-3) ⭐ 真机**点击落点**验证（把两条 _known_gap 从"源码确认"升为"设备实测"）----------
+console.log('')
+console.log('=== 2a-3) 真机点击落点：region → poi ／ fab → publish ===')
+/*
+  ⭐ 为什么单独做这一步（Round 267 自己记下的缺口）：
+    我先前把这两条 claim 标成 MATCH，但 evidence 里如实写了
+    「设备侧只验了控件存在与文案，落点由**源码确认**，真机点击未验」，并留了 _known_gap。
+    现在把缺口补上：真机点一下，看 hash 是否真的变了。
+  ⚠️ 两次点击都是**只读导航**（不产生任何写入），符合本项目对"纯导航点击"的限定。
+  ⚠️ 用完必须**回到地图页**，否则后面的离线/受控 stub 两段会在错误的页面上跑。
+*/
+async function clickAndReadHash(selector, label) {
+  const before = await evaluate('location.hash')
+  const clicked = await evaluate(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)})
+    if (!el) return { ok: false, why: 'not found' }
+    el.click()
+    return { ok: true }
+  })()`)
+  await sleep(1800)
+  const after = await evaluate('location.hash')
+  return { label, before, after, clicked, changed: before !== after }
+}
+const navRegion = await clickAndReadHash('.map__region', 'region→poi')
+log('CLICK_REGION', navRegion)
+// 回到地图页（离开再回来也顺带保证是新鲜挂载）
+await evaluate(`location.hash = '#/campus'`)
+await sleep(1500)
+await evaluate(`location.hash = '#/map'`)
+await sleep(3200)
+const navFab = await clickAndReadHash('.map__fab', 'fab→publish')
+log('CLICK_FAB', navFab)
+// 复位到地图页，供后续段落使用
+await evaluate(`location.hash = '#/campus'`)
+await sleep(1500)
+await evaluate(`location.hash = '#/map'`)
+await sleep(3200)
+
 // ---------- 2b) 离线路径单独验 `.map__marker` DOM ----------
 console.log('')
 console.log('=== 2b) 离线自绘地图路径的标记 DOM（provider 无关量之外的独立验证）===')
@@ -459,19 +497,31 @@ const v = {
   MAP_TENCENT_BASEMAP: claims && claims.providerText === '腾讯地图' && claims.hasTencentWatermark === true
     ? 'PASS'
     : 'FAIL',
-  /** 基线 navigation[0]「地区名 → **选点页（poi/search）**」——用源码+设备控件存在性共同支撑 */
-  MAP_REGION_TO_POI_CONTROL: claims && typeof claims.regionText === 'string' && claims.regionText.length > 0
-    ? 'PASS'
-    : 'FAIL',
-  /** 基线 navigation[1]「+ → **发布页**」 */
-  MAP_PLUS_TO_PUBLISH_CONTROL: claims && claims.fabAria === '发布' ? 'PASS' : 'FAIL',
+  /**
+   * 基线 navigation[0]「地区名 → **选点页（poi/search）**」
+   * ⭐ Round 267 补：此前只验"控件存在 + 文案"（真机落点未验）。
+   *   现在**真机点击**并确认 hash 落到 poi 页 —— 从"源码确认"升为"设备实测"。
+   */
+  MAP_REGION_TO_POI_CONTROL:
+    claims && typeof claims.regionText === 'string' && claims.regionText.length > 0 &&
+    navRegion && navRegion.clicked && navRegion.clicked.ok && navRegion.changed &&
+    /poi/i.test(String(navRegion.after))
+      ? 'PASS'
+      : 'FAIL',
+  /** 基线 navigation[1]「+ → **发布页**」——同上，真机点击后确认落到发布页 */
+  MAP_PLUS_TO_PUBLISH_CONTROL:
+    claims && claims.fabAria === '发布' &&
+    navFab && navFab.clicked && navFab.clicked.ok && navFab.changed &&
+    /publish/i.test(String(navFab.after))
+      ? 'PASS'
+      : 'FAIL',
 
   /** 基线明记未知 → 只记录，不当作可通过项（也不进 KEYS，故不影响裁决） */
   MAP_PIN_COLOR_SEMANTICS_CONFORMANCE: 'NOT_EVALUATED',
   OFFLINE_MAP_PROJECTION_CONFORMANCE: 'NOT_EVALUATED',
   ORIGINAL_MAP_MARKER_CONFORMANCE: 'NOT_EVALUATED',
 
-  detail: { expected, snap: { ...snap, bodyText: undefined }, snapOffline, stub, expectedCount, leakedInNormal, markerCards: (snap && snap.markerCards) || [], baselineClaims: claims },
+  detail: { expected, snap: { ...snap, bodyText: undefined }, snapOffline, stub, expectedCount, leakedInNormal, markerCards: (snap && snap.markerCards) || [], baselineClaims: claims, navRegion, navFab },
   notes: {
     判别性: '期望条数来自**服务端实况**（不写死 6）；主判据用 provider 无关的 data-marker-count',
     /*
