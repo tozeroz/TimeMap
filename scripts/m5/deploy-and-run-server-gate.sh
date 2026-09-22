@@ -24,6 +24,19 @@ scp -i "$KEY" -o BatchMode=yes "$LOCAL_GATE" "$HOST:/tmp/gate-m5.sh" >/dev/null
 echo "  已上传 scripts/gates/m5/gate-server.sh → /tmp/gate-m5.sh"
 
 echo
+echo "=== 1.5) ⭐ 本地静态检查（先证本地是健康的，再谈服务器侧结论）==="
+# 为什么放在**部署之前**：
+#   如果本地类型检查/门禁语法/PS1 完整性就有问题，那么"服务器侧门禁 PASS"是在
+#   验证一份**本身不健康**的产物 —— 顺序上应当先证本地，再证服务器。
+#   这也是把 `check-all-local.sh` 从"一个要记得跑的脚本"变成**流程的一步**：
+#   本会话已两次因"忘了跑某个检查"而让缺陷溜过（solution 配置的 tsc 空过、
+#   deploy-server.ps1 被截断成 3 字节却没人发现）。
+if ! bash 'G:\demo map\scripts\m5\check-all-local.sh'; then
+  echo "  **FAIL** 本地静态检查未通过 —— 先修本地，再跑服务器侧门禁"
+  exit 1
+fi
+
+echo
 echo "=== 2) SERVER_ARTIFACT_PROVENANCE（委托给权威检查器）==="
 # ⚠️ 这里**不再**自己算哈希（原实现用 `sha256sum | cut -d' ' -f1`，
 #    在 Git Bash 下会因 coreutils 对文件名转义而带上前导反斜杠 →
