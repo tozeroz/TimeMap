@@ -1222,6 +1222,78 @@ export function buildServer(deps: ServerDeps) {
   // -------------------------------------------------------------------------
 
   /** 地点详情：地点本体 + 该地点的动态列表（按时间倒序） */
+  // -------------------------------------------------------------------------
+  // WO#18（审核 62 的 A2）：地点**列表/搜索** —— 只读
+  //
+  // 为什么在此之前 PoiSearchScreen 只能读 mock：**此前根本没有这个接口**
+  //   （只有 /api/places/:id 单品）。而 PoiDetailScreen 早已走权威 ⇒ 一真一假。
+  //
+  // ⭐ 最小 read model（按 UI **实际渲染**的字段定，不按 mock 有什么）：
+  //     id / name / address / latitude / longitude / postCount
+  //   ⚠️ mock 里的 `category` 与 `posts` **都没被 UI 渲染** ——
+  //      其中 `posts: 1284` 是"无出处的编造数字"，本接口用**真实 COUNT** 取代它。
+  //   ⚠️ `distance` 由**客户端**算（依赖用户当前位置），服务端不返回 ——
+  //      没有定位就不渲染，不编造（同 WO#15 对「距我N公里」的处置）。
+  //
+  // ⭐ `postCount` 这里**可以**是真值（与校园圈的 campusCircleCount 不同）：
+  //     posts.place_id 是**直接外键**，归属已存在且权威 ⇒ COUNT 即真值，无需推断。
+  //     而 campusCircleCount 必须 null 是因为归属列全空、根本不知道属于哪个校区。
+  //     **两者不可类比。**
+  //
+  // ⚠️ 服务端过滤（沿用 WO#12 纪律）：客户端 filter 只有"永远返回全集"才等价，
+  //    一旦加 limit 会静默变成"不完整但看起来完整"。
+  // -------------------------------------------------------------------------
+  app.get('/api/places', async (req, reply) => {
+    const q = String((req.query as { q?: string }).q ?? '').trim()
+    try {
+      /*
+        ⚠️ 用参数化 + 上限，避免无界返回；
+          `q` 用 ILIKE 子串匹配（与 mock 版本的 includes 语义一致）。
+      */
+      const params: unknown[] = []
+      let where = ''
+      if (q) {
+        params.push('%' + q + '%')
+        where = "where pl.name ilike $1 or coalesce(pl.address, '') ilike $1"
+      }
+      params.push(200)
+      const r = await db.pool.query<{
+        id: string
+        name: string
+        address: string | null
+        latitude: number | null
+        longitude: number | null
+        post_count: string
+      }>(
+        'select pl.id, pl.name, pl.address, pl.latitude, pl.longitude, ' +
+          '(select count(*) from posts p where p.place_id = pl.id)::text as post_count ' +
+          'from places pl ' +
+          where +
+          ' order by pl.name, pl.id limit $' +
+          String(params.length),
+        params,
+      )
+      return {
+        items: r.rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          address: row.address,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          /**
+           * 真实计数（posts.place_id 是直接外键 ⇒ 无需推断）。
+           * ⚠️ 与 campusCircleCount 的 null 语义**不同**，别混。
+           */
+          postCount: Number(row.post_count),
+        })),
+      }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
   app.get('/api/places/:id', async (req, reply) => {
     const id = (req.params as { id?: string }).id ?? ''
     if (!/^[0-9a-f-]{36}$/i.test(id)) {

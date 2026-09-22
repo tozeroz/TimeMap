@@ -1,0 +1,10 @@
+{
+  "_provenance": {
+    "source": "app/src/data/mock.ts（WO#18 之前）",
+    "extracted_at": "2026-09-22T14:07:02.067Z",
+    "extracted_by": "scripts/m5/extract-legacy-pois.mjs",
+    "reason": "WO#18（审核 62 的 A2）要求 PoiSearchScreen 接权威数据源。这份 mock 地点数据在 WO#18 之后**已无任何生产引用**。",
+    "why_must_not_be_used": "⚠️ 它**不是**权威数据：其中 `posts` 字段（如 1284 / 143 / 143）是**无出处的编造数字**；`address` 与真实行**不一致**（mock 多出「北京市海淀区」前缀，而权威行是「西直门外上园村3号」，后者与基线实例更接近）；`distance` 是硬编码的固定文案，与用户实际位置无关。只可用于对照 WO#18 的敏感度（突变把它接回去 ⇒ 门禁必须变红）。",
+    "original_ts_source": "export const pois: Poi[] = [\n  {\n    id: 'poi1',\n    name: '北京交通大学',\n    address: '北京市海淀区西直门外上园村3号',\n    distance: '0m',\n    category: '学校',\n    posts: 1284,\n  },\n  {\n    id: 'poi2',\n    name: '北京交通大学教学楼8号楼',\n    address: '北京市海淀区西直门外上园村3号',\n    distance: '160m',\n    category: '教学楼',\n    posts: 207,\n  },\n  {\n    id: 'poi3',\n    name: '北京交通大学交通运输学院',\n    address: '北京市海淀区西直门外上园村3号',\n    distance: '320m',\n    category: '院系',\n    posts: 96,\n  },\n  {\n    id: 'poi4',\n    name: '思源楼',\n    address: '北京交通大学校内',\n    distance: '410m',\n    category: '教学楼',\n    posts: 143,\n  },\n  {\n    id: 'poi5',\n    name: '教育超市',\n    address: '北京交通大学校内',\n    distance: '520m',\n    category: '超市',\n    posts: 88,\n  },\n]\n"
+  }
+}

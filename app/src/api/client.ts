@@ -890,6 +890,40 @@ export async function getPlace(id: string): Promise<ApiResult<ApiPlaceDetail>> {
 }
 
 // ---------------------------------------------------------------------------
+// 地点列表 / 搜索（M5 WO#18；审核 62 的 A2）
+//
+// 为什么现在才有：`PoiSearchScreen` 此前只能读 mock 的 `pois` ——
+// 因为服务端**只有** `/api/places/:id`（单品）。而 PoiDetailScreen 早已走权威
+// ⇒ 又是一处"同一实体两种来源"。
+//
+// ⭐ `postCount` 的语义（与校园圈的 `campusCircleCount` **不同**，别混）：
+//     `posts.place_id` 是**直接外键** ⇒ 归属已存在且权威 ⇒ COUNT 即真值，**不是 null**。
+//     campusCircleCount 之所以必须 null，是因为 `posts.school_campus_id` 全空、
+//     根本不知道帖子属于哪个校区 —— 那是"归属缺失"，这是"归属存在"。
+//
+// ⚠️ `distance` **不在**这个返回里：它依赖**用户当前位置**（客户端才知道）。
+//    服务端不猜距离；客户端有定位才算，没定位就不渲染（不编造）。
+// ---------------------------------------------------------------------------
+
+export interface ApiPlaceListItem {
+  id: string
+  name: string
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+  /** 真实计数（直接外键，无需推断）；**不是** null 语义 */
+  postCount: number
+}
+
+/** 地点列表；`q` 为服务端子串过滤（沿用 WO#12 纪律：不用客户端 filter） */
+export async function listPlaces(q?: string): Promise<ApiResult<ApiPlaceListItem[]>> {
+  const qs = q && q.trim() ? '?q=' + encodeURIComponent(q.trim()) : ''
+  const r = await request<{ items: ApiPlaceListItem[] }>('/api/places' + qs)
+  if (!r.ok) return r
+  return { ok: true, value: r.value.items ?? [] }
+}
+
+// ---------------------------------------------------------------------------
 // 学校 / 校区（M5 WO#16 层 B；审核 61 批准）
 //
 // ⭐ `campusCircleCount` 的语义（审核 60 的计数策略 A，**最容易搞错的一处**）：

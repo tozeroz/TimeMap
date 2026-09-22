@@ -78,7 +78,7 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 
 <!-- BEGIN:MACHINE-SNAPSHOT -->
 扫描范围：app/src/screens（26 个文件）
-统计：api-only=14 ／ mock+api=1 ／ mock-only=4 ／ types-only=0 ／ none=7
+统计：api-only=15 ／ mock+api=1 ／ mock-only=3 ／ types-only=0 ／ none=7
 
 | AnnounceScreen.tsx | none | — | — | — |
 | BoardScreen.tsx | mock+api | boardEmojis | — | getBoardNotes, postBoardNote, relativeTime |
@@ -98,7 +98,7 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 | MoreScreen.tsx | none | — | — | — |
 | OnboardingScreen.tsx | none | — | — | — |
 | PoiDetailScreen.tsx | api-only | — | — | avatarFor, getPlace, relativeTime |
-| PoiSearchScreen.tsx | mock-only | pois | — | — |
+| PoiSearchScreen.tsx | api-only | — | — | listPlaces |
 | ProfileEditScreen.tsx | api-only | — | — | me, patchMyDisplayName, updateSessionUser |
 | PublishScreen.tsx | api-only | — | — | createPost, toFeedPost |
 | ScannerScreen.tsx | mock-only | scannerHints | — | — |

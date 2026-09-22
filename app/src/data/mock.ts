@@ -56,14 +56,14 @@ export interface ChatMessage {
   time: string
 }
 
-export interface Poi {
-  id: string
-  name: string
-  address: string
-  distance: string
-  category: string
-  posts: number
-}
+/*
+  WO#18：`Poi` 接口**已移除** —— 它原先只服务于 `export const pois`（同批移出，
+  → scripts/m5/fixtures/legacy-pois.json）。移出后它在全仓**已无任何引用**
+  （核对过：其余 `Poi` 命中都是路由名 / class 名 / ApiPlace* 类型）。
+  ⚠️ 一并去掉的理由：留着一个"描述假数据形状"的类型，
+     等于给未来的自己留了把假数据加回来的模板。
+  ⚠️ 地点数据的权威类型现在是 `ApiPlaceListItem`（app/src/api/client.ts）。
+*/
 
 export interface BoardNote {
   id: string
@@ -377,48 +377,22 @@ export const threads: ChatThread[] = [
   },
 ]
 
-export const pois: Poi[] = [
-  {
-    id: 'poi1',
-    name: '北京交通大学',
-    address: '北京市海淀区西直门外上园村3号',
-    distance: '0m',
-    category: '学校',
-    posts: 1284,
-  },
-  {
-    id: 'poi2',
-    name: '北京交通大学教学楼8号楼',
-    address: '北京市海淀区西直门外上园村3号',
-    distance: '160m',
-    category: '教学楼',
-    posts: 207,
-  },
-  {
-    id: 'poi3',
-    name: '北京交通大学交通运输学院',
-    address: '北京市海淀区西直门外上园村3号',
-    distance: '320m',
-    category: '院系',
-    posts: 96,
-  },
-  {
-    id: 'poi4',
-    name: '思源楼',
-    address: '北京交通大学校内',
-    distance: '410m',
-    category: '教学楼',
-    posts: 143,
-  },
-  {
-    id: 'poi5',
-    name: '教育超市',
-    address: '北京交通大学校内',
-    distance: '520m',
-    category: '超市',
-    posts: 88,
-  },
-]
+/*
+  WO#18（审核 62 的 A2）：`export const pois` 这个**数据导出已移出生产代码**。
+
+  ⚠️ 为什么移出而不是留在这里加注释：WO#16/WO#17 已两次确认的纪律 ——
+     "**注释挡不住重新 import**"。只要数据还在生产模块里，
+     重新 import 一下就会再次形成"同一实体两种来源"。
+
+  ⚠️ 它不是权威数据：
+     · `posts`（1284 / 143 / …）是**无出处的编造数字**
+     · `address` 与真实行不一致（mock 多「北京市海淀区」前缀）
+     · `distance` 是硬编码固定文案，与用户位置无关
+
+  → 已移出至 scripts/m5/fixtures/legacy-pois.json（附 provenance 与"为何不得使用"）
+  ⚠️ PoiSearchScreen 现在读 `GET /api/places`（WO#18 新增）；
+     PoiDetailScreen 早已读 `GET /api/places/:id` ⇒ 两者同源。
+*/
 
 export const boardNotes: BoardNote[] = [
   {
