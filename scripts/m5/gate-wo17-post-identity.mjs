@@ -29,7 +29,7 @@
  * ════════════════════════════════════════════════════════════════════
  * 断言（5 键）
  * ════════════════════════════════════════════════════════════════════
- *   MISSING_ID_NO_ENTITY_LEAK_COMMENTS  #/comments?id=<不存在> ⇒ 不出现任何真实动态正文
+ *   MISSING_ID_NO_ENTITY_LEAK_FEED_COMMENTS  #/feed?id=<不存在> ⇒ 整页（含内联评论区）不出现任何真实动态正文
  *   MISSING_ID_NO_ENTITY_LEAK_FEED      #/feed?id=<不存在>     ⇒ 同上
  *   SAME_IDENTITY_ACROSS_SCREENS        同一有效 id ⇒ 两屏作者**一致**（同一实体）
  *   COMMENTS_COUNT_FROM_AUTHORITY       评论屏的「评论 N」== 该动态在**API** 的评论总数
@@ -95,14 +95,29 @@ const READ = `(() => {
   const q = (s) => document.querySelector(s)
   const el = q('[data-cd-state]')
   const txt = (q('.screen') || document.body).innerText
+  /*
+    ⭐ WO#19：评论区的观测点已迁到 **FeedDetail 的真实评论表面** ——
+      它的 markup 是 .feed__comments-title（「评论 N」）与 .feed__noComments（空态），
+      **不是** 我为旧 CommentsScreen 加的 data-cd-* 钩子。
+      ⚠️ 这里修过我上一版的疏漏：上一版只把**导航**迁到了 #/feed，
+        却仍读旧屏的 data-cd-count ⇒ 两条断言 INCONCLUSIVE（读不到值＝等于没在测）。
+        INCONCLUSIVE 而不是 PASS 说明没伪装成通过，但**必须补完**：
+        **迁观测点时要一并迁"读取的具体节点"**。
+  */
+  const ft = q('.feed__comments-title')
+  const fn = q('.feed__noComments')
+  const legacyCount = q('[data-cd-count]')
   return {
     hash: location.hash,
-    cdState: el ? el.getAttribute('data-cd-state') : null,
+    cdState: el ? el.getAttribute('data-cd-state') : fn ? 'empty' : null,
     author: q('[data-cd-author]') ? q('[data-cd-author]').getAttribute('data-cd-author') : null,
-    countText: q('[data-cd-count]') ? q('[data-cd-count]').innerText.replace(/\\s+/g,' ').trim() : null,
-    cmtBodies: [...document.querySelectorAll('[data-cmt-body]')].map(e=>e.getAttribute('data-cmt-body')),
+    countText: (ft || legacyCount) ? (ft || legacyCount).innerText.replace(/\\s+/g,' ').trim() : null,
+    hasCommentTitle: !!ft,
+    hasNoCommentsText: !!fn,
+    cmtBodies: [...document.querySelectorAll('.cmt[data-comment-id]')].map((n) => (n.querySelector('.cmt__text')||{}).innerText || ''),
+    repliesOf: [...document.querySelectorAll('[data-replies-of]')].map((n) => n.getAttribute('data-replies-of')),
     text: txt.replace(/\\s+/g,' ').trim().slice(0, 600),
-    hasHooks: !!q('[data-cd-state]') || !!q('[data-cd-count]') || !!q('[data-cd-author]'),
+    hasHooks: !!q('[data-cd-state]') || !!q('[data-cd-count]') || !!q('[data-cd-author]') || !!ft,
   }
 })()`
 
@@ -144,8 +159,13 @@ function leakedBodies(view) {
 
 // ── 段 1：不存在的 id（两屏）────────────────────────────────────────
 console.log('')
-console.log('=== 1) #/comments?id=<不存在>：不得出现任何真实动态正文 ⭐ ===')
-const commentsMissing = await goto(`#/comments?id=${MISSING}`)
+/*
+  ⭐ WO#19：本段原为 #/comments（该产品路由已按审核 65 删除）。
+    现在观测 **FeedDetail 的真实评论表面** —— 因为评论区**内联在 #/feed 里**。
+    ⚠️ 判据不变：不存在的 id 下，**整页（含评论区）不得出现任何真实动态正文**。
+*/
+console.log('=== 1) #/feed?id=<不存在>：整页（含内联评论区）不得出现任何真实动态正文 ⭐ ===')
+const commentsMissing = await goto(`#/feed?id=${MISSING}`)
 log('COMMENTS_MISSING', commentsMissing)
 const leakC = leakedBodies(commentsMissing)
 
@@ -162,8 +182,12 @@ let commentsReal = null
 let feedReal = null
 const zeroComment = exp ? exp.items.find((p) => p.total === 0) : null
 if (exp && exp.items[0]) {
-  commentsReal = await goto(`#/comments?id=${exp.items[0].id}`)
+  /*
+    ⭐ WO#19：原来这里分别打开 #/comments 与 #/feed 两屏做"身份一致"比较。
+      独立评论页已删除 ⇒ 只在 **FeedDetail 一屏**上观测（评论区内联在内）。
+  */
   feedReal = await goto(`#/feed?id=${exp.items[0].id}`)
+  commentsReal = feedReal
   log('COMMENTS_REAL', commentsReal)
   log('FEED_REAL', feedReal)
 }
@@ -208,41 +232,50 @@ function displayedAuthorFromText(view, apiAuthor) {
 }
 
 const v = {
-  MISSING_ID_NO_ENTITY_LEAK_COMMENTS: noLeakVerdict(commentsMissing, leakC),
+  /* ⭐ WO#19：本键观测点已迁到 FeedDetail 的**内联评论区**（原 #/comments 已删） */
+  MISSING_ID_NO_ENTITY_LEAK_FEED_COMMENTS: noLeakVerdict(commentsMissing, leakC),
   MISSING_ID_NO_ENTITY_LEAK_FEED: noLeakVerdict(feedMissing, leakF),
   /**
-   * 同一 id 下两屏显示**同一实体**。
-   * ⚠️ 用**文本推导**（拿服务端该 id 的作者名去页面里找）而不是依赖 `data-cd-author`
-   *    —— 见 noLeakVerdict 上方对"断言口径错"的说明。
+   * ⭐ WO#19 取代 `SAME_IDENTITY_ACROSS_SCREENS`：
+   *   独立评论页已删 ⇒ "两屏一致"不再有意义（只有一个屏）。
+   *   改为断言**评论区内联在 FeedDetail 同一页**（这正是本 WO 的结构目标）：
+   *     · URL 仍是 `#/feed?id=...`（没有跳到独立评论路由）
+   *     · 同一页上同时出现：动态正文 + 「评论 N」+（0 评论时空态文字）
+   *   ⚠️ 判据取自**权威**：N 与 API 的 total 比较（见下一条），此处只看"在同一页"。
    */
-  SAME_IDENTITY_ACROSS_SCREENS: (() => {
-    if (!commentsReal || !feedReal || !exp) return 'INCONCLUSIVE'
-    const apiAuthor = exp.items[0].author
-    const inComments = displayedAuthorFromText(commentsReal, apiAuthor) || commentsReal.author
-    const inFeed = displayedAuthorFromText(feedReal, apiAuthor)
-    if (!inComments || !inFeed) return 'FAIL'
-    return inComments === inFeed && inFeed === apiAuthor ? 'PASS' : 'FAIL'
+  COMMENTS_INLINE_IN_FEED: (() => {
+    if (!feedReal || !exp) return 'INCONCLUSIVE'
+    const t = String(feedReal.text || '')
+    const samePage = /^#\/feed\?id=/.test(String(feedReal.hash || ''))
+    const hasPostBody = t.includes(String(exp.items[0].body).slice(0, 10))
+    const hasCommentTitle = /评论\s*\d+/.test(t)
+    return samePage && hasPostBody && hasCommentTitle ? 'PASS' : 'FAIL'
   })(),
-  /** 评论屏的「评论 N」== API 的评论总数（不读 mock） */
-  COMMENTS_COUNT_FROM_AUTHORITY:
-    !commentsReal || !exp || !commentsReal.countText
-      ? 'INCONCLUSIVE'
-      : Number(String(commentsReal.countText).replace(/[^0-9]/g, '')) ===
-          Number(exp.items[0].total)
-        ? 'PASS'
-        : 'FAIL',
+  /**
+   * 评论区的「评论 N」== API 的评论总数（不读 mock）。
+   * ⭐ WO#19：观测点 = **FeedDetail 的** .feed__comments-title（旧屏已删）。
+   */
+  COMMENTS_COUNT_FROM_AUTHORITY: (() => {
+    const view = feedReal || commentsReal
+    if (!view || !exp || !view.countText) return 'INCONCLUSIVE'
+    const shown = Number(String(view.countText).replace(/[^0-9]/g, ''))
+    return shown === Number(exp.items[0].total) ? 'PASS' : 'FAIL'
+  })(),
   /**
    * ⭐ 0 评论的动态必须显示**空态**。
    *   为什么这条有判别力：mock 的 `comments` 数组是**非空**的 ⇒
    *   若实现仍读 mock，这里会渲染出评论行而不是空态。
+   * ⭐ WO#19：空态与"零评论行"都改在 **FeedDetail 的真实评论表面**上判：
+   *   `.feed__noComments` 存在，且 `.cmt[data-comment-id]` 行数为 0。
    */
   NO_MOCK_COMMENT_CONTENT: !zeroComment || !hasNewHooks
     ? 'INCONCLUSIVE'
     : await (async () => {
-        const view = await goto(`#/comments?id=${zeroComment.id}`)
+        const view = await goto(`#/feed?id=${zeroComment.id}`)
         log('COMMENTS_ZERO_COMMENT_POST', view)
-        const countOk = String(view.countText || '').includes('评论 0')
-        const emptyOk = view.cdState === 'empty' || /留下你的评论吧/.test(String(view.text))
+        const countOk = /评论\s*0/.test(String(view.countText || ''))
+        const emptyOk =
+          view.hasNoCommentsText === true || /还没有评论|留下你的评论吧/.test(String(view.text))
         const noRows = (view.cmtBodies || []).length === 0
         return countOk && emptyOk && noRows ? 'PASS' : 'FAIL'
       })(),
@@ -272,9 +305,9 @@ const v = {
 }
 
 const KEYS = [
-  'MISSING_ID_NO_ENTITY_LEAK_COMMENTS',
+  'MISSING_ID_NO_ENTITY_LEAK_FEED_COMMENTS',
   'MISSING_ID_NO_ENTITY_LEAK_FEED',
-  'SAME_IDENTITY_ACROSS_SCREENS',
+  'COMMENTS_INLINE_IN_FEED',
   'COMMENTS_COUNT_FROM_AUTHORITY',
   'NO_MOCK_COMMENT_CONTENT',
 ]

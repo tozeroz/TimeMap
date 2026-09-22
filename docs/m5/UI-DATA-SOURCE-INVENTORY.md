@@ -77,14 +77,13 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 ## 五、机器可读快照（由 scripts/m5/ui-data-source-inventory.mjs --write 生成）
 
 <!-- BEGIN:MACHINE-SNAPSHOT -->
-扫描范围：app/src/screens（26 个文件）
-统计：api-only=15 ／ mock+api=1 ／ mock-only=3 ／ types-only=0 ／ none=7
+扫描范围：app/src/screens（25 个文件）
+统计：api-only=14 ／ mock+api=1 ／ mock-only=3 ／ types-only=0 ／ none=7
 
 | AnnounceScreen.tsx | none | — | — | — |
 | BoardScreen.tsx | mock+api | boardEmojis | — | getBoardNotes, postBoardNote, relativeTime |
 | CampusScreen.tsx | api-only | — | FeedPost | isLoggedIn, likePost, listPosts, listSchoolCampuses, listSchools, readSnapshot, toFeedPost, unlikePost |
 | ChatScreen.tsx | api-only | — | — | fetchMediaBlobUrl, getSession, getThread, getThreadMessages, postThreadImageMessage, postThreadTextMessage, postThreadVoiceMessage, relativeTime, uploadMedia |
-| CommentsScreen.tsx | api-only | — | — | createComment, isLoggedIn |
 | DailyScreen.tsx | none | — | — | — |
 | DrawerPages.tsx | none | — | — | — |
 | FeedDetailScreen.tsx | api-only | — | — | avatarFor, createComment, isLoggedIn, likePost, mediaUrl, relativeTime, unlikePost |

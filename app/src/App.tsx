@@ -7,7 +7,6 @@ import { SchoolSearchScreen } from './screens/SchoolSearchScreen'
 import { MeScreen } from './screens/MeScreen'
 import { MapScreen } from './screens/MapScreen'
 import { FeedDetailScreen } from './screens/FeedDetailScreen'
-import { CommentsScreen } from './screens/CommentsScreen'
 import { MessageScreen } from './screens/MessageScreen'
 import { ChatScreen } from './screens/ChatScreen'
 import { BoardScreen } from './screens/BoardScreen'
@@ -69,7 +68,17 @@ export default function App() {
         由页面显示"未指定"(而不是拿一个 mock 默认值假装成功)。
       */}
       {root === 'feed' && <FeedDetailScreen id={route.query.id ?? param ?? ''} />}
-      {root === 'comments' && <CommentsScreen id={route.query.id ?? param ?? ''} />}
+      {/*
+        ⭐ WO#19（审核 65）：**已删除** #/comments 独立产品路由。
+        为什么删而不是保留：原版**根本没有**独立的 comments 屏 ——
+        M3 证据（docs/original-baseline/supplements/comment-detail.json）明确：
+          "评论区作为 ViewPager(id/vp_detail) 的一页**内联在动态详情里**"，
+          且该 supplement 带 supersedes，取代了 M0 的 deep-link 观察（那只是无参空态）。
+        ⇒ 评论区现由 #/feed（FeedDetailScreen）**内联渲染** —— 它早已按 M3 实现
+          （见该文件顶部注释与 .feed__comments 段）。
+        ⚠️ 审核 64 的纠正："不要为了测试方便永久保留一个原版不存在的产品页面" ⇒
+          Gate 已迁到 FeedDetail 的**真实评论表面**（scripts/m5/gate-wo17-post-identity.mjs）。
+      */}
       {root === 'message' && <MessageScreen />}
       {/*
         M5 WO#8：会话路由的 id 解析（**修掉一个真实缺陷**）。
