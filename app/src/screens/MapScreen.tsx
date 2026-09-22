@@ -7,8 +7,8 @@ import {
   IconLocation,
   IconPlus,
 } from '../components/icons'
-import { listPosts, mediaUrl } from '../api/client'
-import type { ApiPost } from '../api/client'
+import { listPosts, listSchools, mediaUrl } from '../api/client'
+import type { ApiPost, ApiSchool } from '../api/client'
 import type { MapMarker } from '../native/mapApi'
 import { AmapMap } from '../native/AmapMap'
 import { RealMap } from '../native/RealMap'
@@ -273,6 +273,29 @@ export function MapScreen() {
     ⚠️ 刻意**没有** `|| mapMarkers` 这种回落：那正是 WO#12/#14 反复修掉的
        "用编造数据冒充真实"。
   */
+  /*
+    ⭐ WO#16 层 B 第 4 条：地区控件改接**权威实体**。
+    ⚠️ 只取**学校名** —— 「当前选中校区」按审核 60 是 **DO NOT INFER**
+      （没有任何依据说当前选的是校本部），所以**不**显示"（校本部）"。
+      该差异登记为 MAP_REGION_CAMPUS_PART: OMITTED_NO_AUTHORITATIVE_SELECTION。
+    ⚠️ 读不到时**不回落硬编码文案**（那会退回"看起来有数据"）⇒ 显示明确"学校未知"。
+  */
+  const [school, setSchool] = useState<ApiSchool | null>(null)
+  const [schoolPhase, setSchoolPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+
+  useEffect(() => {
+    void (async () => {
+      const r = await listSchools()
+      if (r.ok && r.value.length > 0) {
+        setSchool(r.value[0])
+        setSchoolPhase('ready')
+      } else {
+        setSchool(null)
+        setSchoolPhase('unavailable')
+      }
+    })()
+  }, [])
+
   const [markers, setMarkers] = useState<MapMarker[]>([])
   const [markerPhase, setMarkerPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
 
@@ -518,8 +541,15 @@ export function MapScreen() {
         <header className="map__head">
           <div className="map__titlewrap">
             <h1 className="map__title">Map</h1>
-            <button className="map__region" onClick={() => navigate('poi')}>
-              <span>北京交通大学（校本部）</span>
+            <button
+              className="map__region"
+              data-region-phase={schoolPhase}
+              onClick={() => navigate('poi')}
+            >
+              {/* 权威学校名（GET /api/schools）；读不到时**不显示**编造文案 */}
+              <span data-region-school>
+                {schoolPhase === 'ready' && school ? school.name : '学校未知'}
+              </span>
               <IconChevronDown size={13} />
             </button>
           </div>
