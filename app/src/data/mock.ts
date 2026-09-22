@@ -316,39 +316,22 @@ export const posts: FeedPost[] = [
   },
 ]
 
-export const comments: Comment[] = [
-  {
-    id: 'c1',
-    author: users.u6,
-    text: '这个我也有！养了两周真的长出来了',
-    time: '2 分钟前',
-    likes: 12,
-    replies: [
-      { id: 'c1r1', author: users.u1, text: '真的假的，我要去浇水了', time: '1 分钟前', likes: 3 },
-    ],
-  },
-  {
-    id: 'c2',
-    author: users.u8,
-    text: '同款娃，不过我的已经被舍友养死了',
-    time: '10 分钟前',
-    likes: 28,
-  },
-  {
-    id: 'c3',
-    author: users.u9,
-    text: '在哪里买的呀，求链接',
-    time: '18 分钟前',
-    likes: 6,
-  },
-  {
-    id: 'c4',
-    author: users.u10,
-    text: '好可爱，草长出来记得更新',
-    time: '25 分钟前',
-    likes: 4,
-  },
-]
+/*
+  WO#17（审核 62 的 A1）：`export const comments` 这个**数据导出已移出生产代码**。
+
+  ⚠️ 为什么移出而不是留在这里加注释：审核 60 在 WO#16 已确立 ——
+     "**注释挡不住重新 import**"。只要数据还在生产模块里，
+     重新 import 一下就会再次形成"同一实体两种内容"（一真一假）。
+     审核 62 对 A1 的要求原文："**不再保留**'一真一假'的双数据源"。
+
+  ⚠️ 它**不是**权威数据：内容与作者均为编造，
+     与 FeedDetailScreen 用的真实 /api/posts/:id/comments 会冲突。
+
+  → 已移出至 scripts/m5/fixtures/legacy-comments.json（附 provenance 与"为何不得使用"）
+  ⚠️ `Comment` 接口**保留** —— FeedPost.replies 仍依赖它。
+  ⚠️ 对照：CommentsScreen 现在与 FeedDetailScreen 共用
+     `app/src/data/postIdentity.ts` 的 resolvePostAndComments（**唯一**实现）。
+*/
 
 export const threads: ChatThread[] = [
   {
