@@ -720,3 +720,18 @@ N(并发 DB 客户端)  READY_AT  loadavg(before→after)  'database unreachable
       WO14 诊断脚本改过的昵称**已自行恢复**（seed 无污染）
 - [x] ⚠️ 再次踩到（已记录，避免再用）：**在 PowerShell 里内联含 `||` 的 SQL** 会破解析 →
       一律改用已有脚本（本项目早有此纪律，本轮又犯一次）
+
+### WO14 改前 FAIL 证据（Round 264 追加）
+- [x] ✅ **门禁已写好并拿到改前 FAIL**（`scripts/m5/gate-wo14-me-identity.mjs`，`DEVICE_GATE_EXIT=1`）：
+      `ME_IDENTITY_FROM_SESSION` ／ `ME_DISPLAY_NAME_CONSISTENCY` ／
+      `PROFILE_EDIT_TO_ME_CONTINUITY` ／ `ME_AVATAR_PLACEHOLDER` ／ `NO_MOCK_SELF_IDENTITY` **全 FAIL**；
+      `ME_NO_FALLBACK_ON_UNAVAILABLE` 记 **NOT_EVALUATED**（清 session 会破坏同轮其它断言，故不假装验过）
+      ⭐ 连续性那条最能说明"两处缺陷独立"：**保存本身成功**（savedOk=true），
+        但回「我的」**两处都没跟随** —— 中心名因走 mock、登录行因读陈旧会话缓存
+      seed 已精确恢复（`displayName:"Lemy"`）
+- [x] ✅ **修掉我自己门禁里一个会把 5 条 FAIL 洗成绿的判定 bug**：
+      第一版 `every(PASS) ? PASS : some(NOT_EVALUATED) ? PASS_WITH_NOT_EVALUATED : FAIL`
+      → 只要存在任一 NOT_EVALUATED 就**遮蔽 FAIL**，实测首跑输出 `PASS_WITH_NOT_EVALUATED` 且 **exit 0**（假绿）。
+      已改为**先 FAIL → 再 NOT_EVALUATED → 最后全 PASS**，并新增 `WO14_GATE_REASON` 列出失败项。
+      （同类缺陷本轮还修过：CORS 门禁的"逐项覆盖导致最后一项赢"、"把跳过当 PASS"）
+- [ ] WO14.2 ⬅ **等审核批准计划**（4 个裁定点）；批准后即可实施（改前 FAIL 已就位，改后应转全 PASS）
