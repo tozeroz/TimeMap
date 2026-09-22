@@ -93,6 +93,29 @@ const expected = await evaluate(`(async () => {
       // 服务端的全部地名（用于"页面上每个地名都要能对上"的判定）
       allPlaces: [...new Set(items.map((p) => p.place).filter(Boolean))],
       hasCoordFields: items.length > 0 ? 'placeLat' in items[0] && 'placeLng' in items[0] : null,
+      /*
+        ⭐ Round 267：把**卡片内容**的期望值也取回来（补上 Round 266 发现的断言缺口）。
+        为什么需要它：Round 266 我查出并修掉了一个**自己引入的回归** ——
+        三个地图实现原本用 posts.find(p => p.id === m.postId) 去 **mock** 里查帖子，
+        而 WO#15 之后 m.postId 是真实 UUID ⇒ find 永远 undefined
+        ⇒ 卡片封面与文字**都是空**（标记仍画得出、地名也在，所以极难发现）。
+        **而当时那批断言完全没覆盖卡片内容** ⇒ 这是断言覆盖面的缺口，不是运气问题。
+        ⇒ 现在把"每条有坐标的帖子：有没有图 / 正文前 10 字"取回来做期望值。
+        ⚠️ 只取前 10 字：markersFromPosts 里 excerpt 就是 p.body.slice(0, 10)，
+           Gate 必须与实现**同一口径**，否则会因口径差异产生假 FAIL。
+        ⚠️⚠️ **本注释在模板字面量内部，因此绝不能出现反引号** ——
+           我第一版就是在这里写了反引号，**提前结束了外层模板字面量**，
+           于是 node 把错误报到了后面那行（"missing ) after argument list"）。
+           同类问题本会话已是**第五次**（JSDoc 里的注释结束符、SQL 注释里的反引号、
+           注释里的 import、以及给审核消息内联时的反引号）。
+           ⇒ 习惯：**在模板字面量/注释内部引用代码时，不要用反引号包裹。**
+      */
+      cardExpect: withCoords.map((p) => ({
+        place: p.place,
+        hasImages: Array.isArray(p.images) && p.images.length > 0,
+        mediaId: Array.isArray(p.images) && p.images.length > 0 ? p.images[0].id : null,
+        excerpt: (p.body || '').slice(0, 10),
+      })),
     }
   } catch (e) {
     return { ok: false, why: String(e && e.message) }
@@ -137,6 +160,25 @@ const snapMap = () =>
     declaredCount: badge && badge.getAttribute('data-marker-count') ? Number(badge.getAttribute('data-marker-count')) : (badge && badge.getAttribute('data-marker-phase') === 'empty' ? 0 : null),
     /** 只有离线自绘地图才有这些 DOM 节点 */
     offlineMarkerDomCount: cards.length,
+    /*
+      ⭐ Round 267：读**标记卡片的内容**（补 Round 266 发现的断言缺口）。
+      卡片 DOM 由三个地图实现里的 buildMarkerElement 构造（.rm 结构，
+      在线 SDK 与离线自绘**同构**），因此它在**两条渲染路径上都能查到** ——
+      这与 .map__marker（只有离线自绘有）不同。
+      实测（probe-map-card-dom.mjs）：在线腾讯路径下 .rm = 4、
+      .rm__img = 4（其中 2 个是封面 img、2 个是 .rm__img--text 文本）、.rm__name = 4。
+      ⚠️ 本注释在模板字面量内部 ⇒ **不能出现反引号**（我在这里又踩了一次同名错误）。
+    */
+    markerCards: [...document.querySelectorAll('.rm')].map((el) => {
+      const img = el.querySelector('img.rm__img')
+      const txt = el.querySelector('.rm__img--text')
+      const nameEl = el.querySelector('.rm__name')
+      return {
+        name: nameEl ? (nameEl.textContent || '').trim() : null,
+        coverSrc: img ? img.getAttribute('src') : null,
+        excerpt: txt ? (txt.textContent || '').trim() : null,
+      }
+    }),
     provider: (document.body.innerText.match(/腾讯地图|高德地图|在线地图|离线自绘底图/) || [null])[0],
     bodyText,
   }
@@ -287,12 +329,68 @@ const v = {
       ? 'PASS'
       : 'FAIL',
 
+  /**
+   * ⭐⭐ Round 267：**标记卡片的可见内容必须来自权威帖子**（补 Round 266 的断言缺口）。
+   *
+   * ## 为什么必须补（这是那条回归漏掉的原因，不是"再加一条保险"）
+   *   Round 266 closeout 时我查出：三个地图实现原本
+   *     `const post = posts.find((p) => p.id === m.postId)`  → **去 mock 里查帖子**
+   *   而 WO#15 之后 `m.postId` 是**真实帖子的 UUID**（mock 里是 p1/p2…）
+   *   ⇒ 该 find **永远 undefined** ⇒ `cover` 与 `(post?.text ?? '')` **都是空**
+   *   ⇒ **卡片封面与文字全都空着**；而标记仍画得出来、地名也还在，
+   *     所以表现为"卡片没内容" —— **极难发现**。
+   *   ⚠️ **当时那批断言完全没覆盖卡片内容** ⇒ 是断言覆盖面的缺口。
+   *
+   * ## 判别力从哪来（关键在"文字要**等于**权威正文前 10 字"）
+   *   · 只断言"卡片非空"**判别力弱**：任何非空内容都能过。
+   *   · 本断言要求：**没有封面的帖子，其卡片的文字必须 == 该帖 `body` 的前 10 字**。
+   *     旧代码下那是**空字符串** ⇒ **必然 FAIL**；现有实现下逐条相等 ⇒ PASS。
+   *   · 有封面的帖子则要求卡片里有 `<img class="rm__img">` 且 src 指向 **本服务的 /api/media/<该帖 media id>**
+   *     （既证明"有图"，也证明**图来自权威媒体链路**、不是写死的 URL）。
+   *
+   * ⚠️ 口径必须与实现一致（否则会产生假 FAIL）：
+   *   实现是 `excerpt: p.body ? p.body.slice(0, 10) : undefined`；Gate 用 `(p.body||'').slice(0,10)`。
+   *
+   * ⚠️ 若卡片一个都读不到（`.rm` = 0），记 **INCONCLUSIVE** —— **不**当作 PASS
+   *   （"没样本"与"内容正确"是两件事）。
+   */
+  MARKER_CARD_CONTENT_FROM_AUTHORITY: (() => {
+    const cards = (snap && snap.markerCards) || []
+    const exp = (expected && expected.cardExpect) || []
+    if (cards.length === 0 || exp.length === 0) return 'INCONCLUSIVE'
+    // 按地名分组比较（同名地点可能多条，故按"多重集"逐一配对）
+    const pool = cards.slice()
+    let allMatched = true
+    for (const e of exp) {
+      const i = pool.findIndex((c) => c.name === e.place)
+      if (i < 0) {
+        allMatched = false
+        break
+      }
+      const c = pool.splice(i, 1)[0]
+      if (e.hasImages) {
+        // 有封面 ⇒ 卡片必须有用本服务媒体链路的 <img>
+        if (!c.coverSrc || !c.coverSrc.includes('/api/media/') || !c.coverSrc.includes(e.mediaId)) {
+          allMatched = false
+          break
+        }
+      } else {
+        // 无封面 ⇒ 卡片文字必须**等于**权威正文前 10 字（这正是旧代码会空的地方）
+        if (c.excerpt !== e.excerpt) {
+          allMatched = false
+          break
+        }
+      }
+    }
+    return allMatched ? 'PASS' : 'FAIL'
+  })(),
+
   /** 基线明记未知 → 只记录，不当作可通过项（也不进 KEYS，故不影响裁决） */
   MAP_PIN_COLOR_SEMANTICS_CONFORMANCE: 'NOT_EVALUATED',
   OFFLINE_MAP_PROJECTION_CONFORMANCE: 'NOT_EVALUATED',
   ORIGINAL_MAP_MARKER_CONFORMANCE: 'NOT_EVALUATED',
 
-  detail: { expected, snap: { ...snap, bodyText: undefined }, snapOffline, stub, expectedCount, leakedInNormal },
+  detail: { expected, snap: { ...snap, bodyText: undefined }, snapOffline, stub, expectedCount, leakedInNormal, markerCards: (snap && snap.markerCards) || [] },
   notes: {
     判别性: '期望条数来自**服务端实况**（不写死 6）；主判据用 provider 无关的 data-marker-count',
     /*
@@ -320,6 +418,7 @@ const KEYS = [
   'OFFLINE_RENDERS_NO_GEO_MARKERS',
   'NO_FABRICATED_PLACE_DATA',
   'MAP_NO_FALLBACK_ON_UNAVAILABLE',
+  'MARKER_CARD_CONTENT_FROM_AUTHORITY',
 ]
 const anyFail = KEYS.some((k) => v[k] === 'FAIL')
 const anyNotEval = KEYS.some((k) => v[k] === 'NOT_EVALUATED')
