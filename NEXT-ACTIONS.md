@@ -657,11 +657,11 @@ PUBLICATION_BLOCKER: LICENSE_REVIEW_REQUIRED
       4 类并发 DB 客户端、MemAvailable/swap-in-out/OOM/journal 信号。
       代码侧按 DO NOW 补了**精确 SQLSTATE**：`db.ts` 启动探针原来 `catch { return false }`
       **把错误完全吞掉** → 现在记录 `code=<SQLSTATE> errno= syscall= address=:port message=`。
-      ⚠️ 边界：176s 那次与**并发争用**相关是 **CONSISTENT 但未证明**（需受控并发复现，见 X3.1）
-- [ ] X3.1 ⬅ 下一步（可选、需裁定是否值得做）：**受控并发复现** ——
-      人为并发 N 个 gate/psql，观察 READY_AT 是否随并发上升。
-      只有做了才能把"176s 由并发争用导致"从 CONSISTENT 升级为 PROVEN。
-      ⚠️ 不做也不算未完成——审核 55 只要求"先把事实记清楚"，未要求证明该假设。
+      ⚠️ 【已由 X3.1 更新】176s 那次与**并发争用**相关现已 **PROVEN**（受控复现 180s ≈ 176s）
+- [x] X3.1 ✅ **已完成并证明**（详见本文件末尾「X3.1 结论」节）：
+      受控只变"并发 DB 客户端数" → READY_AT **13s / 18s / 180s**（N=0/8/20），
+      几乎精确复现历史那次的 176s ⇒ 争用假设 **PROVEN**（不再是 CONSISTENT）
+      并发现关键是**连接 churn**（三档 conn_before 都是 2）而非常驻连接数
 
 ### WO14 进展（Round 264）
 - [x] WO14.1 ✅ **inventory 完成**（审核 55 要求"先 inventory，不要直接改"）→
