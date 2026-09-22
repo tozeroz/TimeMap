@@ -48,6 +48,29 @@ const argv = process.argv.slice(2)
 const grepIdx = argv.indexOf('--grep')
 const GREP = grepIdx >= 0 ? argv[grepIdx + 1] : null
 const SHOW_FILES = argv.includes('--files')
+/*
+  `--check`：**完整性 Gate 模式**（审核记录 57 的 X5 批准）
+  ---------------------------------------------------------------
+  ⭐ 核心区别（审核 57 明确要求）：**不要**把"snapshot ≠ manifest"一律当 FAIL。
+     因为旧快照是**合法的历史**（M0 复现失败 → M3 恢复），保留它才有 provenance。
+     正确三分法：
+       snapshot == manifest                                   → OK
+       snapshot != manifest **且**有已声明的 supersedes/恢复链  → EXPLAINED_MISMATCH（仍 OK）
+       snapshot != manifest **且**没有任何解释                 → **FAIL**（这才是要抓的）
+     ⇒ Gate 抓的是 **UNEXPLAINED_BASELINE_MISMATCH**，不是"有几个 mismatch"。
+     （我第一版工具直接汇报"6 屏 blocked / 3 mismatch"，那是**错的口径**，
+       还导致我向审核发出一个被夸大的警报。）
+  审核 57 建议机械验证的不变量：
+     AUTHORITATIVE_MANIFEST_PRESENT
+     EXPECTED_SCREEN_COUNT == manifest.expected_screen_count
+     每个 manifest 屏：对应源文件可解析
+     每个 snapshot/manifest 不一致：被已声明的恢复/取代解释
+     每个已声明的 supersedes：源与目标都可解析
+     无重复/冲突的"当前权威"
+     non-baseline 目录（original-chat / original-sweep）**显式分类**，不被静默计为屏
+  输出：BASELINE_SOURCE_VALIDITY ／ BASELINE_UNEXPLAINED_MISMATCHES
+*/
+const CHECK = argv.includes('--check')
 
 function readJson(p) {
   try {
@@ -225,3 +248,109 @@ if (GREP) {
     console.log('     不能得出"原版没有这件事" —— 手写笔记与截图内容都不在本次范围内。')
   }
 }
+
+// ===========================================================================
+// --check：完整性 Gate（审核 57 的 X5）
+// ===========================================================================
+if (CHECK) {
+  console.log()
+  console.log('=== --check：BASELINE_SOURCE_VALIDITY（完整性 Gate）===')
+  let fail = 0
+  const ok = (m) => console.log(`  PASS ${m}`)
+  const bad = (m) => { console.log(`  **FAIL** ${m}`); fail++ }
+  const warn = (m) => console.log(`  info ${m}`)
+
+  // ① 权威索引存在
+  ok(`AUTHORITATIVE_MANIFEST_PRESENT（${MANIFEST_PATH}）`)
+
+  // ② 屏数不变量
+  const authCount = manifest.screens.length
+  if (authCount === manifest.expected_screen_count) {
+    ok(`EXPECTED_SCREEN_COUNT == ${manifest.expected_screen_count}（实际 ${authCount}）`)
+  } else {
+    bad(`EXPECTED_SCREEN_COUNT=${manifest.expected_screen_count} 但实际列出 ${authCount} 屏`)
+  }
+
+  // ③ 无重复 id（"无重复/冲突的当前权威"）
+  const ids = manifest.screens.map((s) => s.id)
+  const dup = ids.filter((x, i) => ids.indexOf(x) !== i)
+  if (dup.length === 0) ok('无重复 screen id（不存在冲突的当前权威）')
+  else bad(`存在重复 screen id：${[...new Set(dup)].join(', ')}`)
+
+  // ④ 每个 manifest 屏：对应源文件可解析
+  let unresolvable = []
+  for (const s of manifest.screens) {
+    const dir = join(SCREENS, s.id)
+    const bj = join(dir, 'baseline.json')
+    if (!existsSync(dir)) { unresolvable.push(`${s.id}（无目录）`); continue }
+    if (existsSync(bj)) {
+      const j = readJson(bj)
+      if (j.__parse_error) unresolvable.push(`${s.id}/baseline.json（解析失败）`)
+    }
+  }
+  if (unresolvable.length === 0) ok('每个 manifest 屏的源文件都存在且可解析')
+  else bad(`以下屏的源文件不可解析：${unresolvable.join(' ／ ')}`)
+
+  // ⑤ ⭐ 决定性的那条：不一致**且无解释**才算 FAIL
+  let explained = 0
+  let unexplained = []
+  for (const s of manifest.screens) {
+    const bj = join(SCREENS, s.id, 'baseline.json')
+    if (!existsSync(bj)) continue
+    const j = readJson(bj)
+    const bjStates = j && j.states
+    if (!bjStates) continue
+    const diffs = []
+    for (const [k, v] of Object.entries(s.states || {})) {
+      const local = bjStates[k] && bjStates[k].status
+      if (local !== undefined && local !== v) diffs.push(`${k}: ${local}≠${v}`)
+    }
+    if (diffs.length === 0) continue
+    // 有已声明的 supersedes 解释吗？
+    const sup = supMap.get(s.id)
+    if (sup && sup.length > 0) {
+      explained++
+      warn(`EXPLAINED_MISMATCH ${s.id}（${diffs.join('; ')}）← 由 ${sup.map((x) => x.supplement).join(',')} 声明取代`)
+    } else {
+      unexplained.push(`${s.id}（${diffs.join('; ')}）**无任何 supersedes 声明**`)
+    }
+  }
+  if (unexplained.length === 0) {
+    ok(`BASELINE_UNEXPLAINED_MISMATCHES: 0（另有 ${explained} 处 EXPLAINED_MISMATCH，属合法历史，不判 FAIL）`)
+  } else {
+    bad(`BASELINE_UNEXPLAINED_MISMATCHES: ${unexplained.length} —— ${unexplained.join(' ／ ')}`)
+  }
+
+  // ⑥ 每个已声明的 supersedes：源与目标都可解析
+  const badSup = []
+  for (const f of suppFiles) {
+    const j = readJson(join(SUPPS, f))
+    const sp = j && j.supersedes
+    if (!sp) continue
+    if (!sp.file) { badSup.push(`${f}: supersedes 缺 file`); continue }
+    const target = join(ROOT, String(sp.file).replace(/^screens\//, 'screens/'))
+    if (!existsSync(target)) badSup.push(`${f}: 目标 ${sp.file} 不存在`)
+    if (sp.to === undefined) badSup.push(`${f}: supersedes 缺 to`)
+  }
+  if (badSup.length === 0) ok('每个已声明的 supersedes 其源与目标都可解析')
+  else bad(`supersedes 解析问题：${badSup.join(' ／ ')}`)
+
+  // ⑦ non-baseline 目录必须显式分类（不被静默计为屏）
+  const NON_SCREEN = new Set(['original-chat', 'original-sweep'])
+  const silent = dirs.filter((d) => !authSet.has(d) && !NON_SCREEN.has(d))
+  if (silent.length === 0) {
+    ok(`non-baseline 目录已显式分类（${[...NON_SCREEN].join(', ')}）—— 未被静默计为屏`)
+  } else {
+    bad(`以下目录既不在权威索引、也未被显式分类：${silent.join(', ')}`)
+  }
+
+  console.log()
+  if (fail === 0) {
+    console.log('BASELINE_SOURCE_VALIDITY: PASS')
+    console.log('BASELINE_UNEXPLAINED_MISMATCHES: 0')
+  } else {
+    console.log(`BASELINE_SOURCE_VALIDITY: FAIL（${fail} 项）`)
+  }
+  process.exit(fail === 0 ? 0 : 1)
+}
+

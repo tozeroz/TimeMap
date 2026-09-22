@@ -45,6 +45,11 @@ run() {
 run "① 类型检查（三工程；会报告实际检查文件数）" bash scripts/m5/check-types.sh
 run "② 门禁语法检查（*.mjs）"                   bash scripts/m5/check-gate-syntax.sh
 run "③ PowerShell 脚本完整性（BOM/换行/非空可解析）" bash scripts/m5/check-ps1-integrity.sh
+# ⭐ ④b 基线来源权威性（审核记录 57 的 X5 批准接入常规检查）
+# ⚠️ 注意它抓的是 **UNEXPLAINED** mismatch，不是所有 mismatch ——
+#    旧快照 ≠ 权威索引 是**合法历史**（M0 复现失败 → M3 恢复），不应判 FAIL。
+#    正确口径：有 supersedes 声明 → EXPLAINED_MISMATCH（OK）；无解释 → FAIL。
+run "④b 基线来源权威性（SOURCE_VALIDITY；抓 UNEXPLAINED mismatch）" node scripts/m5/baseline-inventory.mjs --check
 
 echo
 echo "=============================================================="
@@ -74,7 +79,7 @@ echo "  （本聚合器只跑**非破坏性、不需要服务器、不需要设�
 echo
 echo "=============================================================="
 if [ "$FAIL" -eq 0 ]; then
-  echo "CHECK_ALL_LOCAL: PASS（上述 5 项本地检查全部通过）"
+  echo "CHECK_ALL_LOCAL: PASS（上述各项本地检查全部通过；其中 ④b 为审核 57 批准接入的基线来源权威性检查）"
 else
   echo "CHECK_ALL_LOCAL: FAIL（至少一项失败，见上面的 **FAIL** 标记）"
 fi
