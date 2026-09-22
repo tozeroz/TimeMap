@@ -47,6 +47,14 @@ export interface ApiPost {
   authorId: string | null
   body: string
   place: string | null
+  /**
+   * ⭐ M5 WO#15：地点经纬度（服务端 left join places 得到；无地点时为 null）。
+   * 为什么需要：地图页按**经纬度**渲染标记（tencent / real 两个实现都是），
+   * 而此前前端只有 place（地名文本）→ 拿不到坐标就无法把 mock 换成权威。
+   * ⚠️ 服务端已显式 Number() 转换（pg 可能把数值以字符串返回）。
+   */
+  placeLat: number | null
+  placeLng: number | null
   createdAt: string
   /** M3 Slice 2 起列表也返回计数（原版卡片上就有） */
   likeCount?: number
@@ -775,6 +783,14 @@ export interface ApiPostDetail {
   authorId: string | null
   body: string
   place: string | null
+  /**
+   * ⭐ M5 WO#15：地点经纬度（服务端 left join places 得到；无地点时为 null）。
+   * 为什么需要：地图页按**经纬度**渲染标记（tencent / real 两个实现都是），
+   * 而此前前端只有 place（地名文本）→ 拿不到坐标就无法把 mock 换成权威。
+   * ⚠️ 服务端已显式 Number() 转换（pg 可能把数值以字符串返回）。
+   */
+  placeLat: number | null
+  placeLng: number | null
   createdAt: string
   /** **含回复**的总数（原版「评论 N」的口径） */
   commentCount: number

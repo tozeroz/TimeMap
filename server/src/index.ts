@@ -64,6 +64,14 @@ interface PostRow {
   body: string
   place: string | null
   created_at: Date
+  /**
+   * ⭐ M5 WO#15：地点经纬度（来自 `left join places`）。
+   * 可选：只有**做了该 join 的查询**才会有这两列（列表与详情有；其它查询没有）。
+   * ⚠️ pg 的 numeric/double 可能以**字符串**返回 → 上层必须显式 Number() 转换，
+   * 否则前端拿到字符串，地图 SDK 需要 number，会静默出错（标记跑到 0,0）。
+   */
+  place_lat?: string | number | null
+  place_lng?: string | number | null
 }
 
 interface UserRow {
@@ -713,6 +721,17 @@ export function buildServer(deps: ServerDeps) {
         PostRow & { like_count: string; comment_count: string; liked_by_me: boolean; images: unknown }
       >(
         `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at,
+                -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
+                -- 为什么需要：地图页的标记按经纬度渲染（默认 provider=tencent 用
+                -- projectToContainer(LatLng)；RealMap 用 L.marker([lat,lng])），
+                -- 而前端此前只能拿到 place（地名文本）——**拿不到坐标就无法把 mock 换成权威**。
+                -- 为什么用 left join 而不是取 posts 自己的列：posts 表没有坐标列，
+                -- 坐标存在 places 表（原版 poi-search 基线也证明地点是 name+address 的实体）。
+                -- 为什么只补两个数字、不返回 address/内部 id：与 WO#12/#13 的
+                -- "只暴露必要字段"一致；本页只需要能定位。
+                -- 无地点（place_id 为空）或地点不存在 → null（**不伪造 0,0**）。
+                pl.latitude  as place_lat,
+                pl.longitude as place_lng,
                 (select count(*) from likes l where l.post_id = p.id)::text as like_count,
                 (select count(*) from comments c where c.post_id = p.id)::text as comment_count,
                 exists (
@@ -731,6 +750,8 @@ export function buildServer(deps: ServerDeps) {
                    where pm.post_id = p.id and m.scope = 'public'
                 ), '[]'::json) as images
            from posts p
+           -- ⭐ WO#15：地点坐标来自 places（left join，缺地点时两列为 null）
+           left join places pl on pl.id = p.place_id
           where ($3::uuid is null or p.author_id = $3::uuid)
           order by p.created_at desc, p.id desc
           limit $1`,
@@ -744,6 +765,11 @@ export function buildServer(deps: ServerDeps) {
           authorId: row.author_id,
           body: row.body,
           place: row.place,
+          // ⭐ WO#15：地点坐标（可为 null）。**注意 pg 的 numeric 会以字符串返回**，
+          //    所以这里显式 Number() 转换 —— 否则前端拿到 "39.9519" 字符串，
+          //    而地图 SDK 的 LatLng 需要 number（静默的类型错误会变成"标记全在 0,0"）。
+          placeLat: row.place_lat === null ? null : Number(row.place_lat),
+          placeLng: row.place_lng === null ? null : Number(row.place_lng),
           createdAt: row.created_at.toISOString(),
           // M3 Slice 2：列表卡片需要显示计数与"我点过没"
           likeCount: Number.parseInt(row.like_count ?? '0', 10),
@@ -952,8 +978,13 @@ export function buildServer(deps: ServerDeps) {
     const meId = s.kind === 'ok' ? s.user.userId : null
     try {
       const pr = await db.pool.query<PostRow>(
-        `select id, author_name, author_id, body, place, created_at
-           from posts where id = $1`,
+        `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at,
+                -- ⭐ WO#15：详情也要带地点坐标（原版 poi-detail 页有「距我N公里」，
+                -- 那需要地点经纬度 + 客户端自身位置）。
+                pl.latitude as place_lat, pl.longitude as place_lng
+           from posts p
+           left join places pl on pl.id = p.place_id
+          where p.id = $1`,
         [id],
       )
       const post = pr.rows[0]
@@ -981,6 +1012,10 @@ export function buildServer(deps: ServerDeps) {
         authorId: post.author_id,
         body: post.body,
         place: post.place,
+        // ⭐ WO#15：地点坐标（可为 null）。显式 Number() —— 见 PostRow 上的注释
+        // （pg 可能以字符串返回数值，前端地图 SDK 需要 number）。
+        placeLat: post.place_lat === null || post.place_lat === undefined ? null : Number(post.place_lat),
+        placeLng: post.place_lng === null || post.place_lng === undefined ? null : Number(post.place_lng),
         createdAt: post.created_at.toISOString(),
         commentCount: Number.parseInt(cr.rows[0]?.n ?? '0', 10),
         likeCount: like.likeCount,
