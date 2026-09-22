@@ -758,12 +758,12 @@ N(并发 DB 客户端)  READY_AT  loadavg(before→after)  'database unreachable
       ② **门禁自身的"恢复"不完整**：恢复步骤**绕过 UI**，于是服务端回到 Lemy 而**设备缓存仍留测试昵称**，
          `TabBar` 读缓存 ⇒ 残留会误导后续轮次。已修（恢复时同步写回缓存）。
          **教训：「恢复了服务端」≠「恢复了整个系统」** —— 绕过 UI 的写操作要自己复原 UI 侧派生状态。
-- [ ] WO14.5 做完 WO14 再做 **MapScreen**（审核 55 排序）← **现在可开始**
+
 - [ ] WO14.6 ⬅ 待裁定：`ME_NO_FALLBACK_ON_UNAVAILABLE` 仍记 NOT_EVALUATED
       （清 session 会破坏同轮其它断言）→ 是否单开一轮专项验证"未登录时不回落 mock"？
 
 ### ⭐ WO14.5 开工种子：MapScreen inventory 的**第一手事实**（Round 264 结尾，未深入）
-- [ ] WO14.5 MapScreen（`app/src/screens/MapScreen.tsx`，**500 行**）—— review 55 排序：WO14 之后再做
+- [x] ✅ WO14.5 inventory 已完成（结论见 WO15 计划及其两份更正）；WO#15 实施已获批准并在进行中
       **已有事实（本轮到这一步为止）**：
       · 它 `import { mapMarkers } from '../data/mock'`（第 10 行）→ 标记可能全是 mock
       · mock 的 `mapMarkers` 每条形如
@@ -839,13 +839,13 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       引用前必须确认"读的是不是权威那份"；**否定性结论**（没有/未知/BLOCKED）门槛更高：
       必须先证明 ①搜索范围完整 ②来源权威 ③无更新记录取代
 - [x] ✅ 本轮同一类错误共犯 **3 次**（窄搜索 → 读错来源 → 又窄搜索），三个都如实记录在案
-- [ ] ⬅ **待裁定 X4'**：是否认可"**不全量重审**、只做 A（机械前置，已实现）+ B（复核 at-panel 一处，已做）"？
+- [x] ✅ X4' 已由审核 57 裁定：**认可"不全量重审"**，A 已实现、B 已做 ⇒ `X4: CLOSED`
       （我原提议"单开一单逐条复核"**已自行撤回**）**6 个屏幕的 `baseline.json` 状态已被补采取代**：
       `at-panel` / `comment-detail` / `login-select` / `login-sns` / `media-preview` / `poi-detail`
       （例如 media-preview 与 at-panel 也是 not_reproducible → **observed**）
       ⇒ 凡此前**只读 baseline.json** 得出的 `BLOCKED`/`NOT_EVALUATED` 判定**都可能已过期**。
       请裁定：**单开一单逐条复核历史结论**，还是只在**新**结论上强制？
-- [ ] ⬅ **待裁定 X5**：`baseline-inventory.mjs` 是否**接入常规检查**（发现"被取代但未声明"即报错）？
+- [x] ✅ X5 已由审核 57 **批准**并**已完成**：`baseline-inventory.mjs --check` 已接入 `check-all-local.sh` ④b
 - [x] ✅ 记录**证据缺口**（不在本单修）：`feed-list`/`feed-detail` 的 observed 是 **error** 态、
       `announce`/`chat`/`comment-detail`/`group` 的 observed 是 **empty** 态
       ⇒ 这几屏的"正常态"基线**未采集**，引用时不得当作"原版正常态已知"
@@ -855,9 +855,9 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       （`docs/POLICY-VIOLATION-2026-09-21.md`，**已登记／用户裁定 A／2026-09-21 20:47 结案**）
       → 其**结构性结论仍有效**，但引用时必须带上该标注。我本轮**未对原版做任何写操作**，
         且**未重新采集基线**（所有原版结论来自既有文件）
-- [ ] ⬅ 待裁定（原 6 项）：是否批准 WO15 计划／**是否批准新增 API 能力 placeLat+placeLng**／
+- [x] ✅ 原 6 项已由审核 57 覆盖：**WO15: APPROVED TO IMPLEMENT**（含方案 A 坐标字段，已实现）
       方案 A、B 或其它／mock 6 条保留加注释／颜色 NOT_EVALUATED／是否先补原版 Map 只读基线采集
-- [ ] ⬅ 待裁定 2 项（追加）：**WO14.5d 是否单开 WO#16**（校园/校区选择与原版形态对齐）／
+- [ ] ⬅ 待裁定：**WO14.5d 是否单开 WO#16**（校园/校区选择与原版形态对齐；顶部应为校区列表、`N条校园圈` 而非 `N位同学`）／**视觉通道是否接入**（vision 两次返回空，我未核对过基线截图像素）
       **视觉通道是否接入**（`vision` 工具两次返回空，故我**没有**核对过基线截图像素）
 
 ### ⭐ Round 265 收尾：审核 57 裁定 + WO#15 增量①（服务端坐标）已落地
