@@ -891,14 +891,44 @@ posts  : 有 place_id；**4 条 post 关联了 place**
        ⚠️ §4 **如实说明**：无地点的 post 数为 **0** ⇒「null 坐标」这条**无样本可验**，
           脚本打印"无样本可验，不假装验过"，**不**把它算成 PASS
       回归：WO#11 feed ／ WO#13 profile-edit ／ WO#7 text-send **全部 DEVICE_GATE_EXIT=0**
-- [ ] WO15.2 ⬅ **下一步（本轮未做）**：前端把 MapScreen 的标记改由 `GET /api/posts` 派生
+- [x] WO15.2 ✅ **已完成**（commit d968a19）：MapScreen 标记改由 `GET /api/posts` 派生（`markersFromPosts`），只保留**同时有经纬度**的帖子；三态 loading/ready/unavailable；**无 mock 回落**
       （**只保留带坐标的帖子**；无地点/读不到 → **不出标记、不回落 mock**）；
       mock 的 6 条从渲染路径移除（**保留在 mock.ts 并加注释说明"未采用"**，理由：保留
       "曾观察到的原版图钉（阳光操场）"这条线索，避免以后又被误当真实数据）
-- [ ] WO15.3 ⬅ 下一步：Gate `MAP_MARKERS_FROM_AUTHORITY`（每个标记能追溯到**真实 post**）／
+- [x] WO15.3 ✅ **已完成**（`gate-wo15-map-markers.mjs`，`DEVICE_GATE_EXIT=0`）：4 键全 PASS；敏感度**受控突变证明能红**（注入编造地名 → 3 键 FAIL、fallback 仍 PASS；撤销后回全 PASS）
       `MARKER_COUNT_MATCHES_POSTS_WITH_PLACE`（**不硬编码 6**）／ `NO_FABRICATED_PLACE_DATA` ／
       `MAP_NO_FALLBACK_ON_UNAVAILABLE`；并加敏感度（标记源改回 mock → 前两条必须 FAIL）
 - [ ] WO15.4 仍 NOT_EVALUATED（依基线原话「具体缩放级别与**标记规则未记录**」）：
       图钉**配色规则** ／ 气泡卡片内容与出现条件 ／ 缩放级别 ／ 头像标记与照片标记的分工
       ⚠️ 其中"标记的内容形态"**已有三处独立证据**（照片卡片+彩色图钉+地点名），
         且发现一个**交互细节**：地图上点的是**照片缩略图**、**不是地名文字**（原版 poi-detail 补充）
+
+### ⭐⭐ Round 265 完成：**WO#15 全量落地**（服务端坐标 + 前端权威标记 + 门禁 + 敏感度）
+- [x] ✅ **WO15 服务端增量**（64c4cfd）：`GET /api/posts` 与 `/api/posts/:id` 加 `placeLat`/`placeLng`
+      （left join places；**显式 Number()** 防 pg 返回字符串；无地点给 null，**不伪造 0,0**）
+      实测 `WO15_PLACE_COORDS: PASS`；回归 3 条全 `EXIT=0`
+- [x] ✅ **WO15 前端增量**（d968a19）：`markersFromPosts()` 派生标记；`OfflineMap` 与三条原生地图
+      全部改用传入 `markers`；新增可见徽标 `[data-marker-phase]`（让"没数据/读不到"**能被看见**）；
+      mock 的 6 条加注释说明**未采用**（保留"阳光操场"这条原版线索，防以后又被当真）
+- [x] ✅ **WO15 门禁**（`gate-wo15-map-markers.mjs`，`EXIT=0`）：
+      `MAP_MARKERS_FROM_AUTHORITY` ／ `MARKER_COUNT_MATCHES_POSTS_WITH_PLACE` ／
+      `NO_FABRICATED_PLACE_DATA` ／ `MAP_NO_FALLBACK_ON_UNAVAILABLE` **四键全 PASS**；
+      ⭐ **两条渲染路径各自验证**（在线腾讯用 provider 无关徽标计数；离线自绘单独验 `.map__marker` DOM）
+      ⭐ 期望条数（4）来自**服务端实况**，**不硬编码 6**
+- [x] ✅ **敏感度**：注入 1 条编造地名 → `NO_FABRICATED_PLACE_DATA`／`COUNT`／`AUTHORITY` **三键 FAIL**、
+      `fallback` 仍 PASS（归因清晰）；撤销后 `git diff --exit-code` **证实与原提交字节一致**，
+      设备重装后回到**四键全 PASS**
+- [x] ✅ **修掉一次间歇性门禁失败的根因**（d8ab0a5）：地图页全屏弹窗「授权地理位置」
+      残留到下一个 Gate → WO#14 偶发 FAIL。已在**共用入口** `run-device-gate.sh` 加第 8/10 步
+      best-effort 关弹窗（与"DB 残留清理"同一理由：10+ 个 Gate 各造状态各不管收）
+- [x] ✅ ⭐⭐ **自测当场抓到我的修复其实无效**：第一版用 CSS 几何启发式找按钮 → 弹窗明明在，
+      却输出「没有需要关闭的阻断式弹窗」→ `SELFTEST_DISMISS_MODALS: FAIL`。
+      改为**按已知容器选择器**（`.map__modal-wrap` 等）后：**弹窗出现过 → 被关掉 → 断言消失 = PASS**。
+      **教训：新加的"修复"本身也必须被证明会生效**（与"新断言必须证明能红"同一纪律）；
+      且**"猜几何形状"不如"按已知选择器"** —— 前者会随样式微调**静默失效**。
+- [x] ✅ **全设备回归 10 条全 `DEVICE_GATE_EXIT=0`**（WO#15 ／ 14 ／ 13 ／ 12 ／ 11 ／ 10 ／ 8 ／ 9A ／ 9B ／ 7）
+- [ ] WO15.5 ⬅ **待裁定/下一步**：`MAP_PIN_COLOR_SEMANTICS_CONFORMANCE` 等三项仍 **NOT_EVALUATED**
+      （依基线原话「具体缩放级别与标记规则未记录」）→ 若接入可用图像通道，
+      可用 `recovered-m3-map-pins.png` 等把"图钉配色/气泡卡片"升格为视觉直接证据
+- [ ] WO15.6 ⬅ 下一步（可选）：把 `dismiss-blocking-modals` 的经验推广 ——
+      检查其它页是否也有"首次进入弹窗"会跨 Gate 残留（如 onboarding / upgrade-alert）
