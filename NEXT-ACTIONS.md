@@ -1138,3 +1138,44 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [ ] ⬅ 把 `SchoolPickerUnavailable` 这个 **OUR_DESIGN_CHOICE** 登记进 KNOWN-DEVIATIONS
       （它不是原版呈现；原版此处是校区列表）
 - [ ] ⬅ 敏感度覆盖：余下 10 个门禁按 `docs/m5/SENSITIVITY-COVERAGE-AUDIT.md` 的顺序补齐
+
+### ⭐⭐ Round 316：审核 61 落实 + WO#16 层 A 关账 + **层 B 第 1 部分完成**
+
+**已完成并提交**（HEAD=97d3f65，已推送，工作区干净）：
+- [x] ✅ **审核 61 记录**：`docs/review-log/61-…md`
+      `WO16_LAYER_A: PASS/COMPLETE` ／ `WO16_LAYER_B: APPROVED TO IMPLEMENT`
+      ／ `MAP_GEO_PERMISSION_TEST: OPTION (a) + fixture 边界` ／ `FULL_GATE_SESSION_ORDER_SWEEP: DO NOT START NOW`
+- [x] ✅ ⭐ **按审核口径纠正我一处过度主张**：把地理弹窗拆成两条 claim ——
+      `MAP_GEO_PERMISSION_MODAL_UI`（用 app 自带 `#/map?ask=1` 强制弹出 ⇒ 确定性 UI 契约，进 KEYS）
+      与 `MAP_GEO_PERMISSION_AUTO_FIRST_ENTRY`（**NOT_EVALUATED**）。
+      审核原话："**不要为了让它绿而把 force-stop 解释得比实际更强**"
+      （force-stop 只证明**进程**重启；权限/localStorage 可能跨进程持久，不等价于"首次进入"）
+- [x] ✅ **登记 D-004**（审核要求的 TEMPORARY deviation）：CampusScreen「校园广场 ▼」面板的**内容**
+- [x] ✅ **层 B 第 1 部分**：
+      · 迁移 `012_seed_school_campuses`：种 北交大 + 校本部/威海校区/东校区（**baseline-derived fixture**）
+        ⚠️ **只种实体，不种归属**；迁移自带 `raise exception` 断言（产生任何归属即失败）
+      · 两个只读 API：`GET /api/schools` ／ `GET /api/schools/:id/campuses`
+        ⭐ `campusCircleCount`：**无法由权威归属计算时给 null，不是 0**（审核计数策略 A）
+      · 客户端方法 `listSchools` / `listSchoolCampuses`
+      · **学校搜索页**（新屏 `#/schools`）：placeholder「搜索选择学校...」+「更多学校」+
+        行格式「学校名 (校区名)」+ 计数（null 时不渲染）
+      · **CampusScreen 校区面板**改接权威实体（＝ D-004 的恢复）+「搜索其他学校」入口
+      · 层 A 门禁同步更新（`CAMPUS_PICKER_NO_MOCK_ON_OPEN` 改为断言真实校区行、且不得退化回占位）
+      实测：`applied=12/12`；API 返回三校区且 `campusCircleCount=null`；
+      `schools=1 campuses=3 posts_with_campus=0 users_with_campus=0`；
+      wo16a 门禁 5 键 PASS，回归 wo16a/wo11/wo15/wo14 全 EXIT=0；CHECK_ALL_LOCAL PASS
+
+**⬅ 下轮从这里继续（层 B 剩余 3 项，均有审核 61 的明确要求）**：
+- [ ] ⬅ **层 B 第 4 条：MapScreen 的学校/校区选择接权威实体**
+      （现在地图页地区控件仍是**硬编码**文案「北京交通大学（校本部）」；
+        应改为取自 `GET /api/schools` + `/campuses` 的权威值）
+      ⚠️ 注意两页形态**不同**（审核 60/61）：地图页顶部显示**学校（校区）**；
+      校园广场页保持「校园广场 ▼」固定标签 —— **不要把 Map picker 套到 CampusScreen**
+- [ ] ⬅ **层 B 第 8 条：层 B 的必要 Gate + sensitivity**
+      （校区面板/搜索页的专门断言；突变应"把数据源接回 mock"并证明能红）
+      ⚠️ 按审核 61：新/改 Gate 必须**声明其 fixture 依赖**（session / permission / DB / device state）并自行建立
+- [ ] ⬅ **层 B 第 9/10 条**：完成后**停止局部扩张**，提交 **M5 GLOBAL COMPLETION AUDIT**
+      （审核建议上限：正常顺序 + **反向顺序**各跑一次完整回归；verdict 一致即停）
+- [ ] ⬅ 收窄 `docs/m5/A-D-LIST.md:220` 那条笼统的"✅ 一致"（审核 60 要求，仍未做）
+- [ ] 敏感度覆盖：余下门禁按 `docs/m5/SENSITIVITY-COVERAGE-AUDIT.md` 补齐
+      ⚠️ 但按审核 61：**不要**现在启动专项工程；只在"flaky / 顺序相关 / 明显共享可变状态"时才查
