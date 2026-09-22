@@ -97,11 +97,23 @@
 
 ### 2.4 `at-panel`（WO#9B 目标）
 
+> ⚠️ **2026-09-22（Round 265）就地更正 —— 原话保留在下方，不抹掉**：
+> 下面引用的"baseline 内容**为空**：所有 states not_reproducible"是**屏内快照**
+> `screens/at-panel/baseline.json` 的状态，而**权威状态在聚合索引** `docs/original-baseline/manifest.json`：
+> at-panel 的 `normal` = **observed**（恢复记录见 `supplements/at-panel.json` 的 supersedes：
+> `states.normal.status: not_reproducible → observed`）。
+> 来源：`scripts/m5/baseline-inventory.mjs`（权威索引优先 + 快照不一致即标 MISMATCH）。
+> **本小节的结论不受影响** —— 三条 known_unknown 的处置本来就**引用具体证据**
+> （APK 静态布局 / recovered-m3-ui.xml）而不是"状态标签"，因此对"快照过期"免疫。
+> 只是**前提句**需要按权威索引读。另可注意：`docs/m3/EVIDENCE-PROVENANCE-AUDIT.md:98`
+> 早已定案「baseline coverage：22 observed / 0 evidence-blocked」，与权威索引一致。
+
 ```
 baseline 内容**为空**：所有 states not_reproducible、interactions/navigation 均为 []、
 blocked_reason = "deep link 无法直达；需要群聊上下文"
 known_unknowns = ["面板以抽屉还是弹层出现、成员列表排序、搜索框有无"]
 ```
+（↑ 这是**屏内快照**的原文；权威索引里 at-panel 的 normal 已是 observed，见上方更正。）
 
 | known_unknown | 我们的处置 | 状态 |
 |---|---|---|
