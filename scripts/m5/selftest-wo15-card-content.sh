@@ -18,12 +18,13 @@
 # ════════════════════════════════════════════════════════════════════
 # 三阶段（用一个"受控突变"制造已知缺陷）
 # ════════════════════════════════════════════════════════════════════
-#   ① 基线   ：当前代码 ⇒ 期望 6 键全 PASS、DEVICE_GATE_EXIT=0
-#   ② 突变   ：把卡片内容改回"空"（等价于旧代码在 mock 里查不到帖子的后果）
-#               ⇒ 期望 **只有** MAP_MARKER_CARD_DATA_AUTHORITY 变 FAIL，
-#                 其余 5 键仍 PASS（**归因清晰**：证明是这个原因导致的红），
-#                 且 DEVICE_GATE_EXIT=1
-#   ③ 还原   ：从备份还原 ⇒ 断言 `git diff --exit-code` **字节一致**，
+#   ② 突变   ：把卡片**数据来源重新接错到 mock**
+#              （逐字还原改前那段代码：加回 import mock + posts.find 查帖子；
+#                而 m.postId 现在是真实 UUID ⇒ 查不到 ⇒ 封面与文字都空）
+#              ⇒ 期望 **只有** MAP_MARKER_CARD_DATA_AUTHORITY 变 FAIL，
+#                其余 5 键仍 PASS（**归因清晰**：证明是这个原因导致的红），
+#                且 DEVICE_GATE_EXIT=1
+#   ③ 还原   ：断言回到"**本自测开始前**的内容"（sha256 摘要比对），
 #              再跑一次回到 6 键全 PASS（证明②的变红确实由突变引起）
 #
 # ⚠️ 需要设备在线的完整门禁链（跑 run-device-gate.sh），因此较慢（每阶段含构建+安装）。
@@ -64,6 +65,12 @@ run_gate() {
 
 fail=0
 
+# ⭐ 采"本自测开始前"的状态（③ 阶段要用它判"还原是否真的回到原样"）
+#   为什么不用 HEAD 作基准：见 ③ 处的说明 —— 那会把"我还没提交"误判成"突变有残留"。
+PRE_HASH="$(sha256sum "$TARGET" | cut -d' ' -f1)"
+if git diff --quiet "$TARGET" 2>/dev/null; then PRE_DIRTY="0"; else PRE_DIRTY="1"; fi
+echo "（测试前状态：sha256=${PRE_HASH:0:12}… ／ 是否与 HEAD 不同：$PRE_DIRTY）"
+
 echo "════════ ① 基线：当前代码应 6 键全 PASS ════════"
 rebuild_install || { echo '  **FAIL** 构建/安装失败'; exit 1; }
 BASE="$(run_gate)"
@@ -82,9 +89,9 @@ else
 fi
 
 echo
-echo "════════ ② 突变：把卡片内容改回「空」 ════════"
+echo "════════ ② 突变：把卡片**数据来源重新接错到 mock** ════════"
 node "$MUT" inject || { echo "  **FAIL** 突变注入失败"; exit 1; }
-echo "  已突变 $TARGET（cover=undefined ／ 文本片段=空串）"
+echo "  已突变 $TARGET（加回 import mock + posts.find 查帖子 ⇒ 真实 UUID 查不到 ⇒ 卡片空）"
 rebuild_install || { echo '  **FAIL** 构建/安装失败（突变阶段）'; exit 1; }
 MUT_OUT="$(run_gate)"
 echo "$MUT_OUT" | sed 's/^/  /'
@@ -114,11 +121,27 @@ echo "════════ ③ 还原：应回到 6 键全 PASS 且字节一
 node "$MUT" restore || { echo "  **FAIL** 还原失败"; exit 1; }
 rm -f "tools/tmp/TencentMap.orig.txt" 2>/dev/null || true
 
-if git diff --exit-code "$TARGET" >/dev/null 2>&1; then
-  echo "  PASS git diff --exit-code = 0（与提交版本**字节一致**）"
-else
-  echo "  **FAIL** 还原后与原提交不一致（有残留改动）"
+# ⭐ 这里修过一个**我自己造成的设计错误**：
+#   第一版用 `git diff --exit-code $TARGET` 判"是否字节一致"，
+#   但那是拿工作区去比 **HEAD** —— 只有在"本自测开始**之前**工作区就干净"时才成立。
+#   实跑时我恰好在测试前留了一处**未提交的合法改动**（一行缩进清理），
+#   于是 ③ 报"还原后与原提交不一致" —— **把"我还没提交"误判成"突变有残留"**。
+#   ⇒ 正确要求是：**还原后必须等于"本自测开始前"的内容**（无论它是否已提交）。
+#     所以：开始前记下 sha256，还原后比那个摘要。
+if [ -z "${PRE_HASH:-}" ]; then
+  echo "  **FAIL** 内部错误：没有采到『测试前』的摘要"
   fail=1
+elif [ "$(sha256sum "$TARGET" | cut -d' ' -f1)" = "$PRE_HASH" ]; then
+  echo "  PASS 还原后与本自测**开始前**的内容字节一致"
+else
+  echo "  **FAIL** 还原后与本自测开始前的内容不一致（有残留改动）"
+  fail=1
+fi
+# 顺带如实报告"测试前是否已提交"（**信息性**，不作为结论依据）
+if [ "$PRE_DIRTY" = "1" ]; then
+  echo "  信息：本自测开始时 $TARGET 与 HEAD 本就不同（有未提交改动）⇒ 上面比的是『测试前状态』"
+else
+  echo "  信息：本自测开始时 $TARGET 与 HEAD 一致（干净）"
 fi
 
 rebuild_install || { echo '  **FAIL** 构建/安装失败（还原阶段）'; exit 1; }
