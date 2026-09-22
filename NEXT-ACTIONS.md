@@ -958,7 +958,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
         见 `MessageScreen:8`、`FeedListScreen:25`）
       · 结果：`api-only` 7 → 9 → **11**；`mock+api` 6 → 4 → **2**；`mock-only` **5**
       · 已接入常规检查 **④c**（`--check` 双向自测：改一行即 FAIL 并精确报差异、还原即 PASS）
-- [ ] ⬅ ⭐ **新发现 1（建议立单）**：`CommentsScreen` 与 `FeedDetailScreen` 对**同一数据一真一假**
+- [x] ✅ **新发现 1 已立项为 WO#17**（审核 62 定为**第一优先**，理由=identity corruption）：
       + `CommentsScreen` 有 `posts.find(...) ?? **posts[0]**` 的**静默兜底**
       （与 WO#12 修掉的 `?? 'u1'`、WO#13 的"假成功"**同型**）
       + 该屏**无任何 `navigate('comments')` 调用**（路由可达但无入口）
@@ -967,11 +967,11 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       （mock.ts 的 `me = { name:'自定义名称6', avatar: avatar('我','#6b7cff') }`）
       ⇒ 与 **WO#14 在 MeScreen 修掉的是同一个编造身份**，**第二次出现在另一屏**
       ⇒ 说明"修一个屏"不足以覆盖它，需要**按类排查**
-- [ ] ⬅ **新发现 3（待裁定）**：`scanner` / `media-preview` / `comments` 三屏
+- [x] ✅ **新发现 3 已并入 A3/A4 的"一次有界只读观察"**（审核 62：合并取证，不分别开考古单）：
       **在 App.tsx 挂着但全仓无任何 navigate 入口**（**路由可达、无入口**）。
       ⚠️ 与 WO#13 删掉的"编造孤儿路由"形态相同，但**这次不同**：这三条**都有原版基线屏**
       ⇒ **不能直接删**，需先判明"原版里它们由什么入口进入"。本轮**只记录不删不改**。
-- [ ] ⬅ **新发现 4**：`PoiSearchScreen` 仍渲染 mock `pois`（含**无出处的 `posts:1284`**），
+- [x] ✅ **新发现 4 已立项为 WO#18**（审核 62 定为第二优先）：
       而 `PoiDetailScreen` **已走权威** `/api/places/:id`；服务端**有**详情接口、**没有**列表接口
       ⇒ 修复需**新增 API 能力**（与 WO#15 同性质）→ `docs/m5/FINDING-poi-search-screen-still-mock.md`
 - [x] ✅ 其中「新发现 2」**已在本轮修完**（见「Round 266 修复①」）。**剩下三个**（新发现 1/3/4）待裁定是否立单：
@@ -1123,7 +1123,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
         敏感度：故意写"`post.place == 北京交通大学` → 自动归属校本部" ⇒ **必须 FAIL**
         （审核原话：这正是最容易为了"让数字出来"而重新引入的**数据伪造路径**）
       · 设备验证（构建+安装+跑通）+ 敏感度（用 `scripts/m5/selftest-mutation.sh` 通用驱动）
-- [ ] ⬅ **WO#16 层 B（审核 60/61 已批准范围）—— 进度 6/10 条**：
+- [x] ✅ **WO#16 层 B（审核 60/61 已批准范围）—— 10/10 条全部完成**：
       ✅ 已完成：① seed 北交大+3 校区（迁移 012）② 两个只读 API ③ count=null 策略
       ✅ ④ MapScreen 接权威实体 ⑤ 学校搜索页 `#/schools` ⑥ CampusScreen 保持「校园广场 ▼」
       ⏳ 未完成：⑧ 必要 Gate+敏感度 ⑨停止局部扩张 ⑩ M5 全局 audit（见下两条）
@@ -1134,15 +1134,15 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       · ⚠️ 计数策略 **A**：**不**给现有 4 条 post 补 campus attribution；
         `posts.school_campus_id` 未知就保持 NULL
 - [x] ✅ **WO#15**：审核 60 已写 **PASS / CLOSED**（无需再做）
-- [ ] ⬅ **层 B 第 8 条：必要 Gate + 必要 sensitivity**（⚠️ 我的清理脚本曾误删此条，已补回）
+- [x] ✅ **层 B 第 8 条已完成**（gate-wo16b-schools.mjs 9 键 + mutate-wo16b-schools.mjs 敏感度三阶段 PASS）
       · 学校搜索页（`#/schools`）与校区面板的**专门断言**（目前只有 wo16a 覆盖 CampusScreen 侧）
       · 把 `MAP_REGION_CAMPUS_PART: OMITTED_NO_AUTHORITATIVE_SELECTION` 做成可断言项并进 manifest
       · ⚠️ 按审核 61：新/改 Gate 必须**声明 fixture 依赖**（session/permission/DB/device state）并自行建立
       · 突变用 `scripts/m5/selftest-mutation.sh` 通用驱动证明能红
-- [ ] ⬅ **层 B 第 9/10 条：做完后停止局部扩张，提交 M5 GLOBAL COMPLETION AUDIT**（⚠️ 同上，已补回）
+- [x] ✅ **层 B 第 9/10 条已完成**：M5 全局回归审计 PASS（正序+逆序一致）；审计文档已按审核 62 纠正措辞与命名
       · 审核建议上限：**正常顺序** + **反向顺序**各跑一次完整回归；verdict 一致即停
       · 下一次审核关注点会变：不再是"还能加什么 Gate"，而是"M5 距最终关账还剩哪些**真正的产品 blocker**"
-- [ ] ⬅ **收窄 `docs/m5/A-D-LIST.md:220` 那条笼统的"✅ 一致"**（审核 60 要求；唯一保留的一条，原先重复 3 次）
+- [x] ✅ **A-D-LIST.md:220 已收窄**（新增 §五之二，拆成三条各自结论；原文保留不改写历史）
       应拆成：`Campus switcher presence/rough structure: PARTIAL` ／
       `subtitle text: MISMATCH`（current=北京交通大学 / original=校园广场 ▼）／
       `mock school/member data: MISMATCH / unsupported`
@@ -1218,3 +1218,66 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       · ⚠️ 按审核 61：新/改 Gate 必须**声明其 fixture 依赖**（session/permission/DB/device state）并自行建立
       · 突变应"把数据源接回 mock"并证明能红（用 `scripts/m5/selftest-mutation.sh` 通用驱动）
       （审核建议上限：正常顺序 + **反向顺序**各跑一次完整回归；verdict 一致即停）
+
+### ⭐⭐ Round 317：审核 62 落实 —— WO#16 **PASS / CLOSED**；WO#17／WO#18 立项
+
+**已完成并提交**：
+- [x] ✅ **审核 62 落盘**：`docs/review-log/62-…md`
+      `WO16_LAYER_A: PASS` ／ `WO16_LAYER_B_IMPLEMENTATION: PASS` ／
+      `WO16_FINAL_CLOSE: HOLD — 1 semantic closeout` → **修完即 CLOSED**（审核 62 明确："完成这一项即可"）
+- [x] ✅ ⭐⭐ **修掉审核 62 指出的计数语义漏洞**（`campusCircleCount` 的**覆盖完整性**）
+      ```
+      旧（错）："平台里有没有任何一条非空归属" ⇒ 有就算 established
+                ⇒ 4 帖 1 条归属时返回 校本部=1 / 威海=0 / 东校=0
+                  而那两个 0 是**伪造**：另 3 条 NULL 可能属于任意校区
+      新（对）：totalRelevantPosts == 0        → 覆盖完整 ⇒ 允许 0
+               0 <= attributed < total        → **覆盖不完整 ⇒ 全部 null**
+               attributed == total            → 覆盖完整 ⇒ 才允许真实 COUNT
+      ```
+      另**多修一处同源问题**：原实现把 `users.school_campus_id` 也计入覆盖 ——
+      但统计对象是"校园圈**动态数**"（post population）⇒ 已改为**只看 posts**
+- [x] ✅ **字段改名**（审核建议）：`attributionEstablished` → **`attributionCoverageComplete`**
+      + 新增诊断字段 `coverage:{totalRelevantPosts,attributedPosts}`（让"为什么是 null"可机械核对）
+- [x] ✅ **审核要求的小敏感度**：`scripts/m5/selftest-campus-count-coverage.sh`（四阶段全 PASS）
+      ```
+      ① 基线（0/4）→ 全 null ／ ② **只给 1 条**（1/4）→ **仍全 null** ⭐（旧实现会返回 1/0/0）
+      ③ 撤销 → DB 无残留 ／ ④ 覆盖完整（4/4）→ 给出**真实** COUNT（0 此时**有资格**）
+      ```
+      ⭐ ④ 是**反向证明**：证伪"规则退化成永远给 null"这种偷懒实现（审核只要求 ①②，我补 ④）
+- [x] ✅ **新 Gate 断言** `CAMPUS_COUNT_COVERAGE_SEMANTICS`（gate-wo16b 现 **9 键**，全 PASS / EXIT=0）
+      与 DB 级 selftest 的分工：前者证"服务端**算得对**"，后者类证"接口**如实传出**且 UI 照做"
+      ⇒ 缺任一都会出现"服务端对但界面仍显示 0"的漏网
+- [x] ✅ ⚠️ **纠正我审计文档里那句自相矛盾的话**（审核 62 第 2 条）
+      原文"**没有已知的、可执行的假数据面**"与紧接着列出的 A1/A2 **直接矛盾**
+      ⇒ 已改为"主要主链路高度收敛，但**仍剩余至少 A1/A2**"
+      ⇒ 教训：**用"没有…"这类全称否定作结论前，必须先核对同一文档里的清单**
+- [x] ✅ **审计裁决改名**（审核 62 第 2 条）：
+      `M5_GLOBAL_AUDIT: PASS` → `M5_GLOBAL_REGRESSION_AUDIT: PASS` +
+      `M5_COMPLETION_STATUS: BLOCKED` + `M5_CLOSEOUT_PHASE: ACTIVE`
+      （⚠️ 审核明确"只是命名修正，**不要再扩测试范围**" —— 我遵守）
+- [x] ✅ **WO#16 状态**：**PASS / CLOSED**（层 A + 层 B 全部交付，唯一 blocker 已修并双向证明）
+
+**⬅ 下轮从这里继续（审核 62 已给定优先级）**：
+- [ ] ⬅ **WO#17 `WO17_POST_IDENTITY_AND_COMMENT_AUTHORITY`（A1，**第一优先**）**
+      审核指出它的优先级**高于** A2，因为它不只是"显示假数据"，而是 **identity corruption**：
+      "请求/点击的是 post A，页面显示的是 post B"（与 WO#12 的 `users[id] ?? users.u1` 完全同型）
+      ```
+      · 去掉 `posts.find(...) ?? posts[0]` 静默兜底
+      · 目标 post 不存在 → unavailable/error（**不**静默换实体）
+      · CommentsScreen 与 FeedDetail 使用**同一** authoritative post identity
+      · 不再保留"一真一假"的双数据源
+      ⚠️ 审核明确："不要趁机重做整个评论系统"（目标尽量窄）
+      ```
+- [ ] ⬅ **WO#18 `WO18_POI_SEARCH_AUTHORITY`（A2，第二优先）**
+      `GET /api/places`（最小 read model 按**实际 UI 字段**设计，不要扩成完整 POI 平台）；
+      `posts: 1284` 若 UI 需要"该地点动态数"⇒ 用 `COUNT(posts WHERE place_id = places.id)`
+      **真实计算**；不能可靠表达则 null/不渲染，**绝不能继续留 mock 数字**
+- [ ] ⬅ **A3/A4：一次有界的只读观察**（合并取证，**不**分别开四个考古单）
+      只回答 **entry** ／ **navigation target** ／ **最低可见 contract**
+      ⚠️ 审核强调：「**存在原版 screen baseline**」≠「我们已经知道它的**用户入口**」
+      ⇒ 必须把 **destination correctness** 与 **entry reachability** 分开
+- [ ] ⬅ **A5（视觉/语义）：默认方案 (c) + 定点 (b)**
+      · 可机械测量的 claim（色相/bbox/几何/ROI/颜色族）⇒ 用现有 pixel analyzer 收敛
+      · 少量关键视觉语义 ⇒ 把具体 baseline/current PNG **上传到审核会话**，由远端 reviewer 看图核对
+      · 非关键/非默认 fallback ⇒ 保留 known limitation
+      ⚠️ **不**建设新 vision 基础设施；但也**不能**无限全挂 NOT_EVALUATED 后宣布完成（最终目标严格 1:1）

@@ -916,8 +916,17 @@ export interface ApiCampus {
 export interface ApiSchoolCampuses {
   schoolId: string
   items: ApiCampus[]
-  /** 归属机制是否已建立（false 时所有 campusCircleCount 都是 null） */
-  attributionEstablished: boolean
+  /**
+   * ⭐ 归属**覆盖完整性**（审核 62 收紧；WO#16 closeout）
+   *   true  ⇔ **该有归属的帖子全部都有** school_campus_id ⇒ 此时 campusCircleCount 才可信
+   *   false ⇔ 覆盖不完整 ⇒ **所有 campusCircleCount 都是 null**
+   * ⚠️ 改名原因（审核 62）：原 `attributionEstablished` 容易被读成
+   *   "存在任何归属"，而正确的条件是"**归属覆盖完整**" ——
+   *   4 条帖子里只有 1 条有归属时，另两个校区**不能**给出 0。
+   */
+  attributionCoverageComplete: boolean
+  /** 诊断用：覆盖率分子/分母（让"为什么是 null"可被机械核对） */
+  coverage?: { totalRelevantPosts: number; attributedPosts: number }
 }
 
 /** 学校列表（只读）。目前只有 1 所（种子），这是**数据驱动的差异**，不是实现缺陷。 */

@@ -60,7 +60,7 @@ export function SchoolSearchScreen() {
         return
       }
       setCampuses(cr.value.items)
-      setAttrEstablished(cr.value.attributionEstablished)
+      setAttrEstablished(cr.value.attributionCoverageComplete)
       setState('ready')
     })()
   }, [])
@@ -129,7 +129,7 @@ export function SchoolSearchScreen() {
                   </span>
                   {/*
                     ⭐ 计数只在**权威可算**时渲染（见文件头说明）。
-                    当前 attributionEstablished=false ⇒ 这里**不渲染**，
+                    当前 attributionCoverageComplete=false ⇒ 这里**不渲染**，
                     而不是显示"0条校园圈"。
                   */}
                   {campus.campusCircleCount !== null && (

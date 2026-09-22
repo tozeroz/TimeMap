@@ -139,14 +139,78 @@ X3.2 观察项：若再出现慢启动，`[migrate] ...: code=<SQLSTATE> ...` �
 
 ## 四、诚实结论
 
-```
-M5 的**产品层收敛**已完成到"没有已知的、可执行的假数据面"：
-  · 12 个迁移、16 个门禁（本轮前向 15 个设备门禁全 EXIT=0）、25 个屏幕
-  · mock 在**可执行/可呈现的 surface** 上已全部被清除或登记为 TEMPORARY deviation
-  · 唯一的"仍是假"的两处（A1 CommentsScreen、A2 PoiSearchScreen）**修法明确但尚未做**
+> ⚠️ 本节措辞已于 2026-09-22 按**审核 62 第 2 条**纠正（原句自相矛盾，见下方"自查"）。
 
-M5 **尚未**达到"可以关账"的状态，剩余的是**上面 A 类**（真正需要做的工作），
-而**不是**"再多加几个 Gate"。这正是审核 61 提醒我不要再做的方向。
+```
+主要主链路**已经高度收敛**：
+  · 12 个迁移、16 个门禁（本轮正常顺序 15 个设备门禁全 EXIT=0）、25 个屏幕
+  · mock 在可执行/可呈现的 surface 上已全部被清除或登记为 TEMPORARY deviation
+
+但**目前仍明确剩余至少两个**已知、当前可执行的 fake-data surface：
+  A1 CommentsScreen —— 含 `posts.find(...) ?? posts[0]` 静默兜底
+       ⚠️ 它不只是"显示假数据"，而是**身份篡改**：请求 post A、页面显示 post B
+       （与 WO#12 的 `users[id] ?? users.u1` 完全同型）
+  A2 PoiSearchScreen —— mock POI + 无出处的 `posts: 1284`
+
+⇒ **M5 尚不可关账**。剩余的是 A 类**真工作**，
+   而**不是**"再多加几个 Gate"（这正是审核 61 提醒我不要再做的方向）。
 ```
 
-⚠️ 本审计**不声称 M5 已完成**。下节列出建议的收尾顺序。
+### ⚠️ 自查：本审计初稿有一句**自相矛盾**的话（审核 62 纠正）
+
+初稿我写的是"**M5 的产品层收敛已完成到'没有已知的、可执行的假数据面'**" ——
+这与**紧接着的下一行**（"唯一的'仍是假'的两处（A1、A2）修法明确但尚未做"）**直接矛盾**：
+A1/A2 本身就是已知、当前可执行的假数据面。
+
+⇒ 已按审核 62 给出的口径改写为"主要主链路高度收敛，但**仍剩余至少 A1/A2**"。
+
+**教训（值得记进纪律）**：写结论句时用了"**没有…**"这类**全称否定**，
+必须先回头核对同一份文档里的清单 ——
+否则"清单列了 5 条、结论说没有"会**同时误导读者与我自己**，
+而且这种矛盾在复核时很容易被"我自己的结论"掩盖（因为读的人会信任结论句）。
+
+### ⚠️ 另一处命名纠正（审核 62 第 2 条）
+
+本审计脚本的输出原为 `M5_GLOBAL_AUDIT: PASS`。审核指出这个名字**夸大了它证明的东西**：
+```
+它证明的：现有 16 个门禁全绿 ／ 正序逆序一致 ／ 当前 regression 没有明显顺序依赖
+它**没有**证明：M5 产品已经 complete
+```
+⇒ 已按审核建议改名（脚本与文档同步）：
+```
+M5_GLOBAL_REGRESSION_AUDIT: PASS      （回归/顺序审计通过）
+M5_COMPLETION_STATUS: BLOCKED          （产品完成度：受阻，未完成）
+M5_CLOSEOUT_PHASE: ACTIVE              （审核 62 第 3 条：已进入关账执行阶段，但不可关账）
+```
+⚠️ 这只是命名修正，**不因此扩大测试范围**（审核 62 明确要求）。
+
+---
+
+## 五、建议的收尾顺序（审核 62 已给定优先级）
+
+```
+WO16  → 修 attribution **部分覆盖**这一处语义（覆盖不完整 ⇒ 全部 null）→ **PASS / CLOSED**
+WO17  → A1：`WO17_POST_IDENTITY_AND_COMMENT_AUTHORITY`
+         · 去掉 `?? posts[0]`
+         · 目标 post 不存在 ⇒ unavailable/error（**不**静默换一个实体）
+         · CommentsScreen 与 FeedDetail 使用**同一** authoritative post identity
+         · 不再保留"一真一假"的双数据源
+         ⚠️ 审核明确："不要趁机重做整个评论系统"
+         ⚠️ 优先级高于 A2 —— 因为它是 **identity corruption**，比"显示假数据"危险
+WO18  → A2：`WO18_POI_SEARCH_AUTHORITY`（`GET /api/places`；最小 read model 按实际 UI 字段设计）
+         · `posts: 1284` 若 UI 确实需要"该地点动态数"⇒ 用
+           `COUNT(posts WHERE place_id = places.id)` **真实计算**；不能可靠表达则 null/不渲染
+A3/A4 → **一次有界的只读观察**（合并取证，不分别开四个考古单）
+         只回答：entry ／ navigation target ／ 最低可见 contract
+         ⚠️ 审核特别强调 A4：「**存在原版 screen baseline**」≠「我们已经知道它的用户入口」
+            ⇒ 必须把 **destination correctness** 与 **entry reachability** 分开
+A5    → 默认方案 **(c)**（审核 62 第 6 条）：
+         · 可**机械测量**的 claim（色相/bbox/几何/ROI/颜色族）⇒ 用现有像素分析器收敛
+         · **少量关键视觉语义**（头像 marker 长什么样／bubble 内有什么…）
+           ⇒ 把那几张具体的 baseline/current PNG **上传到审核会话**，由远端 reviewer 直接看图核对
+         · 非关键/非默认 fallback ⇒ 可保留 known limitation
+         ⚠️ **不**建设新的 vision 基础设施（那会掉回"局部过度收敛"）
+         ⚠️ 但 A5 **不能**无限全部挂 NOT_EVALUATED 然后宣布完成 ——
+            因为最终目标是严格 1:1（审核 62 原话）
+```
+

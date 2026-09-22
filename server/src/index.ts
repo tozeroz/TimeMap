@@ -1323,20 +1323,39 @@ export function buildServer(deps: ServerDeps) {
         [id],
       )
       /*
-        ⭐ 归属机制是否已建立？看**全平台**有没有任何一条非空归属。
-          （不是只看本 school：归属机制是全局性的；只要平台里出现过真实归属，
-            计数就有意义，届时该 campus 若确实为 0 也应如实给 0。）
+        ⭐⭐ 归属**覆盖完整性**判定（审核 62 收紧；WO#16 closeout）
+        ═══════════════════════════════════════════════════════════════
+        规则：`campusCircleCount` 可以是 number **当且仅当**"当前被计入该校园圈统计的
+              **post population** 已 100% 有显式 school_campus_id"。
+
+          totalRelevantPosts == 0          → 覆盖完整 ⇒ 允许 0
+          0 <= attributed < total          → **覆盖不完整 ⇒ 全部 count = null**
+          attributed == total              → 覆盖完整 ⇒ 才允许真实 COUNT
+
+        ⚠️ 这里修过一个**真实的语义漏洞**（我原来的实现）：
+           旧规则只看"平台里有没有**任何**一条非空归属"，于是当 4 条帖子里
+           **只有 1 条**有归属、另 3 条仍 NULL 时，它会认为"已建立"并返回
+             校本部 = 1 ／ 威海校区 = **0** ／ 东校区 = **0**
+           —— 那两个 0 是错误的：3 条 NULL 完全可能属于任意校区。
+           0 的语义是"**权威地知道**没有动态"，不是"目前没被归属到这里"。
+           ⇒ 根因：把"**存在任何归属**"当成了"**归属覆盖完整**"。
+
+        ⚠️ 另一处修正：覆盖完整性**只看 posts**。
+           原实现把 `users.school_campus_id` 也加进了那个计数，但
+           统计对象是"**校园圈动态数**"（post population）——
+           把 user 的归属混进来会得出"覆盖完整"的错误结论。
       */
-      const attr = await db.pool.query<{ n: string }>(
-        'select (' +
-          '(select count(*) from posts where school_campus_id is not null) + ' +
-          '(select count(*) from users where school_campus_id is not null)' +
-          ')::text as n',
+      const cov = await db.pool.query<{ total: string; attributed: string }>(
+        'select (select count(*) from posts)::text as total, ' +
+          '(select count(*) from posts where school_campus_id is not null)::text as attributed',
       )
-      const attributionEstablished = Number(attr.rows[0]?.n ?? '0') > 0
+      const totalRelevantPosts = Number(cov.rows[0]?.total ?? '0')
+      const attributedPosts = Number(cov.rows[0]?.attributed ?? '0')
+      /* 覆盖完整 = 该有归属的帖子**全部**都有归属（0 == 0 也算完整，此时允许 0） */
+      const attributionCoverageComplete = attributedPosts === totalRelevantPosts
 
       let counts = new Map<string, number>()
-      if (attributionEstablished) {
+      if (attributionCoverageComplete) {
         const cc = await db.pool.query<{ school_campus_id: string; n: string }>(
           'select school_campus_id, count(*)::text as n from posts ' +
             'where school_campus_id is not null group by school_campus_id',
@@ -1349,10 +1368,19 @@ export function buildServer(deps: ServerDeps) {
         items: cr.rows.map((row) => ({
           id: row.id,
           name: row.name,
-          // null = 无法由权威归属计算（**不是 0**）；见上方说明
-          campusCircleCount: attributionEstablished ? (counts.get(row.id) ?? 0) : null,
+          /*
+            null = 覆盖不完整／无法由权威归属计算（**不是 0**，见函数头说明）；
+            只有覆盖完整时才给真实 COUNT。
+          */
+          campusCircleCount: attributionCoverageComplete ? (counts.get(row.id) ?? 0) : null,
         })),
-        attributionEstablished,
+        /*
+          ⚠️ 字段改名（审核 62 建议）：原 `attributionEstablished` 容易把
+             "存在任何归属"误读成"归属覆盖完整" —— 正是上面那个漏洞的语言根源。
+        */
+        attributionCoverageComplete,
+        // 诊断用（也让"为什么是 null"可被机械核对）；不暴露任何敏感数据
+        coverage: { totalRelevantPosts, attributedPosts },
       }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)

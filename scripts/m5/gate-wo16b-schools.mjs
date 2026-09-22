@@ -105,7 +105,9 @@ const expected = await evaluate(`(async () => {
       schoolName: school.name,
       campusNames: (cd.items || []).map((c) => c.name),
       counts: (cd.items || []).map((c) => c.campusCircleCount),
-      attributionEstablished: cd.attributionEstablished,
+      /* ⭐ 审核 62：字段已从 attributionEstablished 改名为 attributionCoverageComplete */
+      attributionCoverageComplete: cd.attributionCoverageComplete,
+      coverage: cd.coverage || null,
     }
   } catch (e) { return { ok: false, why: String(e && e.message) } }
 })()`)
@@ -208,6 +210,34 @@ const v = {
     // 服务端有数字：那就不该"不渲染"
     return anyCountRendered ? 'PASS' : 'FAIL'
   })(),
+  /**
+   * ⭐ 计数**覆盖语义**自洽（审核 62 收紧后新增；WO#16 closeout）
+   *   规则：count 可以是 number **当且仅当**该校园圈统计的 post population 100% 有归属
+   *   ⇒ 从**API 响应本身**做机械核对（不依赖 DB 直连）：
+   *     ① 覆盖不完整（attributionCoverageComplete=false）⇒ **每个** count 都必须是 null
+   *     ② 覆盖完整（true）⇒ 不允许出现 null（此时 0 是**有资格**的，0 ≠ null）
+   *     ③ coverage 诊断字段必须存在且自洽（attributed <= total；complete ⇔ attributed==total）
+   *   ⚠️ 为什么放在这里而不是只靠 DB 级 selftest：
+   *     DB 级测试证的是"服务端算得对"；本键证的是"**接口把这个结论如实传出去了、且 UI 也照做了**"。
+   *     两者缺一，都会出现"服务端对但界面仍显示 0"的漏网。
+   */
+  CAMPUS_COUNT_COVERAGE_SEMANTICS: (() => {
+    if (!exp) return 'INCONCLUSIVE'
+    const complete = exp.attributionCoverageComplete
+    if (typeof complete !== 'boolean') return 'FAIL'
+    const allNull = exp.counts.every((c) => c === null)
+    if (!complete && !allNull) return 'FAIL' // 覆盖不完整却给了数字
+    if (complete && allNull) return 'FAIL' // 覆盖完整却全给 null（退化成"永远不可用"）
+    const cov = exp.coverage
+    if (!cov || typeof cov.totalRelevantPosts !== 'number' || typeof cov.attributedPosts !== 'number') {
+      return 'FAIL'
+    }
+    if (cov.attributedPosts > cov.totalRelevantPosts) return 'FAIL'
+    if (complete !== (cov.attributedPosts === cov.totalRelevantPosts)) return 'FAIL'
+    // 覆盖不完整时，UI 也**不得**渲染任何计数字段
+    if (!complete && rows.some((r) => r.hasCount)) return 'FAIL'
+    return 'PASS'
+  })(),
   /** 面板标题逐字「<学校名>（当前学校）」 */
   CAMPUS_PANEL_TITLE:
     !exp ? 'INCONCLUSIVE' : panel && panel.title === exp.schoolName + '（当前学校）' ? 'PASS' : 'FAIL',
@@ -234,6 +264,7 @@ const KEYS = [
   'SCHOOL_ROW_SHAPE',
   'SCHOOL_ROWS_FROM_AUTHORITY',
   'CIRCLE_COUNT_NULL_NOT_RENDERED',
+  'CAMPUS_COUNT_COVERAGE_SEMANTICS',
   'CAMPUS_PANEL_TITLE',
   'CAMPUS_PANEL_FROM_AUTHORITY',
   'SCHOOL_SEARCH_ENTRY_NAVIGATES',
