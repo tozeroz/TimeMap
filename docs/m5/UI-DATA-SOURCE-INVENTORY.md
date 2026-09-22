@@ -73,3 +73,36 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 4. 不要为了"过 Gate"在正式 UI 上到处加"这是 mock"的可见标签 ——
    那本身会制造新的 1:1 偏差（审核记录 44）
 ```
+
+## 五、机器可读快照（由 scripts/m5/ui-data-source-inventory.mjs --write 生成）
+
+<!-- BEGIN:MACHINE-SNAPSHOT -->
+扫描范围：app/src/screens（25 个文件）
+统计：api-only=11 ／ mock+api=2 ／ mock-only=5 ／ types-only=0 ／ none=7
+
+| AnnounceScreen.tsx | none | — | — | — |
+| BoardScreen.tsx | mock+api | boardEmojis, me | — | getBoardNotes, postBoardNote, relativeTime |
+| CampusScreen.tsx | mock+api | campusInfo, schools | FeedPost | isLoggedIn, likePost, listPosts, readSnapshot, toFeedPost, unlikePost |
+| ChatScreen.tsx | api-only | — | — | fetchMediaBlobUrl, getSession, getThread, getThreadMessages, postThreadImageMessage, postThreadTextMessage, postThreadVoiceMessage, relativeTime, uploadMedia |
+| CommentsScreen.tsx | mock-only | comments, posts | — | — |
+| DailyScreen.tsx | none | — | — | — |
+| DrawerPages.tsx | none | — | — | — |
+| FeedDetailScreen.tsx | api-only | — | — | avatarFor, createComment, getComments, getPost, isLoggedIn, likePost, mediaUrl, readSnapshot, relativeTime, unlikePost |
+| FeedListScreen.tsx | api-only | — | FeedPost | listPosts, readSnapshot, toFeedPost |
+| LoginScreen.tsx | api-only | — | — | requestLoginCode, verifyLoginCode |
+| LoginSelectScreen.tsx | none | — | — | — |
+| MapScreen.tsx | api-only | — | MapMarker | listPosts |
+| MeScreen.tsx | api-only | — | — | logout, me |
+| MediaPreviewScreen.tsx | mock-only | posts | — | — |
+| MessageScreen.tsx | api-only | — | — | getSession, getThreads, relativeTime |
+| MoreScreen.tsx | none | — | — | — |
+| OnboardingScreen.tsx | none | — | — | — |
+| PoiDetailScreen.tsx | api-only | — | — | avatarFor, getPlace, relativeTime |
+| PoiSearchScreen.tsx | mock-only | pois | — | — |
+| ProfileEditScreen.tsx | api-only | — | — | me, patchMyDisplayName, updateSessionUser |
+| PublishScreen.tsx | api-only | — | — | createPost, toFeedPost |
+| ScannerScreen.tsx | mock-only | scannerHints | — | — |
+| SimpleScreen.tsx | none | — | — | — |
+| UpgradeDialog.tsx | mock-only | upgradeInfo | — | — |
+| UserProfileScreen.tsx | api-only | — | FeedPost | getThreads, getUser, listPosts, toFeedPost |
+<!-- END:MACHINE-SNAPSHOT -->

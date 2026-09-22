@@ -50,6 +50,12 @@ run "③ PowerShell 脚本完整性（BOM/换行/非空可解析）" bash script
 #    旧快照 ≠ 权威索引 是**合法历史**（M0 复现失败 → M3 恢复），不应判 FAIL。
 #    正确口径：有 supersedes 声明 → EXPLAINED_MISMATCH（OK）；无解释 → FAIL。
 run "④b 基线来源权威性（SOURCE_VALIDITY；抓 UNEXPLAINED mismatch）" node scripts/m5/baseline-inventory.mjs --check
+# ⭐ ④c UI 数据源清单**漂移检查**（与 ④b 同一思路：让"文档过期"机械可见）
+# 起因：`UI-DATA-SOURCE-INVENTORY.md` 写在"WO#8 之后"，而 WO#11–15 已把其中**多屏**从 mock
+#      改成权威，文档却没同步 ⇒ 它会**误导下一个工作单的选择**（而它的用途正是"挑单时先看"）。
+# 原文档 §四 写了"新增屏幕必须登记"，但那是**手动规则** ⇒ 必然漂移。
+# ⇒ 改为机械生成快照 + 本项检查：与源码不一致即 FAIL，并列出差异。
+run "④c UI 数据源清单漂移（UI_DATA_SOURCE_INVENTORY）" node scripts/m5/ui-data-source-inventory.mjs --check
 
 echo
 echo "=============================================================="
@@ -79,7 +85,7 @@ echo "  （本聚合器只跑**非破坏性、不需要服务器、不需要设�
 echo
 echo "=============================================================="
 if [ "$FAIL" -eq 0 ]; then
-  echo "CHECK_ALL_LOCAL: PASS（上述各项本地检查全部通过；其中 ④b 为审核 57 批准接入的基线来源权威性检查）"
+  echo "CHECK_ALL_LOCAL: PASS（上述各项本地检查全部通过；④b=基线来源权威性 ④c=UI 数据源清单漂移，两者都是"让过期/不一致机械可见"）"
 else
   echo "CHECK_ALL_LOCAL: FAIL（至少一项失败，见上面的 **FAIL** 标记）"
 fi
