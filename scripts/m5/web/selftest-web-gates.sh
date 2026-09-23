@@ -52,8 +52,10 @@ echo
 echo "════ 0) 基线 ════"
 B_MOUNT="$(run_gate scripts/m5/web/gate-web-app-mount.mjs)"
 B_CLEAN="$(run_gate scripts/m5/web/gate-web-load-clean.mjs)"
+B_LOGIN="$(run_gate scripts/m5/web/gate-web-login.mjs)"
 echo "  mount: ${B_MOUNT:0:150}"
 echo "  clean: ${B_CLEAN:0:150}"
+echo "  login: ${B_LOGIN:0:150}"
 
 echo
 echo "════ 注入（零风险：只在子路径放坏页面，不碰线上首页）════"
@@ -106,6 +108,14 @@ A_CLEAN="$(run_gate scripts/m5/web/gate-web-load-clean.mjs 'WEB_ENTRY_PATH=/load
 echo "  ${A_CLEAN:0:300}"
 
 echo
+echo "--- login 门禁指向 /web-broken/ ⇒ 应**变红**（那里没有登录 UI）---"
+# ⚠️ 归因说明：/web-broken/ 是"缺 #root"的页面 ⇒ 应用不渲染 ⇒ 页面上**没有登录控件**，
+#    所以登录门禁的断言必然为假。变红的原因正是"登录 UI 不存在"（即被测应用坏了），
+#    而不是环境问题（页面本身是 200、origin 正确）。
+A_LOGIN="$(run_gate scripts/m5/web/gate-web-login.mjs 'WEB_ENTRY_PATH=/web-broken/')"
+echo "  ${A_LOGIN:0:300}"
+
+echo
 echo "════ 移除注入并复核回绿 ════"
 # ⚠️ 清理**不能**写成 `ssh "rm -rf ..."`：本会话的删除守卫会拦下"组合/不透明 shell 语法
 #    里的删除"⇒ 整条 ssh 返回非零（我因此在原子部署那里被卡过一轮）。
@@ -123,8 +133,10 @@ scp -i "$KEY" -o BatchMode=yes /tmp/cleanup-inject.sh "$TARGET:/tmp/cleanup-inje
 ssh -i "$KEY" -o BatchMode=yes "$TARGET" 'bash /tmp/cleanup-inject.sh' 2>&1 | sed 's/^/  /'
 C_MOUNT="$(run_gate scripts/m5/web/gate-web-app-mount.mjs)"
 C_CLEAN="$(run_gate scripts/m5/web/gate-web-load-clean.mjs)"
+C_LOGIN="$(run_gate scripts/m5/web/gate-web-login.mjs)"
 echo "  mount: ${C_MOUNT:0:150}"
 echo "  clean: ${C_CLEAN:0:150}"
+echo "  login: ${C_LOGIN:0:150}"
 
 echo
 echo "════════ 汇总 ════════"
@@ -156,6 +168,15 @@ case "$A_MOUNT" in *'"ROOT_ELEMENT_PRESENT":false'*) ;; *) require "mount 注入
 case "$A_CLEAN" in *"$not_ready"*) require "clean 注入后是「未就绪」兜底 ⇒ 归因错误" 1;; esac
 case "$A_CLEAN" in *'"ON_WEB_ORIGIN":true'*) ;; *) require "clean 注入后页面没真正加载 ⇒ 变红原因不可信" 1;; esac
 case "$A_CLEAN" in *'"NO_FAILED_STATIC_RESOURCES":false'*) ;; *) require "clean 注入后未出现预期的 '静态资源失败' 特征" 1;; esac
+
+# —— login 注入 ——
+# ⚠️ 断言必须盯**前置断言**（SCREEN_PRESENT），而不是那些"否定式"断言：
+#    否定式断言（"没跳转到登录页"）在页面整个坏掉时**天然为真**，
+#    我第一版就是拿它当敏感度判据，于是误报"没有变红"。
+case "$B_LOGIN" in *'"LOGINSELECT_SCREEN_PRESENT":true'*) ;; *) require "login 基线不是 PASS（前置断言没成立）" 1;; esac
+case "$A_LOGIN" in *"$not_ready"*) require "login 注入后是「未就绪」兜底 ⇒ 归因错误" 1;; esac
+case "$A_LOGIN" in *'"LOGINSELECT_SCREEN_PRESENT":false'*) ;; *) require "login 注入后前置断言仍为真 ⇒ 判据空虚" 1;; esac
+case "$C_LOGIN" in *'"LOGINSELECT_SCREEN_PRESENT":true'*) ;; *) require "login 移除注入后没回绿" 1;; esac
 
 # —— 还原 ——
 case "$C_MOUNT" in *'"ROOT_HAS_CHILDREN":true'*) ;; *) require "mount 移除注入后没回绿" 1;; esac
