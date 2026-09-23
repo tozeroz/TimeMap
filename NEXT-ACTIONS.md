@@ -1792,7 +1792,8 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ✅ **全量回归完成**：**25 门禁 × 两轮（正序+逆序）全部 EXIT=0、逐门禁一致、无顺序敏感**
       （M5_GLOBAL_REGRESSION_AUDIT: PASS；服务器侧与本地检查均 PASS）
       ⚠️ 前一次的"顺序敏感"是**我自己中途改文件**造成的污染，已如实记录并干净重跑
-- [ ] ⬅ 待做：把本轮所有裁定/结论汇总到最终 audit，并请审核裁定 **M5 能否关账**
+- [x] ✅ 已完成（见上方 closeout 与关账记录）；本轮所有裁定/结论已汇总进最终 audit 与
+      docs/review-log/69-m5-formally-closed.md，并已取得"**M5 可以正式关账**"的裁定。
 - [ ] 已降级/待裁定：F-002（non-blocking）／WO10.9／WO14.6／X3.2／I3（若公开）
 
 ### ⭐⭐ Round 319 末：审核 68 点名的**三项 closeout 全部销项** + 最终干净回归全绿
@@ -1817,5 +1818,25 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       ⇒ 从仓库重建会让公共图片全 404；已把服务器内容纳入仓库使"唯一真源=本仓库"重新为真
 - [x] ✅ **修掉我自己 6 个门禁缺陷**（其中一个最严重：**我的门禁污染了别人的门禁** ——
       QR 门禁的 prototype 补丁不可撤销 ⇒ 使 scanner 门禁第一帧就 found ⇒ 误报 FAIL）
-- [ ] ⬅ 待审核裁定：三个 closeout 是否销项／**M5 能否关账**（已提交，等回复）
-- [ ] 待裁定不变：`VOICE_CONSUMPTION` 是否要补播放器 UI；`WO10.9`／`WO14.6`；I3（若公开）
+- [x] ✅ **审核裁定收到：三个 closeout 全部 PASS / CLOSED**
+      `WO21_PUBLISH_MEDIA_ATTACH: PASS / CLOSED`
+      `WO22_REAL_QR_SCANNER: PASS / CLOSED`（接受当前证据，**不要求**再人工补光学 smoke）
+      `WO23_APP_UPDATE: PASS / CLOSED`（`INSTALL_HANDOFF_TO_OS: INITIATED` 口径被认可）
+- [x] ✅ **M5 正式 PASS / CLOSED**（审核 69）：M0–M5 全部关账
+      ⚠️ 审核明确指令：**停止**主动寻找新的 M5 工作；除非真实回归或新的明确产品需求，
+         否则不要因"还能再验证一点什么"重开 M5。
+      ⚠️ `VOICE_CONSUMPTION: NOT_IMPLEMENTED` 被明确判为 **NON-BLOCKING CURRENT SCOPE**，
+         且**不得**据此扩大 WO#21（若将来有证据表明原版 Feed 必须播放语音帖，那是**新的**能力缺口）。
+      ⚠️ 措辞已按建议改为 "App update flow / install handoff"（不写 "silent self-update"）。
+
+### 🎯 M5 关账后：**M5 相关队列清空**
+
+- [x] ✅ 所有 M5 相关工作项已关账（审核 69：`M5_EXPERIENCE_COMPLETION: PASS / CLOSED`）
+- ⬅ **以下各项属于 Release / Polish，或为已知非阻塞限制，不再属于 M5**：
+  · `VOICE_CONSUMPTION` 播放器 UI（**需新的产品需求**才做，不得据此重开 WO#21）
+  · 扫码光学 smoke test（发布前顺手做，**不再是 M5 Gate**）
+  · 原版扫码后去向／原版更新去向／原版语音手势：均 `NOT_EVALUATED`（只读约束）
+  · I1 依赖清单收录 jsQR／I3 图标重绘／视觉像素级 backlog：**Release / Polish**
+  · `WO10.9`／`WO14.6`／`X3.2`：历史关账措辞与待观察项，**不重开**
+- ⚠️ **纪律（审核 69 指令）**：除非发现**真实回归**或**新的明确产品需求**，
+  **不得**因为"还能再验证一点什么"重新打开 M5。

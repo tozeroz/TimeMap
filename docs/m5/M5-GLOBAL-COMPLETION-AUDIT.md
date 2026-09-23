@@ -214,3 +214,19 @@ A5    → 默认方案 **(c)**（审核 62 第 6 条）：
             因为最终目标是严格 1:1（审核 62 原话）
 ```
 
+---
+
+## ⭐⭐ M5 正式关账（审核 69，2026-09-23 14:00）
+
+```
+M5_GLOBAL_REGRESSION_AUDIT: PASS
+M5_EXPERIENCE_COMPLETION:   PASS / CLOSED
+  27 device gates × (forward + reverse) = 54/54 clean ／ no order-sensitive result
+  server gate: PASS ／ CHECK_ALL_LOCAL: PASS
+最终冻结：M0 CLOSED ／ M1 CLOSED ／ M2 CLOSED ／ M3 CLOSED ／ M4 CLOSED ／ **M5 PASS / CLOSED**
+```
+
+详见 docs/review-log/69-m5-formally-closed.md。
+
+⚠️ 审核 69 的明确指令：**停止**从 Gate/自测/原版观察里主动寻找新的 M5 工作；
+除非发现**真实回归**或**新的明确产品需求**，否则不要因为"还能再验证一点什么"重开 M5。
