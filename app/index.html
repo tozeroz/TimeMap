@@ -10,23 +10,28 @@
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="apple-touch-icon" href="./favicon.svg" />
     <title>Campus</title>
-    <!--
-      ⚠️ 本文件会**原样下发到浏览器**（包括注释），所以这里只留必要的短说明；
-      完整的设计理由写在 docs/ 与提交信息里，不要往生产 HTML 里塞内部推理。
-      —— 这条本身就是 WO#25 的一次修正：最初把大段内部注释写在这里，
-         让 index.html 从 519 字节涨到 2376 字节，且把内部判断暴露给了每个访客。
-    -->
     <script>
-      // 网页端放开缩放（原生壳内保持 user-scalable=no）。
-      // 细节见 docs/WEB-FRONTEND.md「与原生端的差异」。
+      /*
+        网页端放开缩放；原生壳内保持 user-scalable=no。
+        判别方式用 location.hostname：原生壳的页面源是 https://localhost
+        （Capacitor androidScheme 的既定行为），网页端是我们自己的域名/IP。
+        ⚠️ 刻意**不依赖 window.Capacitor 是否已注入** —— 原生桥的脚本注入时机
+           不由我们控制，若它还没到就判断，会把原生 App 误判成网页端、
+           从而把 App 的缩放也放开（那是原生侧的行为回归）。
+        注：本文件会原样下发到浏览器，注释保持简短；完整理由见 docs/ 与提交信息。
+      */
       ;(function () {
-        var cap = window.Capacitor
-        var isNative = typeof cap?.isNativePlatform === 'function' && cap.isNativePlatform() === true
-        if (isNative) return
+        var isNativeShell =
+          location.hostname === 'localhost' ||
+          (typeof window.Capacitor?.isNativePlatform === 'function' && window.Capacitor.isNativePlatform() === true)
+        if (isNativeShell) return
         var m = document.querySelector('meta[name="viewport"]')
         if (m) m.setAttribute('content', 'width=device-width, initial-scale=1.0, viewport-fit=cover')
       })()
     </script>
+  </head>
+  <body>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

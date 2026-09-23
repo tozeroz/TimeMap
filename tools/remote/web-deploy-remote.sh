@@ -44,12 +44,37 @@ smoke() {
   r=$(code http://127.0.0.1/.well-known/acme-challenge/x); p "ACME 目录仍可达" "$r"
 
   echo
+  echo "  --- 挂载点检查（⚠️ 这一条是补上来的，见下）---"
+  # ⚠️⚠️ 为什么必须查 #root：
+  #   我曾在"精简 index.html 注释"时**误删了 <body> 与 <div id="root">**，
+  #   部署后 `/` 仍是 200、<title> 也正常 —— 于是**原有冒烟全绿**，
+  #   但页面上什么都没有（React createRoot 拿到 null，报 React error #299）。
+  #   ⇒ "HTTP 200 + 标题对" **证明不了应用能挂载**。
+  #     所以这里显式断言挂载点与模块脚本都在。
+  HTML=$(curl -s -m 10 http://127.0.0.1/)
+  if printf '%s' "$HTML" | grep -q 'id="root"'; then
+    p "HTML 含 <div id=\"root\">" "yes"
+  else
+    p "HTML 含 <div id=\"root\">" "**NO**"; fail=1
+  fi
+  if printf '%s' "$HTML" | grep -q 'type="module"'; then
+    p "HTML 含 module 入口脚本" "yes"
+  else
+    p "HTML 含 module 入口脚本" "**NO**"; fail=1
+  fi
+  if printf '%s' "$HTML" | grep -q '<body'; then
+    p "HTML 含 <body>" "yes"
+  else
+    p "HTML 含 <body>" "**NO**"; fail=1
+  fi
+
+  echo
   echo "  --- 页面标题（确认下发的真的是我们的 index.html）---"
-  curl -s -m 10 http://127.0.0.1/ | grep -o '<title>[^<]*</title>' | head -1 | sed 's/^/    /'
+  printf '%s' "$HTML" | grep -o '<title>[^<]*</title>' | head -1 | sed 's/^/    /'
   echo "  --- 是否声明了图标（favicon 404 的验证点）---"
-  curl -s -m 10 http://127.0.0.1/ | grep -o 'rel="icon"[^>]*' | head -1 | sed 's/^/    /'
-  echo "  --- 是否有 version.ts 之外的可疑残留文件 ---"
-  find "$WEB" -type f | wc -l | sed 's/^/    文件总数: /'
+  printf '%s' "$HTML" | grep -o 'rel="icon"[^>]*' | head -1 | sed 's/^/    /'
+  echo "  --- 文件总数 ---"
+  find "$WEB" -type f | wc -l | sed 's/^/    /'
 
   echo
   if [ "$fail" = 0 ]; then echo "WEB_SMOKE: PASS"; else echo "WEB_SMOKE: FAIL"; exit 1; fi
