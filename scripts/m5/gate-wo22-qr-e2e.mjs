@@ -116,6 +116,48 @@ const READ = `(() => {
 })()`
 
 console.log('')
+/*
+  ⭐⭐ 前置清理：**必须在开始前清掉上一次运行可能残留的 drawImage 补丁**。
+  ⚠️ 为什么需要（真实踩到过）：补丁挂在 CanvasRenderingContext2D.prototype 上，
+     而 WebView 页面在两次门禁运行之间**不会重载** ⇒ 若上一次没还原（旧版本代码没有还原逻辑），
+     本次一进扫码页就**第一帧识别成功**（phase=found、frames=1）
+     ⇒ 本门的 `SCANNER_WAS_SCANNING_BEFORE` 误报 FAIL，而根因在**上一次运行**。
+  ⇒ 一边"运行前清理"、一边"运行后还原"，两头都做，才不会被上一次的运行状态左右。
+     这也是"门禁必须自己保证前置状态"，而不是假设环境是干净的。
+*/
+{
+  const cleared = await evaluate(`(() => {
+    const p = CanvasRenderingContext2D.prototype
+    if (p.__wo22patched && p.__wo22origDrawImage) {
+      p.drawImage = p.__wo22origDrawImage
+      delete p.__wo22patched
+      delete p.__wo22origDrawImage
+      return { cleared: true }
+    }
+    return { cleared: false, stuck: !!p.__wo22patched }
+  })()`)
+  log('STALE_PATCH_CLEARED', cleared)
+
+  /*
+    ⚠️⚠️ 若**清不掉**（stuck:true），说明残留的是**旧版本补丁**：
+       旧版把原函数存在**闭包**里、只把 `__wo22patched=true` 挂在原型上
+       ⇒ 没有任何引用能还原它 ⇒ 只能**重载页面**（原型是页面级的，重载即丢弃）。
+    ⭐ 这就是"我的门禁污染了别人的门禁"的完整修复：
+       既要"运行前清理 + 运行后还原"（新版本），
+       也要能处理**历史上已经留下**的、清不掉的残留（重载）。
+    ⚠️ 教训：给被测环境打补丁时，**必须把还原所需的引用也保存到可访问的地方**
+       （把它存到原型上，而不是闭包里）—— 否则补丁就是**不可撤销**的。
+  */
+  if (cleared && cleared.stuck) {
+    console.log('  ⚠ 检测到**不可撤销的旧补丁残留** ⇒ 重载页面以丢弃原型修改')
+    await evaluate(`window.location.reload()`)
+    await sleep(6000)
+    const after = await evaluate(`(() => ({ patched: !!CanvasRenderingContext2D.prototype.__wo22patched, hash: location.hash }))()`)
+    log('AFTER_RELOAD', after)
+  }
+}
+
+console.log('')
 console.log('=== 1) 进入扫码页（真实入口：抽屉「扫一扫」）→ 应进入 scanning ===')
 await evaluate(`location.hash = '#/me'`)
 await sleep(2200)
@@ -146,6 +188,8 @@ const injected = await evaluate(`(async () => {
   const proto = CanvasRenderingContext2D.prototype
   if (!proto.__wo22patched) {
     const orig = proto.drawImage
+    /* ⭐ 把原函数留在 proto 上，供测试结束**还原**（见文件末尾） */
+    proto.__wo22origDrawImage = orig
     proto.drawImage = function (src, ...rest) {
       if (src && src.tagName === 'VIDEO' && src.hasAttribute && src.hasAttribute('data-scanner-video')) {
         return orig.call(this, img, ...rest)
@@ -225,6 +269,42 @@ const incon = KEYS.filter((k) => v[k] === 'INCONCLUSIVE')
 v.WO22_QR_E2E_GATE = anyFail ? 'FAIL' : incon.length ? 'PASS_WITH_INCONCLUSIVE' : 'PASS'
 v.INCONCLUSIVE_KEYS = incon
 log('VERDICT', v)
+
+/*
+  ⭐⭐ 收尾：**必须还原** drawImage 补丁。
+  ════════════════════════════════════════════════════════════════════
+  ⚠️ 这是一处**真实缺陷**（被最终干净回归抓出来的，值得记）
+  ════════════════════════════════════════════════════════════════════
+    本门禁把补丁挂在 `CanvasRenderingContext2D.prototype` 上，而 **prototype 是
+    整个页面会话共享的** —— 路由切换/组件重挂载都不会清掉它。
+    但它**不会**在 ws.close() 时自动消失（WebView 页面还活着）。
+
+    后果（实测到的现象）：本门禁跑完之后，`gate-wo22-scanner-real.mjs` 里的扫码页
+    **第一帧就"识别成功"** ⇒ `phase="found"`、`frames=1` ⇒
+    它的核心断言 `SCANNER_DECODE_LOOP_RUNNING`（帧计数必须**持续增长**）判 **FAIL**。
+    ⇒ 这正是那轮回归里"顺序敏感"的一个根因：
+      **我的门禁污染了别人的门禁**，结果取决于两者谁先跑。
+
+  处置：测试结束前把原型上的方法**还原**（与门禁自己的 DB 清理同性质），
+        并把"补丁状态"写进报告，便于日后核对。
+  ⚠️ 教训（与"验证产物"同源）：**测试对被测环境的修改，必须在测试结束前撤回**；
+    否则它制造的问题会记在**别人**头上，而且只在特定顺序下出现 —— 极难归因。
+*/
+try {
+  const restored = await evaluate(`(() => {
+    const proto = CanvasRenderingContext2D.prototype
+    if (proto.__wo22patched && proto.__wo22origDrawImage) {
+      proto.drawImage = proto.__wo22origDrawImage
+      delete proto.__wo22patched
+      delete proto.__wo22origDrawImage
+      return { restored: true }
+    }
+    return { restored: false, why: 'not patched' }
+  })()`)
+  log('DRAWIMAGE_PATCH_RESTORED', restored)
+} catch (e) {
+  log('DRAWIMAGE_PATCH_RESTORE_FAILED', String((e && e.message) || e))
+}
 
 ws.close()
 await sleep(300)
