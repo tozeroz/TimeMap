@@ -1,0 +1,33 @@
+# HTTPS 证书健康检查（每小时）—— 真正的保护在这里，而不是门禁
+#
+# ⚠️ 为什么必须是一个**定时任务**而不是只做成门禁：
+#    门禁只在我跑审计时执行；而证书 6 天就过期，**问题可能出现在两次审计之间**。
+#    "只在有人看的时候才检查"的监控，等于没有监控。
+# ⚠️ 为什么每小时（而不是每天）：
+#    证书只有 6 天寿命，且续期尝试可能因网络/限流瞬失败。
+#    高频率 + 自动补救 ⇒ 多次自愈机会，把"必须人工介入"的概率压到最低。
+# ⚠️ RandomizedDelaySec：避免整点集中打 LE / 打自己。
+[Unit]
+Description=Check campus TLS certificate health (Let's Encrypt IP cert, ~6-day lifetime)
+Documentation=file:/srv/campus/ops/tls/check-cert-health.sh
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# 脚本自身负责：检查 → 必要时自动续期+reload → 复检 → 不健康则 CRITICAL 告警
+ExecStart=/opt/campus/check-cert-health.sh
+# 告警 webhook（可选）：设置后异常会 POST 过去（企业微信/钉钉/Server酱机器人）。
+# ⚠️ 当前**未配置** —— 所以异常只留在 journald 与状态文件里，这是已知缺口。
+# Environment=TLS_ALERT_WEBHOOK=https://example.invalid/CHANGE_ME
+Environment=TLS_THRESHOLD_DAYS=3
+# 检查本身要访问 LE 与自己，给足超时
+TimeoutStartSec=180
+
+# 加固：只读系统、私有 tmp
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+# 需要写状态文件（/run/campus）与读写 /etc/letsencrypt
+ReadWritePaths=/run/campus /etc/letsencrypt /var/log/letsencrypt /var/www/certbot

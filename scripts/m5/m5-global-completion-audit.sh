@@ -34,7 +34,7 @@ ONLY_FORWARD=0
 #      这样以后新增门禁**自动纳入**，不会再漏。
 #    ⚠️ 服务器侧门禁（不在设备上跑）单独排除：
 #      · gate-place-not-campus.mjs（走 ssh 查服务器 DB + bundle）
-SERVER_SIDE_GATES="gate-place-not-campus.mjs"
+SERVER_SIDE_GATES="gate-place-not-campus.mjs gate-tls-cert-health.sh"
 DEVICE_GATES=()
 while IFS= read -r f; do
   b="$(basename "$f")"
@@ -98,8 +98,34 @@ done
 
 echo
 echo "  --- 服务器侧门禁 ---"
-PLACE_LINE="$(node scripts/m5/gate-place-not-campus.mjs 2>&1 | grep -o '"PLACE_NOT_CAMPUS_GATE":"[A-Z]*"' | head -1)"
-echo "  gate-place-not-campus.mjs            $PLACE_LINE"
+# ⚠️ 这里原先是**一行硬编码**（只跑 gate-place-not-campus.mjs）。
+#    教训：硬编码列表会让新增的门禁**永远不被跑到**，而输出看起来还是"绿的"
+#    —— 本轮之前已经因为同类问题吃过一次亏（审计脚本曾硬编码 15 个设备门禁，
+#       导致新增的 10 个"从未被测过"）。
+#    ⇒ 改成**按显式列表循环**，并按扩展名分派执行方式。
+#    ⚠️ 为什么这里不用自动发现（不像设备门禁那样）：服务器侧门禁的**执行方式不同**
+#       （有的本地 node 跑、有的要 ssh 到服务器），无法靠文件名一律处理；
+#       但**列表至少集中在一处**，且下面会打印每个门禁的结论行，缺谁会看得出来。
+SERVER_SIDE_LIST=(
+  "gate-place-not-campus.mjs"
+  "gate-tls-cert-health.sh"
+)
+for _g in "${SERVER_SIDE_LIST[@]}"; do
+  _p="scripts/m5/$_g"
+  if [ ! -f "$_p" ]; then
+    printf '  %-38s %s\n' "$_g" "**FATAL** 列表里有但文件不存在 —— 不能静默跳过"
+    continue
+  fi
+  case "$_g" in
+    *.mjs) _out="$(node "$_p" 2>&1)" ;;
+    *.sh)  _out="$(bash "$_p" 2>&1)" ;;
+    *)     _out="(未知扩展名，未执行)" ;;
+  esac
+  # 取该门禁自己打印的结论行（各门禁都按约定输出 "KEY: VERDICT"）
+  _line="$(printf '%s' "$_out" | grep -oE '(PLACE_NOT_CAMPUS_GATE|TLS_CERT_HEALTH): [A-Z_]+' | tail -1)"
+  [ -z "$_line" ] && _line="**未打印结论行**（门禁坏了或输出格式变了）"
+  printf '  %-38s %s\n' "$_g" "$_line"
+done
 
 echo
 echo "  --- 本地检查 ---"
