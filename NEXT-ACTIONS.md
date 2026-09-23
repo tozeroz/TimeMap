@@ -1794,3 +1794,28 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       ⚠️ 前一次的"顺序敏感"是**我自己中途改文件**造成的污染，已如实记录并干净重跑
 - [ ] ⬅ 待做：把本轮所有裁定/结论汇总到最终 audit，并请审核裁定 **M5 能否关账**
 - [ ] 已降级/待裁定：F-002（non-blocking）／WO10.9／WO14.6／X3.2／I3（若公开）
+
+### ⭐⭐ Round 319 末：审核 68 点名的**三项 closeout 全部销项** + 最终干净回归全绿
+
+- [x] ✅ **① WO#21 audio typed persistence/readback**（审核 68 的唯一 P0）
+      ⚠️ 确认是真缺陷：POST 把所有 mediaId 一律写进 post_media，而读模型把所有行都放进
+         images ⇒ **语音被报成图片**。修法：三处读点**按 mime 分流**（不用 width/height 推断）。
+      门禁 `gate-wo21-audio-roundtrip.sh`：**11/11 PASS**（含 X 在 audio 里、**不在 images 里**）
+      ⚠️ 如实报 `VOICE_CONSUMPTION: NOT_IMPLEMENTED`（Feed 还不能播放语音），待审核裁定是否要补
+- [x] ✅ **② WO#22 真实 QR 端到端**：固定载荷 QR（campus-scanner-e2e-20260923）走**真实解码路径**
+      ⇒ 实际进入 found 且 payload **逐字相符**。门禁 `gate-wo22-qr-e2e.mjs`：**4/4 PASS**
+      ⚠️ 如实划界：`SCANNER_CAMERA_OPTICS_SAW_PHYSICAL_QR: NOT EVALUATED`
+         （内置摄像头拍不到自己屏幕；MuMu 摄像头源只能经 GUI 配置）⇒ 待审核裁定是否必须人工补
+- [x] ✅ **③ WO#23 真更新流程**：托管真实 APK（200 + 正确 MIME + 字节等长 + zip 魔数）
+      + 迁移 015 发布 1.1 + **修掉 `window.open` 在 WebView 里无效**的真实缺陷
+      门禁 `gate-wo23-update-flow.mjs`：**6/6 PASS**（含 Android 侧 oracle：前台切到 Chrome）
+      ⚠️ 口径 `INSTALL_HANDOFF_TO_OS: INITIATED`（不声称 COMPLETED）
+- [x] ✅ **最终干净回归**：`M5_GLOBAL_REGRESSION_AUDIT: **PASS**`
+      **27 门禁 × 两轮（正序+逆序）全部 EXIT=0、逐门禁一致、无顺序敏感项**
+      服务器侧 PASS ／ CHECK_ALL_LOCAL: PASS（全程不修改任何文件）
+- [x] ✅ **顺带修掉真实配置漂移**：`ops/nginx/campus-locations.inc` 仓库 23 行 vs 服务器 99 行
+      ⇒ 从仓库重建会让公共图片全 404；已把服务器内容纳入仓库使"唯一真源=本仓库"重新为真
+- [x] ✅ **修掉我自己 6 个门禁缺陷**（其中一个最严重：**我的门禁污染了别人的门禁** ——
+      QR 门禁的 prototype 补丁不可撤销 ⇒ 使 scanner 门禁第一帧就 found ⇒ 误报 FAIL）
+- [ ] ⬅ 待审核裁定：三个 closeout 是否销项／**M5 能否关账**（已提交，等回复）
+- [ ] 待裁定不变：`VOICE_CONSUMPTION` 是否要补播放器 UI；`WO10.9`／`WO14.6`；I3（若公开）
