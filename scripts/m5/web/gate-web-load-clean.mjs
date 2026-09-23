@@ -77,7 +77,32 @@ await send('Page.enable')
 
 // 从干净状态加载（用户打开时会经历的就是这个）
 await send('Page.navigate', { url: `${WEB_ORIGIN}${WEB_ENTRY_PATH}` })
-await sleep(8000)
+// ⚠️ 用**轮询等就绪**而不是固定 sleep：固定秒数要么白等、要么在慢的时候读到半成品
+//    （实测在敏感度验证里偶发 origin=null 的自相矛盾读数）。
+{
+  const deadline = Date.now() + 20000
+  let ready = false
+  while (Date.now() < deadline) {
+    const st = await (async () => {
+      const p = new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method: 'Runtime.evaluate', params: { expression: `(() => ({ rs: document.readyState, org: location.origin, href: location.href }))()`, returnByValue: true } })) })
+      const r = await p
+      return r.result && r.result.result ? r.result.result.value : null
+    })()
+    if (st && st.rs === 'complete' && String(st.org || '').startsWith(WEB_ORIGIN)) { ready = true; break }
+    await sleep(400)
+  }
+  // 再给静态资源一点时间把请求跑完（我们要统计它们的结果）
+  await sleep(2500)
+  if (!ready) {
+    console.log('VERDICT = ' + JSON.stringify({
+      NO_FAILED_STATIC_RESOURCES: false, NO_LOADING_FAILURES: false,
+      NO_PAGE_EXCEPTIONS: false, NO_CONSOLE_ERRORS: false, ON_WEB_ORIGIN: false,
+      detail: { reason: '页面在 20 秒内未就绪', target: `${WEB_ORIGIN}${WEB_ENTRY_PATH}` },
+    }))
+    ws.close()
+    process.exit(1)
+  }
+}
 
 const checks = {}
 const detail = {}

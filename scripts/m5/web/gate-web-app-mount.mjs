@@ -62,12 +62,36 @@ await send('Page.enable')
 
 // ⭐ 先导航到**确定的主路由**，再断言。
 // ⚠️ 这里修过一次**脆性**问题：初版直接对"当前页面"断言，而前一个门禁可能把应用
-//    留在全屏页面（实测留在 #/scanner）⇒ 两条断言因**环境**而误判：
-//      · PAGE_HAS_VISIBLE_TEXT 要求文本 >20 字，而扫码页只有 20 字（差 1 个字）
-//      · APP_SHELL_RENDERED 要求有 .tabbar，而扫码页本来就是全屏、没有标签栏
-//    ⇒ 门禁必须**自己建立前置条件**，不能依赖"上一个门禁恰好把应用留在哪"。
+//    留在全屏页面（实测留在 #/scanner）⇒ 两条断言因**环境**而误判。
+//    ⇒ 门禁必须**自己建立前置条件**。
 await send('Page.navigate', { url: `${WEB_ORIGIN}${WEB_ENTRY_PATH}#/campus` })
-await sleep(8000)
+
+// ⚠️ 再修一次**脆性**：初版用**固定 sleep(8000)** 等加载完成。
+//    实测在敏感度验证里偶发读到 origin=null（导航与评估赛跑，评估落在旧执行上下文
+//    已被销毁、新页面尚未提交的时刻）⇒ 得到自相矛盾的结果。
+//    ⇒ 改为**轮询等就绪**：直到 readyState=complete 且 origin 已经是我们的目标，
+//      最多等 20 秒。这样"等待时间"由**实际状态**决定，而不是靠猜一个秒数。
+{
+  const deadline = Date.now() + 20000
+  let ready = false
+  while (Date.now() < deadline) {
+    const st = await ev(`(() => ({ rs: document.readyState, org: location.origin, href: location.href }))()`)
+    if (st && st.rs === 'complete' && String(st.org || '').startsWith(WEB_ORIGIN) && String(st.href).includes(WEB_ENTRY_PATH)) {
+      ready = true
+      break
+    }
+    await sleep(400)
+  }
+  if (!ready) {
+    console.log('VERDICT = ' + JSON.stringify({
+      ON_WEB_ORIGIN: false, ROOT_ELEMENT_PRESENT: false, ROOT_HAS_CHILDREN: false,
+      PAGE_HAS_VISIBLE_TEXT: false, APP_SHELL_RENDERED: false, NO_MOUNT_EXCEPTION: false,
+      detail: { reason: '页面在 20 秒内未就绪（导航未完成或未落在目标路径）', target: `${WEB_ORIGIN}${WEB_ENTRY_PATH}` },
+    }))
+    ws.close()
+    process.exit(1)
+  }
+}
 
 const v = await ev(`(() => {
   const root = document.getElementById('root')
