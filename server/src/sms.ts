@@ -38,6 +38,16 @@ export type SmsSendResult =
 export interface SmsSender {
   /** 是否已配置（未配置时调用方应回退到 dev sink，并**如实**在响应里标明） */
   readonly configured: boolean
+  /**
+   * 当前下发的短信**签名名**（未配置时为 null）。
+   *
+   * ⭐ 为什么要暴露它：短信签名是**阿里云系统赠送的**（PNVS 明确不支持自定义），
+   *    所以用户收到的是「【恒创联众】您的验证码为…」——**看起来与本 App 无关**。
+   *    我们在客户端无法改短信内容，但可以**告诉用户该等哪条短信**。
+   *    ⇒ 由服务端把这个名字给客户端（而不是客户端写死），这样运维换签名时提示会自动跟上。
+   * ⚠️ 它不是秘密：签名是短信里公开可见的发送方名称。
+   */
+  readonly signName: string | null
   sendVerifyCode(phoneE164: string, code: string, ttlSeconds: number): Promise<SmsSendResult>
 }
 
@@ -101,6 +111,7 @@ export function createSmsSender(cfg: SmsSenderConfig | null): SmsSender {
   if (!cfg || !cfg.akId || !cfg.akSecret || !cfg.signName || !cfg.templateCode) {
     return {
       configured: false,
+      signName: null,
       async sendVerifyCode() {
         return {
           ok: false,
@@ -114,6 +125,7 @@ export function createSmsSender(cfg: SmsSenderConfig | null): SmsSender {
 
   return {
     configured: true,
+    signName: cfg.signName,
     async sendVerifyCode(phoneE164: string, code: string, ttlSeconds: number): Promise<SmsSendResult> {
       /*
         ⚠️ 手机号：阿里云这个接口要**不带 + 和国家码**的国内号码（配合 CountryCode=86）。

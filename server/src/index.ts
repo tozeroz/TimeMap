@@ -403,6 +403,14 @@ export function buildServer(deps: ServerDeps) {
         expiresAt: expiresAt.toISOString(),
         delivery: 'sms',
         delivery_note: '验证码已通过短信下发（阿里云短信认证）',
+        /*
+          ⭐ 把**短信签名**告诉客户端。
+          为什么必须这么做：短信签名是阿里云 PNVS **系统赠送的**（官方明确不支持自定义），
+          所以用户收到的是「【恒创联众】您的验证码为…」——**看不出是我们的 App**。
+          客户端改不了短信内容，但可以提示用户"该等哪条短信"。
+          ⚠️ 由服务端给（不是客户端写死）：运维换签名时提示自动跟上，不会变成假话。
+        */
+        sms_sender: deps.smsSender.signName,
       }
     }
 

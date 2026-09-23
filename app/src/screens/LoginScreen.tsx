@@ -55,9 +55,21 @@ export function LoginScreen() {
         return
       }
       setSent(true)
-      // 服务端明确说了它没有短信通道（delivery=dev-sink）——如实显示，
-      // 而不是假装"验证码已发送到你的手机"。
-      setDevHint(r.value.delivery === 'dev-sink' ? r.value.delivery_note : '')
+      /*
+        服务端会如实告诉我们**投递方式**，我们照着显示，不假装：
+        · delivery === 'dev-sink' ⇒ 没接短信通道，码在服务器上（照实说）
+        · delivery === 'sms'      ⇒ 真发了短信。此时再告诉用户**短信发送方名称**
+          （来自服务端的 sms_sender）—— 因为我们的短信签名是阿里云系统赠送的
+          （PNVS 不支持自定义），短信里显示的是「【恒创联众】…」而不是本 App 的名字；
+          提示出发送方，用户才知道该查收哪条短信。
+      */
+      setDevHint(
+        r.value.delivery === 'dev-sink'
+          ? r.value.delivery_note
+          : r.value.sms_sender
+            ? `验证码已发送，发送方显示为「${r.value.sms_sender}」，请注意查收。`
+            : '',
+      )
       startCooldown(60)
     } finally {
       setBusy(false)
@@ -140,7 +152,11 @@ export function LoginScreen() {
         )}
 
         {error && <p className="login__error">{error}</p>}
-        {devHint && <p className="login__devhint">{devHint}</p>}
+        {devHint && (
+          <p className="login__devhint" data-login-hint>
+            {devHint}
+          </p>
+        )}
 
         <button
           className="login__submit"

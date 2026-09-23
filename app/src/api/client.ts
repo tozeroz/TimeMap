@@ -649,6 +649,16 @@ export interface RequestCodeResult {
   expiresAt: string
   delivery: string
   delivery_note: string
+  /**
+   * ⭐ 短信**签名名**（只在 `delivery === 'sms'` 时有值）。
+   *
+   * 用途：告诉用户"该等哪条短信"。
+   * 背景：我们的短信走阿里云「短信认证」（PNVS），而它**只允许用系统赠送的签名**
+   * （官方明确不支持自定义）⇒ 用户收到的是「【恒创联众】您的验证码为…」，
+   * **看不出是我们的 App**。客户端改不了短信内容，但可以提示发送方名称，
+   * 让用户知道要查收哪条短信。值由**服务端**给（不是写死），运维换签名时提示自动跟上。
+   */
+  sms_sender?: string | null
 }
 
 export async function requestLoginCode(phone: string): Promise<ApiResult<RequestCodeResult>> {
