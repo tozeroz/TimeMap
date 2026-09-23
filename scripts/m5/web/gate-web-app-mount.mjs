@@ -1,0 +1,120 @@
+/**
+ * 网页端专属门禁：**应用真的挂载了**
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * 为什么需要这个门禁（它是被一个真实 bug 逼出来的）
+ * ════════════════════════════════════════════════════════════════════════════
+ *   我在精简 index.html 注释时**误删了 `<body>` 与 `<div id="root">`**。
+ *   部署后：
+ *     · `/` 返回 **200**
+ *     · `<title>Campus</title>` **正常**
+ *     · 我的部署冒烟脚本 **全绿**
+ *     · 但页面上**什么都没有**（React createRoot 拿到 null ⇒ React error #299）
+ *   ⇒ "HTTP 200 + 标题对"**证明不了应用能挂载**。
+ *      静态检查（HTML 里有没有 #root）也只在"部署那一刻"成立；
+ *      真正要守的是**运行时**：脚本跑完之后 DOM 里到底有没有内容。
+ *
+ * ⇒ 本门禁断言运行时事实：根节点存在、有子树、且没有挂载期异常。
+ *    ⚠️ 它与"静态检查 HTML 含 #root"**互补而非重复**：
+ *       静态查的是代码/产物，本门禁查的是**浏览器里真的渲染出来了**。
+ */
+const PORT = process.env.CDP_PORT ?? 9222
+const WEB_ORIGIN = process.env.WEB_ORIGIN ?? 'https://8.148.156.146'
+// ⚠️ 入口路径单独一个变量（默认 `/`）。
+//    为什么分开：敏感度验证需要"让门禁去加载一个**故意坏的**页面"，
+//    而**不能**通过改 WEB_ORIGIN 来做到 —— 那会让 origin 断言一起失败，
+//    于是门禁变红的原因就变成了"origin 不对"，**归因错误**（假敏感度）。
+//    分开之后：入口指向 /web-broken/，origin 断言依然成立，
+//    变红只可能因为"应用没挂载" ⇒ 这才是有效判别力。
+const WEB_ENTRY_PATH = process.env.WEB_ENTRY_PATH ?? '/'
+
+const list = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json()
+const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl)
+if (!page) { console.error('FATAL 没有 page target'); process.exit(2) }
+
+const ws = new WebSocket(page.webSocketDebuggerUrl)
+await new Promise((res, rej) => { ws.addEventListener('open', res, { once: true }); ws.addEventListener('error', rej, { once: true }) })
+
+let id = 0
+const pending = new Map()
+const exceptions = []
+ws.addEventListener('message', (e) => {
+  const m = JSON.parse(e.data)
+  if (m.method === 'Runtime.exceptionThrown') {
+    exceptions.push(String(m.params.exceptionDetails?.exception?.description ?? m.params.exceptionDetails?.text))
+  }
+  if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id) }
+})
+function send(method, params = {}) {
+  return new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })) })
+}
+async function ev(expr, t = 20000) {
+  const p = send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })
+  const r = await Promise.race([p, new Promise((res) => setTimeout(() => res({ TIMEOUT: true }), t))])
+  if (r.TIMEOUT) return { TIMEOUT: true }
+  if (r.result && r.result.exceptionDetails) return { ERROR: r.result.exceptionDetails.text }
+  return r.result && r.result.result ? r.result.result.value : null
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+await send('Runtime.enable')
+await send('Page.enable')
+
+// ⭐ 先导航到**确定的主路由**，再断言。
+// ⚠️ 这里修过一次**脆性**问题：初版直接对"当前页面"断言，而前一个门禁可能把应用
+//    留在全屏页面（实测留在 #/scanner）⇒ 两条断言因**环境**而误判：
+//      · PAGE_HAS_VISIBLE_TEXT 要求文本 >20 字，而扫码页只有 20 字（差 1 个字）
+//      · APP_SHELL_RENDERED 要求有 .tabbar，而扫码页本来就是全屏、没有标签栏
+//    ⇒ 门禁必须**自己建立前置条件**，不能依赖"上一个门禁恰好把应用留在哪"。
+await send('Page.navigate', { url: `${WEB_ORIGIN}${WEB_ENTRY_PATH}#/campus` })
+await sleep(8000)
+
+const v = await ev(`(() => {
+  const root = document.getElementById('root')
+  const txt = (document.body.innerText || '').replace(/\\s+/g, ' ').trim()
+  return {
+    origin: location.origin,
+    hash: location.hash,
+    rootExists: !!root,
+    rootChildren: root ? root.childElementCount : -1,
+    rootHTMLlen: root ? root.innerHTML.length : -1,
+    bodyTextLen: txt.length,
+    bodyTextSample: txt.slice(0, 120),
+    hasTabbar: !!document.querySelector('.tabbar'),
+    scriptCount: document.querySelectorAll('script').length,
+    title: document.title,
+  }
+})()`)
+
+const checks = {}
+// ① 目标正确（避免把"模拟器里的 App"当成网页端来判定）
+checks.ON_WEB_ORIGIN = String(v.origin || '').startsWith(WEB_ORIGIN)
+// ② ⭐ 挂载点存在
+checks.ROOT_ELEMENT_PRESENT = v.rootExists === true
+// ③ ⭐ 真的渲染出了子树（这是"应用起来了"的核心判据）
+checks.ROOT_HAS_CHILDREN = typeof v.rootChildren === 'number' && v.rootChildren > 0
+// ④ 页面有可见文本（不是空白页）
+checks.PAGE_HAS_VISIBLE_TEXT = typeof v.bodyTextLen === 'number' && v.bodyTextLen > 20
+// ⑤ 应用外壳渲染出来了（底部标签栏是每个主界面都有的结构）
+checks.APP_SHELL_RENDERED = v.hasTabbar === true
+// ⑥ ⭐ 没有挂载期异常（React error #299 就是"容器不是 DOM 元素"，正是那个 bug 的症状）
+const badExceptions = exceptions.filter((e) => /React error #299|createRoot|Target container/i.test(e))
+checks.NO_MOUNT_EXCEPTION = badExceptions.length === 0
+
+const detail = {
+  origin: v.origin,
+  hash: v.hash,
+  rootChildren: v.rootChildren,
+  rootHTMLlen: v.rootHTMLlen,
+  bodyTextLen: v.bodyTextLen,
+  bodyTextSample: v.bodyTextSample,
+  hasTabbar: v.hasTabbar,
+  mountExceptions: badExceptions.slice(0, 2),
+  allExceptionCount: exceptions.length,
+}
+if (badExceptions.length) detail.badExceptionSample = badExceptions[0].slice(0, 300)
+
+const fail = Object.entries(checks).filter(([, ok]) => ok !== true).map(([k]) => k)
+console.log('VERDICT = ' + JSON.stringify({ ...checks, detail }))
+ws.close()
+process.exit(fail.length ? 1 : 0)

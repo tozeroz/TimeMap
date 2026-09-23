@@ -12,16 +12,44 @@ set -uo pipefail
 WEB=/srv/campus/web
 MODE="${1:-all}"
 
+# ── ⭐ 原子替换（修掉"部署期间站点打空"的真实缺陷）─────────────────────
+# ⚠️ 原来的做法是 `rm -rf $WEB && mkdir -p $WEB` 再上传 ⇒
+#    **整个上传期间站点是空的**（不是"旧版本继续服务"，而是"什么都没有"）。
+#    这不是理论风险：nginx 错误日志里有证据 ——
+#      01:58:2x  directory index of "/srv/campus/web/" is forbidden  (GET /)
+#    而且其中一条来自**真实客户端 IP**（不是我的 127.0.0.1）⇒ 真有访客撞上了。
+#    同时它也让"部署后立刻冒烟"变得不可靠（可能读到半成品）。
+# ⇒ 改为：新内容先放到 $WEB.new（已在别处上传），再 **两次 mv 原子切换**。
+#    mv 在同文件系统内是 rename(2)，是原子的 ⇒ **不存在中间态**。
+atomic_swap() {
+  local stage="${1:-$WEB.new}"
+  if [ ! -d "$stage" ]; then
+    echo "  ✗ 找不到暂存目录 $stage（新内容没上传？）⇒ 不做切换，保留现有版本"
+    return 1
+  fi
+  if [ ! -f "$stage/index.html" ]; then
+    echo "  ✗ $stage/index.html 不存在 ⇒ 拒绝切换（避免把站点切成空的）"
+    return 1
+  fi
+  fix_perms "$stage"
+  local old="${WEB}.old.$$"
+  if [ -d "$WEB" ]; then
+    mv "$WEB" "$old"          # 1) 当前版本挪走
+  fi
+  mv "$stage" "$WEB"          # 2) 新版本就位（此刻起对外可见）
+  [ -d "$old" ] && rm -rf "$old"
+  echo "  ✓ 已原子切换（中间不存在空目录状态）"
+  echo -n "  切换后文件数: "; find "$WEB" -type f | wc -l
+}
+
 # ── 权限修正（⚠️ 不做这步 /assets 会 403，页面白屏）─────────────────────
 fix_perms() {
-  chown -R campus:campus "$WEB"
+  local dir="${1:-$WEB}"
+  chown -R campus:campus "$dir"
   # ⚠️ 目录 755 / 文件 644 **分开设**，不用 chmod -R 一刀切：
   #    一刀切会给普通文件加可执行位 —— 没好处，却扩大"被当程序执行"的面。
-  find "$WEB" -type d -exec chmod 755 {} \;
-  find "$WEB" -type f -exec chmod 644 {} \;
-  echo "  --- 权限（应见 drwxr-xr-x 与 -rw-r--r--）---"
-  ls -la "$WEB" | sed 's/^/    /'
-  ls -la "$WEB/assets" | head -6 | sed 's/^/    /'
+  find "$dir" -type d -exec chmod 755 {} \;
+  find "$dir" -type f -exec chmod 644 {} \;
 }
 
 # ── 冒烟验证 ────────────────────────────────────────────────────────────
@@ -81,8 +109,9 @@ smoke() {
 }
 
 case "$MODE" in
-  perms) fix_perms ;;
+  perms) fix_perms "$WEB"; echo "  --- 权限（应见 drwxr-xr-x 与 -rw-r--r--）---"; ls -la "$WEB" | sed 's/^/    /'; ls -la "$WEB/assets" | head -6 | sed 's/^/    /' ;;
+  swap)  atomic_swap "${2:-}" ;;
   smoke) smoke ;;
-  all)   fix_perms; echo; smoke ;;
-  *)     echo "用法: $0 {perms|smoke|all}"; exit 2 ;;
+  all)   atomic_swap "${2:-}"; echo; smoke ;;
+  *)     echo "用法: $0 {perms|swap [stage]|smoke|all [stage]}"; exit 2 ;;
 esac
