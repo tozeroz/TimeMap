@@ -29,11 +29,11 @@ GATE="${1:?用法: run-web-gate.sh <gate.mjs>}"
 WEB_BASE="${WEB_BASE:-https://8.148.156.146}"
 LOCK_OWNER="web-gate:$(basename "$GATE")"
 
-echo "=== 1/6 确保网页端 Chrome 在 9222 ==="
+echo "=== 1/7 确保网页端 Chrome 在 9222 ==="
 bash scripts/m5/web/launch-web-chrome.sh || { echo "WEB_TARGET_VALIDITY: FAIL（无法把 web Chrome 拉到 9222）"; exit 1; }
 
 echo
-echo "=== 2/6 目标校验（对照设备版的前台应用检查）==="
+echo "=== 2/7 目标校验（对照设备版的前台应用检查）==="
 VER="$(curl -s -m 5 http://127.0.0.1:9222/json/version || true)"
 if printf '%s' "$VER" | grep -q 'Android-Package'; then
   echo "  ✗ CDP 上是 **Android WebView**，不是桌面浏览器 ⇒ 这次测的不是网页端"
@@ -55,18 +55,48 @@ esac
 echo "WEB_TARGET_VALIDITY: PASS"
 
 echo
-echo "=== 3/6 拿门禁锁（与设备门禁共用同一把锁，避免互相干扰）==="
+echo "=== 3/7 拿门禁锁（与设备门禁共用同一把锁，避免互相干扰）==="
 bash scripts/m5/gate-lock.sh acquire "$LOCK_OWNER" 2>&1 | sed 's/^/  /' || true
 cleanup() { bash scripts/m5/gate-lock.sh release >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 echo
-echo "=== 4/6 跑门禁：$(basename "$GATE") ==="
+echo "=== 4/7 把页面带到前台（防 rAF 节流）==="
+# ⚠️ 为什么必须做：网页端扫码门禁曾突然 FAIL、detail 里 `frames: 0`，
+#    而摄像头与 <video> 都正常（getUserMedia 640x480、videoWidth=1920）。
+#    真正原因是 `document.visibilityState="hidden"` ⇒ **requestAnimationFrame 被节流到 0**
+#    ⇒ 逐帧解码循环跑不起来。
+#    ⚠️ 那是**环境抖动**（窗口被模拟器等遮挡），不是产品缺陷；但它会让审计结果不可复现。
+#    ⇒ 双保险：① launch-web-chrome.sh 用 Chrome 官方开关关掉遮挡/后台节流；
+#              ② 这里在跑门禁之前，用 CDP `Page.bringToFront` 主动把页签带到前台。
+node -e '
+const port = process.env.CDP_PORT || 9222
+;(async () => {
+  try {
+    const list = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
+    const page = list.find((t) => t.type === "page" && t.webSocketDebuggerUrl)
+    if (!page) { console.log("  (无 page target，跳过 bringToFront)"); return }
+    const ws = new WebSocket(page.webSocketDebuggerUrl)
+    await new Promise((res, rej) => { ws.addEventListener("open", res, {once:true}); ws.addEventListener("error", rej, {once:true}) })
+    let id = 0
+    const send = (method, params = {}) => new Promise((r) => { const i = ++id; ws.addEventListener("message", function h(e){ const m = JSON.parse(e.data); if (m.id === i) { ws.removeEventListener("message", h); r(m) } }); ws.send(JSON.stringify({id:i, method, params})) })
+    await send("Page.enable")
+    await send("Page.bringToFront")
+    const vis = await send("Runtime.evaluate", { expression: "document.visibilityState", returnByValue: true })
+    const v = vis && vis.result && vis.result.result ? vis.result.result.value : null
+    console.log("  bringToFront 后 visibilityState =", v)
+    ws.close()
+  } catch (e) { console.log("  (bringToFront 失败，继续):", String(e && e.message || e)) }
+})()
+' 2>&1 | sed 's/^/  /'
+
+echo
+echo "=== 5/7 跑门禁：$(basename "$GATE") ==="
 node "$GATE"
 RC=$?
 
 echo
-echo "=== 5/6 目标复核（期间页面没被切走）==="
+echo "=== 6/7 目标复核（期间页面没被切走）==="
 URL2="$(curl -s -m 5 http://127.0.0.1:9222/json | node -e '
 let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
   try{const a=JSON.parse(s);const p=a.find(t=>t.type==="page"&&t.webSocketDebuggerUrl);console.log(p?p.url:"")}catch(e){console.log("")}
@@ -77,6 +107,6 @@ case "$URL2" in
 esac
 
 echo
-echo "=== 6/6 汇总 ==="
+echo "=== 7/7 汇总 ==="
 echo "WEB_GATE_EXIT=$RC"
 exit "$RC"

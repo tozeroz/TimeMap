@@ -26,16 +26,35 @@ URL="${WEB_URL:-https://8.148.156.146/}"
 ADB="${ADB_BIN:-G:/Program Files/Netease/MuMu/nx_main/adb.exe}"
 
 FAKE_MEDIA="${FAKE_MEDIA:-1}"
-FAKE_FLAGS=()
+CHROME_FLAGS=()
 if [ "$FAKE_MEDIA" = "1" ]; then
-  FAKE_FLAGS+=(--use-fake-device-for-media-stream --use-fake-ui-for-media-stream)
+  CHROME_FLAGS+=(--use-fake-device-for-media-stream --use-fake-ui-for-media-stream)
 fi
+
+# ⭐ 关闭后台/遮挡节流（**实测必需**，不是可选的"优化"）
+# ⚠️ 踩到的现象：网页端两个扫码门禁突然 FAIL，detail 里 `frames: 0`
+#    （而此前同一批门禁 PASS、frames 有 64）。
+#    诊断结论（逐项排除）：
+#      · 摄像头**正常** —— getUserMedia 拿到 640x480、readyState=4
+#      · 扫码页 <video> **正常** —— videoWidth=1920、未暂停、readyState=4
+#      · 但 `document.visibilityState="hidden"`、`hasFocus=false`
+#      · 且 200ms 内 `requestAnimationFrame` **回调 0 次**
+#    ⇒ 根因：Chrome 窗口被其它窗口（如模拟器）遮挡 ⇒ **rAF 被节流到 0**
+#      ⇒ 逐帧解码循环跑不起来 ⇒ frames 恒为 0 ⇒ 扫码门禁**误判为功能缺陷**。
+#    ⚠️ 这是**环境抖动**，不是产品问题；留着它会让"网页端全量审计"不可复现
+#      （同一批门禁换个窗口遮挡状态结论就不同）。
+#    ⇒ 用 Chrome 官方开关关掉这三类节流（三件套都要）：
+#        --disable-backgrounding-occluded-windows  窗口被遮挡也不进后台
+#        --disable-renderer-backgrounding          渲染进程不降级
+#        --disable-background-timer-throttling     不做后台定时器节流
+#    ⚠️ 另：run-web-gate.sh 在跑门禁前还会 `Page.bringToFront`（双保险）。
+CHROME_FLAGS+=(--disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling)
 # ⚠️ 关键：把"本次期望的 flag 集合"记在 profile 里。
 #    因为下面遇到"9222 上已有桌面浏览器"时会**复用**它 —— 若复用了一个用**旧 flag**
 #    启动的实例，我改了 flag 却以为生效了（例如以为已启用合成摄像头，实际没有），
 #    那就会得出错误结论。所以要先比对，不一致就重启。
 FLAGS_MARKER="$PROFILE/.dsh-flags"
-DESIRED_FLAGS="$(printf '%s\n' "${FAKE_FLAGS[@]:-}")"
+DESIRED_FLAGS="$(printf '%s\n' "${CHROME_FLAGS[@]:-}")"
 
 echo "=== 1) 检查 9222 现在是谁占着 ==="
 if curl -s -m 3 "http://127.0.0.1:$PORT/json/version" >/dev/null 2>&1; then
@@ -90,7 +109,7 @@ mkdir -p "$PROFILE"
 #       代价：**无法**用它测"用户拒绝授权"这条分支 ⇒ 那一分支需要单独的方式验证，
 #       不能因此声称已覆盖。（详见 docs/WEB-FRONTEND.md）
 #    ⚠️ 可用 FAKE_MEDIA=0 关掉这两个开关（用于验证"无设备/拒绝授权"时的显式状态）。
-# （FAKE_MEDIA / FAKE_FLAGS / DESIRED_FLAGS 已在上面定义 —— 那里是"复用判断"所需，
+# （FAKE_MEDIA / CHROME_FLAGS / DESIRED_FLAGS 已在上面定义 —— 那里是"复用判断"所需，
 #  这里不再重复定义，避免两处定义将来各自漂移。）
 [ "$FAKE_MEDIA" = "1" ] && echo "  （启用合成摄像头/麦克风；FAKE_MEDIA=0 可关闭）"
 "$CHROME" \
@@ -100,7 +119,7 @@ mkdir -p "$PROFILE"
   --no-default-browser-check \
   --disable-features=Translate,OptimizationHints \
   --window-size=430,932 \
-  "${FAKE_FLAGS[@]}" \
+  "${CHROME_FLAGS[@]}" \
   "$URL" >/dev/null 2>&1 &
 
 for i in $(seq 1 30); do

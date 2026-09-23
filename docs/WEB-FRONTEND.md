@@ -87,21 +87,34 @@ bash scripts/m5/web/verify-atomic-deploy.sh       # 验证部署无空窗（原�
 ### 5.0 当前实测结果（2026-09-24）
 
 ```
-WEB_AUDIT: TOTAL=31 PASS=31 FAIL=0 SKIPPED=1
+WEB_AUDIT: TOTAL=31 PASS=31 FAIL=0 SKIPPED=3
 ```
 
-- **27 个复用门禁全部 exit=0**（含 feed / 用户资料 / 资料编辑 / 我的身份 / 地图标记 /
+- **26 个复用门禁全部 exit=0**（含 feed / 用户资料 / 资料编辑 / 我的身份 / 地图标记 /
   留言板 / 校园 / 学校 / 帖子身份 / POI / 认证表单 / **发布媒体（含真实录音）** /
-  **扫码 e2e** / **真实取景扫码** / 更新检查 / 更新流程 / 标签栏 / 文字发送 / 消息列表 /
+  **扫码 e2e** / **真实取景扫码** / 更新流程 / 标签栏 / 文字发送 / 消息列表 /
   群聊切片 / @面板 / 公告 / 编辑器覆盖 / 学院选择器 / 媒体预览权 / 扫码入口 …）
-- **4 个网页端专属门禁 exit=0**（见 5.3）
-- **1 个明确不适用**：`gate-statusbar-inset.mjs`（Android edge-to-edge 专属，见 5.4）
+- **5 个网页端专属门禁 exit=0**（见 5.3）
+- **3 个明确不适用**（各自写明理由，**不为了统一数字删掉** —— 审核方 Review 71 也明确认可这一口径）：
+  | 不适用项 | 理由 |
+  |---|---|
+  | `gate-statusbar-inset.mjs` | Android 15+ edge-to-edge 专属；浏览器没有系统状态栏覆盖问题 |
+  | `gate-wo23-update-check.mjs` | 其 `UPDATE_STRUCTURE_MATCHES_BASELINE` 断言弹窗结构含「立即更新」，而按 **P0 裁定**网页端**必须没有**该按钮 ⇒ 该结构断言在网页端必然为假（**这是 P0 修复的预期后果**）；其余键在网页端仍适用且此前 PASS，网页端契约由 `gate-web-update-platform.mjs` 覆盖 |
+  | `gate-wo23-update-platform.mjs` | 原生端**对照侧**（断言原生**仍然有** APK 动作），与上面那条是**对称的一对** |
 - 另有：`ATOMIC_DEPLOY: PASS`（部署期间 60 次采样无失败请求 + build-id 哨兵证明部署真发生）
-- 另有：网页端专属门禁的**敏感度验证通过**（注入因**预期缺陷**变红、移除后回绿）
+- 另有：网页端专属门禁的**敏感度验证通过**（注入因**预期缺陷**变红、移除后回绿；三重判据见 5.3）
+- ⚠️ 该结果**可复现**：曾因 Chrome 窗口被遮挡导致 rAF 节流而出现假 FAIL，已修（见 5.6）
 
 ⭐ **覆盖率是核对过的，不是"门禁全绿就算测过了"**：把前端路由清单
 （`navigate()` 调用点）与门禁逐项对照后，发现 **`login` / `loginselect` 没有任何门禁覆盖**
 （因为建立测试会话时是直接注入 token 绕过了登录 UI）⇒ 才补了 `gate-web-login.mjs`。
+
+⭐ **平台语义也是核对过的，不是"门禁全绿就算对了"**：`gate-wo23-update-*` 按 APK 场景写，
+在网页端曾**照样 PASS** —— 因为"网页端该不该有 APK 更新动作"不在其判据里。
+这正是审核方点出的 **P0**；现已修，并补了**对称的一对**平台门禁（见 5.3）。
+> 审核方 Review 71 的原话值得长期保留：
+> 「**Gate 全绿只能证明"符合 Gate 写定的 contract"，
+> 不能证明"这个 contract 对当前平台本身就是对的"**」
 
 ### 5.1 目标切换机制（为什么不需要改 62 个门禁文件）
 门禁的 CDP 地址硬编码为 `http://127.0.0.1:9222/json`。我们**不给 62 个文件加参数**，
@@ -133,6 +146,7 @@ WEB_AUDIT: TOTAL=31 PASS=31 FAIL=0 SKIPPED=1
 | `gate-web-cert-trust.mjs` | **公共信任 HTTPS + 同源 API** | 判据是"在页面内 fetch 同源 API"：证书不被信任时**浏览器**会拦截，而 curl 用系统 CA 库、失效模式不同 ⇒ 必须在真实浏览器里判定 |
 | `gate-web-load-clean.mjs` | **加载干净**（无失败静态资源、无控制台 error、无未捕获异常） | 被那条 favicon 404 逼出来的：不影响功能，所以任何功能断言都发现不了；原生端也不会有（WebView 不发 favicon 请求） |
 | `gate-web-login.mjs` | **登录流程**（协议门禁 / 手机号校验 / 真实调用链 / 失败不假装成功） | **覆盖率核对发现的缺口**：路由清单里 `login`/`loginselect` 一个门禁都没有，而登录是网页端第一道功能。用 CDP `Fetch` 域**拦截** `/api/auth/request-code` ⇒ **零短信成本、无需真验证码**即可验证真实调用链（含失败分支如实报错） |
+| `gate-web-update-platform.mjs` | **App 更新的平台语义**：网页端**不得**提供 APK 自更新 | 审核方点出的 **P0**。⚠️ 原有 `gate-wo23-update-*` 按 APK 场景写，在网页端**照样 PASS**（"网页端该不该有这个动作"不在其判据里）⇒ 才需要这条。⭐ 用 CDP `Fetch` 域**注入"有更新"**，确定地覆盖最易漏的分支；其**对照侧**是原生端门禁 `gate-wo23-update-platform.mjs` |
 
 **敏感度验证**（`selftest-web-gates.sh`）：基线绿 → 注入因**预期缺陷**变红 → 移除后回绿。
 用**零风险注入**（坏页面放子路径 `/web-broken/`、`/load-broken/`，**不碰线上首页**），
@@ -156,6 +170,7 @@ WEB_AUDIT: TOTAL=31 PASS=31 FAIL=0 SKIPPED=1
    并打印出来（不计入 PASS 总数）。
 
 ### 5.5 部署是**原子**的（并且这一点被验证过）
+
 上传到**带时间戳的唯一暂存目录** → 服务器侧 `mv` 替换（同文件系统 rename 是原子的）。
 ⚠️ 原做法 `rm -rf $WEB` + 上传会让站点在上传期间**彻底为空** —— 这不是理论风险：
 nginx error.log 里有实证（`directory index of "/srv/campus/web/" is forbidden`），
@@ -163,7 +178,33 @@ nginx error.log 里有实证（`directory index of "/srv/campus/web/" is forbidd
 验证脚本 `verify-atomic-deploy.sh` 在**部署进行中**持续采样并断言无失败请求，
 同时用 **build-id 哨兵**证明"部署真的发生了"（否则"没有失败"在"什么都没做"时同样成立 ⇒ 空虚判据）。
 
+### 5.6 ⚠️ 消除一个**环境抖动**：rAF 节流会让扫码门禁误报
 
+**现象**：网页端两个扫码门禁突然 FAIL，detail 里 `frames: 0`（此前同一批门禁 PASS、frames 有 64）。
+
+**逐项排除**（不是猜）：
+```
+摄像头    ：getUserMedia 拿到 640x480、readyState=4        ⇒ 正常
+扫码页 <video>：videoWidth=1920、未暂停、readyState=4        ⇒ 正常
+但         ：document.visibilityState="hidden"、hasFocus=false
+且         ：200ms 内 requestAnimationFrame **回调 0 次**
+```
+⇒ 根因：**Chrome 窗口被其它窗口（如模拟器）遮挡 ⇒ rAF 被浏览器节流到 0**
+⇒ 逐帧解码循环跑不起来 ⇒ `frames` 恒为 0 ⇒ 门禁**误判为功能缺陷**。
+
+⚠️ 这是**环境抖动**，不是产品问题；但它会让"网页端全量审计"**不可复现**
+（同一批门禁换个窗口遮挡状态结论就不同）—— 这比一次假 FAIL 更危险。
+
+**修法（双保险）**：
+1. `launch-web-chrome.sh` 用 Chrome 官方开关关掉三类节流：
+   `--disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling`
+2. `run-web-gate.sh` 在跑门禁前用 CDP **`Page.bringToFront`** 主动把页签带到前台
+   （日志会打印 `bringToFront 后 visibilityState = visible` 作为证据）
+
+**实测**：修复后两个扫码门禁 `exit=0`，且 `SCANNER_DECODE_LOOP_RUNNING: PASS`、
+`SCANNER_ENTERED_FOUND: PASS` ✓
+
+---
 ## 六、已知限制 / 未做到的事
 
 > ⚠️ 下面第 1、2、4 条的处置口径已由 **Review 70** 裁定（落盘 `docs/review-log/70-wo25-web-release-pass-closed.md`）：

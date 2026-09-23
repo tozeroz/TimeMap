@@ -41,6 +41,9 @@ web_not_applicable() {
     gate-wo23-update-platform.mjs)
       echo "原生专属（**对照侧**）：它断言的正是"原生端**仍然有** APK 更新动作"。按 WO#25 的 P0 裁定，网页端**必须没有**该动作 ⇒ 这条在网页端必然为假。网页端那一侧由 gate-web-update-platform.mjs 负责（两者是**对称的一对**：一条防"网页端泄漏 APK 语义"，一条防"改过头把手机端更新也去掉"）。"
       ;;
+    gate-wo23-update-check.mjs)
+      echo "部分原生专属：在**实施 P0 之后**，它的 UPDATE_STRUCTURE_MATCHES_BASELINE 断言了弹窗结构 =（标题 + 版本说明 +「取消」+「立即更新」），而按 P0 裁定网页端**必须没有**「立即更新」⇒ 那条结构断言在网页端**必然为假**（这是 P0 修复的**预期后果**，不是缺陷）。⚠️ 该门禁的其余键（真调 API / 状态与清单一致 / 不假成功 / version 一致）在网页端**仍然适用且此前 PASS**；网页端那一侧的平台契约由 gate-web-update-platform.mjs 覆盖（含用 Fetch 域注入"有更新"来验真实比较与诚实呈现）。"
+      ;;
     *) echo "" ;;
   esac
 }
