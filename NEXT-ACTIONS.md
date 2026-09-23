@@ -2010,11 +2010,15 @@ REMAINING RELEASE WORK: ≠ WO25
       门禁实际问的是 web Chrome。已在 `run-device-gate.sh` 里对称地先释放它，
       并用 `forward --list` **确认转发真的建立**，否则大声失败
 - [x] ✅ 回归：设备端 5 门禁 exit=0／provenance PASS；网页端新门禁 exit=0；tsc exit=0；CHECK_ALL_LOCAL PASS
-- [ ] ⬅ **待做（我已两次踩到）**：把「pnpm build → **npx cap sync android** → 构建安装」
-      固化成一条发布脚本 —— 漏跑 cap sync 会让 `ARTIFACT_PROVENANCE` 失败
-      （症状是 `source changed ≠ executed artifact changed`）。已在审核中提请裁定
-- [ ] ⬅ 待审核裁定本次 P0 补做（已提交，4 个问题：P0 是否确认／对称门禁做法／
-      假状态栏"仅开发态"口径／是否要固化发布脚本）
+- [x] ✅ **已实施（Review 71 明确要求"直接做，不必再发设计计划"）**：`tools/release-android.ps1`
+      作为**唯一 Android 发布入口**，固定顺序 tsc → build → **cap sync** → **provenance（强制）**
+      → gradle 构建/安装 → 三段式 provenance + 平台语义门禁。
+      ⚠️ 审核方要求的 fail-fast 已满足：**cap sync 失败或 provenance 失败 ⇒ 整条命令失败、不产出 APK**
+      （实测：注入错误的 cap 路径 ⇒ exit=1 并在 provenance 步中止）。
+      ⚠️ 脚本**纯 ASCII**（实测 0 个非 ASCII 字节）。
+- [x] ✅ **已取得裁定（Review 71）**：P0 正式销项；对称门禁**两条都保留**；
+      假状态栏"仅开发态"**认可**；桌面居中布局 PRESERVED / PASS；
+      9222 端口争用修法**认可**。落盘 `docs/review-log/71-wo25-p0-platform-semantics-and-release-entry.md`
 
 **⭐ 本轮方法论收获（值得长期保留）**：
   门禁全绿会**掩盖平台语义错误** —— 原有 wo23 门禁按 APK 场景写，在网页端照样 PASS，
@@ -2022,3 +2026,39 @@ REMAINING RELEASE WORK: ≠ WO25
   ⇒ **门禁只保证"实现与它写定的口径一致"，不保证该口径在当前平台上是对的**。
   ⇒ 与审核方那条「**FAIL ≠ 断言有判别力**」是同一类盲区的两侧：
      一条说"红了不代表测对了"，一条说"绿了不代表测全了"。
+
+### ⭐ Review 71：P0 补做裁定 —— 全部 PASS，**P0 正式销项**
+
+```
+WO25_WEB_RELEASE: PASS / CLOSED
+WEB_PLATFORM_SEMANTICS: PASS
+NATIVE_PLATFORM_REGRESSION: PASS
+DESKTOP_CONSTRAINED_LAYOUT: PRESERVED / PASS
+WEB_UPDATE_PLATFORM_CONTRACT: PASS
+NATIVE_UPDATE_PLATFORM_CONTRACT: PASS
+NEXT RELEASE HARDENING: 已实施
+```
+
+- [x] ✅ 裁定已落盘（`docs/review-log/71-…`）并回写本队列
+- [x] ✅ **对称的一对门禁两条都保留**；审核方并明确：
+      "Web audit 中 native gate 标记 NOT_APPLICABLE 也仍然是正确做法，
+       **不应为了统一数字删除它**" —— 与我坚持的口径一致
+- [x] ✅ 审核方对"门禁全绿"的定性（值得长期保留）：
+      「Gate 全绿只能证明"符合 Gate 写定的 contract"，
+       **不能证明"这个 contract 对当前平台本身就是对的"**」
+      ⚠️ 但审核方同时要求"**记录到这里即可，不要再由此发展新审计体系**" ⇒ 只入档，不新建体系
+- [x] ✅ fake status bar 边界获认可：Vite 开发预览可显示；生产 Web 不显示；
+      原生用真实系统 bars/safe area。桌面保留居中 + max-width≈430px，
+      去掉"模拟手机硬件"装饰后其定性为"**桌面上的居中 mobile-first application canvas**"
+
+**⚠️ 本轮我自己的错（如实留痕）**：
+  ① ⭐ **把"PASS/CLOSED"当成免检**：审核方在批准时明确给了一条 P0，我未覆盖却已记为 CLOSED
+     ⇒ 等于**用裁定的措辞代替了对裁定内容的逐条核对**。
+     靠**复核结论本身**（实测 DOM 与点击行为）发现，不是靠提示。
+  ② 在 release-android.ps1 注释里**引用审核方的中文原文** ⇒ 该文件出现 66 个非 ASCII 字节，
+     **违反了该文件头部自己写的 ASCII 规则**（PS 5.1 按本地代码页解析无 BOM 的 .ps1）。已改为英文转述。
+
+- [ ] ⬅ **下一步（按裁定：属 Release/运维/视觉 backlog，另开工作单，不扩展 WO#25）**：
+      ① 证书监控接**外部告警通道**（需你提供 webhook URL；裁定为 RELEASE OPS GAP）
+      ② 视觉设计 backlog（I3 图标重绘、语音帖播放 `VOICE_CONSUMPTION` 等既有遗留）
+      ③ iOS Safari 真机实测（裁定 NON-BLOCKING，**不声称已支持**）
