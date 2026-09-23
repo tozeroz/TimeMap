@@ -6,7 +6,16 @@
   height: var(--h-tabbar);
   /* 右侧留出悬浮按钮的位置，避免 FAB 压住「地图」tab */
   padding: 0 72px 0 8px;
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  /*
+   * 底部安全区（手势条）。
+   * ⚠️ 加 `--safe-area-inset-bottom` 优先：与顶部同源 —— Android 15+ 强制 edge-to-edge 后
+   *    tabbar 会伸到手势条下面；而 Capacitor 官方文档指出旧版 Android WebView(<140) 的
+   *    `env(safe-area-inset-*)` **值是错的**（Chromium issue 40699457），
+   *    所以要优先用 Capacitor 内置 SystemBars 注入的那个可靠变量。
+   * ⚠️ 在**不强制 edge-to-edge** 的系统（如模拟器的 Android 12）上该值本就是 0
+   *    ⇒ 对老系统等于没变，不会双重留白。
+   */
+  padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0));
   background: var(--c-surface);
   border-top: 1px solid var(--c-divider);
   flex: 0 0 auto;

@@ -27,6 +27,23 @@
   border: none;
 }
 
+/*
+ * ⚠️ 真机上**不要**再加一次 --h-statusbar。
+ *
+ * 为什么：`.media` 是 `.shell__body` 的后代，而真机上
+ * `.shell--native .shell__viewport { padding-top: var(--h-safe-top) }`
+ * **已经**把整块内容推下来了（见 shell.css）。
+ * `.media` 自己有 `position: relative` ⇒ 本规则里的 `top` 是相对 `.media` 的
+ * ⇒ 若仍写 `var(--h-statusbar)`（真机上它等于那条 inset），就会**再下移一次** ——
+ *    顶栏会落到"状态栏下方再一个状态栏高度"的位置（双重偏移）。
+ * ⇒ 真机上 `top: 0` 才是"紧贴已让出区域的下沿"，位置正确。
+ * ⚠️ 这条覆盖**只作用于原生壳**：浏览器预览里 shell__viewport 没有那段 padding，
+ *    顶部空白由模拟状态栏元素占着，原来的写法在那里是对的，故不动它。
+ */
+.shell--native .media .topbar {
+  top: 0;
+}
+
 /* 深色画面上的控件要压过 .topbar--plain 的浅色底托规则 */
 .media .topbar--plain .iconbtn {
   background: rgba(255, 255, 255, 0.16);

@@ -30,6 +30,32 @@ const config: CapacitorConfig = {
      */
     androidScheme: 'https',
   },
+  plugins: {
+    /**
+     * ⭐ SystemBars（Capacitor 8 **内置在 @capacitor/core**，不需要额外装插件）。
+     *
+     * 解决的是**真机上才暴露的问题**：Android 15+ 对 targetSdk ≥ 35 的应用
+     * **强制 edge-to-edge** ⇒ WebView 铺满整屏（含状态栏区域）
+     * ⇒ 页面顶栏与状态栏重叠、置顶按钮点不到
+     *   （用户在自己手机上实测到；本项目 targetSdk = 36，必然中招）。
+     *
+     * ⚠️ 为什么**不用** @capacitor/status-bar 的 `overlaysWebView: false`：
+     *    官方文档明确写了 "Android 16+ behavior change" —— `overlaysWebView` 与
+     *    `backgroundColor` 在 targetSdk 36 上**不再起作用**（系统已强制 edge-to-edge、
+     *    不再允许应用 opt-out）。所以那条路在 Android 16 上是**白改一轮**。
+     *
+     * ⇒ 正解：让 Capacitor 把**可靠**的安全区值注入 CSS。
+     *    官方文档指出旧版 Android WebView(<140) 的 `env(safe-area-inset-*)` **值是错的**
+     *    （Chromium issue 40699457）；SystemBars 会注入 `--safe-area-inset-*` 作为可靠来源，
+     *    我们在 shell.css 里用它为状态栏留出内边距。
+     *
+     * `css` 是官方默认值，这里**显式写出**：这是**有意的依赖**，不是碰巧生效；
+     * 将来若默认值变了，也希望是被人显式改掉的。
+     */
+    SystemBars: {
+      insetsHandling: 'css',
+    },
+  },
 }
 
 export default config

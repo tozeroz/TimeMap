@@ -276,7 +276,8 @@
 .feed__replySheet {
   width: 100%;
   box-sizing: border-box;
-  padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+  /* 底部安全区：优先用 Capacitor SystemBars 注入的可靠变量（旧版 WebView 的 env() 值不准） */
+  padding: 14px 16px calc(16px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0)));
   background: #fff;
   border-radius: 16px 16px 0 0;
 }
