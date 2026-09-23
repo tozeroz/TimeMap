@@ -1986,3 +1986,39 @@ REMAINING RELEASE WORK: ≠ WO25
       候选：① 证书到期监控接**外部告警通道**（需你提供 webhook URL；目前只落 journald）
       ② 一次一键发布脚本（版本号+构建+上传+核对 sha256，避免再出现"产物与版本不一致"）
       ③ 视觉设计 backlog（I3 图标重绘、`VOICE_CONSUMPTION` 语音帖播放等既有遗留项）
+
+### ⭐ 复核后补做（commit 88a2d7a）：审核方要求的 **P0** —— App 更新在 Web 上的平台语义
+
+⚠️ **先记我自己的错**：裁定写着 `WO25_WEB_RELEASE: PASS / CLOSED`，
+   而审核方在批准时**明确给了一条 P0**（网页端绝不能把"下载 APK"当成自己的更新）。
+   我先前**没有覆盖它**却把 WO#25 记为 CLOSED —— 等于**用裁定的措辞代替了对裁定内容的逐条核对**。
+   是在**复核那条结论本身**时发现的（实测 #/upgrade 上「立即更新」按钮仍在、
+   其代码路径就是 window.location.href = apkUrl）⇒ 已补做并修正审核日志口径。
+
+- [x] ✅ **P0 已修**：网页端不渲染 `[data-upgrade-now]`、不显示 APK 地址，
+      改为如实说明"网页端随服务端部署更新、刷新即最新"；**原生端完全不变**
+- [x] ✅ **建对称的一对门禁**（防"没改"也防"改过头"）：
+      `scripts/m5/web/gate-web-update-platform.mjs`（网页端：没有 APK 动作；
+        ⭐ 并用 CDP Fetch 域**拦截发布清单注入"有更新"**覆盖最易漏的分支）
+      `scripts/m5/gate-wo23-update-platform.mjs`（原生端对照侧：**仍然有** APK 动作；
+        ⭐ 有目标校验，非原生壳则**拒绝给结论**）
+      实测对照：网页端 hasNowButton=**false** ／ 原生端 hasNowButton=**true**
+- [x] ✅ **布局口径细化**：模拟状态栏改为**仅开发态**渲染（正式网页端不画假 OS UI）；
+      桌面保留居中+max-width 430px，去掉圆角/阴影装饰（**刻意不改几何**以免扰动几何断言）
+- [x] ✅ 新增 `app/src/platform.ts` 作为**单一定义**的平台判定（原先 Shell 与 index.html 各写一份）
+- [x] ✅ **连带修掉门禁"测错对象"**：9222 被 web 测试 Chrome 占用 ⇒ adb forward 绑定失败 ⇒
+      门禁实际问的是 web Chrome。已在 `run-device-gate.sh` 里对称地先释放它，
+      并用 `forward --list` **确认转发真的建立**，否则大声失败
+- [x] ✅ 回归：设备端 5 门禁 exit=0／provenance PASS；网页端新门禁 exit=0；tsc exit=0；CHECK_ALL_LOCAL PASS
+- [ ] ⬅ **待做（我已两次踩到）**：把「pnpm build → **npx cap sync android** → 构建安装」
+      固化成一条发布脚本 —— 漏跑 cap sync 会让 `ARTIFACT_PROVENANCE` 失败
+      （症状是 `source changed ≠ executed artifact changed`）。已在审核中提请裁定
+- [ ] ⬅ 待审核裁定本次 P0 补做（已提交，4 个问题：P0 是否确认／对称门禁做法／
+      假状态栏"仅开发态"口径／是否要固化发布脚本）
+
+**⭐ 本轮方法论收获（值得长期保留）**：
+  门禁全绿会**掩盖平台语义错误** —— 原有 wo23 门禁按 APK 场景写，在网页端照样 PASS，
+  因为"网页端该不该有这个动作"不在其判据里。
+  ⇒ **门禁只保证"实现与它写定的口径一致"，不保证该口径在当前平台上是对的**。
+  ⇒ 与审核方那条「**FAIL ≠ 断言有判别力**」是同一类盲区的两侧：
+     一条说"红了不代表测对了"，一条说"绿了不代表测全了"。
