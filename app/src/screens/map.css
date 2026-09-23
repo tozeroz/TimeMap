@@ -33,6 +33,109 @@
   right: 8px;
 }
 
+/* 地点列表按钮（备用入口，4.4 异常反馈） */
+.map__listBtn {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+}
+.map__listBtn--warn {
+  background: rgba(245, 69, 59, 0.1);
+  color: #f5453b;
+  border-radius: var(--r-pill);
+}
+
+/* 分类筛选 chips（草图 4.1：全部/地标/食堂…） */
+.map__filters {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 10px;
+  z-index: 500;
+  display: flex;
+  gap: 8px;
+  padding: 0 12px;
+  overflow-x: auto;
+}
+.map__chip {
+  flex: none;
+  padding: 7px 15px;
+  border: none;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--c-text-2);
+  font-size: 12.5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.map__chip.is-active {
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-weight: 600;
+}
+
+/* 离线标记的帖子数徽标 */
+.map__markerCount {
+  font-size: 9px;
+  line-height: 1.2;
+  color: var(--c-text-3);
+  text-align: center;
+}
+
+/* 地点列表半屏弹层 */
+.map__sheetWrap {
+  position: absolute;
+  inset: 0;
+  z-index: 650;
+  background: rgba(0, 0, 0, 0.42);
+  display: flex;
+  align-items: flex-end;
+}
+.map__sheet {
+  width: 100%;
+  max-height: 68%;
+  overflow-y: auto;
+  background: var(--c-surface);
+  border-radius: 18px 18px 0 0;
+  padding: 16px 18px calc(20px + env(safe-area-inset-bottom));
+}
+.map__sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.map__sheetHead h3 {
+  margin: 0;
+  font-size: 16.5px;
+}
+.map__sheetClose {
+  border: none;
+  background: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--c-text-3);
+  padding: 2px 6px;
+}
+.map__sheetTip {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+.map__sheetList { display: flex; flex-direction: column; }
+.map__sheetItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 2px;
+  border: none;
+  border-bottom: 1px solid var(--c-divider);
+  background: none;
+  text-align: left;
+}
+.map__sheetDot { flex: none; width: 9px; height: 9px; border-radius: 50%; }
+.map__sheetName { font-size: 14.5px; color: var(--c-text); font-weight: 600; }
+.map__sheetCat { font-size: 11.5px; color: var(--c-text-2); }
+.map__sheetCount { margin-left: auto; font-size: 12px; color: var(--c-text-3); }
+
 /* 底图来源提示：在线 / 离线降级 */
 .map__onlineBadge,
 .map__offlineBadge {

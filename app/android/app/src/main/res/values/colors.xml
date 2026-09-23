@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    品牌色（与 Web 侧 app/src/styles/tokens.css 保持一致）。
+    原工程缺失本文件，但 styles.xml 引用了其中的 colorPrimary/colorPrimaryDark/colorAccent，
+    导致资源链接失败、根本打不出 APK —— 这里补齐。
+-->
+<resources>
+    <color name="colorPrimary">#101010</color>
+    <color name="colorPrimaryDark">#000000</color>
+    <color name="colorAccent">#3B6EF5</color>
+    <color name="splashBackground">#101010</color>
+</resources>

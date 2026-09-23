@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    启动页背景。styles.xml 的 AppTheme.NoActionBarLaunch 用 @drawable/splash 作为
+    android:background；原工程只引用了这个资源却没有任何定义（原为 splash.png，
+    被 .gitignore 的 *.png 规则排除后彻底缺失），这里改成纯矢量的等价实现。
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splashBackground" />
+    <item
+        android:drawable="@drawable/splash_logo"
+        android:gravity="center" />
+</layer-list>

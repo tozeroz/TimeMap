@@ -1,0 +1,145 @@
+/* ============================================================
+   BJTU TimeMap 登录页（F01 低敏邀请码登录）
+   只收集邀请码与昵称，不涉及手机号 / 密码 / 身份证。
+   ============================================================ */
+.lg {
+  display: flex;
+  flex-direction: column;
+  padding: 46px 28px 30px;
+  background: var(--c-bg);
+}
+
+.lg__hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.lg__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 24px;
+  background: var(--c-primary);
+  color: #fff;
+}
+
+.lg__title {
+  margin: 6px 0 0;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.lg__sub {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--c-text-3);
+  line-height: 1.5;
+}
+
+.lg__card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 18px;
+  background: var(--c-surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.lg__field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.lg__label {
+  font-size: 12.5px;
+  color: var(--c-text-3);
+}
+
+.lg__input {
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--c-divider);
+  border-radius: var(--r-md);
+  background: var(--c-bg);
+  font-size: 16px;
+  color: var(--c-text);
+}
+
+.lg__input:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+.lg__error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--c-danger);
+}
+
+.lg__submit {
+  height: 48px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.lg__submit:disabled {
+  opacity: 0.4;
+}
+
+.lg__hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+.lg__code {
+  padding: 5px 10px;
+  border: 1px dashed var(--c-accent);
+  border-radius: var(--r-pill);
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lg__privacy {
+  margin: 18px 0 0;
+  font-size: 11.5px;
+  color: var(--c-text-3);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.lg__privacyBody {
+  margin: 8px 6px 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+}
+
+.lg__privacyBody p {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--c-text-2);
+}
+
+.lg__privacyBody p:last-child {
+  margin-bottom: 0;
+}

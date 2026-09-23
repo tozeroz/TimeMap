@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import type { MapMarker } from '../data/mock'
-import { posts } from '../data/mock'
+import type { PlaceMapMarker } from '../data/timemap'
 import type { GeoFix } from './geo'
 import type { MapHandle } from './mapApi'
 import { activeTileConfig, CAMPUS_CENTER } from './mapTiles'
@@ -14,8 +13,8 @@ import './realmaps.css'
  * 为什么保留它：不需要 key、不依赖任何厂商 SDK 域名，只要瓦片能下就能出图；
  * 瓦片连续加载失败时回调 onTilesFailed，让上层退回离线自绘地图。
  *
- * 标记沿用原版形态：照片卡片 + 彩色图钉 + 地点名（用 divIcon 自绘）。
- * 蓝点用真实定位坐标（here），拿不到时退回校园中心，绝不留空白。
+ * 标记为「地点聚合标记」：名称 + 帖子数 + 分类配色图钉（不铺开单帖），
+ * 点击进入地点详情。蓝点用真实定位坐标（here），拿不到时退回校园中心，绝不留空白。
  */
 export function RealMap({
   markers,
@@ -24,10 +23,10 @@ export function RealMap({
   onTilesFailed,
   mapRef,
 }: {
-  markers: MapMarker[]
+  markers: PlaceMapMarker[]
   /** 真实定位结果；null = 尚未拿到，蓝点先停在校园中心 */
   here?: GeoFix | null
-  onMarkerClick: (postId: string) => void
+  onMarkerClick: (placeId: string) => void
   onTilesFailed: () => void
   mapRef?: (handle: MapHandle | null) => void
 }) {
@@ -62,16 +61,14 @@ export function RealMap({
     })
     layer.addTo(map)
 
-    // 标记：照片卡片 + 图钉 + 地点名
+    // 标记：地点聚合卡片（封面图/名称 + 帖子数）+ 分类配色图钉
     for (const m of markers) {
-      const post = posts.find((p) => p.id === m.postId)
-      const cover = post?.images[0]
-      const body = cover
-        ? `<img class="rm__img" src="${cover}" alt="" />`
-        : `<span class="rm__img rm__img--text">${(post?.text ?? '').slice(0, 10)}</span>`
+      const body = m.cover
+        ? `<img class="rm__img" src="${m.cover}" alt="" />`
+        : `<span class="rm__img rm__img--text">${m.place}</span>`
       const html = `
         <div class="rm">
-          <div class="rm__card">${body}<span class="rm__name">${m.place}</span></div>
+          <div class="rm__card">${body}<span class="rm__name">${m.place}</span><span class="rm__count">${m.count} 帖</span></div>
           <span class="rm__pin" style="color:${m.color}">
             <svg width="18" height="24" viewBox="0 0 20 26"><path d="M10 25.5S19 15.6 19 9.6A9 9 0 0 0 1 9.6c0 6 9 15.9 9 15.9Z" fill="currentColor"/><circle cx="10" cy="9.6" r="3.4" fill="#fff"/></svg>
           </span>
@@ -83,7 +80,7 @@ export function RealMap({
         iconAnchor: [38, 100],
       })
       const marker = L.marker([m.lat, m.lng], { icon })
-      marker.on('click', () => onMarkerClick(m.postId))
+      marker.on('click', () => onMarkerClick(m.id))
       marker.addTo(map)
     }
 

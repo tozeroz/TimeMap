@@ -20,10 +20,17 @@ app/android/app/src/main/assets/capacitor.config.json
 # 勘察与对比的原始截图（体积大，且是外部 app 的截图，不进版本库）
 .mumu-capture/
 .playwright-mcp/
-*.png
+
+# 注意：这里**不要**再写全局的 *.png。
+# 原先有一条 `*.png`，把 app/android 下的 splash.png / ic_launcher 图标也一起排除了，
+# 导致克隆下来的工程缺少资源、直接构建失败（@drawable/splash 未定义）。
+# 截图目录本身已按目录忽略，无需再按扩展名扫全仓库。
 
 # 工具临时
 tools/tmp/
+
+# 本地 Android SDK（约 1 GB，由 tools/fetch-android-sdk.mjs 下载，不进版本库）
+.android-sdk/
 
 # 系统
 Thumbs.db

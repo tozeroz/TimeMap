@@ -1,0 +1,7 @@
+.more__foot {
+  margin: 18px var(--pad-page) 30px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--c-text-3);
+  line-height: 1.6;
+}

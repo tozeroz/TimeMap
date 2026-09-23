@@ -2,140 +2,75 @@ import { useEffect } from 'react'
 import { Shell } from './components/Shell'
 import { TabBar, type TabKey } from './components/TabBar'
 import { useRoute } from './router'
-import { CampusScreen } from './screens/CampusScreen'
+import { getSession } from './data/tmStore'
+import { useTm } from './components/TmPostCard'
+import { LoginScreen } from './screens/LoginScreen'
 import { MeScreen } from './screens/MeScreen'
 import { MapScreen } from './screens/MapScreen'
+import { ActivitiesScreen } from './screens/ActivitiesScreen'
+import { ActivityDetailScreen } from './screens/ActivityDetailScreen'
+import { PlaceDetailScreen } from './screens/PlaceDetailScreen'
 import { FeedDetailScreen } from './screens/FeedDetailScreen'
 import { CommentsScreen } from './screens/CommentsScreen'
-import { MessageScreen } from './screens/MessageScreen'
-import { ChatScreen } from './screens/ChatScreen'
-import { BoardScreen } from './screens/BoardScreen'
-import { DailyScreen } from './screens/DailyScreen'
-import { PoiSearchScreen } from './screens/PoiSearchScreen'
 import { PublishScreen } from './screens/PublishScreen'
-import { LoginScreen } from './screens/LoginScreen'
-import { OnboardingScreen } from './screens/OnboardingScreen'
-import { AnnounceScreen } from './screens/AnnounceScreen'
-import { SimpleScreen } from './screens/SimpleScreen'
-import { FeedListScreen } from './screens/FeedListScreen'
-import { PoiDetailScreen } from './screens/PoiDetailScreen'
-import { GroupChatScreen } from './screens/GroupChatScreen'
-import { MediaPreviewScreen } from './screens/MediaPreviewScreen'
-import { ScannerScreen } from './screens/ScannerScreen'
-import { LoginSelectScreen } from './screens/LoginSelectScreen'
-import { UpgradeDialog } from './screens/UpgradeDialog'
-import { MoreScreen } from './screens/MoreScreen'
-import { UserProfileScreen } from './screens/UserProfileScreen'
+import { AdminScreen } from './screens/AdminScreen'
 import { ProfileEditScreen } from './screens/ProfileEditScreen'
-import {
-  AboutScreen,
-  AccountScreen,
-  BlacklistScreen,
-  ContactScreen,
-  PrivacyScreen,
-  VerifyScreen,
-} from './screens/DrawerPages'
+import { MoreScreen } from './screens/MoreScreen'
 import './styles/pages.css'
+import './styles/timemap.css'
 
 const TAB_TITLES: Record<string, string> = {
-  me: '自定义名称6',
-  campus: '校园广场',
-  map: '地图',
+  map: 'BJTU TimeMap · 地图',
+  activities: 'BJTU TimeMap · 活动',
+  me: 'BJTU TimeMap · 我的',
 }
 
 export default function App() {
+  // 订阅 store：登录/退出后要立刻切换登录门禁，不能等下一次路由变化
+  useTm()
   const route = useRoute()
   const [root, param] = route.path.split('/')
+  /**
+   * 详情页的 id 既支持 query（navigate('place', { id }) → #/place?id=xxx），
+   * 也支持路径段（#/place/xxx）。原实现只读路径段，而所有跳转都用 query，
+   * 结果详情页永远落到兜底 id —— 这里一并修掉。
+   */
+  const idParam = route.query.id ?? param
   const tab: TabKey | null =
-    root === 'me' || root === 'campus' || root === 'map' ? (root as TabKey) : null
+    root === 'map' || root === 'activities' || root === 'me' ? (root as TabKey) : null
   // 深色页面：状态栏需要跟着变暗
   const dark = root === 'scanner' || root === 'media'
 
+  // F01 用户入口：邀请码控制试用范围 —— 未登录一律先到登录页
+  const loggedIn = Boolean(getSession())
+
   useEffect(() => {
-    document.title = TAB_TITLES[root] ?? 'Campus'
+    document.title = TAB_TITLES[root] ?? 'BJTU TimeMap'
   }, [root])
+
+  if (!loggedIn) {
+    return (
+      <Shell dark={dark}>
+        <LoginScreen />
+      </Shell>
+    )
+  }
 
   return (
     <Shell dark={dark}>
-      {tab === 'campus' && <CampusScreen />}
-      {tab === 'me' && <MeScreen />}
       {tab === 'map' && <MapScreen />}
+      {tab === 'activities' && <ActivitiesScreen />}
+      {tab === 'me' && <MeScreen />}
 
-      {root === 'feed' && <FeedDetailScreen id={param ?? 'p1'} />}
-      {root === 'comments' && <CommentsScreen id={param ?? 'p1'} />}
-      {root === 'message' && <MessageScreen />}
-      {root === 'chat' && <ChatScreen id={param ?? 't1'} />}
-      {root === 'board' && <BoardScreen />}
-      {root === 'daily' && <DailyScreen />}
-      {root === 'poi' && <PoiSearchScreen />}
+      {root === 'place' && <PlaceDetailScreen id={idParam ?? 'pl_siyuanbei'} />}
+      {root === 'feed' && <FeedDetailScreen id={idParam ?? 'tp1'} />}
+      {root === 'comments' && <CommentsScreen id={idParam ?? 'tp1'} />}
       {root === 'publish' && <PublishScreen />}
+      {root === 'activity' && <ActivityDetailScreen id={idParam ?? 'ta1'} />}
+      {root === 'admin' && <AdminScreen />}
       {root === 'login' && <LoginScreen />}
-      {root === 'onboarding' && <OnboardingScreen />}
-      {root === 'announce' && <AnnounceScreen />}
-      {root === 'feedlist' && <FeedListScreen />}
-      {root === 'poidetail' && <PoiDetailScreen />}
-      {root === 'group' && <GroupChatScreen />}
-      {root === 'scanner' && <ScannerScreen />}
-      {root === 'loginselect' && <LoginSelectScreen />}
-      {root === 'upgrade' && <UpgradeDialog />}
-      {root === 'more' && <MoreScreen />}
-      {root === 'user' && <UserProfileScreen id={route.query.id ?? 'u1'} />}
-      {root === 'account' && <AccountScreen />}
-      {root === 'verify' && <VerifyScreen />}
-      {root === 'privacy' && <PrivacyScreen />}
-      {root === 'blacklist' && <BlacklistScreen />}
-      {root === 'about' && <AboutScreen />}
-      {root === 'contact' && <ContactScreen />}
       {root === 'profile-edit' && <ProfileEditScreen />}
-      {root === 'media' && (
-        <MediaPreviewScreen
-          postId={route.query.post}
-          startIndex={route.query.i ? Number(route.query.i) : 0}
-        />
-      )}
-
-      {root === 'interests' && (
-        <SimpleScreen title="我的兴趣" subtitle="选择你感兴趣的内容，我们会为你推荐">
-          <div className="chips">
-            {['摄影', '美食', '读书', '音乐', '运动', '旅行', '电影', '宠物', '手作', '考研'].map(
-              (t) => (
-                <span key={t} className="chip">
-                  {t}
-                </span>
-              ),
-            )}
-          </div>
-        </SimpleScreen>
-      )}
-      {root === 'tags' && (
-        <SimpleScreen title="我的标签" subtitle="标签会展示在你的主页">
-          <div className="chips">
-            {['INFP', '天秤座', '夜猫子', '食堂测评员', '图书馆常驻'].map((t) => (
-              <span key={t} className="chip chip--blue">
-                {t}
-              </span>
-            ))}
-          </div>
-        </SimpleScreen>
-      )}
-      {root === 'bio' && (
-        <SimpleScreen title="介绍一下自己" subtitle="一句话让别人认识你">
-          <p className="para">喜欢傍晚的操场和图书馆四楼的窗边位，偶尔写点东西。</p>
-        </SimpleScreen>
-      )}
-      {root === 'school' && (
-        <SimpleScreen title="我的学校" subtitle="北京交通大学">
-          <p className="para">海淀区西直门外上园村 3 号</p>
-          <p className="para">12,486 位同学已加入</p>
-        </SimpleScreen>
-      )}
-      {root === 'edit-profile' && (
-        <SimpleScreen title="编辑资料" subtitle="修改后立即生效">
-          <p className="para">昵称：自定义名称6</p>
-          <p className="para">学院：计算机与信息技术学院</p>
-          <p className="para">年级：本科三年级</p>
-        </SimpleScreen>
-      )}
+      {root === 'more' && <MoreScreen />}
 
       {tab && <TabBar active={tab} />}
     </Shell>

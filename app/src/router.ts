@@ -22,7 +22,8 @@ function parseHash(): Route {
       if (k) query[decodeURIComponent(k)] = decodeURIComponent(v ?? '')
     }
   }
-  return { path: pathPart || 'campus', query }
+  // 默认落地页 = 地图（TimeMap 以地图为主要入口）
+  return { path: pathPart || 'map', query }
 }
 
 export function useRoute(): Route {
@@ -31,7 +32,7 @@ export function useRoute(): Route {
   useEffect(() => {
     const onChange = () => setRoute(parseHash())
     window.addEventListener('hashchange', onChange)
-    if (!window.location.hash) window.location.hash = '#/campus'
+    if (!window.location.hash) window.location.hash = '#/map'
     return () => window.removeEventListener('hashchange', onChange)
   }, [])
 
@@ -48,8 +49,8 @@ export function navigate(path: string, query?: Record<string, string>) {
   window.location.hash = `#/${path}${qs}`
 }
 
-/** 返回上一页；如果没有历史则回到主 tab */
-export function goBack(fallback = 'campus') {
+/** 返回上一页；如果没有历史则回到主 tab（TimeMap 主入口 = 地图） */
+export function goBack(fallback = 'map') {
   if (window.history.length > 1) {
     window.history.back()
   } else {

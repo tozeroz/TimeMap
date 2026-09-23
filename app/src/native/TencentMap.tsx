@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { MapMarker } from '../data/mock'
-import { posts } from '../data/mock'
+import type { PlaceMapMarker } from '../data/timemap'
 import type { GeoFix } from './geo'
 import { hasTencentKey, TENCENT_MAP_KEY } from './keys'
 import type { MapHandle } from './mapApi'
@@ -98,32 +97,35 @@ interface PlacedItem {
   lng: number
 }
 
-/** 标记的 DOM 结构：照片卡片 + 图钉 + 地点名（与 Leaflet 版同构） */
-function buildMarkerElement(m: MapMarker): HTMLDivElement {
-  const post = posts.find((p) => p.id === m.postId)
-  const cover = post?.images[0]
+/** 标记的 DOM 结构：地点聚合卡片（封面/名称 + 帖子数）+ 分类配色图钉（与 Leaflet 版同构） */
+function buildMarkerElement(m: PlaceMapMarker): HTMLDivElement {
   const el = document.createElement('div')
   el.className = 'rm'
   el.dataset.markerId = m.id
 
   const card = document.createElement('div')
   card.className = 'rm__card'
-  if (cover) {
+  if (m.cover) {
     const img = document.createElement('img')
     img.className = 'rm__img'
-    img.src = cover
+    img.src = m.cover
     img.alt = ''
     card.appendChild(img)
   } else {
     const span = document.createElement('span')
     span.className = 'rm__img rm__img--text'
-    span.textContent = (post?.text ?? '').slice(0, 10)
+    span.textContent = m.place
     card.appendChild(span)
   }
   const name = document.createElement('span')
   name.className = 'rm__name'
   name.textContent = m.place
   card.appendChild(name)
+
+  const count = document.createElement('span')
+  count.className = 'rm__count'
+  count.textContent = `${m.count} 帖`
+  card.appendChild(count)
 
   const pin = document.createElement('span')
   pin.className = 'rm__pin'
@@ -143,9 +145,9 @@ export function TencentMap({
   onSdkFailed,
   mapRef,
 }: {
-  markers: MapMarker[]
+  markers: PlaceMapMarker[]
   here?: GeoFix | null
-  onMarkerClick: (postId: string) => void
+  onMarkerClick: (placeId: string) => void
   onSdkFailed: () => void
   mapRef?: (handle: MapHandle | null) => void
 }) {
@@ -209,7 +211,7 @@ export function TencentMap({
         const wrap = document.createElement('div')
         wrap.className = 'rm__wrap rm__wrap--tmap'
         const el = buildMarkerElement(m)
-        el.addEventListener('click', () => onMarkerClick(m.postId))
+        el.addEventListener('click', () => onMarkerClick(m.id))
         wrap.appendChild(el)
         host.appendChild(wrap)
         const item: PlacedItem = { wrap, lat: m.lat, lng: m.lng }

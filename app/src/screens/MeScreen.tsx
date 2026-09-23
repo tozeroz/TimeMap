@@ -1,109 +1,103 @@
 import { useState } from 'react'
 import { Screen, TopBar } from '../components/Shell'
-import { Drawer } from '../components/Drawer'
-import {
-  IconChatBubble,
-  IconChevronRight,
-  IconEdit,
-  IconImage,
-  IconMenu,
-  IconShare,
-} from '../components/icons'
-import { me } from '../data/mock'
+import { IconChevronRight, IconEdit } from '../components/icons'
+import { PostCard, useTm } from '../components/TmPostCard'
+import { deletePost, getSession, logout, myFavorites, myPosts } from '../data/tmStore'
 import { navigate } from '../router'
-import './me.css'
 
-/** 个人页：对齐原版 —— 纯白底、无多余模块，中部只有「拍下眼前的风景」+ 提示气泡 */
+/**
+ * 我的（F01 账号资料 / US-02 / US-03）：
+ * - 个人资料卡（昵称 / 学院 / 年级 / 一句话介绍），可编辑
+ * - 我的发布（可删除自己的帖子）、我的收藏（取消收藏即移除）
+ * - 学生管理员可见「管理端」入口（US-08 权限边界）
+ */
 export function MeScreen() {
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  useTm()
+  const session = getSession()
+  const profile = session?.profile
+  const [tab, setTab] = useState<'posts' | 'favorites'>('posts')
+  const posts = myPosts()
+  const favorites = myFavorites()
+
+  if (!profile) return null
 
   return (
-    <Screen
-      header={
-        <TopBar
-          left={
-            <>
-              <button
-                className="iconbtn"
-                aria-label="菜单"
-                onClick={() => setDrawerOpen(true)}
-              >
-                <IconMenu size={22} strokeWidth={2.2} />
-              </button>
-              <button className="iconbtn" aria-label="分享">
-                <IconShare size={20} strokeWidth={2.2} />
-              </button>
-            </>
-          }
-          right={
-            <button className="iconbtn" onClick={() => navigate('message')} aria-label="消息">
-              <IconChatBubble size={22} strokeWidth={2.2} />
-            </button>
-          }
-          variant="plain"
-        />
-      }
-      scroll
-    >
-      <section className="me__profile">
-        <div className="me__side me__side--left">
-          <button className="me__entry" onClick={() => navigate('profile-edit')}>
-            <span>我的兴趣</span>
-            <IconChevronRight size={14} />
-          </button>
-          <button className="me__entry" onClick={() => navigate('profile-edit')}>
-            <span>我的标签</span>
-            <IconChevronRight size={14} />
-          </button>
+    <Screen header={<TopBar variant="plain" center="我的" />}>
+      {/* 资料卡 */}
+      <section className="tme__profile">
+        <img className="tme__avatar" src={profile.avatar} alt="" />
+        <div className="tme__profileMain">
+          <h2 className="tme__name">{profile.name}</h2>
+          <p className="tme__meta">
+            {profile.college}
+            {profile.grade ? ` · ${profile.grade}` : ''}
+          </p>
+          {profile.bio && <p className="tme__bio">{profile.bio}</p>}
         </div>
-
-        <div className="me__center">
-          <img className="me__avatar" src={me.avatar} alt="" />
-          <h2 className="me__name">{me.name}</h2>
-          <button className="me__edit" onClick={() => navigate('profile-edit')}>
-            <IconEdit size={14} />
-            <span>编辑资料</span>
-          </button>
-        </div>
-
-        <div className="me__side me__side--right">
-          <button className="me__entry" onClick={() => navigate('profile-edit')}>
-            <span>介绍一下自己～</span>
-            <IconChevronRight size={14} />
-          </button>
-          <button className="me__entry" onClick={() => navigate('profile-edit')}>
-            <span>我的学校</span>
-            <IconChevronRight size={14} />
-          </button>
-        </div>
+        <button className="tme__editBtn" onClick={() => navigate('profile-edit')}>
+          <IconEdit size={14} />
+          编辑资料
+        </button>
       </section>
 
-      {/* 语音动态条（原版个人页实测存在「我的第一条语音」卡片） */}
-      <section className="me__voiceRow">
-        <button className="me__voiceCard" onClick={() => navigate('publish')}>
-          <span className="me__voiceBar" aria-hidden>
-            {Array.from({ length: 18 }).map((_, i) => (
-              <i key={i} style={{ height: `${7 + ((i * 23) % 15)}px` }} />
-            ))}
+      {session?.role === 'admin' && (
+        <button className="tme__adminEntry" onClick={() => navigate('admin')}>
+          <span className="tme__adminIcon" aria-hidden>
+            ⚙
           </span>
-          <span className="me__voiceLabel">我的第一条语音</span>
+          <span className="tme__adminText">管理端</span>
+          <span className="tme__adminSub">举报处理 · 内容 · 地点 · 活动</span>
+          <IconChevronRight size={16} />
         </button>
-        <div className="me__hint">
-          <span className="me__hint-spark">✦</span>
-          <span className="me__hint-bubble">快来试试吧～</span>
-        </div>
+      )}
+
+      {/* 统计 + 列表切换 */}
+      <section className="tme__stats">
+        <button className={`tme__stat ${tab === 'posts' ? 'is-active' : ''}`} onClick={() => setTab('posts')}>
+          <strong>{posts.length}</strong>
+          <span>我的发布</span>
+        </button>
+        <button
+          className={`tme__stat ${tab === 'favorites' ? 'is-active' : ''}`}
+          onClick={() => setTab('favorites')}
+        >
+          <strong>{favorites.length}</strong>
+          <span>我的收藏</span>
+        </button>
       </section>
 
-      {/* 记录入口：原版是「拍下眼前的风景」黑色胶囊 */}
-      <section className="me__prompt">
-        <button className="me__capture" onClick={() => navigate('publish')}>
-          <IconImage size={17} />
-          <span>拍下眼前的风景</span>
-        </button>
+      <section className="tme__list">
+        {tab === 'posts' ? (
+          posts.length === 0 ? (
+            <div className="tm__empty">
+              <p>还没有发布过内容</p>
+              <span>从地图选一个地点，留下你的第一条校园记忆</span>
+            </div>
+          ) : (
+            posts.map((p) => (
+              <PostCard
+                key={p.id}
+                post={p}
+                showPlace
+                removedBadge
+                onDelete={(id) => deletePost(id)}
+              />
+            ))
+          )
+        ) : favorites.length === 0 ? (
+          <div className="tm__empty">
+            <p>还没有收藏</p>
+            <span>在帖子详情点 ☆ 收藏，之后会出现在这里</span>
+          </div>
+        ) : (
+          favorites.map((p) => <PostCard key={p.id} post={p} showPlace />)
+        )}
       </section>
 
-      {/* 左上角三横线打开的抽屉菜单（原版实测有 8 项） */}
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <button className="tme__logout" onClick={() => logout()}>
+        退出登录
+      </button>
+      <div className="tme__spacer" />
     </Screen>
   )
 }

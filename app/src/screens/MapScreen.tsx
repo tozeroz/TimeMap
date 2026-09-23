@@ -1,18 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Screen } from '../components/Shell'
-import {
-  IconChatBubble,
-  IconChevronDown,
-  IconCompass,
-  IconLocation,
-  IconPlus,
-} from '../components/icons'
-import { mapMarkers } from '../data/mock'
+import { IconChevronDown, IconCompass, IconLocation, IconPlus } from '../components/icons'
+import { getTmVersion, placeMarkers, listPlaces, placePostCount, subscribeTm, isPlaceEnabled } from '../data/tmStore'
+import { CATEGORY_COLOR } from '../data/timemap'
+import type { PlaceMapMarker } from '../data/timemap'
 import { AmapMap } from '../native/AmapMap'
 import { RealMap } from '../native/RealMap'
 import { TencentMap } from '../native/TencentMap'
 import type { MapHandle } from '../native/mapApi'
 import { CAMPUS_CENTER } from '../native/mapTiles'
+import { navigate, useRoute } from '../router'
 import {
   distanceMeters,
   ensureLocationPermission,
@@ -24,7 +21,6 @@ import {
   type GeoFix,
   type GeoStatus,
 } from '../native/geo'
-import { navigate, useRoute } from '../router'
 import './map.css'
 
 interface ViewState {
@@ -35,13 +31,23 @@ interface ViewState {
 
 const MIN_SCALE = 0.6
 const MAX_SCALE = 3
+const DEFAULT_VIEW: ViewState = { x: -260, y: -700, scale: 1 }
+
+/** 分类筛选（草图 4.1：[全部][地标][食堂]…） */
+const FILTERS = ['全部', '地标', '食堂', '教学楼', '图书馆', '体育场馆']
+
+/**
+ * US-01「返回地图后保留原浏览区域」：
+ * hash 路由切页会卸载组件，这里用模块级变量保存视图，重进时恢复。
+ */
+let savedView: ViewState | null = null
 
 /**
  * 离线自绘地图 —— **降级方案**。
  * 在线瓦片连续加载失败（无网络 / 被墙 / 无 key）时使用，保证地图区域不是空白。
  * 拖拽、双击、捏合的数据都在这里处理。
  */
-function OfflineMap({ view, onTilesMeta }: { view: ViewState; onTilesMeta?: (el: HTMLDivElement | null) => void }) {
+function OfflineMap({ view, markers }: { view: ViewState; markers: PlaceMapMarker[] }) {
   const inv = 1 / view.scale
   return (
     <div
@@ -67,6 +73,7 @@ function OfflineMap({ view, onTilesMeta }: { view: ViewState; onTilesMeta?: (el:
           <path d="M700 -300 V2200" strokeWidth="24" />
         </g>
         <path d="M-300 1520 C 200 1480, 620 1600, 1000 1520 S 1600 1430, 1900 1480" stroke="#bcd8ef" strokeWidth="44" fill="none" />
+        <rect x="300" y="1180" width="180" height="120" rx="10" fill="#cfe3f2" />
         <rect x="820" y="500" width="330" height="260" rx="14" fill="#d9e9cd" />
         <g fill="#8b8578" fontSize="26" fontFamily="PingFang SC, sans-serif">
           <text x="320" y="404">西直门外上园村路</text>
@@ -77,8 +84,8 @@ function OfflineMap({ view, onTilesMeta }: { view: ViewState; onTilesMeta?: (el:
           <text x="800" y="1020">逸夫教学楼</text>
         </g>
       </svg>
-      <div className="map__markers" ref={onTilesMeta}>
-        {mapMarkers.map((m) => (
+      <div className="map__markers">
+        {markers.map((m) => (
           <div
             key={m.id}
             className="map__marker"
@@ -89,9 +96,14 @@ function OfflineMap({ view, onTilesMeta }: { view: ViewState; onTilesMeta?: (el:
               transformOrigin: '50% 100%',
             }}
           >
-            <button className="map__markerCard" onClick={() => navigate('feed', { id: m.postId })}>
-              <span className="map__markerImg map__markerImg--text">{m.place}</span>
+            <button className="map__markerCard" onClick={() => navigate('place', { id: m.id })}>
+              {m.cover ? (
+                <img className="map__markerImg" src={m.cover} alt="" />
+              ) : (
+                <span className="map__markerImg map__markerImg--text">{m.place}</span>
+              )}
               <span className="map__markerName">{m.place}</span>
+              <span className="map__markerCount">{m.count} 帖</span>
             </button>
             <span className="map__pin" style={{ color: m.color }} aria-hidden>
               <svg width="20" height="26" viewBox="0 0 20 26">
@@ -147,7 +159,12 @@ export function MapScreen() {
   // #/map?ask=1 → 强制弹出定位授权说明（验收真实触摸用；正常只在未授权时弹）
   const forceAsk = route.query.ask === '1'
 
-  const [view, setView] = useState<ViewState>({ x: -260, y: -700, scale: 1 })
+  // 订阅状态变化：发布/下架/停用地点后标记数量实时刷新
+  useSyncExternalStore(subscribeTm, getTmVersion)
+  const [filter, setFilter] = useState('全部')
+  const [listOpen, setListOpen] = useState(false)
+
+  const [view, setView] = useState<ViewState>(savedView ?? DEFAULT_VIEW)
   const [tipOpen, setTipOpen] = useState(false)
   const [tileFailed, setTileFailed] = useState(false)
   const [tilesOk, setTilesOk] = useState<boolean | null>(null)
@@ -160,6 +177,15 @@ export function MapScreen() {
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
   /** 被系统拒绝过至少一次 —— 此时再点“授权”不会弹框，需要引导去系统设置 */
   const [deniedOnce, setDeniedOnce] = useState(false)
+
+  // 视图保存（返回地图后保留原浏览区域，US-01）
+  useEffect(() => {
+    savedView = view
+  }, [view])
+
+  // 地点聚合标记：筛选 + 帖子数随状态（发布/下架）实时更新
+  const markers = placeMarkers(filter)
+  const places = listPlaces()
 
   const drag = useRef<{ id: number; startX: number; startY: number; originX: number; originY: number } | null>(null)
   const pinch = useRef<{ distance: number; scale: number } | null>(null)
@@ -184,8 +210,6 @@ export function MapScreen() {
     setGeoStatus('asking')
     const granted = await ensureLocationPermission()
     if (!granted) {
-      // 系统已经拒绝过（或用户勾了“不再询问”）时，requestPermissions 不会再弹框，
-      // 这时只能明确告诉用户去哪里手动开，不要让人对着一个没反应的按钮反复点。
       setGeoStatus('denied')
       setDeniedOnce(true)
       return
@@ -330,7 +354,7 @@ export function MapScreen() {
       handle.flyTo(target[0], target[1], 16)
       return
     }
-    setView({ x: -260, y: -700, scale: 1 })
+    setView(DEFAULT_VIEW)
   }, [offline, fix])
 
   const backToCampus = useCallback(() => {
@@ -363,9 +387,9 @@ export function MapScreen() {
     setProviderState('raster')
   }, [])
 
-  // 注意：这两个回调必须保持稳定引用，否则地图组件的建图 effect 会每次渲染都销毁重建地图
-  const handleMarkerClick = useCallback((postId: string) => {
-    navigate('feed', { id: postId })
+  // 点击标记进入「地点详情」（US-01：地图标记与地点详情内容一致）
+  const handleMarkerClick = useCallback((placeId: string) => {
+    navigate('place', { id: placeId })
   }, [])
 
   const handleMapRef = useCallback((handle: MapHandle | null) => {
@@ -378,14 +402,21 @@ export function MapScreen() {
       header={
         <header className="map__head">
           <div className="map__titlewrap">
-            <h1 className="map__title">Map</h1>
-            <button className="map__region" onClick={() => navigate('poi')}>
-              <span>北京交通大学（校本部）</span>
+            <h1 className="map__title">BJTU TimeMap</h1>
+            <button className="map__region" onClick={() => setListOpen(true)}>
+              <span>北京交通大学 · 海淀校区</span>
               <IconChevronDown size={13} />
             </button>
           </div>
-          <button className="iconbtn map__msg" onClick={() => navigate('message')} aria-label="消息">
-            <IconChatBubble size={22} />
+          {/* 异常兜底（4.4）：地图加载失败时提供地点列表作为备用入口 */}
+          <button
+            className={`iconbtn map__listBtn ${offline ? 'map__listBtn--warn' : ''}`}
+            onClick={() => setListOpen(true)}
+            aria-label="地点列表"
+          >
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M4 6.5h16M4 12h16M4 17.5h16" />
+            </svg>
           </button>
         </header>
       }
@@ -403,10 +434,10 @@ export function MapScreen() {
         onTouchEnd={onTouchEnd}
       >
         {offline ? (
-          <OfflineMap view={view} />
+          <OfflineMap view={view} markers={markers} />
         ) : provider === 'tencent' ? (
           <TencentMap
-            markers={mapMarkers}
+            markers={markers}
             here={fix}
             onMarkerClick={handleMarkerClick}
             onSdkFailed={handleTencentFailed}
@@ -414,7 +445,7 @@ export function MapScreen() {
           />
         ) : provider === 'amap' ? (
           <AmapMap
-            markers={mapMarkers}
+            markers={markers}
             here={fix}
             onMarkerClick={handleMarkerClick}
             onSdkFailed={handleAmapFailed}
@@ -422,13 +453,26 @@ export function MapScreen() {
           />
         ) : (
           <RealMap
-            markers={mapMarkers}
+            markers={markers}
             here={fix}
             onMarkerClick={handleMarkerClick}
             onTilesFailed={handleTilesFailed}
             mapRef={handleMapRef}
           />
         )}
+
+        {/* 分类筛选：全部 / 地标 / 食堂 / …（草图 4.1） */}
+        <div className="map__filters no-scrollbar">
+          {FILTERS.map((f) => (
+            <button
+              key={f}
+              className={`map__chip ${filter === f ? 'is-active' : ''}`}
+              onClick={() => setFilter(f)}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
 
         {offline && (
           <span className="map__offlineBadge">
@@ -445,8 +489,6 @@ export function MapScreen() {
           status={geoStatus}
           fix={fix}
           onRetry={() => {
-            // 未授权：先把“为什么要定位”的说明弹回来，再让用户点授权；
-            // 定位超时：直接重试，不用再解释一遍。
             if (geoStatus === 'denied') setTipOpen(true)
             else void requestGeo()
           }}
@@ -478,7 +520,7 @@ export function MapScreen() {
           <div className="map__modal-wrap">
             <div className="map__modal">
               <h3 className="map__modal-title">授权地理位置</h3>
-              <p className="map__modal-desc">在地图上，标记属于你的校园生活</p>
+              <p className="map__modal-desc">在地图上，标记属于你的校园记忆</p>
               {deniedOnce && (
                 <p className="map__modal-desc map__modal-desc--warn">
                   系统已拒绝定位权限，再点授权不会弹框。
@@ -490,7 +532,6 @@ export function MapScreen() {
                   className="map__modal-btn"
                   onClick={() => {
                     setTipOpen(false)
-                    // 明确拒绝过就给出提示条，避免蓝点静默停在校门口
                     setGeoStatus((s) => (s === 'ok' ? s : 'denied'))
                   }}
                 >
@@ -505,6 +546,45 @@ export function MapScreen() {
                 >
                   授权
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 地点列表（备用入口 + 快速索引） */}
+        {listOpen && (
+          <div className="map__sheetWrap" onClick={() => setListOpen(false)}>
+            <div className="map__sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="map__sheetHead">
+                <h3>地点列表</h3>
+                <button className="map__sheetClose" onClick={() => setListOpen(false)} aria-label="关闭">
+                  ×
+                </button>
+              </div>
+              <p className="map__sheetTip">
+                {offline ? '底图加载失败时，可从这里直接进入地点详情' : '全校预设地点，点击进入详情'}
+              </p>
+              <div className="map__sheetList">
+                {places.map((p) => {
+                  const enabled = isPlaceEnabled(p.id)
+                  return (
+                    <button
+                      key={p.id}
+                      className="map__sheetItem"
+                      onClick={() => {
+                        setListOpen(false)
+                        navigate('place', { id: p.id })
+                      }}
+                    >
+                      <span className="map__sheetDot" style={{ background: CATEGORY_COLOR[p.category] }} />
+                      <span className="map__sheetName">{p.name}</span>
+                      <span className="map__sheetCat">{p.category}</span>
+                      <span className="map__sheetCount">
+                        {enabled ? `${placePostCount(p.id)} 帖` : '已停用'}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>

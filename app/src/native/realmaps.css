@@ -94,6 +94,14 @@
   white-space: nowrap;
 }
 
+/* 地点聚合标记的帖子数徽标（初稿 5.1：显示帖子总数/近期新增数） */
+.rm__count {
+  font-size: 9px;
+  line-height: 1.2;
+  color: #949499;
+  text-align: center;
+}
+
 .rm__pin {
   display: block;
   margin-top: -3px;

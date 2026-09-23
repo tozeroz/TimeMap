@@ -1,121 +1,178 @@
 import { useState } from 'react'
 import { Screen, TopBar } from '../components/Shell'
-import { IconBack, IconComment, IconHeart, IconShare } from '../components/icons'
-import { comments, posts } from '../data/mock'
-import { findPost } from '../data/store'
+import { IconBack, IconHeart, IconStar } from '../components/icons'
+import { CommentInput, CommentList, ReportSheet, TagChip, useTm, useToast, Toast } from '../components/TmPostCard'
+import { relativeTime } from '../data/timemap'
+import {
+  commentCount,
+  deletePost,
+  favoriteCount,
+  getPlace,
+  getPost,
+  likeCount,
+  toggleFavorite,
+  toggleLike,
+  userById,
+} from '../data/tmStore'
 import { goBack, navigate } from '../router'
-import './feed.css'
 
 /**
- * 动态详情（原版 FeedDetailActivity）。
- * 结构按原版实测：
- * - 顶部：返回 + 分享
- * - 作者行：头像 + 昵称 +「学校(校区) · 时间」
- * - 正文 + 配图
- * - 底部互动条：输入框「留下我的评论...」+ 点赞（心形+数字）+「评论」按钮
+ * 帖子详情（US-02/US-03/US-08）：
+ * - 作者 / 地点 / 正文或媒体 / 互动与评论
+ * - 下架后不显示正文（状态页 + 返回入口，4.4 异常反馈）
+ * - 点赞只计一次可取消；收藏可撤销；作者可删除自己的帖子
+ * - 普通用户可举报；举报不自动下架
  */
 export function FeedDetailScreen({ id }: { id: string }) {
-  // 本地发的帖子也能打开详情
-  const post = findPost(id, posts) ?? posts[0]
-  const [liked, setLiked] = useState(post.liked)
-  const likes = post.likes + (liked ? 1 : 0) - (post.liked ? 1 : 0)
+  useTm()
+  const post = getPost(id)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [cmtReport, setCmtReport] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [toast, showToast] = useToast()
+
+  if (!post || post.status === 'removed') {
+    return (
+      <Screen
+        header={
+          <TopBar
+            left={
+              <button className="iconbtn" onClick={() => goBack('map')} aria-label="返回">
+                <IconBack size={22} />
+              </button>
+            }
+          />
+        }
+      >
+        <div className="tm__statusPage">
+          <h2>内容不存在或已下架</h2>
+          <p>该内容已被作者删除或由管理员下架。</p>
+          <button className="tm__btnPrimary" onClick={() => navigate('map')}>
+            返回地图
+          </button>
+        </div>
+      </Screen>
+    )
+  }
+
+  const author = userById(post.authorId)
+  const place = getPlace(post.placeId)
+  const mine = post.authorId === 'me'
 
   return (
     <Screen
       header={
         <TopBar
           left={
-            <button className="iconbtn" onClick={() => goBack()} aria-label="返回">
+            <button className="iconbtn" onClick={() => goBack('map')} aria-label="返回">
               <IconBack size={22} />
             </button>
           }
           right={
-            <button className="iconbtn" aria-label="分享">
-              <IconShare size={20} />
+            <button className="fd__reportBtn" onClick={() => setReportOpen(true)}>
+              举报
             </button>
           }
         />
       }
       footer={
-        <div className="feed__bar">
-          <input className="feed__input" placeholder="留下我的评论..." />
+        <div className="fd__bar">
+          <CommentInput postId={post.id} />
           <button
-            className={`feed__action ${liked ? 'is-liked' : ''}`}
-            onClick={() => setLiked((v) => !v)}
+            className={`fd__act ${post.likedByMe ? 'is-on' : ''}`}
+            onClick={() => toggleLike(post.id)}
+            aria-pressed={post.likedByMe}
+            aria-label={post.likedByMe ? '取消点赞' : '点赞'}
+            data-act="like"
+            data-count={likeCount(post)}
           >
-            <IconHeart size={21} filled={liked} />
-            <span>{likes}</span>
+            <IconHeart size={20} filled={post.likedByMe} />
+            {likeCount(post)}
           </button>
-          <button className="feed__action feed__action--text" onClick={() => navigate('comments', { id: post.id })}>
-            <IconComment size={21} />
-            <span>评论</span>
+          <button
+            className={`fd__act ${post.favoritedByMe ? 'is-fav' : ''}`}
+            onClick={() => toggleFavorite(post.id)}
+            aria-pressed={post.favoritedByMe}
+            aria-label={post.favoritedByMe ? '取消收藏' : '收藏'}
+            data-act="favorite"
+            data-count={favoriteCount(post)}
+          >
+            <IconStar size={20} filled={post.favoritedByMe} />
+            {favoriteCount(post)}
           </button>
         </div>
       }
-      scroll
     >
-      <article className="feed__post">
-        <header className="feed__author">
-          <img className="feed__avatar" src={post.author.avatar} alt="" />
-          <div className="feed__author-main">
-            <div className="feed__author-name">{post.author.name}</div>
-            <div className="feed__author-meta">
-              {post.author.school ?? '北京交通大学'} · {post.createdAt}
-              {post.location && (
-                <button className="feed__placeLink" onClick={() => navigate('poidetail')}>
-                  · {post.location}
-                </button>
-              )}
-            </div>
-          </div>
-        </header>
-
-        <p className="feed__text">{post.text}</p>
-        {post.topic && <span className="feed__topic">{post.topic}</span>}
-
-        {post.images.map((src, i) => (
-          <img
-            key={i}
-            className="feed__image"
-            src={src}
-            alt=""
-            onClick={() => navigate('media', { post: post.id, i: String(i) })}
-          />
-        ))}
-      </article>
-
-      <section className="feed__comments">
-        <h3 className="feed__comments-title">共 {post.comments} 条评论</h3>
-        {comments.map((c) => (
-          <div key={c.id} className="cmt">
-            <img className="cmt__avatar" src={c.author.avatar} alt="" />
-            <div className="cmt__body">
-              <div className="cmt__name">{c.author.name}</div>
-              <p className="cmt__text">{c.text}</p>
-              <div className="cmt__meta">
-                <span>{c.time}</span>
-                <span className="cmt__reply">回复</span>
-              </div>
-              {c.replies?.map((r) => (
-                <div key={r.id} className="cmt cmt--reply">
-                  <img className="cmt__avatar cmt__avatar--sm" src={r.author.avatar} alt="" />
-                  <div className="cmt__body">
-                    <div className="cmt__name">{r.author.name}</div>
-                    <p className="cmt__text">{r.text}</p>
-                    <div className="cmt__meta">
-                      <span>{r.time}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <span className="cmt__likes">
-              <IconHeart size={14} />
-              {c.likes}
+      <article className="fd__post">
+        <header className="fd__author">
+          <img className="fd__avatar" src={author.avatar} alt="" />
+          <div className="fd__authorMain">
+            <span className="fd__authorName">{author.name}</span>
+            <span className="fd__authorMeta">
+              {author.college ? `${author.college} · ` : ''}
+              {relativeTime(post.createdAt)}
             </span>
           </div>
-        ))}
+          {mine &&
+            (confirmDelete ? (
+              <span className="tm__confirmRow">
+                <button
+                  className="tm__confirmYes"
+                  onClick={() => {
+                    setConfirmDelete(false)
+                    const res = deletePost(post.id)
+                    showToast(res.ok ? '已删除' : (res.error ?? '删除失败'))
+                  }}
+                >
+                  确认删除
+                </button>
+                <button className="tm__confirmNo" onClick={() => setConfirmDelete(false)}>
+                  取消
+                </button>
+              </span>
+            ) : (
+              <button className="fd__delBtn" onClick={() => setConfirmDelete(true)}>
+                删除
+              </button>
+            ))}
+        </header>
+
+        {place && (
+          <button className="fd__place" onClick={() => navigate('place', { id: place.id })}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 21s6.5-5.4 6.5-10.2A6.5 6.5 0 0 0 5.5 10.8C5.5 15.6 12 21 12 21Z" />
+              <circle cx="12" cy="10.6" r="2.3" />
+            </svg>
+            {place.name}
+          </button>
+        )}
+
+        {post.tags.length > 0 && (
+          <div className="tm__postTags">
+            {post.tags.map((t) => (
+              <TagChip key={t} tag={t} placeCategory={place?.category} />
+            ))}
+          </div>
+        )}
+
+        {post.text && <p className="fd__text">{post.text}</p>}
+
+        {post.images.length > 0 && (
+          <div className={`fd__imgs fd__imgs--${post.images.length}`}>
+            {post.images.slice(0, 3).map((src, i) => (
+              <img key={i} className="fd__img" src={src} alt="" />
+            ))}
+          </div>
+        )}
+      </article>
+
+      <section className="fd__comments">
+        <h3 className="fd__commentsTitle">评论 {commentCount(post.id)}</h3>
+        <CommentList postId={post.id} onReport={(cid) => setCmtReport(cid)} />
       </section>
+      <Toast msg={toast} />
+      <ReportSheet targetType="post" targetId={reportOpen ? post.id : null} onClose={() => setReportOpen(false)} />
+      <ReportSheet targetType="comment" targetId={cmtReport} onClose={() => setCmtReport(null)} />
     </Screen>
   )
 }

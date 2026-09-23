@@ -1,0 +1,414 @@
+.map__head {
+  position: relative;
+  padding: 6px var(--pad-page) 10px;
+  background: var(--c-surface);
+  z-index: 4;
+}
+
+.map__titlewrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.map__title {
+  margin: 0;
+  font-size: var(--f-title);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+
+.map__region {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 3px;
+  font-size: var(--f-sub);
+  color: var(--c-text-2);
+}
+
+.map__msg {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+}
+
+/* 地点列表按钮（备用入口，4.4 异常反馈） */
+.map__listBtn {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+}
+.map__listBtn--warn {
+  background: rgba(245, 69, 59, 0.1);
+  color: #f5453b;
+  border-radius: var(--r-pill);
+}
+
+/* 分类筛选 chips（草图 4.1：全部/地标/食堂…） */
+.map__filters {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 10px;
+  z-index: 500;
+  display: flex;
+  gap: 8px;
+  padding: 0 12px;
+  overflow-x: auto;
+}
+.map__chip {
+  flex: none;
+  padding: 7px 15px;
+  border: none;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--c-text-2);
+  font-size: 12.5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.map__chip.is-active {
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-weight: 600;
+}
+
+/* 离线标记的帖子数徽标 */
+.map__markerCount {
+  font-size: 9px;
+  line-height: 1.2;
+  color: var(--c-text-3);
+  text-align: center;
+}
+
+/* 地点列表半屏弹层 */
+.map__sheetWrap {
+  position: absolute;
+  inset: 0;
+  z-index: 650;
+  background: rgba(0, 0, 0, 0.42);
+  display: flex;
+  align-items: flex-end;
+}
+.map__sheet {
+  width: 100%;
+  max-height: 68%;
+  overflow-y: auto;
+  background: var(--c-surface);
+  border-radius: 18px 18px 0 0;
+  padding: 16px 18px calc(20px + env(safe-area-inset-bottom));
+}
+.map__sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.map__sheetHead h3 {
+  margin: 0;
+  font-size: 16.5px;
+}
+.map__sheetClose {
+  border: none;
+  background: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--c-text-3);
+  padding: 2px 6px;
+}
+.map__sheetTip {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+.map__sheetList { display: flex; flex-direction: column; }
+.map__sheetItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 2px;
+  border: none;
+  border-bottom: 1px solid var(--c-divider);
+  background: none;
+  text-align: left;
+}
+.map__sheetDot { flex: none; width: 9px; height: 9px; border-radius: 50%; }
+.map__sheetName { font-size: 14.5px; color: var(--c-text); font-weight: 600; }
+.map__sheetCat { font-size: 11.5px; color: var(--c-text-2); }
+.map__sheetCount { margin-left: auto; font-size: 12px; color: var(--c-text-3); }
+
+/* 底图来源提示：在线 / 离线降级 */
+.map__onlineBadge,
+.map__offlineBadge {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 500;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.map__onlineBadge {
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--c-text-2);
+}
+
+.map__offlineBadge {
+  background: rgba(17, 17, 17, 0.72);
+  color: #fff;
+}
+
+/* 真实定位状态：徽标 / 距校园过远时的提示条（可点击） */
+.map__geoBadge {
+  position: absolute;
+  left: 10px;
+  top: 34px;
+  z-index: 500;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  line-height: 1.4;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--c-text-2);
+  border: 0;
+  pointer-events: none;
+}
+
+.map__geoBadge--action {
+  pointer-events: auto;
+  background: rgba(47, 124, 246, 0.9);
+  color: #fff;
+}
+
+.map__geoFar {
+  position: absolute;
+  left: 10px;
+  top: 58px;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 9px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  line-height: 1.4;
+  background: rgba(17, 17, 17, 0.72);
+  color: #fff;
+}
+
+.map__geoFarBtn {
+  border: 0;
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #111;
+}
+
+/* 地图舞台：接管指针事件实现拖拽 */
+.map {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: #f2f1ec;
+  touch-action: none; /* 关键：交给 JS 处理拖拽/捏合，禁止浏览器默认手势 */
+  cursor: grab;
+  user-select: none;
+}
+
+.map:active {
+  cursor: grabbing;
+}
+
+/* 世界层：随拖拽/缩放变换 */
+.map__world {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.map__canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1400px;
+  height: 2000px;
+}
+
+/* 标记层 */
+.map__markers {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+
+.map__marker {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.map__markerCard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 3px 3px 5px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+}
+
+.map__markerImg {
+  width: 66px;
+  height: 66px;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--c-surface-sunken);
+}
+
+.map__markerName {
+  max-width: 78px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--c-text-2);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map__pin {
+  display: block;
+  margin-top: -3px;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.25));
+}
+
+/* 授权弹窗 */
+.map__modal-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 30px;
+  background: rgba(0, 0, 0, 0.28);
+  /*
+   * 必须显式抬到地图 SDK 之上。
+   * 起因：腾讯 GL SDK 内部会插入一个 z-index:1000 的透明层；如果地图容器自己
+   * 不创建层叠上下文，这一层就会和页面其它绝对定位元素挤在同一个上下文里，
+   * 把弹窗（z-index:auto）压下去 —— 表现是「弹窗看得见，但点哪儿都没反应」。
+   * 现在 .realmaps 已经 isolation:isolate，这里再显式给一个值，双保险。
+   */
+  z-index: 600;
+}
+
+.map__modal {
+  width: 100%;
+  max-width: 300px;
+  padding: 22px 20px 16px;
+  border-radius: var(--r-xl);
+  background: var(--c-surface);
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.26);
+}
+
+.map__modal-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.map__modal-desc {
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: var(--c-text-2);
+  line-height: 1.5;
+}
+
+/* 系统已拒绝过定位时的额外说明（告诉用户去系统设置里开） */
+.map__modal-desc--warn {
+  margin-top: -10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 149, 0, 0.12);
+  color: #b25f00;
+  text-align: left;
+}
+
+.map__modal-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.map__modal-btn {
+  flex: 1 1 0;
+  height: 40px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  color: var(--c-text-2);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.map__modal-btn--primary {
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+}
+
+/* 悬浮控件：定位 + 指南针（右下角，FAB 上方） */
+.map__controls {
+  position: absolute;
+  right: 14px;
+  bottom: 86px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 500; /* 必须高于地图 SDK 的内部层级，否则按钮看得见点不动 */
+}
+
+.map__ctrl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-card);
+  color: var(--c-text);
+}
+
+.map__fab {
+  position: absolute;
+  right: 14px;
+  bottom: 24px;
+  z-index: 500; /* 同上：要盖在地图 SDK 之上才点得到 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  box-shadow: var(--shadow-float);
+}
+
+/* 文字占位图（无配图的动态） */
+.map__markerImg--text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: var(--c-text-2);
+  background: var(--c-surface-sunken);
+  text-align: center;
+}
