@@ -150,3 +150,55 @@
   color: var(--c-text-2);
   text-align: center;
 }
+
+/* ⭐ WO#22：真实扫码的取景视频与识别结果
+   ⚠️ 视觉样式属**非阻塞 backlog**（审核 67）；这里只求"结构正确 + 可用 + 状态如实"。 */
+.scan__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.scan__result {
+  margin: 18px auto 0;
+  padding: 0 18px;
+  max-width: 480px;
+  text-align: center;
+}
+
+.scan__resultLabel {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--c-text-2, #666);
+}
+
+.scan__resultText {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--c-text-1, #111);
+  word-break: break-all;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+}
+
+.scan__resultNote {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--c-text-2, #666);
+}
+
+.scan__again {
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--c-brand, #6b7cff);
+  border: 0;
+  border-radius: 22px;
+}
