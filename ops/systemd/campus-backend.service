@@ -20,7 +20,23 @@ Environment=HOST=127.0.0.1
 Environment=PORT=3001
 Environment=PG_POOL_MAX=5
 Environment=DEFAULT_AUTHOR=我
+
+# ⚠️⚠️ 两个 EnvironmentFile 的分工必须分清（Round 322 修的真实缺陷）：
+#
+#   server.env    —— **部署生成**：由 tools/deploy-server.ps1 **整个重写**
+#                    （DATABASE_URL 与 LOGIN_CODE_HMAC_KEY 都从服务器本地文件派生）。
+#                    ⇒ **运维手工往里加的东西会在下次部署时被抹掉。**
+#   operator.env  —— **运维填写**：部署脚本**从不读写**它。
+#                    第三方凭据（如阿里云短信 AK）放这里。
+#
+#   踩过的坑：我先把短信 AK 写进 server.env，下一次部署就把它覆盖没了 ——
+#   表现为"日志说未配置、进程也看不到变量"，但文件里明明写过。
+#   这类"配了又被悄悄抹掉"极难发现，所以**不能靠记性**，要靠文件分工把它变成不可能。
+#
+#   ⚠️ 两个文件都必须 mode 600 且属主 campus。缺任一都不阻止启动（前置的 `-`），
+#      便于排障；但**启动日志会明确说当前短信通道是配了还是没配**。
 EnvironmentFile=-/srv/campus/server.env
+EnvironmentFile=-/srv/campus/operator.env
 
 Restart=on-failure
 RestartSec=3

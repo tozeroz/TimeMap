@@ -16,6 +16,7 @@ import {
 import { DEFAULT_CORS_ORIGINS, loadConfig } from './config.ts'
 import { createDb, type Db } from './db.ts'
 import { createDevSink, type DevSink } from './devSink.ts'
+import { createSmsSender, type SmsSender } from './sms.ts'
 import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts'
 
 /**
@@ -104,6 +105,13 @@ export interface ServerDeps {
   loginVerifyMaxAttempts: number
   loginWindowSeconds: number
   devSink: DevSink
+  /**
+   * ⭐ 短信通道（阿里云「短信认证」PNVS）。
+   * ⚠️ 它可能是 **未配置** 状态（`configured === false`）—— 那时 request-code
+   *    **如实回退**到 dev sink，并在响应里标 `delivery: 'dev-sink'`。
+   *    我们**绝不**在没真发短信时声称发过。
+   */
+  smsSender: SmsSender
   trustProxy?: string
 }
 
@@ -363,9 +371,42 @@ export function buildServer(deps: ServerDeps) {
     }
 
     /**
-     * 投递：本项目**没有短信通道**，因此走 dev sink（独立目录，tmpfs 优先）。
+     * 投递：优先走**真实短信通道**（阿里云「短信认证」）；未配置时才回退 dev sink。
+     *
+     * ⚠️⚠️ 这里的分支必须**如实反映现实**（这是本项目反复强调的纪律）：
+     *   · 真发了短信 ⇒ `delivery: 'sms'`，**不**再给 sink 路径（那等于把码又泄一份到磁盘）
+     *   · 没配短信 ⇒ `delivery: 'dev-sink'`，**明确写出**没接短信通道，并给出取码路径
+     *   · 配了但**发送失败** ⇒ 返回错误（503），**绝不**退回 dev sink 糊过去 ——
+     *     否则"渠道坏了"会表现为"用户收到了码"（假成功）。
+     *
      * 注意：**绝不把验证码写进日志**（审核记录 08 第 2 点）。
      */
+    if (deps.smsSender.configured) {
+      const sent = await deps.smsSender.sendVerifyCode(phone, code, deps.loginCodeTtlSeconds)
+      if (!sent.ok) {
+        /*
+          ⚠️ 失败时**不再**把码写进 sink：能发短信的部署不应在磁盘上留一份明文码
+             （dev sink 存在的前提是"没有真实通道"）。
+          ⚠️ 也**不**泄露 code 本身，只给错误码与原因，便于排障。
+        */
+        reply.code(503)
+        return {
+          error: 'sms_delivery_failed',
+          reason: sent.code,
+          message: sent.message,
+          delivery: 'sms',
+        }
+      }
+      return {
+        ok: true,
+        phone,
+        expiresAt: expiresAt.toISOString(),
+        delivery: 'sms',
+        delivery_note: '验证码已通过短信下发（阿里云短信认证）',
+      }
+    }
+
+    /* ── 未配置短信通道 ⇒ 如实回退 dev sink ── */
     let sinkPath = ''
     try {
       sinkPath = deps.devSink.deliver(phone, code, expiresAt)
@@ -2887,6 +2928,26 @@ async function main() {
   const db = createDb(cfg)
   const devSink = createDevSink(cfg.loginCodeSink)
 
+  /*
+    ⭐ 短信通道：**四项齐全**才算配置好；缺任何一项就如实回退 dev sink。
+    ⚠️ 这里刻意**不**在缺项时报警退出：回退是设计好的行为（本地/离线开发要用），
+       但**必须在启动日志里说清当前用的是哪条通道** —— 否则"以为在发短信、其实没发"
+       正是最难发现的一类假成功。
+    ⚠️ 只打印**是否配置**，**绝不**打印 AK 或密钥（与"验证码不进日志"同一条纪律）。
+  */
+  const smsSender = createSmsSender({
+    akId: cfg.aliyunSmsAkId,
+    akSecret: cfg.aliyunSmsAkSecret,
+    signName: cfg.aliyunSmsSignName,
+    templateCode: cfg.aliyunSmsTemplateCode,
+    ttlMinutes: Math.max(1, Math.round(cfg.loginCodeTtlSeconds / 60)),
+  })
+  console.log(
+    smsSender.configured
+      ? '[sms] 已配置阿里云短信认证（PNVS）⇒ 验证码走真实短信下发'
+      : '[sms] 未配置（缺 AK 或赠送签名/模板）⇒ 验证码回退到 dev sink；响应里会明确标 delivery=dev-sink',
+  )
+
   if (!cfg.loginCodeHmacKey) {
     console.error(
       '[config] LOGIN_CODE_HMAC_KEY 未配置：验证码相关接口会失败关闭(503)。' +
@@ -2905,6 +2966,7 @@ async function main() {
     loginVerifyMaxAttempts: cfg.loginVerifyMaxAttempts,
     loginWindowSeconds: cfg.loginWindowSeconds,
     devSink,
+    smsSender,
     trustProxy: cfg.trustProxy,
   })
 

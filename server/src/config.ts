@@ -36,6 +36,24 @@ export interface AppConfig {
   loginWindowSeconds: number
   /** 开发用验证码投递目录（tmpfs 优先；不写普通日志） */
   loginCodeSink: string
+  /**
+   * ⭐ 短信通道（阿里云「短信认证」PNVS）—— Round 322 接入。
+   *
+   * ⚠️ **四项齐全才算配置好**；缺任何一项都视为"未配置"，此时如实回退到 dev sink
+   *    并在响应里标 `delivery: 'dev-sink'`（**绝不**假装发过短信）。
+   *
+   * ⚠️ 为什么用 PNVS 而不是普通短信服务：个人主体拿不到短信签名的实名报备
+   *    （腾讯云自 2025-09-18 起直接关闭个人自用资质；阿里云 SMS 的签名也需资质报备），
+   *    而 PNVS 用**系统赠送的签名+模板**，个人实名即可用。详见 `sms.ts` 文件头。
+   *
+   * ⚠️ 凭据只从环境变量读（线上在 /srv/campus/server.env，权限 600），**绝不进 git**。
+   */
+  aliyunSmsAkId: string
+  aliyunSmsAkSecret: string
+  /** 控制台「赠送签名配置」选定的签名名（只能用系统赠送的） */
+  aliyunSmsSignName: string
+  /** 控制台「赠送模板配置」选定的模板 CODE（必须与赠送签名配套） */
+  aliyunSmsTemplateCode: string
   /** 是否信任 X-Forwarded-For（只为 Nginx 本机反代开启） */
   trustProxy: string
 }
@@ -93,6 +111,12 @@ export function loadConfig(): AppConfig {
     loginVerifyMaxAttempts: readInt('LOGIN_VERIFY_MAX_ATTEMPTS', 5),
     loginWindowSeconds: readInt('LOGIN_WINDOW_SECONDS', 300),
     loginCodeSink: process.env.LOGIN_CODE_SINK ?? '/run/campus/login-codes',
+
+    /* ⭐ 短信通道（阿里云 PNVS）—— 四项齐全才算配置好；缺任何一项都如实回退 dev sink */
+    aliyunSmsAkId: process.env.ALIYUN_SMS_AK_ID ?? '',
+    aliyunSmsAkSecret: process.env.ALIYUN_SMS_AK_SECRET ?? '',
+    aliyunSmsSignName: process.env.ALIYUN_SMS_SIGN_NAME ?? '',
+    aliyunSmsTemplateCode: process.env.ALIYUN_SMS_TEMPLATE_CODE ?? '',
     trustProxy: process.env.TRUST_PROXY ?? '127.0.0.1',
   }
 }
