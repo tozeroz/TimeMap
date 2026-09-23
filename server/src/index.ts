@@ -1509,6 +1509,55 @@ export function buildServer(deps: ServerDeps) {
       · ⚠️ **不**返回"专业"：F-005 明确 NOT_EVALUATED（点「就读专业」无可见反应）。
       · ⚠️ **不**返回学院→校区归属：原版未显示这种关系 ⇒ 无依据。
   */
+  /*
+    ⭐ WO#23（Owner 裁定 ③：App 自更新必须实现体验等价）：**真实的**发布清单。
+    ═══════════════════════════════════════════════════════════════════════════
+    为什么这样做（而不是继续显示"更新流程未接入"）：
+      Owner 裁定 ③ 要求"必须实现体验等价" ⇒ 只停在"如实说没接"不满足。
+      但原版「立即更新」的**真实去向未观察**（点它可能触发真实下载 ⇒ 只读约束下
+      **BLOCKED_BY_POLICY**，不能去点）⇒ "原版做成什么样"**无从对齐**。
+    ⇒ 能做且**是真的**的事：让客户端来问**我们自己的后端**要发布清单（真实请求/真实数据），
+      客户端拿**自己真实的版本号**比较（真实比较）：
+        · 有更新 ⇒ 给出**真实的下载地址**（运维在 app_release 表里配置；
+                    未配置就**如实说**未配置，**不编造链接**）
+        · 无更新 ⇒ 如实显示"已是最新版本"
+      ⇒ 于是"检查更新"是一个**真功能**，不是提示框。
+    ⚠️ 术语：`ORIGINAL_UPDATE_FLOW: NOT_EVALUATED`（不与原版对齐）；
+       `APP_UPDATE_CHECK_IS_REAL: PASS`（检查是真的）。
+    ⚠️ 本接口**公开只读**（升级弹窗在登录前也可能用到），不返回任何敏感信息。
+  */
+  app.get('/api/app/release', async (_req, reply) => {
+    try {
+      const r = await db.pool.query<{
+        latest_version: string
+        apk_url: string | null
+        notes: string | null
+        updated_at: Date
+      }>(
+        `select latest_version, apk_url, notes, updated_at
+           from app_release where active = true
+          order by updated_at desc limit 1`,
+      )
+      const row = r.rows[0]
+      if (!row) {
+        /* 没有生效的发布行 ⇒ 如实说没有清单，**不**编造版本 */
+        return { configured: false, reason: 'no_active_release' }
+      }
+      return {
+        configured: true,
+        latestVersion: row.latest_version,
+        /* ⚠️ apkUrl 为 null = 我们**没有**托管安装包 ⇒ 客户端必须如实说明 */
+        apkUrl: row.apk_url,
+        notes: row.notes,
+        updatedAt: row.updated_at.toISOString(),
+      }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error' }
+    }
+  })
+
   app.get('/api/schools/:id/colleges', async (req, reply) => {
     const id = (req.params as { id?: string }).id ?? ''
     if (!/^[0-9a-f-]{36}$/i.test(id)) {

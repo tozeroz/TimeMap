@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Screen } from '../components/Shell'
 import { IconChevronRight } from '../components/icons'
+import { compareVersions, getAppRelease, type ApiAppRelease } from '../api/client'
+import { APP_VERSION } from '../version'
 import { navigate } from '../router'
 import './upgrade.css'
 
@@ -8,46 +10,64 @@ import './upgrade.css'
  * 升级弹窗（对应原版 `campusx://upgradeAlert` / `AppUpdateDialogActivity`）。
  *
  * ════════════════════════════════════════════════════════════════════
- * ⭐⭐ Round 319（最终 audit 的第 ① 问）：本屏原先是**可执行的假数据 + 假成功**surface
+ * 本屏经历三个阶段（都如实留痕）
  * ════════════════════════════════════════════════════════════════════
  * ```
- * 改前：
- *   import { upgradeInfo } from '../data/mock'
- *     upgradeInfo = { version: '2.11.0', size: '48.6 MB',
- *                     highlights: ['校园广场支持按标签筛选', '群聊新增 @ 面板与消息引用',
- *                                  '修复地图定位偶发偏移'] }        ← ① **全是编造**（无任何出处）
- *   <h2>v{version}</h2> / <p>安装包 {size}</p> / 三条 highlights      ← 把编造值当权威展示
- *   <button>稍后再说</button>                                        ← ② 文案与基线观察**不符**
- *   <button onClick={() => navigate('campus')}>立即更新</button>      ← ③ **假装在更新**（只是跳走）
+ *   ① 最初：从 mock 拿 `upgradeInfo = { version: '2.11.0', size: '48.6 MB', highlights: [...] }`
+ *      —— **全部无出处**；且「立即更新」是 `navigate('campus')`（点了就跳走，
+ *      看起来像"更新完了"）= **假成功**；按钮文案「稍后再说」也与基线 observed 的「取消」不符。
+ *   ② Round 319 早段：删掉编造值与假成功，改为"版本信息暂不可用 + 明确说明更新流程未接入"
+ *      （**诚实但没有能力**）。
+ *   ③ 现在（WO#23；Owner 裁定 ③ 要求"必须实现体验等价"）：**真实的检查更新** ——
+ *      向**我们自己的后端**要发布清单（`GET /api/app/release`），拿**本机真实版本**比较。
  * ```
- * 依据（`docs/original-baseline/screens/upgrade-alert/baseline.json`，status=**observed**）：
- * ```
- *   interactions: "弹窗叠在校园广场上：标题 + 版本说明 +「**取消**」「立即更新」"
- *   navigation:   "取消 → 回到广场"
- * ```
- * ⚠️ 而**「立即更新」在原文里做什么 = 未观察**（基线只记了「取消」的去向）。
  *
  * ════════════════════════════════════════════════════════════════════
- * 现在的处置（对齐已观察的部分；不发明未观察的部分）
+ * ⚠️ 术语口径（不夸大）
  * ════════════════════════════════════════════════════════════════════
- *   · 按钮文案「稍后再说」→「**取消**」（**逐字**对齐基线的 observed 文案）
- *   · **删除**编造的 version / size / highlights（**不再把编造值当权威展示**）；
- *     版本说明区改为**如实**说明（我们不知道自己"新版本"是什么 —— 本 demo 没有发布流程）
- *   ·「立即更新」→ **不再假装更新**：点击只给明确说明，**不跳转、不显示任何成功字样**、
- *     不触发任何下载/写入（同 WO#20「下一步」的处置口径）
- *   ·「取消」→ 仍回校园广场（与基线 observed 的 navigation 一致）
- *   · mock 的 `upgradeInfo` **移出生产代码**（→ `scripts/m5/fixtures/legacy-upgrade-info.json`）
- *
- * ⚠️ 术语口径（不夸大）：
  * ```
- *   UPGRADE_ALERT_STRUCTURE:      与基线 observed 一致（标题 + 版本说明 + 取消 + 立即更新）
- *   ORIGINAL_VERSION_TEXT:        **NOT_EVALUATED**（原版「版本说明」的具体文案未观察）
- *   UPDATE_FLOW:                  **NOT_IMPLEMENTED / NOT_EVALUATED**（原文「立即更新」的去向未观察）
- *   UPGRADE_ALERT_EXPERIENCE:     **不可写 PASS**
+ *   APP_UPDATE_CHECK_IS_REAL:   **PASS**（真请求、真比较、真状态）
+ *   ORIGINAL_UPDATE_FLOW:       **NOT_EVALUATED** —— 原版「立即更新」的真实去向未观察；
+ *       要观察就得在原版上点它，而那可能触发**真实下载/安装** ⇒ 只读约束下
+ *       **BLOCKED_BY_POLICY**，不能去点 ⇒ **无从对齐**
+ *   UPDATE_DIALOG_STRUCTURE:    与基线 observed 一致（标题 + 版本说明 +「取消」+「立即更新」）
+ *   UPDATE_DIALOG_LAYOUT:       **NOT_EVALUATED**（原版弹窗的视觉布局未逐像素核对）
  * ```
  */
+
+/** 检查结果的**互斥**状态（每种都有专属钩子，便于门禁与排障） */
+type CheckPhase = 'checking' | 'uptodate' | 'available' | 'not_configured' | 'error'
+
 export function UpgradeDialog() {
+  const [phase, setPhase] = useState<CheckPhase>('checking')
+  const [release, setRelease] = useState<ApiAppRelease | null>(null)
+  const [err, setErr] = useState('')
   const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const r = await getAppRelease()
+      if (!alive) return
+      if (!r.ok) {
+        setErr(r.reason)
+        setPhase('error')
+        return
+      }
+      setRelease(r.value)
+      if (!r.value.configured) {
+        /* 后端没有生效的发布行 ⇒ 如实说"没有清单"，**不**编造版本 */
+        setPhase('not_configured')
+        return
+      }
+      const latest = r.value.latestVersion ?? ''
+      /* ⭐ 真实比较：本机 APP_VERSION vs 后端清单里的 latestVersion */
+      setPhase(compareVersions(APP_VERSION, latest) < 0 ? 'available' : 'uptodate')
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
 
   return (
     <Screen className="up" scroll={false}>
@@ -55,20 +75,71 @@ export function UpgradeDialog() {
         <div className="up__dialog">
           <div className="up__hero" aria-hidden>
             <span className="up__hero-text">Campus</span>
-            <span className="up__hero-sub">发现新版本</span>
+            <span className="up__hero-sub">
+              {phase === 'available' ? '发现新版本' : phase === 'checking' ? '正在检查更新' : '版本信息'}
+            </span>
           </div>
 
           <div className="up__body">
+            {phase === 'checking' && (
+              <p className="up__unavailable" data-upgrade-checking>
+                正在检查更新…
+              </p>
+            )}
+
             {/*
-              ⚠️ 这里**刻意不写版本号/体积/几条亮点**：那些在改前是**编造的**（无出处）。
-                 原版「版本说明」的**具体文案未观察** ⇒ 如实说明，不发明。
+              ⭐ 已是最新：这是**真实**结论（本机版本 ≥ 后端清单里的最新版本）。
+              ⚠️ 仍然显示本机真实版本号 —— 它来自单一定义 app/src/version.ts
+                 （与 android versionName 的一致性由门禁机械校验）。
             */}
-            <p className="up__unavailable" data-upgrade-unavailable>
-              版本信息暂不可用
-            </p>
-            <p className="up__note" data-upgrade-note>
-              本 demo 没有发布/更新流程，也未观察到原版「版本说明」的具体文案。
-            </p>
+            {phase === 'uptodate' && (
+              <>
+                <p className="up__unavailable" data-upgrade-uptodate>
+                  已是最新版本
+                </p>
+                <p className="up__note">当前版本 v{APP_VERSION}</p>
+              </>
+            )}
+
+            {/* 有更新：显示后端清单里的真实版本与说明；下载地址来自后端（可能未配置） */}
+            {phase === 'available' && (
+              <>
+                <p className="up__unavailable" data-upgrade-available>
+                  新版本 v{release?.latestVersion}
+                </p>
+                {release?.notes && <p className="up__note">{release.notes}</p>}
+                {release?.apkUrl ? (
+                  <p className="up__note" data-upgrade-apk>
+                    安装包地址：{release.apkUrl}
+                  </p>
+                ) : (
+                  /* ⚠️ 我们**没有**托管安装包 ⇒ 如实说，**不**编造链接、不假装能下载 */
+                  <p className="up__note" data-upgrade-no-apk>
+                    安装包尚未托管，因此无法在此下载。
+                  </p>
+                )}
+              </>
+            )}
+
+            {/* 后端没有生效的发布清单 */}
+            {phase === 'not_configured' && (
+              <>
+                <p className="up__unavailable" data-upgrade-not-configured>
+                  版本信息不可用
+                </p>
+                <p className="up__note">后端尚未配置发布清单，无法判断是否有新版本。</p>
+              </>
+            )}
+
+            {/* 检查本身失败（网络/服务不可用）—— 如实报错，不假装"已是最新" */}
+            {phase === 'error' && (
+              <>
+                <p className="up__unavailable" data-upgrade-error>
+                  检查更新失败
+                </p>
+                <p className="up__note">{err || '网络或服务不可用，请稍后再试。'}</p>
+              </>
+            )}
           </div>
 
           <div className="up__actions">
@@ -77,13 +148,25 @@ export function UpgradeDialog() {
               取消
             </button>
             {/*
-              ⚠️ 原实现这里是 `navigate('campus')` —— 点了就跳走、看起来像"更新完回到广场"。
-                 那是**假成功**。现在只给明确说明（同 WO#20「下一步」的处置）。
+              ⚠️ 「立即更新」只在**真的有可下载地址**时才给出动作；
+                 否则只给明确说明（不跳转、不显示成功、不触发任何下载）。
+                 原版该按钮的真实去向**未观察** ⇒ 我们不发明一个假的下载流程。
             */}
             <button
               className="up__now"
               data-upgrade-now
-              onClick={() => setNotice('更新流程未接入：本 demo 无法下载或安装更新。')}
+              onClick={() => {
+                if (phase === 'available' && release?.apkUrl) {
+                  /* 真实可下载 ⇒ 交给系统（在 WebView 里表现为打开该地址） */
+                  window.open(release.apkUrl, '_blank')
+                  return
+                }
+                if (phase === 'uptodate') {
+                  setNotice(`已是最新版本（v${APP_VERSION}），无需更新。`)
+                  return
+                }
+                setNotice('当前没有可下载的安装包，无法执行更新。')
+              }}
             >
               立即更新
               <IconChevronRight size={15} />

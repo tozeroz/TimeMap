@@ -1017,6 +1017,45 @@ export async function listSchoolColleges(schoolId: string): Promise<ApiResult<Ap
   return { ok: true, value: r.value.items }
 }
 
+/**
+ * ⭐ WO#23（Owner 裁定 ③）：**真实的**发布清单（供"检查更新"用）。
+ *
+ * ⚠️ 这是"真检查、真比较"，但**不等于**与原版一致：
+ *   原版「立即更新」的真实去向**未观察**（点它可能触发真实下载 ⇒ 只读约束下
+ *   BLOCKED_BY_POLICY）⇒ `ORIGINAL_UPDATE_FLOW: NOT_EVALUATED`。
+ *
+ * ⚠️ `apkUrl` **可能为 null** = 我们**没有**托管安装包 ⇒ 调用方必须**如实说明**，
+ *    **不得**编造链接、也不得显示"更新成功"。
+ */
+export interface ApiAppRelease {
+  configured: boolean
+  reason?: string
+  latestVersion?: string
+  apkUrl?: string | null
+  notes?: string | null
+  updatedAt?: string
+}
+
+export function getAppRelease(): Promise<ApiResult<ApiAppRelease>> {
+  return request<ApiAppRelease>('/api/app/release')
+}
+
+/**
+ * 比较版本号（`1.10` > `1.9` —— 逐段数值比较，**不**按字符串比）。
+ * ⚠️ 只处理数字点分（我们自己的版本就是这样）；遇到非数字段按 0 处理并**不抛错**。
+ */
+export function compareVersions(a: string, b: string): number {
+  const pa = String(a).split('.').map((x) => Number.parseInt(x, 10) || 0)
+  const pb = String(b).split('.').map((x) => Number.parseInt(x, 10) || 0)
+  const n = Math.max(pa.length, pb.length)
+  for (let i = 0; i < n; i++) {
+    const x = pa[i] ?? 0
+    const y = pb[i] ?? 0
+    if (x !== y) return x < y ? -1 : 1
+  }
+  return 0
+}
+
 // ---------------------------------------------------------------------------
 // 「最后一次成功的 API 快照」缓存
 //

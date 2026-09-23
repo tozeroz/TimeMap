@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { DrawerPage } from '../components/Drawer'
 import { IconChevronRight } from '../components/icons'
 import { listSchoolColleges, listSchools } from '../api/client'
+import { APP_VERSION } from '../version'
 import { goBack, navigate } from '../router'
 import './drawerpages.css'
 
@@ -319,10 +320,15 @@ export function AboutScreen() {
       <div className="dpcard dpcard--center">
         <div className="dpcard__brand">Campus</div>
         {/*
-          ⚠️ 刻意**不**写版本号：原版本页的内容与版本号**未观察**，写任何一个具体值都是编造。
+          ⭐ WO#23：这里显示**本机真实版本**（来自单一定义的 app/src/version.ts）。
+          ⚠️ 它与 `android/app/build.gradle` 的 versionName 的**一致性由门禁机械校验** ——
+             不靠人记得同步（不一致会让"检查更新"比错版本）。
+          ⚠️ 改前这里是编造的 `v2.10.0`（原版该屏内容**从未被观察**）；
+             Round 319 早段一度改为"版本信息不可用"（诚实但连自己的版本都不显示）；
+             现在改为显示**真实**的本机版本。
         */}
-        <div className="dpcard__version" data-version-unavailable>
-          版本信息不可用
+        <div className="dpcard__version" data-version-value>
+          v{APP_VERSION}
         </div>
         <p className="dpcard__desc">
           本 demo 数据来自自建后端 API；未实现的能力会在对应页面如实标注。

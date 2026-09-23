@@ -13,6 +13,7 @@ import voiceMediaStrictSql from './migrations/010_voice_media_strict.sql'
 import mentionsAllSql from './migrations/011_mentions_all.sql'
 import seedSchoolCampusesSql from './migrations/012_seed_school_campuses.sql'
 import seedCollegesSql from './migrations/013_seed_colleges.sql'
+import appReleaseSql from './migrations/014_app_release.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -53,6 +54,17 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   //      ⚠️ 该 dump 是**观察到的子集**（面板可能可滚动）⇒
   //         ORIGINAL_COLLEGE_LIST_COMPLETE: NOT_EVALUATED（**不**声称完整）。
   { version: '013_seed_colleges', sql: seedCollegesSql },
+
+  // 014：App 发布清单（WO#23；Owner 裁定 ③：App 自更新必须实现体验等价）
+  //      ⚠️ 只种**一行**，版本取我们的**真实版本**（1.0，与 android versionName 一致；
+  //         该一致性由门禁机械校验）；apk_url 为 NULL（我们**没有**托管 APK）
+  //         ⇒ 客户端必须如实说"下载地址未配置"，**不得**编造链接。
+  //      ⚠️ **不**种编造的"新版本号/包体积/功能亮点"（改前的 mock 正是那样，已删除）。
+  //      目的：「检查更新」去问**我们自己的后端**（真实请求、真实数据、真实比较），
+  //            而不是弹一个写死的提示框。
+  //      ⚠️ 它**不等于**与原版一致：原版「立即更新」的真实去向未观察（点它可能触发真实
+  //         下载 ⇒ 只读约束下 BLOCKED_BY_POLICY）⇒ ORIGINAL_UPDATE_FLOW: NOT_EVALUATED。
+  { version: '014_app_release', sql: appReleaseSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

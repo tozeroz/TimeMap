@@ -78,7 +78,7 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 
 <!-- BEGIN:MACHINE-SNAPSHOT -->
 扫描范围：app/src/screens（25 个文件）
-统计：api-only=17 ／ mock+api=0 ／ mock-only=0 ／ types-only=0 ／ none=8
+统计：api-only=18 ／ mock+api=0 ／ mock-only=0 ／ types-only=0 ／ none=7
 
 | AnnounceScreen.tsx | none | — | — | — |
 | BoardScreen.tsx | api-only | — | — | getBoardNotes, postBoardNote, relativeTime |
@@ -103,6 +103,6 @@ P5  其余（Comments / PoiSearch / ProfileEdit / MediaPreview / Scanner / Upgra
 | ScannerScreen.tsx | none | — | — | — |
 | SchoolSearchScreen.tsx | api-only | — | — | listSchoolCampuses, listSchools |
 | SimpleScreen.tsx | none | — | — | — |
-| UpgradeDialog.tsx | none | — | — | — |
+| UpgradeDialog.tsx | api-only | — | — | compareVersions, getAppRelease |
 | UserProfileScreen.tsx | api-only | — | — | getThreads, getUser, listPosts, toFeedPost |
 <!-- END:MACHINE-SNAPSHOT -->
