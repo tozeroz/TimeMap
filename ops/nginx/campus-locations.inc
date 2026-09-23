@@ -99,14 +99,20 @@ location /download/ {
 # 背景：本项目的后端用 HTTPS，但证书原本是**自建私有 CA 自签**的 ——
 #   App 能用是因为 APK 里内置了那个 CA；而**浏览器不认** ⇒ 网页端必然报证书错误。
 #   2026 起 Let's Encrypt 正式支持给**纯 IP** 签发公共信任证书（无需域名），
-#   我们用它把证书换成公共信任的（详见 ops/tls/ 与 docs/）。
+#   我们用它把证书换成公共信任的（详见 ops/tls/ 与 docs/TLS-IP-CERTIFICATE.md）。
 #
 # ⚠️ IP 证书只能用 **http-01 / tls-alpn-01** 验证（IP 不涉及 DNS，没法用 dns-01）
 #   ⇒ 必须让 LE 能从**公网 80 端口**取到挑战文件 ⇒ 就是这条 location。
-# ⚠️ 它必须**先于下面的 `location / { return 404; }` 生效**：nginx 前缀匹配取最长匹配，
-#   本 location 比 `/` 更具体，所以能正确命中；这里放在它前面只是为了让阅读顺序也清楚。
+#
+# ⚠️⚠️ 用 `^~` 而不是普通的 `location`（这是 WO#25 引入 SPA 后**必须**的改动）：
+#   nginx 的匹配规则是「前缀匹配选最长」**但正则匹配会盖过普通前缀匹配**
+#   （只有 `^~` 前缀能在命中后**跳过正则**）。
+#   我们下面新增了 `location ~ /\.` 来拒绝点文件（原来靠 `location / { return 404; }`
+#   顺带挡住）—— 而 `/.well-known/acme-challenge/...` **本身就是一个点开头的路径**，
+#   若不用 `^~`，正则会抢先命中 ⇒ **ACME 挑战被拒 ⇒ 证书续期直接失效**。
+#   ⇒ 这类"一个改动悄悄打断另一条链路"的风险，靠的是**显式优先级**而不是运气。
 # ⚠️ 只暴露 challenge 目录本身，不暴露其它任何静态文件（`try_files` 兜成 404）。
-location /.well-known/acme-challenge/ {
+location ^~ /.well-known/acme-challenge/ {
     root /var/www/certbot;
     default_type "text/plain";
     try_files $uri =404;
@@ -118,5 +124,61 @@ location ~ ^/(media|_private_media)/\.tmp/ {
     return 404;
 }
 
-# 没有任何静态站点与业务路由，其它一律 404，避免误暴露
-location / { return 404; }
+# 拒绝**点文件**（如 .env、.git/*、.db_password 之类）。
+# ⚠️ 为什么需要它：改前 `location / { return 404; }` 顺手挡住了所有点路径；
+#   引入 SPA 后 `/` 变成静态托管 ⇒ 若不显式拒绝，托管目录里将来出现点文件就会被下发。
+# ⚠️ 用 `(?!well-known)` 负向断言排除 ACME 目录，**并且**上面那条已用 `^~` 保底
+#   （双保险：即便有人改动这里的正则，ACME 也不会因此失效）。
+location ~ /\.(?!well-known) {
+    deny all;
+    return 404;
+}
+
+# ⭐⭐ 网页端 SPA（WO#25：用户要求"双端"—— 手机端 APK + 网页端）
+#
+# ════════════════════════════════════════════════════════════════════════════
+# ⚠️ 这行改动**撤掉了一道原有的保护**，如实记录
+# ════════════════════════════════════════════════════════════════════════════
+# 改前这里是：`location / { return 404; }` —— 注释写着
+#   「没有任何静态站点与业务路由，其它一律 404，避免误暴露」。
+# 这是一条**保守的默认拒绝**。现在要做网页端，就必须把它换成"托管前端产物"。
+# ⇒ 我没有假装这个变化不存在，而是：
+#   ① 只托管**一个目录** `/srv/campus/web`（前端构建产物），不托管其它任何路径
+#   ② `autoindex off` —— 绝不列目录
+#   ③ **显式拒绝点文件**（见上面的 `location ~ /\.`）—— 改前是"顺带"挡住的，
+#      现在必须**显式**挡，否则托管目录里将来出现 .env/.git 就会被下发
+#   ④ 用 `try_files ... =404` 而**不是**回退到 index.html：
+#      ⚠️ 我们用的是**自写 hash 路由**（路径形如 `/#/campus`），**路径部分永远是 `/`**，
+#         所以**不需要** history fallback。
+#         反过来，如果写成"找不到就返回首页"，会让**任何拼错的路径都返回 200**，
+#         从而掩盖真实的配置/部署错误 —— 那是"让错误看起来像正常"的典型。
+#
+# ⚠️ 安全边界（明确写下，避免日后误解）：
+#   · 前端是**公开可访问**的（任何人打开 https://<IP>/ 都能看到登录页）
+#   · 业务数据仍受**会话鉴权**保护（未登录只能到登录页）
+#   · 这是"托管一个公开 demo 前端"的**有意选择**，不是疏忽
+#
+# ⚠️ 三个 location **平铺**写，不嵌套：nginx 支持嵌套 location 但很少见、易踩坑
+#   （例如嵌套块内的匹配规则与外层叠加时的行为不直观）。
+#   这里内容简单，平铺最不容易出错。
+#   注意：`index index.html` 会触发**内部重定向**到 `/index.html`，
+#   所以下面 `location = /index.html` 能命中它 ✓。
+location = /index.html {
+    root /srv/campus/web;
+    add_header Cache-Control "no-cache" always;
+}
+
+# 带哈希名的不变资源 ⇒ 可长缓存
+location /assets/ {
+    root /srv/campus/web;
+    autoindex off;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+
+location / {
+    root /srv/campus/web;
+    index index.html;
+    autoindex off;
+    try_files $uri $uri/ =404;
+}
