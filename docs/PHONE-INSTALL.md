@@ -10,7 +10,6 @@
 | **本机文件**（推荐，最快） | `G:\demo map\campus-demo-1.0.apk` |
 | 构建产物原始路径 | `G:\demo map\app\android\app\build\outputs\apk\debug\app-debug.apk` |
 | **手机直接下载**（不用数据线） | `http://8.148.156.146/download/campus-demo-1.0.apk` |
-| 下载二维码（手机扫） | `G:\demo map\apk-download-qr.png` |
 
 **校验值（实测一致）**
 ```
@@ -19,8 +18,10 @@ sha256 = 87C25AF8E0A188F66DBBF93060C3E0160CF9322678D85C9047C706832CE310F4
 版本   = versionName 1.0 / versionCode 1 / package com.campusx.demo
 签名   = CN=Android Debug（debug 签名，见下方"注意"）
 ```
-> ✅ 已实测：从上面那个 URL 下载到的文件，sha256 与本地文件**逐字节一致**；
->    二维码也**解回文本验证过**，内容正是该 URL（用 PPM + jsQR 解码，逐字相符）。
+> ✅ 已实测：从上面那个 URL 下载到的文件，sha256 与本地文件**逐字节一致**。
+> ⚠️ 上面那个 URL 指向的是**服务器上的一份副本**；本机那份与它同源同哈希。
+>    注：服务器上原先那份是 08:24 的旧构建（早于 11:52 的「立即更新」修复），
+>    已在本轮用当前构建**替换**过了。
 
 ## 二、怎么装
 
