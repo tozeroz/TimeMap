@@ -79,7 +79,24 @@ powershell -File tools/deploy-web.ps1 -SkipBuild   # 只上传
 bash scripts/m5/web/setup-web-session.sh          # 建立网页端已登录会话
 bash scripts/m5/web/run-web-gate.sh scripts/m5/gate-wo11-feed-list.mjs   # 跑单个门禁
 bash scripts/m5/web/web-gate-audit.sh             # 跑全量并分类
+bash scripts/m5/web/selftest-web-gates.sh         # 网页端专属门禁的敏感度验证
+bash scripts/m5/web/verify-atomic-deploy.sh       # 验证部署无空窗（原子切换）
 ```
+
+### 5.0 当前实测结果（2026-09-24）
+
+```
+WEB_AUDIT: TOTAL=30 PASS=30 FAIL=0 SKIPPED=1
+```
+
+- **27 个复用门禁全部 exit=0**（含 feed / 用户资料 / 资料编辑 / 我的身份 / 地图标记 /
+  留言板 / 校园 / 学校 / 帖子身份 / POI / 认证表单 / **发布媒体（含真实录音）** /
+  **扫码 e2e** / **真实取景扫码** / 更新检查 / 更新流程 / 标签栏 / 文字发送 / 消息列表 /
+  群聊切片 / @面板 / 公告 / 编辑器覆盖 / 学院选择器 / 媒体预览权 / 扫码入口 …）
+- **3 个网页端专属门禁 exit=0**（见 5.3）
+- **1 个明确不适用**：`gate-statusbar-inset.mjs`（Android edge-to-edge 专属，见 5.4）
+- 另有：`ATOMIC_DEPLOY: PASS`（部署期间 60 次采样无失败请求）
+- 另有：3 个网页端专属门禁的**敏感度验证通过**（注入因预期缺陷变红、移除后回绿）
 
 ### 5.1 目标切换机制（为什么不需要改 62 个门禁文件）
 门禁的 CDP 地址硬编码为 `http://127.0.0.1:9222/json`。我们**不给 62 个文件加参数**，
@@ -89,6 +106,8 @@ bash scripts/m5/web/web-gate-audit.sh             # 跑全量并分类
 
 ⇒ 靠"谁占着 9222"切换目标，**现有门禁一行都不用改**。
 ⚠️ 因此**不要并发**跑设备门禁与网页端门禁。
+⚠️ `launch-web-chrome.sh` 会把"本次期望的启动参数"记在 profile 里；若 9222 上已有实例
+   但参数不一致，会**重启**它 —— 避免"我改了 flag 却复用了旧实例"从而得出错误结论。
 
 ### 5.2 登录怎么来的（重要）
 网页端要跑完整门禁必须先登录，而登录码现在走**真短信**，自动化读不到。
@@ -101,6 +120,33 @@ bash scripts/m5/web/web-gate-audit.sh             # 跑全量并分类
 ✅ 对真实用户**零影响**（不需要临时关闭短信投递）
 ✅ 不往生产代码里加任何"测试登录通道"（那才是真的安全债）
 ⚠️ 读出的 token 是明文，只落 `tools/tmp/`（`.gitignore` 已忽略），不打印完整值、不进仓库
+
+### 5.3 网页端专属门禁（3 个，放 `scripts/m5/web/` 以免被设备审计误捡）
+| 门禁 | 守什么 | 为什么它是网页端专属 |
+|---|---|---|
+| `gate-web-app-mount.mjs` | **应用真的挂载**（根节点存在、有子树、无挂载期异常） | 被我自己那个真实 bug 逼出来的：误删 `<body>` 与 `#root` 后 `/` 仍 200、title 正常、**旧冒烟全绿**，但页面空白（React error #299）⇒ "HTTP 200 + 标题对"证明不了能挂载 |
+| `gate-web-cert-trust.mjs` | **公共信任 HTTPS + 同源 API** | 判据是"在页面内 fetch 同源 API"：证书不被信任时**浏览器**会拦截，而 curl 用系统 CA 库、失效模式不同 ⇒ 必须在真实浏览器里判定 |
+| `gate-web-load-clean.mjs` | **加载干净**（无失败静态资源、无控制台 error、无未捕获异常） | 被那条 favicon 404 逼出来的：不影响功能，所以任何功能断言都发现不了；原生端也不会有（WebView 不发 favicon 请求） |
+
+**敏感度验证**（`selftest-web-gates.sh`）：基线绿 → 注入因**预期缺陷**变红 → 移除后回绿。
+用**零风险注入**（坏页面放子路径 `/web-broken/`、`/load-broken/`，**不碰线上首页**），
+并通过门禁的 `WEB_ENTRY_PATH` 参数指向它。
+
+### 5.4 为什么不适用项要显式登记，而不是删掉
+`gate-statusbar-inset.mjs` 断言 Android 15+ edge-to-edge 的安全区注入——浏览器没有
+系统状态栏覆盖问题，该逻辑在网页端**本就不应生效**。
+⚠️ 若为了"跑绿"把它删掉，就会让"哪些没测、为什么没测"变得不可见。
+⇒ 在 `web-gate-audit.sh` 的 `WEB_NOT_APPLICABLE` 表里**显式登记 + 写明理由**，
+   并打印出来（不计入 PASS 总数）。
+
+### 5.5 部署是**原子**的（并且这一点被验证过）
+上传到**带时间戳的唯一暂存目录** → 服务器侧 `mv` 替换（同文件系统 rename 是原子的）。
+⚠️ 原做法 `rm -rf $WEB` + 上传会让站点在上传期间**彻底为空** —— 这不是理论风险：
+nginx error.log 里有实证（`directory index of "/srv/campus/web/" is forbidden`），
+且其中一条来自**真实客户端 IP**。
+验证脚本 `verify-atomic-deploy.sh` 在**部署进行中**持续采样并断言无失败请求，
+同时用 **build-id 哨兵**证明"部署真的发生了"（否则"没有失败"在"什么都没做"时同样成立 ⇒ 空虚判据）。
+
 
 ## 六、已知限制 / 未做到的事
 
