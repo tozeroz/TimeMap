@@ -81,6 +81,17 @@ export function UpgradeDialog() {
           </div>
 
           <div className="up__body">
+            {/*
+              ⭐ 本机当前版本**始终**可见（带钩子）。
+              ⚠️ 为什么单列一行而不是只在"已是最新"分支里显示：
+                 WO#23 门禁要能判断"设备装的版本 vs 清单里的最新版本"的相对关系，
+                 而"有更新"分支原先不显示当前版本 ⇒ 门禁读不到 ⇒ 只能记 INCONCLUSIVE。
+                 ⇒ 让事实**始终可观测**，门禁才能给出确定的判断。
+            */}
+            <p className="up__note" data-upgrade-current>
+              当前版本 v{APP_VERSION}
+            </p>
+
             {phase === 'checking' && (
               <p className="up__unavailable" data-upgrade-checking>
                 正在检查更新…
@@ -93,12 +104,9 @@ export function UpgradeDialog() {
                  （与 android versionName 的一致性由门禁机械校验）。
             */}
             {phase === 'uptodate' && (
-              <>
-                <p className="up__unavailable" data-upgrade-uptodate>
-                  已是最新版本
-                </p>
-                <p className="up__note">当前版本 v{APP_VERSION}</p>
-              </>
+              <p className="up__unavailable" data-upgrade-uptodate>
+                已是最新版本
+              </p>
             )}
 
             {/* 有更新：显示后端清单里的真实版本与说明；下载地址来自后端（可能未配置） */}
@@ -152,13 +160,28 @@ export function UpgradeDialog() {
                  否则只给明确说明（不跳转、不显示成功、不触发任何下载）。
                  原版该按钮的真实去向**未观察** ⇒ 我们不发明一个假的下载流程。
             */}
+            {/*
+              ⚠️ 审核 68 第 ③ 项：原版「立即更新」的真实去向**未观察**（不可去点），
+                 但 Owner 裁定"自更新必须实现体验等价" ⇒ 至少要能**真的把用户带进
+                 一个可安装的 APK 流程**。
+
+              ⚠️⚠️ 这里修过一处**真实缺陷**（WO#23 门禁抓出来的）：
+                 初版写的是 `window.open(release.apkUrl, '_blank')` ——
+                 在 Capacitor 的 WebView 里**什么都不发生**（门禁实测：
+                 点击后 **没有任何**对 apkUrl 的请求，Android 的 DownloadManager 也没有条目）。
+                 ⇒ 改成**真实导航** `window.location.href = apkUrl`：
+                   Capacitor 的 WebViewClient 会把**本应用 origin 之外**的 URL 交给系统处理
+                   （系统浏览器/下载器），于是 APK 真的开始下载、用户点通知即可安装。
+                 ⚠️ 这会离开本应用页面 —— 那是**有意的**：更新动作本来就该交出去。
+                 仍然**不声称**"安装完成"：安装确认是 Android 系统 UI，不是我们能断言的。
+            */}
             <button
               className="up__now"
               data-upgrade-now
               onClick={() => {
                 if (phase === 'available' && release?.apkUrl) {
-                  /* 真实可下载 ⇒ 交给系统（在 WebView 里表现为打开该地址） */
-                  window.open(release.apkUrl, '_blank')
+                  /* 真实导航 ⇒ 交给系统浏览器/下载器 */
+                  window.location.href = release.apkUrl
                   return
                 }
                 if (phase === 'uptodate') {

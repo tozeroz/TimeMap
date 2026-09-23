@@ -14,6 +14,7 @@ import mentionsAllSql from './migrations/011_mentions_all.sql'
 import seedSchoolCampusesSql from './migrations/012_seed_school_campuses.sql'
 import seedCollegesSql from './migrations/013_seed_colleges.sql'
 import appReleaseSql from './migrations/014_app_release.sql'
+import release11Sql from './migrations/015_release_1_1.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -65,6 +66,16 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   //      ⚠️ 它**不等于**与原版一致：原版「立即更新」的真实去向未观察（点它可能触发真实
   //         下载 ⇒ 只读约束下 BLOCKED_BY_POLICY）⇒ ORIGINAL_UPDATE_FLOW: NOT_EVALUATED。
   { version: '014_app_release', sql: appReleaseSql },
+
+  // 015：发布 1.1 并托管**真实**安装包（WO#23 收尾；Owner 裁定 ③）
+  //      ⚠️ 用**迁移**而不是直接 UPDATE 库：凡"需长期成立的状态"都要能从仓库重建 ——
+  //         本项目刚因 nginx 配置 drift（仓库 23 行 / 服务器 99 行）吃过一次亏。
+  //      · latest_version='1.1' 与 app/src/version.ts 的 APP_VERSION 和 android
+  //        versionName **一致**（一致性由门禁机械校验）
+  //      · apk_url 指向我们**自己构建并托管**的 APK（Nginx /download/ 静态下发）
+  //        ⚠️ 刻意用 **http**：线上是私有 CA 自签证书，APK 下载会被证书告警挡住；
+  //           80 端口在同一份 locations 配置里可用 ⇒ 这是**已知取舍**，不是疏忽。
+  { version: '015_release_1_1', sql: release11Sql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */
