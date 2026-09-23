@@ -77,7 +77,8 @@ powershell -File tools/deploy-web.ps1 -SkipBuild   # 只上传
 
 ```bash
 bash scripts/m5/web/setup-web-session.sh          # 建立网页端已登录会话
-bash scripts/m5/web/run-web-gate.sh scripts/m5/gate-wo11-feed-list.mjs   # 跑单个门禁
+bash scripts/m5/web/run-web-gate.sh scripts/m5/gate-wo11-feed-list.mjs   # 跑单个门禁（复用门禁）
+bash scripts/m5/web/run-web-gate.sh scripts/m5/web/gate-web-login.mjs    # 跑单个网页端专属门禁
 bash scripts/m5/web/web-gate-audit.sh             # 跑全量并分类
 bash scripts/m5/web/selftest-web-gates.sh         # 网页端专属门禁的敏感度验证
 bash scripts/m5/web/verify-atomic-deploy.sh       # 验证部署无空窗（原子切换）
@@ -86,17 +87,21 @@ bash scripts/m5/web/verify-atomic-deploy.sh       # 验证部署无空窗（原�
 ### 5.0 当前实测结果（2026-09-24）
 
 ```
-WEB_AUDIT: TOTAL=30 PASS=30 FAIL=0 SKIPPED=1
+WEB_AUDIT: TOTAL=31 PASS=31 FAIL=0 SKIPPED=1
 ```
 
 - **27 个复用门禁全部 exit=0**（含 feed / 用户资料 / 资料编辑 / 我的身份 / 地图标记 /
   留言板 / 校园 / 学校 / 帖子身份 / POI / 认证表单 / **发布媒体（含真实录音）** /
   **扫码 e2e** / **真实取景扫码** / 更新检查 / 更新流程 / 标签栏 / 文字发送 / 消息列表 /
   群聊切片 / @面板 / 公告 / 编辑器覆盖 / 学院选择器 / 媒体预览权 / 扫码入口 …）
-- **3 个网页端专属门禁 exit=0**（见 5.3）
+- **4 个网页端专属门禁 exit=0**（见 5.3）
 - **1 个明确不适用**：`gate-statusbar-inset.mjs`（Android edge-to-edge 专属，见 5.4）
-- 另有：`ATOMIC_DEPLOY: PASS`（部署期间 60 次采样无失败请求）
-- 另有：3 个网页端专属门禁的**敏感度验证通过**（注入因预期缺陷变红、移除后回绿）
+- 另有：`ATOMIC_DEPLOY: PASS`（部署期间 60 次采样无失败请求 + build-id 哨兵证明部署真发生）
+- 另有：网页端专属门禁的**敏感度验证通过**（注入因**预期缺陷**变红、移除后回绿）
+
+⭐ **覆盖率是核对过的，不是"门禁全绿就算测过了"**：把前端路由清单
+（`navigate()` 调用点）与门禁逐项对照后，发现 **`login` / `loginselect` 没有任何门禁覆盖**
+（因为建立测试会话时是直接注入 token 绕过了登录 UI）⇒ 才补了 `gate-web-login.mjs`。
 
 ### 5.1 目标切换机制（为什么不需要改 62 个门禁文件）
 门禁的 CDP 地址硬编码为 `http://127.0.0.1:9222/json`。我们**不给 62 个文件加参数**，
@@ -121,16 +126,27 @@ WEB_AUDIT: TOTAL=30 PASS=30 FAIL=0 SKIPPED=1
 ✅ 不往生产代码里加任何"测试登录通道"（那才是真的安全债）
 ⚠️ 读出的 token 是明文，只落 `tools/tmp/`（`.gitignore` 已忽略），不打印完整值、不进仓库
 
-### 5.3 网页端专属门禁（3 个，放 `scripts/m5/web/` 以免被设备审计误捡）
+### 5.3 网页端专属门禁（4 个，放 `scripts/m5/web/` 以免被设备审计误捡）
 | 门禁 | 守什么 | 为什么它是网页端专属 |
 |---|---|---|
 | `gate-web-app-mount.mjs` | **应用真的挂载**（根节点存在、有子树、无挂载期异常） | 被我自己那个真实 bug 逼出来的：误删 `<body>` 与 `#root` 后 `/` 仍 200、title 正常、**旧冒烟全绿**，但页面空白（React error #299）⇒ "HTTP 200 + 标题对"证明不了能挂载 |
 | `gate-web-cert-trust.mjs` | **公共信任 HTTPS + 同源 API** | 判据是"在页面内 fetch 同源 API"：证书不被信任时**浏览器**会拦截，而 curl 用系统 CA 库、失效模式不同 ⇒ 必须在真实浏览器里判定 |
 | `gate-web-load-clean.mjs` | **加载干净**（无失败静态资源、无控制台 error、无未捕获异常） | 被那条 favicon 404 逼出来的：不影响功能，所以任何功能断言都发现不了；原生端也不会有（WebView 不发 favicon 请求） |
+| `gate-web-login.mjs` | **登录流程**（协议门禁 / 手机号校验 / 真实调用链 / 失败不假装成功） | **覆盖率核对发现的缺口**：路由清单里 `login`/`loginselect` 一个门禁都没有，而登录是网页端第一道功能。用 CDP `Fetch` 域**拦截** `/api/auth/request-code` ⇒ **零短信成本、无需真验证码**即可验证真实调用链（含失败分支如实报错） |
 
 **敏感度验证**（`selftest-web-gates.sh`）：基线绿 → 注入因**预期缺陷**变红 → 移除后回绿。
 用**零风险注入**（坏页面放子路径 `/web-broken/`、`/load-broken/`，**不碰线上首页**），
 并通过门禁的 `WEB_ENTRY_PATH` 参数指向它。
+
+⭐**判据必须三重同时成立**（否则"变红"证明不了判别力）：
+```
+① 不能是「页面未就绪」兜底   ← 否则红的原因不是被测缺陷
+② ON_WEB_ORIGIN == true      ← 排除"页面根本没打开"这类假红
+③ 出现预期的缺陷特征          ← mount: ROOT_ELEMENT_PRESENT=false 等
+```
+⚠️ 其中 **③ 必须是"肯定式"特征**：我最初拿 `LOGINSELECT_REQUIRES_AGREEMENT`（"**没有**跳到登录页"）
+这类**否定式**断言当判据，而它在"页面整个坏掉、什么都没发生"时**天然为真** ⇒ 会空虚通过。
+现已给这类断言加**前置断言**（界面确实存在）并让其依赖前置成立。
 
 ### 5.4 为什么不适用项要显式登记，而不是删掉
 `gate-statusbar-inset.mjs` 断言 Android 15+ edge-to-edge 的安全区注入——浏览器没有
@@ -150,10 +166,23 @@ nginx error.log 里有实证（`directory index of "/srv/campus/web/" is forbidd
 
 ## 六、已知限制 / 未做到的事
 
+> ⚠️ 下面第 1、2、4 条的处置口径已由 **Review 70** 裁定（落盘 `docs/review-log/70-wo25-web-release-pass-closed.md`）：
+> 网页端发布本身 `PASS / CLOSED`；iOS 为 `KNOWN UNVALIDATED PLATFORM / NON-BLOCKING`；
+> 布局为 `LAYOUT: (c) KEEP`；后续 Release 工作 `≠ WO#25`（另开工作单）。
+
 1. **无域名 ⇒ 用户看到 IP**。正式运营仍需域名 + 备案（见 `docs/TLS-IP-CERTIFICATE.md`）。
-2. **未在真实 iOS Safari 上实测**。代码上无 iOS 专属依赖，但**没有真机验证过**
-   ⇒ 记 `NOT_EVALUATED`，不声称已支持 iOS。
-3. **桌面浏览器的摄像头/麦克风**在无相应硬件的机器上无法验证 ⇒ 相关门禁应为
-   `NOT_EVALUATED` 或按"权限被拒时的显式处理"来判定，而不是假装可用。
-4. **没有做响应式重排**：桌面宽屏是"手机壳居中"，不是铺满的桌面布局。
-   这是**有意的选择**（demo 演示感强、且不必重做布局），不是未完成。
+2. **未在真实 iOS Safari 上实测**（裁定：`KNOWN UNVALIDATED PLATFORM / NON-BLOCKING`）。
+   代码上无 iOS 专属依赖，且证书已是**公共信任**（这正是当初换掉私有 CA 的目的），
+   但**没有真机验证过** ⇒ 记 `NOT_EVALUATED`，**不声称已支持 iOS**。
+3. **桌面浏览器的摄像头/麦克风**在无相应硬件的机器上无法验证。
+   本项目用 Chrome 官方**合成媒体设备**（`--use-fake-device-for-media-stream`）让
+   同一条功能路径真的跑起来，从而验证应用逻辑而不是"这台机器有没有摄像头"。
+   ⚠️ 代价如实标注：`--use-fake-ui-for-media-stream` 会自动同意权限弹窗
+   ⇒ **"用户拒绝授权"这条分支无法用它覆盖**。
+4. **桌面布局不改**（裁定 `LAYOUT: (c) KEEP`）：宽屏浏览器是"手机壳居中"
+   （`pointer: fine` 才套），手机浏览器是满屏。这是**有意的选择**，不是未完成
+   ⇒ 不再横向扩成桌面重设计。
+5. **外部告警通道未接**（属证书监控 WO#24）：详见 `docs/TLS-IP-CERTIFICATE.md`。
+6. **登录的"真实发短信 + 收码 + 建会话"那一段**不在 `gate-web-login.mjs` 内（该门禁记
+   `INCONCLUSIVE`），由既有 `gate-sms-login.sh` 负责（遵守"只在提供测试号时才判定"的策略）——
+   **不假装覆盖**。

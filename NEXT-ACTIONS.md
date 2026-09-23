@@ -1929,9 +1929,9 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ✅ **修掉网页端两个真实缺陷**：index.html **完全没有图标声明**（导致 /favicon.ico 404）；
       网页端**禁止缩放**（可访问性问题）⇒ 网页端放开、原生壳内保持不放
 - [x] ✅ 文档 `docs/WEB-FRONTEND.md`（含与原生端的差异矩阵、踩坑、如何测试）
-- [ ] ⬅ **待提交审核**（WO#25 计划 + 结果证据）
-- [ ] **待做**：iOS Safari 真机实测（目前 `NOT_EVALUATED`，**不声称已支持 iOS**）
-- [ ] **待做**：桌面布局取舍——当前宽屏套"手机壳"（`pointer:fine` 才套），
+- [x] ✅ **已提交审核并取得裁定**（Review 70，落盘 `docs/review-log/70-wo25-web-release-pass-closed.md`）
+- [x] ✅ **iOS Safari**：裁定为 `KNOWN UNVALIDATED PLATFORM / NON-BLOCKING` ⇒ 保持 `NOT_EVALUATED` 登记，**不声称已支持 iOS**（无真机可测）
+- [x] ✅ **桌面布局**：裁定 `LAYOUT: (c) KEEP` ⇒ 保持现状（手机浏览器满屏、宽屏套手机壳），**无需改代码**。原描述：当前宽屏套"手机壳"（`pointer:fine` 才套），
       手机浏览器是满屏。已在审核中请裁定 (a)/(b)/(c)，默认按现状 (c) 继续
 
 **⚠️ 本轮记录在案的自身错误（都值得留痕）**：
@@ -1948,3 +1948,41 @@ posts  : 有 place_id；**4 条 post 关联了 place**
   ⑨ 为测门禁而**真的替换线上首页** ⇒ 把站点搞坏 ⇒ 改为零风险子路径注入
   ⚠️ 另：`check-ps1-integrity.sh` **早就存在**且判据正确，是我改完 `.ps1` 后**没跑它**
      ⇒ 教训是"把既有检查跑起来"，而不是"再加一条检查"
+
+### ⭐ Review 70：WO#25 网页端发布 —— 裁定 **PASS / CLOSED**（落盘 docs/review-log/70-…）
+
+```
+WO25_WEB_RELEASE: PASS / CLOSED
+LAYOUT: (c) KEEP
+WEB_GATE_NOT_APPLICABLE_POLICY: APPROVED
+IOS_SAFARI: KNOWN UNVALIDATED PLATFORM NON-BLOCKING
+REMAINING RELEASE WORK: ≠ WO25
+```
+
+- [x] ✅ 裁定已落盘并回写本队列（工作流要求：裁定必须落盘 + 回写唯一待办权威）
+- [x] ✅ **审核方的两条方法性指导已照做**：
+      ① 「FAIL ≠ 断言有判别力」⇒ 敏感度汇总升级为**三重判据**
+         （非"未就绪"兜底 + ON_WEB_ORIGIN=true + 预期的缺陷特征）。
+         ⚠️ 这条正中我犯过的错：我的汇总第一版只看一个 false，
+         把"MSYS 路径转换导致导航到垃圾 URL ⇒ 未就绪"误判成"变红=有判别力"（假通过）。
+      ② 「不要为了证明 Gate 的判别力直接破坏公开生产入口」⇒ 注入改为**零风险子路径**。
+         ⚠️ 同样正中我的实际错误：第一版**真的替换了线上首页**、把站点搞坏过一次。
+- [x] ✅ 审核方指示「到这里停止，不需要继续发展新的 sensitivity framework」⇒ **不再扩展**该框架
+- [x] ✅ 网页端正式地址：**https://8.148.156.146/**（Let's Encrypt IP 证书，公共信任）
+      关闭时门禁结果：`WEB_AUDIT: TOTAL=31 PASS=31 FAIL=0 SKIPPED=1`
+
+**⚠️ 本轮我自己发现并已修的问题（非审核方指出，如实区分）**：
+  · **登录流程无门禁覆盖**（覆盖率核对发现：路由清单里 login/loginselect 一个门禁都没有，
+    而登录是网页端第一道功能）⇒ 新增 `gate-web-login.mjs`，用 CDP `Fetch` 域拦截
+    `/api/auth/request-code`，**零短信成本**验证真实调用链（含失败分支不假装成功）
+  · **"否定式"断言可空虚通过**：`LOGINSELECT_REQUIRES_AGREEMENT`（"没有跳到 #/login"）
+    在页面整个坏掉时**天然为真** ⇒ 新增**前置断言**并让其依赖前置成立
+  · **测试状态没重置**：`Page.navigate` 同源同路径只改 hash 不重载 ⇒ 应用状态是上一场景残留，
+    导致断言量的不是目标场景（看起来像功能缺陷，其实是测试问题）⇒ 新增 `freshLoad()` 强制重载
+  · **断言固化我的偏好**：`SUBMIT_DISABLED_FOR_INVALID_PHONE` 假定"非法号码必须禁用按钮"，
+    但"交给服务端判定并如实呈现错误"同样是合理设计 ⇒ 改为行为判据
+
+- [ ] ⬅ **下一步（按裁定：属 Release/运维/视觉 backlog，另开工作单，不扩展 WO#25）**：
+      候选：① 证书到期监控接**外部告警通道**（需你提供 webhook URL；目前只落 journald）
+      ② 一次一键发布脚本（版本号+构建+上传+核对 sha256，避免再出现"产物与版本不一致"）
+      ③ 视觉设计 backlog（I3 图标重绘、`VOICE_CONSUMPTION` 语音帖播放等既有遗留项）
