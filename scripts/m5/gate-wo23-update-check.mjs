@@ -130,9 +130,28 @@ console.log('=== 1) 打开升级弹窗（路由 #/upgrade）===')
 await evaluate(`location.hash = '#/campus'`)
 await sleep(1200)
 await evaluate(`location.hash = '#/upgrade'`)
-await sleep(3500)
-const before = await evaluate(READ)
-log('UPGRADE_T0', before)
+
+/*
+  ⚠️ 这里修过一次**真实缺陷**：本门禁的断言"版本相等 ⇒ 显示已是最新"依赖一次
+     **网络往返**（GET /api/app/release）。初版只 `sleep(3500)` 就断言 ——
+     在我单独跑时侥幸通过，但在**批量回归**里（设备/网络更忙）T0 读到的还是
+     `checking:"正在检查更新…"` ⇒ `UPDATE_SHOWS_UPTODATE` 误报 FAIL。
+  ⇒ 正确做法：**轮询到"终态"**（不再是 checking），带超时；超时才算真的没出结果。
+     这是任何"断言异步状态"的门禁都该用的模式，而不是固定等待。
+*/
+async function waitUntilSettled(maxMs = 15000) {
+  const t0 = Date.now()
+  let last = null
+  while (Date.now() - t0 < maxMs) {
+    last = await evaluate(READ)
+    if (last && !last.TIMEOUT && !last.checking) return { view: last, settled: true, waitedMs: Date.now() - t0 }
+    await sleep(500)
+  }
+  return { view: last, settled: false, waitedMs: Date.now() - t0 }
+}
+const settled = await waitUntilSettled()
+const before = settled.view
+log('UPGRADE_T0', { ...before, _settled: settled.settled, _waitedMs: settled.waitedMs })
 
 console.log('')
 console.log('=== 2) 点「立即更新」：不得跳走、不得声称成功 ⭐ ===')
@@ -160,6 +179,10 @@ const v = {
   /** 版本相等（本机 1.0 == 后端 1.0）⇒ 必须显示"已是最新版本" */
   UPDATE_SHOWS_UPTODATE: (() => {
     if (!before) return 'INCONCLUSIVE'
+    if (!settled.settled) {
+      /* ⚠️ 等不到终态 ⇒ **INCONCLUSIVE**（不假装 PASS，也不误报 FAIL） */
+      return 'INCONCLUSIVE'
+    }
     if (before.errored) return 'INCONCLUSIVE' // 网络问题
     if (before.notConfigured) return 'INCONCLUSIVE' // 后端没清单
     return before.upToDate && /已是最新版本/.test(String(before.upToDate)) ? 'PASS' : 'FAIL'

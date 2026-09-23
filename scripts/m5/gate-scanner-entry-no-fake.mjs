@@ -130,9 +130,20 @@ await sleep(3200)
 const scanner = await evaluate(`(() => {
   const q = (s) => document.querySelector(s)
   const txt = ((q('.screen') || document.body).innerText || '').replace(/\\s+/g,' ').trim()
+  const frame = q('[data-scanner]')
+  const v = q('[data-scanner-video]')
   return {
     hash: location.hash,
     text: txt.slice(0, 400),
+    /* ⭐ WO#22 起：扫码屏有真实的五态与真实视频流 */
+    phase: frame ? frame.getAttribute('data-scanner') : null,
+    videoW: v ? v.videoWidth : 0,
+    videoReady: v ? v.readyState : -1,
+    hasUnsupported: !!q('[data-scanner-unsupported]'),
+    hasDenied: !!q('[data-scanner-denied]'),
+    hasError: !!q('[data-scanner-error]'),
+    hasResult: !!q('[data-scanner-result]'),
+    /* 兼容旧判据：这些钩子已不存在于新实现（保留读取以便如实记录） */
     hasUnavailableHook: !!q('[data-scanner-unavailable]'),
     hasNoteHook: !!q('[data-scanner-note]'),
     fakeViewfinderNodes: document.querySelectorAll('.scan__frame, .scan__line, .scan__corner').length,
@@ -168,9 +179,26 @@ const v = {
     return missing.length === 0 ? 'PASS' : 'FAIL'
   })(),
 
-  /** 扫码页必须**明确**说明尚未实现 */
-  SCANNER_EXPLICIT_UNAVAILABLE:
-    scanner && scanner.hasUnavailableHook && /尚未实现/.test(text) ? 'PASS' : 'FAIL',
+  /**
+   * 扫码页必须给**明确**状态：要么真的有扫码能力（真实取景），要么给出**明确**的
+   * unsupported/denied/error 原因。**不允许**"既没能力、也不说明"的空白态。
+   *
+   * ⚠️⚠️ 本键**被 WO#22 supersede 过**，如实记录：
+   *   本门禁最初（Round 319 早段）断言的是 `SCANNER_EXPLICIT_UNAVAILABLE`
+   *   —— 即页面必须显示「**扫码功能尚未实现**」。那时我们**没有**扫码能力，
+   *   那句"尚未实现"是当时**唯一诚实**的呈现。
+   *   后来 Owner 裁定 ①（扫码必须实现体验等价）⇒ WO#22 接入了**真实扫码**
+   *   ⇒ 那句"尚未实现"**不再成立**，本键若继续要求它就变成**要求一句假话**。
+   *   ⇒ 改为断言"能力或明确原因二者其一"（这才是**不随时间变假**的判据）。
+   *   门禁 `gate-wo22-scanner-real.mjs` 另行断言"真实取景 + 逐帧解码循环在跑"。
+   */
+  SCANNER_STATE_IS_EXPLICIT: (() => {
+    if (!scanner) return 'INCONCLUSIVE'
+    const capable = scanner.phase === 'scanning' && scanner.videoW > 0
+    const explicitReason =
+      scanner.hasUnsupported || scanner.hasDenied || scanner.hasError || scanner.hasResult
+    return capable || explicitReason ? 'PASS' : 'FAIL'
+  })(),
 
   /** ⭐ 不得出现假成功/假进行中（含等待 4.5s 后的复查 —— 旧实现会在 5.2s 后"成功"） */
   SCANNER_NO_FAKE_SUCCESS:
@@ -183,9 +211,19 @@ const v = {
         ? 'FAIL'
         : 'PASS',
 
-  /** 不得画**假取景框/扫描线**（那会让人以为这个 app 能扫码） */
-  SCANNER_NO_FAKE_VIEWFINDER:
-    !scanner ? 'INCONCLUSIVE' : scanner.fakeViewfinderNodes === 0 ? 'PASS' : 'FAIL',
+  /**
+   * ⚠️ 本键**被 WO#22 supersede 过**：原判据是"页面上不得有任何取景框节点"
+   *   —— 那是针对**假取景**（没有视频流、只有装饰框）的。
+   *   WO#22 接入真实取景后，取景框/四角/扫描线是**覆盖在真实 <video> 上的**装饰，
+   *   它们本身不再意味着"假"。⇒ 判据改为"取景必须有**真实视频流**支撑"。
+   */
+  SCANNER_VIEWFINDER_BACKED_BY_REAL_VIDEO: (() => {
+    if (!scanner) return 'INCONCLUSIVE'
+    const hasFrameNodes = scanner.fakeViewfinderNodes > 0
+    if (!hasFrameNodes) return 'PASS' // 没有取景装饰 ⇒ 不可能是"假取景"
+    /* 有装饰 ⇒ 必须有真实视频流（否则就是旧的假取景） */
+    return scanner.videoW > 0 ? 'PASS' : 'FAIL'
+  })(),
 
   /** 不得出现已移出生产的 mock 提示文案 */
   SCANNER_NO_MOCK_HINTS: !scanner ? 'INCONCLUSIVE' : MOCK_HINTS.some((h) => text.includes(h)) ? 'FAIL' : 'PASS',
@@ -222,9 +260,9 @@ const v = {
 const KEYS = [
   'SCANNER_ENTRY_PRESENT_IN_DRAWER',
   'DRAWER_ITEMS_MATCH_ORIGINAL',
-  'SCANNER_EXPLICIT_UNAVAILABLE',
+  'SCANNER_STATE_IS_EXPLICIT',
   'SCANNER_NO_FAKE_SUCCESS',
-  'SCANNER_NO_FAKE_VIEWFINDER',
+  'SCANNER_VIEWFINDER_BACKED_BY_REAL_VIDEO',
   'SCANNER_NO_MOCK_HINTS',
 ]
 const anyFail = KEYS.some((k) => v[k] === 'FAIL')
