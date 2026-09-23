@@ -1,26 +1,33 @@
 import type { ReactNode } from 'react'
+import { isNativeShell } from '../platform'
 import './shell.css'
-
-/** 是否运行在 Capacitor 原生壳（真机/模拟器）里 */
-function isNativeShell(): boolean {
-  const cap = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
-  return typeof cap?.isNativePlatform === 'function' && cap.isNativePlatform() === true
-}
 
 /**
  * 手机外壳：状态栏 + 内容区。
  *
  * 关键差异点：**真机上不画模拟状态栏**。
  * 系统本身已经有状态栏，再画一条就会出现「双状态栏」（实测被发现）。
- * 原版 app 也只依赖系统状态栏。浏览器预览时才需要模拟一条，让页面看起来像手机。
- * 同时把 --h-statusbar 归零，避免扫码/图片预览这类绝对定位的顶栏留出多余空白。
+ * 原版 app 也只依赖系统状态栏。
+ *
+ * ════════════════════════════════════════════════════════════════════
+ * ⚠️ WO#25：正式网页端**也不画**模拟状态栏（审核方要求）
+ * ════════════════════════════════════════════════════════════════════
+ * 审核方对布局形式 (c) 的定义是「手机浏览器满屏 + 桌面居中受限宽度」，
+ * 并明确 **NOT REQUIRED：fake OS status bar / fake hardware frame** ——
+ * 即"为了像手机而画出来的系统 UI"不应出现在**正式网页端**。
+ * （它的原始用途只是**本机开发预览**时让页面看起来像手机。）
+ * ⇒ 只在 **开发态**（`vite dev`）保留模拟状态栏；
+ *    生产构建（`vite build` ⇒ nginx 托管的网页端）**不渲染**它。
+ * ⚠️ 真机（原生壳）本来就不画 ⇒ 三个平台行为都明确。
  */
 export function Shell({ children, dark = false }: { children: ReactNode; dark?: boolean }) {
   const native = isNativeShell()
+  // 仅开发预览时画模拟状态栏：真机不画（系统已有）、正式网页端不画（审核方要求）
+  const showFakeStatusBar = !native && import.meta.env.DEV
   return (
     <div className={`shell ${native ? 'shell--native' : ''}`}>
       <div className={`shell__viewport ${dark ? 'shell__viewport--dark' : ''}`}>
-        {!native && (
+        {showFakeStatusBar && (
           <div className="statusbar">
             <span className="statusbar__time">9:41</span>
             <span className="statusbar__icons">

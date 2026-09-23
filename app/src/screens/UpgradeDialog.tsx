@@ -4,6 +4,7 @@ import { IconChevronRight } from '../components/icons'
 import { compareVersions, getAppRelease, type ApiAppRelease } from '../api/client'
 import { APP_VERSION } from '../version'
 import { navigate } from '../router'
+import { isWebClient } from '../platform'
 import './upgrade.css'
 
 /**
@@ -44,11 +45,38 @@ import './upgrade.css'
 /** 检查结果的**互斥**状态（每种都有专属钩子，便于门禁与排障） */
 type CheckPhase = 'checking' | 'uptodate' | 'available' | 'not_configured' | 'error'
 
+/**
+ * ════════════════════════════════════════════════════════════════════
+ * ⚠️⚠️ WO#25 P0：网页端**不得**提供「下载 APK 自更新」
+ * ════════════════════════════════════════════════════════════════════
+ * 审核方在批准 WO#25 时点出的最关键一条（原文）：
+ *   「正式 Web 前必须特别处理一个 P0：App 更新 …
+ *     网页端**绝不能**出现：发现新版本 → 下载 Android APK 作为自己的『更新』。
+ *     Web 本身是服务器部署后刷新即更新。
+ *     ⇒ WO#25 必须明确 platform behavior：
+ *        Android：现有 APK update flow
+ *        Web    ：不展示 Android APK self-update action
+ *     …这属于**平台语义正确性**，不是功能缩水。」
+ *
+ * ⭐ 为什么原来的门禁没抓到它：`gate-wo23-update-*` 是按 **APK 场景**写的
+ *   （它们验的是"检查是不是真的、有没有假成功、点击是否交出去给系统"），
+ *   于是在网页端**照样 PASS** —— 而"网页端该不该有这个动作"根本不在它们的判据里。
+ *   这是"**门禁全绿掩盖语义错误**"的典型：门禁只保证"实现与它写定的口径一致"，
+ *   不保证"这个口径在当前平台上是对的"。
+ *   ⇒ 补一个**平台语义**门禁：`gate-web-update-platform.mjs`。
+ *
+ * 实现口径（对齐审核方建议的"最小方案：隐藏/标记 Android-only"）：
+ *   · 网页端**不渲染**「立即更新」这个 APK 动作按钮，也不显示 APK 地址；
+ *   · 改为如实说明"网页端随服务端部署更新、刷新即最新"——
+ *     **不发明**一套 Web 更新系统（审核方明确说那是以后另做的事）。
+ *   · 原生端行为**完全不变**（APK update flow / install handoff 保持原样）。
+ */
 export function UpgradeDialog() {
   const [phase, setPhase] = useState<CheckPhase>('checking')
   const [release, setRelease] = useState<ApiAppRelease | null>(null)
   const [err, setErr] = useState('')
   const [notice, setNotice] = useState('')
+  const web = isWebClient()
 
   useEffect(() => {
     let alive = true
@@ -78,7 +106,11 @@ export function UpgradeDialog() {
   return (
     <Screen className="up" scroll={false}>
       <div className="up__mask">
-        <div className="up__dialog">
+        {/*
+          ⭐ 平台钩子：让门禁能**确定地**断言"当前是哪个平台口径"，
+          而不是靠推断 DOM 里有没有某个按钮（那在两种平台都可能偶尔成立）。
+        */}
+        <div className="up__dialog" data-upgrade-platform={web ? 'web' : 'native'}>
           <div className="up__hero" aria-hidden>
             <span className="up__hero-text">Campus</span>
             <span className="up__hero-sub">
@@ -122,7 +154,13 @@ export function UpgradeDialog() {
                   新版本 v{release?.latestVersion}
                 </p>
                 {release?.notes && <p className="up__note">{release.notes}</p>}
-                {release?.apkUrl ? (
+                {web ? (
+                  /* ⚠️ 网页端**不显示 APK 安装包地址**：那是 Android 的更新载体，
+                     对浏览器用户既无意义、又容易被误当成"网页端的更新方式"。 */
+                  <p className="up__note" data-upgrade-web-note>
+                    网页端随服务端部署更新，刷新页面即为最新版本，无需下载安装包。
+                  </p>
+                ) : release?.apkUrl ? (
                   <p className="up__note" data-upgrade-apk>
                     安装包地址：{release.apkUrl}
                   </p>
@@ -181,25 +219,33 @@ export function UpgradeDialog() {
                  ⚠️ 这会离开本应用页面 —— 那是**有意的**：更新动作本来就该交出去。
                  仍然**不声称**"安装完成"：安装确认是 Android 系统 UI，不是我们能断言的。
             */}
-            <button
-              className="up__now"
-              data-upgrade-now
-              onClick={() => {
-                if (phase === 'available' && release?.apkUrl) {
-                  /* 真实导航 ⇒ 交给系统浏览器/下载器 */
-                  window.location.href = release.apkUrl
-                  return
-                }
-                if (phase === 'uptodate') {
-                  setNotice(`已是最新版本（v${APP_VERSION}），无需更新。`)
-                  return
-                }
-                setNotice('当前没有可下载的安装包，无法执行更新。')
-              }}
-            >
-              立即更新
-              <IconChevronRight size={15} />
-            </button>
+            {/*
+              ⚠️⚠️ **网页端不渲染这个按钮**（WO#25 P0，见文件顶部说明）。
+                 网页端没有"安装 APK 更新当前网页应用"这个概念，
+                 所以「立即更新 → 下载 Android APK」在浏览器里是**平台语义错误**。
+                 ⇒ 只在原生端给出这个动作；网页端由上面的 data-upgrade-web-note 如实说明。
+            */}
+            {!web && (
+              <button
+                className="up__now"
+                data-upgrade-now
+                onClick={() => {
+                  if (phase === 'available' && release?.apkUrl) {
+                    /* 真实导航 ⇒ 交给系统浏览器/下载器 */
+                    window.location.href = release.apkUrl
+                    return
+                  }
+                  if (phase === 'uptodate') {
+                    setNotice(`已是最新版本（v${APP_VERSION}），无需更新。`)
+                    return
+                  }
+                  setNotice('当前没有可下载的安装包，无法执行更新。')
+                }}
+              >
+                立即更新
+                <IconChevronRight size={15} />
+              </button>
+            )}
           </div>
           {notice && (
             <p className="up__note" data-upgrade-notice>

@@ -71,10 +71,40 @@ sleep 3
 echo "=== 2/10 建 CDP 转发（必须早于 preflight 的 CDP 检查）==="
 PID="$("$ADB" -s "$SERIAL" shell pidof "$PKG" | tr -d '\r')"
 if [ -z "$PID" ]; then echo "  FATAL 拿不到 $PKG 的 pid"; exit 1; fi
+
+# ⚠️⚠️ 先释放 9222：网页端门禁会起一个**独立 profile 的测试 Chrome** 并占用同一个 9222
+#    （那是刻意的设计：让既有门禁一行都不用改即可复用到网页端，见
+#      scripts/m5/web/launch-web-chrome.sh）。
+#    但两个目标**互斥**：若 web Chrome 还占着 9222，`adb forward tcp:9222` 会**绑定失败**，
+#    而后**静默地**变成"门禁在问 web Chrome"——
+#    实测后果：设备门禁读到 url=https://8.148.156.146/#/me，于是
+#      VISUAL_TARGET_VALIDITY: FAIL（no CDP page target url contains localhost）。
+#    ⭐ 值得一提的是：那次门禁**正确地作废了证据**（"这不是产品 FAIL"）而不是误报产品缺陷，
+#       所以守卫本身有效；但更该做的是**从源头消除争用**。
+#    ⇒ 对称于 launch-web-chrome.sh 里"撤掉模拟器转发"的做法：
+#       这里**关掉我们的 web 测试 Chrome**（只按独立 profile 精确匹配，
+#       ⚠️ 绝不能用 taskkill /IM chrome.exe —— 那会把用户自己的浏览器一起杀掉）。
+powershell.exe -NoProfile -Command "
+\$ps = Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | Where-Object { \$_.CommandLine -like '*web-chrome-profile*' }
+if (\$ps) { \$ps | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }; Write-Output ('  [cdp] released 9222: stopped ' + \$ps.Count + ' web-test chrome process(es)') }
+" 2>&1 | sed 's/^/  /'
+
 "$ADB" -s "$SERIAL" forward --remove-all >/dev/null 2>&1
-"$ADB" -s "$SERIAL" forward tcp:9222 "localabstract:webview_devtools_remote_${PID}" >/dev/null 2>&1
 sleep 1
-echo "  forward tcp:9222 → webview_devtools_remote_$PID"
+
+# ⚠️ 端口仍被占时**大声失败**，不要静默继续（否则又会出现"测错对象还出结论"）。
+if curl -s -m 3 http://127.0.0.1:9222/json/version >/dev/null 2>&1; then
+  echo "  ⚠️ 9222 仍被占用 ⇒ 转发无法绑定；不静默继续（避免门禁问错对象）"
+fi
+
+"$ADB" -s "$SERIAL" forward tcp:9222 "localabstract:webview_devtools_remote_${PID}" 2>&1 | sed 's/^/  /'
+sleep 1
+FWD="$("$ADB" -s "$SERIAL" forward --list 2>/dev/null | grep -c 'tcp:9222' || true)"
+if [ "${FWD:-0}" = "0" ]; then
+  echo "  FATAL adb 转发未建立（tcp:9222 不在 forward --list 里）⇒ 终止，不给结论"
+  exit 1
+fi
+echo "  forward tcp:9222 → webview_devtools_remote_$PID（已确认在转发列表中）"
 
 echo "=== 3/10 VISUAL_TARGET_VALIDITY（采集前）==="
 powershell -NoProfile -Command "& '$PREFLIGHT' -ExpectPackage $PKG -ExpectCdpUrl localhost" || {

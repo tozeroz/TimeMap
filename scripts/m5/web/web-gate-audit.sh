@@ -38,6 +38,9 @@ web_not_applicable() {
     gate-statusbar-inset.mjs)
       echo "原生专属：断言的是 Android 15+ edge-to-edge 的 --safe-area-inset-* 注入与顶栏让位。浏览器没有系统状态栏覆盖问题（页面自带浏览器 chrome），该逻辑在网页端**本就不应生效**。⚠️ 其"不生效"本身由 gate-web-app-mount 等门禁从另一侧保证（应用照常渲染）。"
       ;;
+    gate-wo23-update-platform.mjs)
+      echo "原生专属（**对照侧**）：它断言的正是"原生端**仍然有** APK 更新动作"。按 WO#25 的 P0 裁定，网页端**必须没有**该动作 ⇒ 这条在网页端必然为假。网页端那一侧由 gate-web-update-platform.mjs 负责（两者是**对称的一对**：一条防"网页端泄漏 APK 语义"，一条防"改过头把手机端更新也去掉"）。"
+      ;;
     *) echo "" ;;
   esac
 }
