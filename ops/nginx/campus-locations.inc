@@ -94,6 +94,24 @@ location /download/ {
     default_type application/octet-stream;
 }
 
+# ⭐ ACME 挑战目录（Let's Encrypt 签发/续期用）
+#
+# 背景：本项目的后端用 HTTPS，但证书原本是**自建私有 CA 自签**的 ——
+#   App 能用是因为 APK 里内置了那个 CA；而**浏览器不认** ⇒ 网页端必然报证书错误。
+#   2026 起 Let's Encrypt 正式支持给**纯 IP** 签发公共信任证书（无需域名），
+#   我们用它把证书换成公共信任的（详见 ops/tls/ 与 docs/）。
+#
+# ⚠️ IP 证书只能用 **http-01 / tls-alpn-01** 验证（IP 不涉及 DNS，没法用 dns-01）
+#   ⇒ 必须让 LE 能从**公网 80 端口**取到挑战文件 ⇒ 就是这条 location。
+# ⚠️ 它必须**先于下面的 `location / { return 404; }` 生效**：nginx 前缀匹配取最长匹配，
+#   本 location 比 `/` 更具体，所以能正确命中；这里放在它前面只是为了让阅读顺序也清楚。
+# ⚠️ 只暴露 challenge 目录本身，不暴露其它任何静态文件（`try_files` 兜成 404）。
+location /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+    default_type "text/plain";
+    try_files $uri =404;
+}
+
 # 临时目录绝不对外可见（上传先用 tmp 再原子 rename）
 location ~ ^/(media|_private_media)/\.tmp/ {
     deny all;

@@ -1,0 +1,35 @@
+# Let's Encrypt 证书续期的 systemd service
+#
+# ════════════════════════════════════════════════════════════════════════════
+# 为什么必须自己做（而不是用发行版现成的）
+# ════════════════════════════════════════════════════════════════════════════
+# 本项目用的是**纯 IP 的 Let's Encrypt 证书**（2026-01 GA），它有两个特点：
+#   ① **有效期只有约 6 天**（LE 对 IP 证书强制 shortlived profile）
+#      ⇒ 自动续期不是"优化"，而是**功能的一部分**：漏一次全站就报证书错误。
+#   ② certbot 的 **nginx / apache 插件尚不支持 IP 证书**（官方文档明确），
+#      所以续期后**不会自动重载 web server**，必须自己配 deploy-hook。
+#
+# ⚠️ 而 Ubuntu 26.04 apt 里的 certbot 是 4.0.0，**不支持 --ip-address**（需 >=5.4），
+#    所以我们是把 certbot 5.8 装在 /opt/certbot（venv）里 —— 发行版自带的
+#    `certbot.timer` 因此**没有**随包安装，必须自己写 unit + timer。
+#
+# ⚠️ 时机：certbot renew 自己判断"是否该续"（剩余不足 1/3 才动），
+#    所以一天跑两次是安全的、不会浪费 LE 的速率额度。对 6 天证书来说，
+#    一天两次 ⇒ 最多落后半天，留出充足余量。
+# ════════════════════════════════════════════════════════════════════════════
+[Unit]
+Description=Renew Let's Encrypt certificates (IP certificate, ~6-day lifetime)
+Documentation=https://letsencrypt.org/docs/using/
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# 用 venv 里的 certbot（apt 版本过旧，不支持 IP 证书）
+ExecStart=/opt/certbot/bin/certbot renew --quiet --no-random-sleep-on-renew
+# 续期成功后重载 nginx，让它加载新证书。
+# ⚠️ 这一步就是官方要求补上的 deploy-hook（插件不支持 IP 证书，不会自动装/重载）。
+# ⚠️ 只在**真的续了**之后才需要重载；--deploy-hook 的语义正是"仅当证书真的更新时执行"。
+#    这里额外加 --post-hook 会更粗暴（每次 renew 都 reload），所以用 deploy-hook。
+# ⚠️ 注意：deploy-hook 由证书的 renewal 配置驱动（见 /etc/letsencrypt/renewal/*.conf
+#    里的 renew_hook），所以这里不重复写命令，避免两处配置互相覆盖。
