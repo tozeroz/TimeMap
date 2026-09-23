@@ -45,3 +45,8 @@ desktop.ini
 # 临时/工作目录（代理或脚本留下的 scratch；避免被 git add -A 无意带进仓库）
 .tmp-*/
 *.tmp-*
+# 真机测试用的构建产物（不入库：8.5MB 二进制，且可由源码重建）
+# ⚠️ 需要安装包时：pnpm build && npx cap sync android && gradlew assembleDebug，
+#    或直接从服务器取：http://8.148.156.146/download/campus-demo-1.0.apk
+campus-demo-*.apk
+apk-download-qr.png
