@@ -731,7 +731,14 @@ export function buildServer(deps: ServerDeps) {
 
     try {
       const r = await db.pool.query<
-        PostRow & { like_count: string; comment_count: string; liked_by_me: boolean; images: unknown }
+        PostRow & {
+          like_count: string
+          comment_count: string
+          liked_by_me: boolean
+          images: unknown
+          /* ⭐ 审核 68 P0：audio 与 images **分开**（images 里不得出现 audio） */
+          audio: unknown
+        }
       >(
         `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at,
                 -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
@@ -756,12 +763,20 @@ export function buildServer(deps: ServerDeps) {
                 -- （迁移 006 的复合外键钉死了 scope），这里再显式过滤一次是防御性写法。
                 -- 只返回 id/尺寸，不返回 storage_key —— 客户端统一用 /api/media/:id 取图，
                 -- 不把存储路径暴露给前端（以后换对象存储也不用改客户端）。
+                -- ⭐⭐ 审核 68 P0（我引入的真实缺陷）：**按 mime 分流**，images 里不得出现 audio。
+                --    改前这里把所有 post_media 行都放进 images ⇒ 语音会被报成图片。
                 coalesce((
                   select json_agg(json_build_object('id', m.id, 'width', m.width, 'height', m.height) order by pm.position)
                     from post_media pm
                     join media m on m.id = pm.media_id
-                   where pm.post_id = p.id and m.scope = 'public'
-                ), '[]'::json) as images
+                   where pm.post_id = p.id and m.scope = 'public' and m.mime like 'image/%'
+                ), '[]'::json) as images,
+                coalesce((
+                  select json_agg(json_build_object('id', m.id, 'mime', m.mime, 'durationMs', m.duration_ms) order by pm.position)
+                    from post_media pm
+                    join media m on m.id = pm.media_id
+                   where pm.post_id = p.id and m.scope = 'public' and m.mime = 'audio/webm'
+                ), '[]'::json) as audio
            from posts p
            -- ⭐ WO#15：地点坐标来自 places（left join，缺地点时两列为 null）
            left join places pl on pl.id = p.place_id
@@ -790,6 +805,8 @@ export function buildServer(deps: ServerDeps) {
           likedByMe: row.liked_by_me,
           // M4：帖子图片（只给 id 与尺寸；客户端用 /api/media/:id 取图）
           images: row.images ?? [],
+          /* ⭐ 审核 68 P0：audio 独立返回（语音不会被报成图片） */
+          audio: row.audio ?? [],
         })),
       }
     } catch (err) {
@@ -953,17 +970,37 @@ export function buildServer(deps: ServerDeps) {
 
         const row = r.rows[0]!
         /*
-          响应里带回 images —— 与 `GET /api/posts/:id` **同一形状**
-          （{id,width,height} 数组，按 position 排序），这样客户端发布后
+          响应里带回媒体 —— 与 `GET /api/posts/:id` **同一形状**，这样客户端发布后
           不需要再发一次请求就能把媒体渲染出来。
+
+          ⭐⭐ 审核 68 的 P0（**我引入的真实缺陷**）：改前这里把 post_media 里**所有**行
+          一律报成 `images: [{id,width,height}]` ⇒ **一条语音帖会把 audio 也报成 image**
+          （width/height 为 null）。读模型必须**按 mime 分流**：
+            · `images` = `mime like 'image/%'` → `{id,width,height}`
+            · `audio`  = `mime = 'audio/webm'` → `{id,mime,durationMs}`
+          判据（审核 68 原文）："**audio still represented as audio** → **audio NOT in images**"。
+          ⚠️ 用 `mime` 而不是"靠 width/height 是否为空"来判 —— 后者是**推断**，
+             一旦将来有"无尺寸的图片"就会误判；mime 是**事实**。
         */
-        const imgRes = await db.pool.query<{ id: string; width: number | null; height: number | null }>(
-          `select m.id, m.width, m.height
+        const mediaRes = await db.pool.query<{
+          id: string
+          mime: string
+          width: number | null
+          height: number | null
+          duration_ms: number | null
+        }>(
+          `select m.id, m.mime, m.width, m.height, m.duration_ms
              from post_media pm join media m on m.id = pm.media_id
             where pm.post_id = $1 and m.scope = 'public'
             order by pm.position`,
           [id],
         )
+        const images = mediaRes.rows
+          .filter((m) => m.mime.startsWith('image/'))
+          .map((m) => ({ id: m.id, width: m.width, height: m.height }))
+        const audio = mediaRes.rows
+          .filter((m) => m.mime === 'audio/webm')
+          .map((m) => ({ id: m.id, mime: m.mime, durationMs: m.duration_ms }))
         reply.code(201)
         return {
           id: row.id,
@@ -972,7 +1009,9 @@ export function buildServer(deps: ServerDeps) {
           body: row.body,
           place: row.place,
           createdAt: row.created_at.toISOString(),
-          images: imgRes.rows,
+          /* ⭐ 审核 68 P0：按 mime 分流（images 里**不得**出现 audio） */
+          images,
+          audio,
         }
       } catch (e) {
         /* ⚠️ commit 之前失败才回滚；commit 之后失败说明帖已落库，不能再 rollback */
@@ -1113,14 +1152,30 @@ export function buildServer(deps: ServerDeps) {
       )
       const like = await likeStateFor(id, meId)
       // M4：详情也要带图片（与列表同口径：只取 public，只给 id 与尺寸）
-      const imgs = await db.pool.query<{ id: string; width: number | null; height: number | null }>(
-        `select m.id, m.width, m.height
+      /*
+        ⭐⭐ 审核 68 P0（我引入的真实缺陷）：按 mime 分流，**images 里不得出现 audio**。
+        改前这里把所有 post_media 行都塞进 images ⇒ 语音会被报成图片。
+      */
+      const imgs = await db.pool.query<{
+        id: string
+        mime: string
+        width: number | null
+        height: number | null
+        duration_ms: number | null
+      }>(
+        `select m.id, m.mime, m.width, m.height, m.duration_ms
            from post_media pm
            join media m on m.id = pm.media_id
           where pm.post_id = $1 and m.scope = 'public'
           order by pm.position`,
         [id],
       )
+      const images = imgs.rows
+        .filter((m) => m.mime.startsWith('image/'))
+        .map((m) => ({ id: m.id, width: m.width, height: m.height }))
+      const audio = imgs.rows
+        .filter((m) => m.mime === 'audio/webm')
+        .map((m) => ({ id: m.id, mime: m.mime, durationMs: m.duration_ms }))
       return {
         id: post.id,
         author: post.author_name,
@@ -1135,7 +1190,9 @@ export function buildServer(deps: ServerDeps) {
         commentCount: Number.parseInt(cr.rows[0]?.n ?? '0', 10),
         likeCount: like.likeCount,
         likedByMe: like.likedByMe,
-        images: imgs.rows,
+        /* ⭐ 审核 68 P0：audio 是**独立附件类型**，不出现在 images 里（见上方 imgs 查询的分流） */
+        audio,
+        images,
       }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
