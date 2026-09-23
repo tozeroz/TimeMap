@@ -1657,7 +1657,7 @@ posts  : 有 place_id；**4 条 post 关联了 place**
 - [x] ✅ **已按审核 67 降级**：F-002 = `NON-BLOCKING EXPERIENCE-EQUIVALENT VARIATION`；`ORIGINAL_EMOJI_CHARACTERS` = `VISUAL_DESIGN_BACKLOG`（"不要为了这 6 个字符再进入原版取证"）
 - [x] ✅ **按审核 67 结案**：F-005 保持 `NOT_EVALUATED`，**明确不考古**（原版该行为未知，非已确认 mismatch）
 - [x] ✅ **重复行** —— 同上（I1 第一刀已完成；I3 待"是否公开"决定）
-- [ ] 其他待裁定：WO10.9 / WO14.6
+- [x] ✅ 重复行 —— 见上方同条
 
 ### ⭐⭐ Round 319 续 2：Owner Scope Decision 已编制（含我新发现的**第 4 项**缺口）
 
@@ -1738,11 +1738,31 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       ⚠️ 如实记录：设备门禁初版静态检查因**我自己在注释里引用了旧文案**而误报 FAIL
          ⇒ 已改为"先剥注释再搜"（与「断言口径错」同源）
       ```
-- [ ] ⬅ **① 扫码实际扫码**（下一个）
+- [x] ✅ **① 完成（WO#22）**：扫码从「尚未实现」改为**真实取景 + 逐帧 QR 解码**（commit 64d6537）
+      复用 native/liveCamera.ts（getUserMedia，与发布页同一实现）+ 纯 JS 的 jsQR（新增依赖，
+      **不引入原生插件**）；每帧 drawImage→getImageData→jsQR；解到即停并**如实展示解到的内容**
+      （**不发明**"结果页" —— 原版扫码后的去向只读约束下不可观察）
+      门禁 gate-wo22-scanner-real.mjs **6/6 PASS**：真实摄像头已开（videoReady=4, 1080×1920）、
+      **帧计数 20→34 持续增长**（证明解码循环真在跑，不是"写了行 rAF"）、无 fake-success、
+      解码已接线、**扫码屏零上传**（隐私：画面只在内存）、状态如实互斥
+      ⚠️ 如实标注 SCANNER_DECODES_ACTUAL_QR: **NOT_EVALUATED**（需摄像头前有可扫的二维码；
+      MuMu 有前后摄像头但无可配置的虚拟图像摄像头）+ 给出三条可验证路径
+      ⚠️ SCANNER_TARGET_SCAN_FLOW / SCANNER_OTHER_SYMBOLOGIES: NOT_EVALUATED；
+      SCANNER_SCANNED_RESULT_UI: OUR_DESIGN_CHOICE
       现状：`ScannerScreen` 如实显示「扫码功能尚未实现」
       需先选技术路线：复用 `native/liveCamera.ts` + JS 解码器／Capacitor 条码插件（需检查是否已装）
       ⚠️ 原版**扫码后的目标页**在只读约束下不可观察 ⇒ 目标页形态 NOT_EVALUATED
-- [ ] ⬅ **③ App 自更新**
+- [x] ✅ **③ 完成（WO#23）**：从"如实说未接入"改为**真实的检查更新**（commit e84aa59）
+      迁移 014 + 表 app_release（**真实**发布清单：只种一行、版本取我们真实版本 1.0、
+      apk_url=NULL 表示未托管；**不种**任何编造的版本/体积/亮点）
+      + GET /api/app/release（公开只读）+ 客户端 getAppRelease()/compareVersions()
+      UpgradeDialog 改为互斥五态（checking/uptodate/available/not_configured/error）；
+      本机真实版本来自单一定义 app/src/version.ts，**与 android versionName 的一致性由门禁机械校验**
+      门禁 gate-wo23-update-check.mjs **7/7 PASS**（实测显示「已是最新版本 当前版本 v1.0」；
+      点「立即更新」**不跳走、不声称成功**）
+      ⚠️ ORIGINAL_UPDATE_FLOW: **NOT_EVALUATED**（原版「立即更新」真实去向未观察，
+      且不可去点 —— 可能触发真实下载 ⇒ BLOCKED_BY_POLICY）
+      ⚠️ UPDATE_DOWNLOAD_AND_INSTALL: 我们**没有**托管安装包 ⇒ 不声称"能下载安装"
       现状：`UpgradeDialog` 如实说明「更新流程未接入」
       ⚠️ 原版「立即更新」的去向**未观察**（点它可能触发真实下载 ⇒ BLOCKED_BY_POLICY）
       ⇒ 需在"不假装"的前提下做一条**真实**的更新检查/动作（例如自建版本清单接口）
@@ -1750,13 +1770,25 @@ posts  : 有 place_id；**4 条 post 关联了 place**
       能力：`ChatScreen` 已在用 `startRecording` / `MediaRecorder` / 真权限 / 真上传
       ⇒ 目标：接真实录音 + 真实时长 + 真实上传（或给出明确的能力边界）
       ⚠️ 原版该交互在基线里是 `known_unknowns` ⇒ 对齐目标形态记 NOT_EVALUATED／OUR_DESIGN_CHOICE
-- [ ] ⬅ **① 扫码实际扫码**
+- [x] ✅ 重复行 —— 该单已完成（WO#22 / WO#23），详细记录见上方
       现状：`ScannerScreen` 如实显示「扫码功能尚未实现」
       ⇒ 目标：接入真实扫码（需选技术路线：复用 liveCamera + JS 解码器／Capacitor 条码插件）
       ⚠️ 原版**扫码后的目标页**在只读约束下不可观察 ⇒ 目标页形态 NOT_EVALUATED
-- [ ] ⬅ **③ App 自更新**
+- [x] ✅ 重复行 —— 该单已完成（WO#22 / WO#23），详细记录见上方
       现状：`UpgradeDialog` 如实说明「更新流程未接入」
       ⚠️ 原版「立即更新」的去向**未观察**（点它可能触发真实下载 ⇒ BLOCKED_BY_POLICY）
       ⇒ 需在"不假装"的前提下做一条**真实**的更新检查/动作
 - [ ] ⬅ 每项做完都要：门禁 + 敏感度 + 提交审核 + 落盘（要求 4：每单闭环）
-- [ ] ⬅ ⚠️ 审核 67 口径：③④ 修完后**仍要**区分 `TRUTHFULNESS: PASS` 与 `FEATURE_PARITY`
+- [x] ✅ **已按审核 67 口径分别报**：WO#21/WO#22/WO#23 的提交里都分别列了
+      TRUTHFULNESS 与 FEATURE/PARITY 两组结论，并逐项标注哪些是 NOT_EVALUATED
+      （不因"不再假"就算等效）
+
+
+### ⭐⭐ Round 319 收尾：Owner 裁定的三项 in-scope 工作**全部完成**
+
+- [x] ✅ ① 扫码实际扫码（WO#22）／③ App 自更新（WO#23）／④ 发布页语音真实录音（WO#21，含发帖媒体附件）
+- [x] ✅ ② 认证「下一步」流程 = **APPROVED OUT-OF-SCOPE LIMITATION**（Owner 明确排除）
+- [ ] ⬅ 待做：把 ①②③④ 的完成**提交审核**（WO#22 / WO#23 尚未提交；WO#21 已提交）
+- [ ] ⬅ 待做：**全量回归**（含 3 个新门禁；正在跑）
+- [ ] ⬅ 待做：把本轮所有裁定/结论汇总到最终 audit，并请审核裁定 **M5 能否关账**
+- [ ] 已降级/待裁定：F-002（non-blocking）／WO10.9／WO14.6／X3.2／I3（若公开）
