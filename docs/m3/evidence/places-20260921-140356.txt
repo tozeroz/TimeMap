@@ -1,0 +1,45 @@
+﻿=== A. 取会话（手机号 + dev sink 取码）===
+PASS 已取得会话
+
+=== B. 地点详情接口（地点本体 + 经纬度 + 地址 + 动态数）===
+  响应: {"id":"cccccccc-0001-4001-8001-000000000001","name":"北京交通大学","address":"西直门外上园村3号","latitude":39.9519,"longitude":116.3373,"posts":[{"id":"8b5a1c2c-4e17-495b-9558-a5585c440759","author":"anmoss","authorId":"11111111-1111-4111-8111-1
+PASS 返回地点名
+PASS 返回地址
+PASS 返回经纬度（用于「距我N公里」）
+PASS 返回该地点的动态列表
+PASS 至少有 seed 的两条动态（id 计数 6）
+
+=== C. 边界：404 / 400 ===
+PASS 不存在的地点 → 404
+PASS 非法 id → 400
+
+=== D. 发帖带「已知地点名」→ place_id 必须落库（这是聚合的前提）===
+PASS 发帖 → 201
+PASS 库中 place_id == 匹配到的地点（聚合可用）
+
+=== E. 该帖必须出现在地点详情里（端到端聚合）===
+PASS 新帖出现在该地点的动态列表里
+
+=== F. 未知地点名 → place_id 保持 NULL（不伪造归属）===
+PASS 未知地点也能发帖（place 存文本）
+PASS 未知地点的 place_id 为 NULL（不伪造归属）
+PASS 未知地点的文本仍保留（不丢信息）
+
+=== F2. 同名歧义：存在两个同名地点时不得自动绑定 place_id（审核记录 13 的 closeout）===
+  造了两个同名地点：同名地点32496145
+PASS 确认库中存在 2 个同名候选
+PASS 同名地点也能发帖（不因此报错）
+PASS 同名歧义时 place_id 保持 NULL（没有随便挑一个）
+PASS 同名地点的文本仍保留
+PASS 该帖没有出现在任何一个同名地点的动态里
+ERROR:  invalid input syntax for type uuid: "97856a3b-d567-4578-9afa-81308c78a79f
+INSERT 0 1"
+LINE 1: delete from places where id in ('97856a3b-d567-4578-9afa-813...
+                                        ^
+PASS 临时同名地点已清理
+
+=== G. 清理 ===
+PASS 测试帖子已清理
+PASS 测试账号已清理
+
+PLACES_RESULT PASS

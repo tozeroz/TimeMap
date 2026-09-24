@@ -1,0 +1,64 @@
+{
+  "_README": "⚠️ 这份数据**不是生产数据**，已从 app/src/data/mock.ts 移出（M5 WO#16 层 A，审核 60 批准）。",
+  "_why_moved": [
+    "审核 60 对层 A 的原文要求：『CampusScreen 不再显示 mock school name / 8-school dataset / member counts』",
+    "以及『FeedList 与 CampusScreen 均不得用 mock school data』。",
+    "而按审核 58 的先例：**注释里写『不要用』挡不住以后另一处重新 import** ——",
+    "  · CommentsScreen 先例（同一数据 FeedDetail 已接真实、它仍读 mock）",
+    "  · BoardScreen 先例（WO#14 在 MeScreen 修掉后，另一屏仍在用 mock 自称身份）",
+    "⇒ 因此把这段历史**移出生产模块**，而不是只加注释。"
+  ],
+  "_provenance": {
+    "was_exported_from": "app/src/data/mock.ts 的 `export const campusInfo` 与 `export const schools`",
+    "removed_in": "Round 267（WO#16 层 A）",
+    "still_exported_from_mock": false,
+    "usage_after_removal": "无任何生产代码引用（已用全仓非注释行检索确认）"
+  },
+  "_fabrication_status": {
+    "campusInfo.members": "'12,486' —— **编造**。这正是 WO#11 从动态列表页判定为编造并移除的那个数字。",
+    "campusInfo.posts": "'38,920' —— **编造**（同上）。",
+    "schools[].members": "8 个学校的成员数（'12,486' / '38,021' / …）—— **全部无出处**。",
+    "schools[].region": "每行的地区（'北京市·海淀区' 等）—— 基线**未出现**该字段，**无出处**。",
+    "schools 的 8 个学校": [
+      "其中仅『北京交通大学』与我们的 demo 领域相关；但**这 8 条的集合本身没有出处**",
+      "（基线观察到的原版搜索结果是 上海视觉艺术学院/上海交通大学/北京交通大学/浙江师范大学，",
+      "  与这 8 条**并不相同** ⇒ 这 8 条是当初**凭印象拼的**，不是原版观察）"
+    ]
+  },
+  "_correct_replacement": {
+    "计数语义（审核 60）": [
+      "campus feed count = COUNT(posts WHERE school_campus_id = campus.id)",
+      "无法由权威归属计算时 ⇒ **unavailable / null**，**不是 0**、不由 place 推断、不伪造",
+      "⭐ place = 北京交通大学 只是地理 POI，**推不出** school_campus = 校本部"
+    ],
+    "实体种子（审核 60 批准）": {
+      "school": "北京交通大学",
+      "campuses": ["校本部", "威海校区", "东校区"],
+      "限定": [
+        "seed entity existence: SUPPORTED BY BASELINE（supplements/schools.json 观察到这三项并列）",
+        "current selected campus: DO NOT INFER",
+        "user campus membership: DO NOT INFER",
+        "post campus attribution: DO NOT INFER",
+        "campus post counts: 不得把原版的数字当作我们的实时计数"
+      ],
+      "seed_metadata_要求": "明确写 baseline-derived fixture，以免被误认为从生产系统同步而来"
+    }
+  },
+  "legacy_campus_info": {
+    "name": "北京交通大学",
+    "region": "北京市·海淀区",
+    "members": "12,486",
+    "posts": "38,920"
+  },
+  "legacy_schools": [
+    { "id": "s1", "name": "北京交通大学", "region": "北京市·海淀区", "members": "12,486" },
+    { "id": "s2", "name": "清华大学", "region": "北京市·海淀区", "members": "38,021" },
+    { "id": "s3", "name": "北京大学", "region": "北京市·海淀区", "members": "42,138" },
+    { "id": "s4", "name": "中国人民大学", "region": "北京市·海淀区", "members": "28,905" },
+    { "id": "s5", "name": "北京航空航天大学", "region": "北京市·海淀区", "members": "31,672" },
+    { "id": "s6", "name": "北京师范大学", "region": "北京市·海淀区", "members": "26,410" },
+    { "id": "s7", "name": "复旦大学", "region": "上海市·杨浦区", "members": "33,204" },
+    { "id": "s8", "name": "上海交通大学", "region": "上海市·闵行区", "members": "40,558" }
+  ],
+  "_consumer_note": "目前**没有任何生产代码**读取本文件；保留它只为『曾有这些（无出处的）假设』的溯源。若将来要用，请先按 Source validity 复核每条出处。"
+}

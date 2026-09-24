@@ -1,0 +1,55 @@
+{
+  "screen_id": "login-select",
+  "title": "登录（选择方式）",
+  "recovered_at": "2026-09-21T10:39:54+08:00",
+  "recovered_by": "M3 Slice 0A（登录语义观察）",
+  "method": "deep link campusx://login/select + adb screencap + uiautomator dump（含控件级结构）",
+
+  "activity": "com.kairuotu.account.login.activity.CampusLoginActivity",
+
+  "recovery_entry": [
+    "deep link campusx://login/select → CampusLoginActivity",
+    "未勾选协议直接点「登录 Campus」→ 弹出同意弹窗（用于取证协议门槛行为）"
+  ],
+
+  "supersedes": {
+    "file": "screens/login-select/baseline.json",
+    "field": "known_unknowns（协议门槛行为）",
+    "from": "「协议未勾选时按钮是否禁用」= 未知",
+    "to": "**不是禁用按钮**，而是弹出「请阅读并同意以下条款」+「同意并继续」（id/btn_agree）",
+    "why": "M0 已正确记录页面构成与导航，但未点过未勾选状态的按钮；本轮补齐该行为并解决该 unknown"
+  },
+
+  "observations": {
+    "interactions": [
+      "品牌区：Campus logo + 装饰元素（原版用图片资源实现，a11y 树里没有文字）",
+      "唯一登录入口：id/cl_phone_login（ViewGroup，clickable）[154,1636][926,1720]，内含 id/iv_phone（手机图标）+ id/tv_phone「登录 Campus」",
+      "协议区：id/cl_agreement + id/cb_agreement（CheckBox，clickable，[84,1776][126,1818]）+ id/tv_agreement"
+    ],
+    "navigation": [
+      "「登录 Campus」+ 已勾选协议 → 手机号登录页（CampusSnsLoginActivity）",
+      "「登录 Campus」+ **未**勾选协议 → 弹出同意弹窗，不跳转"
+    ],
+    "known_unknowns_resolved": {
+      "协议未勾选时按钮是否禁用": "**按钮可用**，但点击后弹出「请阅读并同意以下条款」与「同意并继续」按钮（id/btn_agree）"
+    },
+    "known_unknowns_still_open": [
+      "弹窗是否有除「同意并继续」之外的关闭方式（本轮未验证）"
+    ]
+  },
+
+  "agreement_dialog": {
+    "title": "请阅读并同意以下条款",
+    "body": "《用户协议》《隐私政策》《未成年人个人信息保护规则》",
+    "button": "同意并继续",
+    "button_id": "id/btn_agree",
+    "button_bounds": "[135,1748][945,1832]"
+  },
+
+  "evidence": [
+    "screens/login-select/recovered-m3.png",
+    "screens/login-select/recovered-m3-ui.xml",
+    "screens/login-select/recovered-m3-agreement-dialog.png",
+    "screens/login-select/recovered-m3-agreement-dialog-ui.xml"
+  ]
+}

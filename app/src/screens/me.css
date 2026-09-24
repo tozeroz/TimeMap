@@ -149,3 +149,81 @@
   font-weight: 500;
   white-space: nowrap;
 }
+
+/*
+  登录状态区（M3 Slice 0B）。
+  原版不登录也能浏览，所以这里只是个人页上的一个状态行 + 入口，不做成强制拦截。
+*/
+.me__auth {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 16px 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--c-surface-sunken);
+}
+
+.me__authWho {
+  font-size: 13px;
+  color: var(--c-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me__authBtn {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-divider);
+  background: transparent;
+  font-size: 13px;
+  color: var(--c-text-2);
+}
+
+.me__authBtn--primary {
+  border-color: transparent;
+  background: #111;
+  color: #fff;
+}
+
+/* M5 WO#13：MeScreen 里四个"目的地未知"的条目（审核记录 54 的处置）。
+   ⚠️ 它们**刻意不是 <button>**：原实现把「我的兴趣/我的标签/介绍一下自己～/我的学校」
+      全部 navigate('profile-edit')，等于假装"我的兴趣 = 改昵称页面"——没有证据支持。
+   条目本身保留（trident-me/baseline.json:38 逐字记了这五个文案与位置），
+   但目的地记为 NOT_EVALUATED / DEFERRED，并在界面上**如实标注**，而不是留一个通向错误页面的可点入口。 */
+.me__entry--deferred {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.me__deferredTag {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  color: var(--c-text-3);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+/* ===========================================================================
+   M5 WO#14：个人页的**权威自身身份**相关样式
+   =========================================================================== */
+
+/* 首字占位头像（users 表没有 avatar 列）。
+   ⚠️ 改前这里用 mock 生成的 SVG（`me.avatar` → data:image/svg+xml）——
+      与"编造的昵称"是同一类问题：看起来像真实资料，其实是我们画的。
+      按 WO#12/#13 的同一冻结改为首字占位，**不新增数据列**。 */
+.me__avatar--ph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--c-text-2);
+  background: var(--c-surface-sunken);
+  user-select: none;
+}

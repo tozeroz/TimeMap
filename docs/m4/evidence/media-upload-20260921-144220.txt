@@ -1,0 +1,50 @@
+﻿=== 0. 登录（真实手机号 + dev sink）===
+PASS 登录成功（id=c4a4366c…）
+
+=== A. 未登录上传 → 401 ===
+PASS 未登录 → 401
+
+=== B. 伪造 .jpg（内容是文本）→ 必须拒绝 ===
+PASS **文本伪装成 image/jpeg → 400**（按内容判类型，不信 Content-Type）
+PASS 响应明确标注 not_an_image（可诊断）
+
+=== C. 超限文件（6MB > 5MB）→ 必须拒绝 ===
+PASS 6MB 文件 → 413（受控拒绝）
+
+=== D. 缺 upload_request_id / 非法 purpose → 400 ===
+PASS 缺 upload_request_id → 400（不允许无幂等键上传）
+PASS 非法 purpose → 400（scope 由服务端决定）
+
+=== E. 合法 PNG 上传（public）→ 201 + 文件 + DB 行 ===
+PASS 合法 PNG → 201
+PASS purpose=post → scope=public（服务端映射）
+PASS 解出真实尺寸 40x30（与生成的一致）
+PASS storage_key 形态正确（2026/09/3711ecda-6629-4fee-8a17-8293f6c85f01.png）
+PASS 文件落在 public/ 命名空间下
+PASS private/ 下没有同名文件（命名空间分开）
+PASS DB 行正确（public|image/png|103|40x30|64）
+PASS **盘上文件 sha256 == DB 记录**（内容与登记一致）
+PASS 公共静态直出 Content-Type: image/png
+
+=== F. 幂等键：同一 uploadRequestId 重试 → 同一条 media 且**不新增文件** ===
+PASS 重试返回**同一条** media（id 一致）
+PASS 响应标记 idempotentReplay=true
+PASS **文件数只增加了 1**（重试没有新建文件：0 → 1）
+PASS DB 里该幂等键只有 1 行
+
+=== G. 路径穿越：客户端 filename 带 ../ 不影响存储路径 ===
+PASS 带 ../ 的 filename 上传仍然成功（服务端改名）
+PASS storage_key 不含 ..（服务端生成，客户端名字被完全忽略）
+PASS /tmp/pwned.png 不存在（没有穿越到 UPLOAD_ROOT 之外）
+PASS 文件仍在 uploads/public 下（2026/09/ae22e3e8-bdc1-47a4-878c-01f51b06054c.png）
+PASS uploads 下没有客户端 filename 的痕迹
+
+=== H. chat 用途 → private 命名空间 ===
+PASS purpose=chat → scope=private
+PASS 文件落在 private/ 命名空间下
+PASS **未挂到消息的 private 媒体 → 404**（没有被'上传即可读'这个错误授权放行）
+
+=== I. 清理 ===
+PASS 测试数据已清理
+
+MEDIA_UPLOAD_RESULT PASS

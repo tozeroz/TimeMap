@@ -1,4 +1,4 @@
-<#
+﻿<#
   从目标 APK 提取可在 demo 中直接复用的资源与文案。
   输出到 .mumu-capture/apk/extract/
     raw/      原始提取（strings.xml、colors.xml 等）

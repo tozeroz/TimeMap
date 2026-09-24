@@ -1,0 +1,50 @@
+{
+  "screen_id": "feed-daily",
+  "title": "今日打卡",
+  "target_route": "campusx://feed/daily",
+  "activity": "com.kairuotu.feed.list.DailyFeedListActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://feed/daily"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "not_reproducible",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "顶部返回 + 分享",
+    "上半：黄色品牌图（Campus）；下半灰白内容区（本机为空）"
+  ],
+  "navigation": [
+    "返回 → 上一页",
+    "分享 → 系统分享面板"
+  ],
+  "persistence": [
+    "无"
+  ],
+  "known_unknowns": [
+    "下半内容区在完赛/打卡数据存在时展示什么"
+  ]
+}

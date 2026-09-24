@@ -1,0 +1,47 @@
+{
+  "screen_id": "onboarding",
+  "title": "新手引导（昵称）",
+  "target_route": "campusx://login/onboarding",
+  "activity": "com.kairuotu.account.login.activity.CampusOnBoardingActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://login/onboarding"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_applicable",
+      "evidence": []
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "unknown",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "标题「告诉大家，怎么称呼你？」",
+    "昵称输入框 + 灰色「就这样」按钮 + 装饰元素"
+  ],
+  "navigation": [
+    "就这样 → 下一步引导"
+  ],
+  "persistence": [
+    "昵称应持久化（未验证）"
+  ],
+  "known_unknowns": [
+    "引导共有几步、每步内容"
+  ]
+}

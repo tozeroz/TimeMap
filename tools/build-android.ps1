@@ -1,4 +1,4 @@
-<#
+﻿<#
   一键构建并安装 demo APK 到 MuMu 模拟器。
   前置：web 已 build、cap sync 已执行。
 #>

@@ -1,0 +1,3 @@
+﻿=== 0. 造测试数据（绕过 HTTP，直接建 4 类 media 行）===
+FAIL 找不到 /srv/campus/dist/cleanup.mjs（先 pnpm build 并部署产物）
+CLEANUP_UNATTACHED_RESULT FAIL

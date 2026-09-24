@@ -1,0 +1,16 @@
+{
+  "_provenance": {
+    "source": "app/src/data/mock.ts（Round 319 之前）",
+    "extracted_at": "2026-09-23T01:16:00+08:00",
+    "extracted_by": "Round 319 手工移出（同 WO#16/#17/#18 的纪律）",
+    "reason": "它原本给一个**伪造的扫码屏**提供轮播提示文案。该屏已被改为如实呈现『扫码功能尚未实现』⇒ 本数据在生产代码中已无任何引用。",
+    "why_must_not_be_used": "⚠️ 它服务于一个**假 scanner**：伴随『5.2 秒后无条件识别成功』与『正在识别…』的假状态，同时违反两条已冻结原则 —— ①『操作失败绝不本地假成功』② 审核 66 对 scanner 的约束『不打开假 scanner／不假装扫码成功』。只可用于对照本轮的敏感度（突变把它接回去 ⇒ 门禁必须变红）。",
+    "original_ts_source": "export const scannerHints = ['扫描校园卡二维码', '扫描群邀请二维码', '扫描活动签到码']"
+  },
+  "scanHints": ["扫描校园卡二维码", "扫描群邀请二维码", "扫描活动签到码"],
+  "_context": {
+    "original_screen": "原版 com.kairuotu.campus 的扫码页；抽屉入口「扫一扫」已由 Round 318 只读观察确认存在",
+    "original_target_observed": false,
+    "note": "原版扫码后的**目标页/流程未观察** —— 打开相机会涉及相机用途与权限，且『扫码』可能触发业务写入，属只读约束下的高风险路径 ⇒ 记 NOT_EVALUATED，不冒越界风险。"
+  }
+}

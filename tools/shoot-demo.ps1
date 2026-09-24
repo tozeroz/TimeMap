@@ -1,4 +1,4 @@
-<#
+﻿<#
   用无头 Edge 逐路由截图，用于与原版 app 并排对比。
   前置：dev server 已在 127.0.0.1:5174 运行。
   输出：.mumu-capture/demo/<路由>.png

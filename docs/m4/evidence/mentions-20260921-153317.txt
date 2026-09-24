@@ -1,0 +1,30 @@
+﻿=== 0. 准备会话（U1+U2 是成员，U3 不是）===
+PASS 会话就绪（U1/U2 成员，U3 非成员）
+
+=== C1 发送 + mention 成员 → 201 且产生 mention 行 ===
+PASS 成员发送 + mention 成员 → 201
+PASS **产生了 mention 行**（message_mentions 1 行）
+
+=== C2 mention 非成员 → 400 且不写入 ===
+PASS **mention 非成员 → 400**
+PASS 错误码明确（mention_not_in_thread）
+PASS **消息没有写入**（1 → 1，事务回滚）
+PASS 没有留下针对非成员的 mention 行
+
+=== C3 mention 自己 → 400 且不写入 ===
+PASS **mention 自己 → 400**
+PASS 消息没有写入
+
+=== C4 非成员发送 → 404 ===
+PASS **非成员发送 → 404**
+
+=== C5 重复 mention 同一人 → 只 1 行 ===
+PASS 重复 mention 只产生 1 行（去重生效）
+
+=== C6 未登录发送 → 404 ===
+PASS 未登录发送 → 404
+
+=== 清理 ===
+PASS 测试数据已清理
+
+MENTIONS_RESULT PASS

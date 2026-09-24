@@ -1,0 +1,34 @@
+{
+  "_README": "⚠️ 这份数据**不是生产数据**，已从 app/src/data/mock.ts 移出（审核记录 58 的 closeout 要求）。",
+  "_why_moved": [
+    "审核 58 明确要求：历史信息可以保留，但**不要继续作为生产代码中可 import 的业务数据**。",
+    "原因在本项目已被反复验证：**注释里写『不要用』挡不住以后另一处重新 import** ——",
+    "  · `CommentsScreen` 就是先例（同一数据在 FeedDetailScreen 已接真实，它却仍在读 mock）",
+    "  · `BoardScreen` 的 mock 自称身份也是先例（WO#14 在 MeScreen 修掉后，另一屏仍在用）",
+    "⇒ 因此把这段历史**移出生产模块**，而不是只加注释。"
+  ],
+  "_provenance": {
+    "was_exported_from": "app/src/data/mock.ts 的 `export const mapMarkers: MapMarker[]`",
+    "removed_in": "Round 266（审核 58 closeout 第 1 项）",
+    "still_exported_from_mock": false
+  },
+  "_evidence_status": {
+    "ORIGINAL_MAP_PIN_PLACE_OBSERVED": "阳光操场 —— 见 docs/original-interaction-map.md:38（原版实测**红色图钉**）",
+    "其余 5 条": "**无出处**：只出现在本数组与 MapScreen 自身（自引用）；且 **6 条在 places 表里全部 0 行**",
+    "MOCK_PIN_PALETTE_SUPPORTED_BY_BASELINE": "NO（至少绿色无支撑）—— 依机械像素分析，见 docs/m5/WO15-VISUAL-EVIDENCE-mechanical-pixel-analysis.md"
+  },
+  "_coordinate_systems": {
+    "x_y": "SVG 像素空间（与 MapScreen 里 OfflineMap 的 viewBox 1400×2000 同一坐标系）",
+    "lat_lng": "真实经纬度（接入在线地图后用）",
+    "note": "两套坐标**并存**是这个数组的原始形态；生产侧的权威数据只有 lat/lng（来自 posts.place_id → places）"
+  },
+  "legacy_map_markers": [
+    { "id": "m1", "place": "阳光操场", "color": "#f5453b", "userId": "u1", "postId": "p1", "x": 430, "y": 1030, "lat": 39.9512, "lng": 116.3381 },
+    { "id": "m2", "place": "教育超市", "color": "#f2b800", "userId": "u11", "postId": "p7", "x": 560, "y": 1660, "lat": 39.9495, "lng": 116.3372 },
+    { "id": "m3", "place": "图书馆", "color": "#f5453b", "userId": "u5", "postId": "p8", "x": 980, "y": 640, "lat": 39.9521, "lng": 116.3412 },
+    { "id": "m4", "place": "逸夫教学楼", "color": "#2f9e44", "userId": "u2", "postId": "p2", "x": 900, "y": 1020, "lat": 39.9502, "lng": 116.3428 },
+    { "id": "m5", "place": "思源楼", "color": "#f2b800", "userId": "u4", "postId": "p4", "x": 1180, "y": 1120, "lat": 39.9491, "lng": 116.3439 },
+    { "id": "m6", "place": "学苑公寓", "color": "#2f9e44", "userId": "u7", "postId": "p6", "x": 340, "y": 1220, "lat": 39.9487, "lng": 116.3362 }
+  ],
+  "_consumer_note": "目前**没有任何生产代码**读取本文件；保留它只为『曾有这些观察/假设』的溯源。若将来要用，请先按 Source validity 复核每条出处。"
+}

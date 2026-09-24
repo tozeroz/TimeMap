@@ -1,0 +1,39 @@
+﻿=== A. 清理历次失败运行留下的 fixture ===
+  清理了 6 条非种子 media（含落盘文件）
+  剩余 media 行: 2
+  剩余 users: 3
+  盘上文件: 1
+
+=== B. 跑联合备份/恢复演练（带 timeout 兜底，避免再次挂死）===
+=== A. 联合备份（同一个 backup generation）===
+=== A0. 造演练 fixture（走真实上传接口）===
+  fixture 账号=13866433258，上传的 media: c6d49b95-ee58-430d-9ba9-f2414817608b 2c0b779b-5161-40c1-842f-fef3fbcdce52
+PASS 已通过真实接口造出演练 fixture
+PASS database.dump 生成（68450 字节）
+PASS uploads.tar.zst 生成（512 字节）
+PASS manifest.json 生成（记录两侧计数与 sha256）
+  media 行数=4  盘上文件=3
+
+=== B. DATABASE_RESTORE：从 dump 恢复到全新库 ===
+FAIL 恢复后计数不一致（users psql: error: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "campus_m4restore" does not exist/4, media psql: error: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "campus_m4restore" does not exist/4）
+DATABASE_RESTORE: FAIL
+FAIL 恢复后缺少判定函数（psql: error: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "campus_m4restore" does not exist）
+
+=== C. MEDIA_STORE_RESTORE：媒体归档恢复到新目录 ===
+PASS 恢复文件数 3 == 备份时 3
+MEDIA_STORE_RESTORE: PASS
+
+=== D. CROSS_REFERENCE_INTEGRITY：恢复后的 DB 行 → 恢复后的文件，**逐行**核对 ===
+FAIL **只核对到 0 条 media 行，演练失去意义**（等于没验；不允许空洞通过）
+PASS **逐行核对通过**：0 条 media 行全部在恢复的媒体存储里找到文件
+PASS 文件 sha256 与 DB 记录**逐条一致**（内容也一致，不只是文件存在）
+  ⚠ 反向核对发现 3 个 orphan 文件（当前库里可能存在未登记文件；由清扫脚本负责，不影响本次联合恢复判定）
+CROSS_REFERENCE_INTEGRITY: FAIL
+
+=== E. 清理 ===
+PASS fixture 已清理（含落盘文件）
+PASS 备份 generation 保留在 /srv/campus/backups/gen-20260921-145723（便于复查；不进 git）
+
+备份 generation: /srv/campus/backups/gen-20260921-145723
+M4_BACKUP_RESTORE: FAIL
+DRILL_EXIT 1

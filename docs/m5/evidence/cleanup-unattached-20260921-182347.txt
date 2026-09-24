@@ -1,0 +1,37 @@
+﻿=== 0. 造测试数据（绕过 HTTP，直接建 4 类 media 行）===
+PASS 4 类 media 行 + 1 条引用消息就绪（旧无引用 / 新无引用 / 旧有引用 / 旧无引用无文件）
+
+=== C1+C3+C4. dry-run：新图不进候选、孤儿列表不受影响、什么都不删 ===
+FAIL 旧的无引用 media 没被识别：{"mode":"dry-run","scanned":9,"referenced":9,"tooNew":0,"orphans":[],"totalBytes":0,"unattachedMaxAgeHours":24,"unattached":[{"id":"d285abd5-c771-42b1-8838-2268f5d5e9e0","rel":"private/2026/09/wo2-unattached-old-d285abd5c77142b188382268f5d5e9e0.png","bytes":10,"ageHours":72}],"unattachedTotalBytes":
+PASS 1 分钟前的无引用 media **不在候选里**（TTL 保护在途图片）
+PASS 被消息引用的 media 不在候选里（引用优先）
+PASS 盘上无文件的那条被单独报出（unattachedMissingFile=1），不混进候选
+PASS JSON 里 orphan 与 unattached 是**两个字段**（分开计数）
+PASS 文本输出里两类**分开报告**
+PASS **dry-run 后行在、文件在**（什么都没删）
+
+=== C2. 阈值放到 8760h（一年）→ 候选为空、什么都不删 ===
+PASS 阈值 8760h 时候选为空（阈值保护生效）
+
+=== C5. --apply：只删过期且无引用的，行与文件一起删 ===
+{"mode":"apply","scanned":9,"referenced":9,"tooNew":0,"orphans":[],"totalBytes":0,"unattachedMaxAgeHours":24,"unattached":[{"id":"d285abd5-c771-42b1-8838-2268f5d5e9e0","rel":"private/2026/09/wo2-unattached-old-d285abd5c77142b188382268f5d5e9e0.png","bytes":10,"ageHours":72}],"unattachedTotalBytes":10,"unattachedMissingFile":1}
+{"mode":"apply","removed":0,"removedBytes":0,"unattachedRowsDeleted":1,"unattachedFilesDeleted":1,"unattachedBytesDeleted":10}
+PASS 报告里 unattached 行删除数=1（**与孤儿数分开报**）
+PASS 报告里 unattached 文件删除数=1
+PASS 过期的无引用 media **行已删**
+PASS 文件**同时被删**（行与文件一起回收）
+PASS 1 分钟前的在途图片**行与文件都在**
+PASS **被消息引用的 media 行与文件都在**（引用优先于 TTL）
+PASS 引用关系完好（消息仍然指着那张图）
+PASS 有行无文件的那条**没被动**（不属于本工具的处置范围）
+
+=== C7. 再跑一次 --apply → 幂等，什么都不删 ===
+PASS 第二次 --apply：unattached 删除数=0（幂等）
+
+=== C8. 退出码：无 DATABASE_URL → 2（既有纪律，防止无目标库误删）===
+PASS 缺 DATABASE_URL → 退出码 2
+
+=== Z. 清理测试数据 ===
+PASS 测试数据已清理（DB 0 行、盘上 0 个文件）
+
+CLEANUP_UNATTACHED_RESULT FAIL

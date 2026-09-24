@@ -163,3 +163,189 @@
   color: var(--c-text-3);
   flex: 0 0 auto;
 }
+
+/* ===========================================================================
+   M3 Slice 1：详情页的状态、离线提示、嵌套回复的「回复 <目标>」与回复弹层
+   （结构依据：原版实测 —— 子回复嵌套在父评论内部、回复行带独立的 reply_target 字段）
+   =========================================================================== */
+
+.feed__state {
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--c-text-2);
+  font-size: 15px;
+}
+
+.feed__state-sub {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+.feed__retry {
+  margin-top: 16px;
+  padding: 8px 22px;
+  border-radius: var(--r-pill);
+  border: 0;
+  background: #111;
+  color: #fff;
+  font-size: 14px;
+}
+
+/*
+  离线提示：明确写出"这是最后一次成功获取的服务器数据"，
+  不能用 mock 冒充满血在线 —— 审核记录 07 的降级边界。
+*/
+.feed__offline {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--c-surface-sunken);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--c-text-2);
+}
+
+.feed__noComments {
+  padding: 24px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--c-text-3);
+}
+
+.feed__notice {
+  margin: 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--c-surface-sunken);
+  font-size: 13px;
+  color: var(--c-danger);
+}
+
+/* .cmt__reply 原先是 span，现在是有真实行为的按钮 */
+.cmt__reply {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: var(--c-text-3);
+  cursor: pointer;
+}
+
+/* 回复列表：嵌套在父评论内部（对齐原版的容器嵌套，不是平铺到顶层） */
+.cmt__replies {
+  margin-top: 10px;
+  padding-left: 6px;
+  border-left: 2px solid var(--c-divider);
+}
+
+/* 回复的头部一行：<作者> 回复 <目标> · <时间> */
+.cmt__replyMeta {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.cmt__replyLabel {
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+.cmt__replyTarget {
+  font-size: 12px;
+  color: conic-gradient(from 0deg, #2f6fe0, #2f6fe0);
+  color: #2f6fe0;
+}
+
+.cmt__replyTime {
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+/* 回复弹层：半屏卡片，标题「回复 @昵称」（原版实测是半屏弹层） */
+.feed__replyMask {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.feed__replySheet {
+  width: 100%;
+  box-sizing: border-box;
+  /* 底部安全区：优先用 Capacitor SystemBars 注入的可靠变量（旧版 WebView 的 env() 值不准） */
+  padding: 14px 16px calc(16px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0)));
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+}
+
+.feed__replyHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.feed__replyClose {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  color: var(--c-text-2);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.feed__replyTitle {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.feed__replyPost {
+  flex: 0 0 auto;
+  padding: 7px 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: #111;
+  color: #fff;
+  font-size: 14px;
+}
+
+.feed__replyPost:disabled {
+  opacity: 0.6;
+}
+
+.feed__replyInput {
+  width: 100%;
+  box-sizing: border-box;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--c-divider);
+  font-size: 15px;
+}
+
+/* M4：帖子详情页的图片区。
+   图片按 media 行记录的宽高占位，避免加载过程中布局跳动；
+   宽度铺满内容区，高度自适应（保持原始比例）。 */
+.feed__media {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feed__mediaImg {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+  background: var(--c-surface-sunken);
+}

@@ -1,0 +1,47 @@
+{
+  "screen_id": "upgrade-alert",
+  "title": "升级弹窗",
+  "target_route": "campusx://upgradeAlert",
+  "activity": "com.kairuotu.base.update.AppUpdateDialogActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://upgradeAlert"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_applicable",
+      "evidence": []
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "unknown",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "弹窗叠在校园广场上：标题 + 版本说明 +「取消」「立即更新」"
+  ],
+  "navigation": [
+    "取消 → 回到广场",
+    "立即更新 → 下载/商店"
+  ],
+  "persistence": [
+    "无"
+  ],
+  "known_unknowns": [
+    "强制更新（不可取消）时的形态"
+  ]
+}

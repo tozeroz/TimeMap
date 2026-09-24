@@ -111,3 +111,20 @@
   background: var(--c-primary);
   color: var(--c-primary-fg);
 }
+
+/* Round 319：升级弹窗的**如实**版本说明区（替代原编造的 版本号/体积/亮点） */
+.up__unavailable {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-text-1);
+  text-align: center;
+}
+
+.up__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--c-text-2);
+  text-align: center;
+}

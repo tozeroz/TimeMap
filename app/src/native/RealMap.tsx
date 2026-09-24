@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import type { MapMarker } from '../data/mock'
-import { posts } from '../data/mock'
+import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
 import type { MapHandle } from './mapApi'
 import { activeTileConfig, CAMPUS_CENTER } from './mapTiles'
@@ -64,11 +63,10 @@ export function RealMap({
 
     // 标记：照片卡片 + 图钉 + 地点名
     for (const m of markers) {
-      const post = posts.find((p) => p.id === m.postId)
-      const cover = post?.images[0]
+            const cover = m.coverUrl
       const body = cover
         ? `<img class="rm__img" src="${cover}" alt="" />`
-        : `<span class="rm__img rm__img--text">${(post?.text ?? '').slice(0, 10)}</span>`
+        : `<span class="rm__img rm__img--text">${(m.excerpt ?? '').slice(0, 10)}</span>`
       const html = `
         <div class="rm">
           <div class="rm__card">${body}<span class="rm__name">${m.place}</span></div>

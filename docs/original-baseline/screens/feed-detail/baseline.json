@@ -1,0 +1,47 @@
+{
+  "screen_id": "feed-detail",
+  "title": "动态详情",
+  "target_route": "campusx://feed/detail",
+  "activity": "com.kairuotu.feed.detail.FeedDetailActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://feed/detail（未带 id 参数）"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "normal": {
+      "status": "unknown",
+      "evidence": []
+    },
+    "error": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    }
+  },
+  "interactions": [
+    "左上返回 + 右上更多",
+    "中央：网络错误图标 + 「网络不给力，点击刷新试试」+ 刷新按钮"
+  ],
+  "navigation": [
+    "返回 → 上一页"
+  ],
+  "persistence": [
+    "无"
+  ],
+  "known_unknowns": [
+    "带合法 id 且已登录时的详情结构（图片/点赞/评论区）必须由 demo 依据设计还原，本机无法观察"
+  ]
+}

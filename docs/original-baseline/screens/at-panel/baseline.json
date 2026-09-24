@@ -1,0 +1,39 @@
+{
+  "screen_id": "at-panel",
+  "title": "@面板",
+  "target_route": "campusx://group/atPanel（实测回落到 trident）",
+  "activity": "（未落到目标 Activity）",
+  "entry": {
+    "preconditions": [
+      "需要群聊会话与成员"
+    ],
+    "steps": [
+      "尝试 deep link campusx://group/atPanel → 前台仍是 TridentActivity"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "normal": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "error": {
+      "status": "not_reproducible",
+      "evidence": []
+    }
+  },
+  "interactions": [],
+  "navigation": [],
+  "persistence": [],
+  "known_unknowns": [
+    "面板以抽屉还是弹层出现、成员列表排序、搜索框有无"
+  ],
+  "blocked_reason": "deep link 无法直达；需要群聊上下文"
+}

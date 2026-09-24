@@ -436,3 +436,45 @@
 .pub__send:disabled {
   opacity: 0.45;
 }
+
+/* ⭐ WO#21：语音模式（真实录音）+ 发布错误提示
+   ⚠️ 视觉样式属**非阻塞 backlog**（审核 67：图标/颜色/字号/间距不阻塞）；
+      这里只求"结构正确 + 可用 + 能表明真实状态"。 */
+.pub__wave span.is-lit {
+  background: var(--c-brand, #6b7cff);
+  opacity: 1;
+}
+
+.pub__voiceBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px auto 0;
+  padding: 10px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--c-brand, #6b7cff);
+  border: 0;
+  border-radius: 22px;
+}
+
+.pub__voiceClear {
+  display: block;
+  margin: 10px auto 0;
+  padding: 4px 10px;
+  font-size: 13px;
+  color: var(--c-text-2, #666);
+  background: none;
+  border: 0;
+}
+
+.pub__err {
+  margin: 8px 16px 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #c0392b;
+  background: rgba(192, 57, 43, 0.08);
+  border-radius: 8px;
+}

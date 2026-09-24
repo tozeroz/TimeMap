@@ -6,15 +6,50 @@
   height: var(--h-tabbar);
   /* 右侧留出悬浮按钮的位置，避免 FAB 压住「地图」tab */
   padding: 0 72px 0 8px;
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  /*
+   * 底部安全区（手势条）。
+   * ⚠️ 加 `--safe-area-inset-bottom` 优先：与顶部同源 —— Android 15+ 强制 edge-to-edge 后
+   *    tabbar 会伸到手势条下面；而 Capacitor 官方文档指出旧版 Android WebView(<140) 的
+   *    `env(safe-area-inset-*)` **值是错的**（Chromium issue 40699457），
+   *    所以要优先用 Capacitor 内置 SystemBars 注入的那个可靠变量。
+   * ⚠️ 在**不强制 edge-to-edge** 的系统（如模拟器的 Android 12）上该值本就是 0
+   *    ⇒ 对老系统等于没变，不会双重留白。
+   */
+  padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0));
   background: var(--c-surface);
   border-top: 1px solid var(--c-divider);
   flex: 0 0 auto;
 }
 
+/*
+  M5 WO#6：tab 项改为**竖排**（图标在上、文字在下）。
+
+  ## 依据（两条独立原版证据，审核记录 40 已批准）
+  ① dump 的 bounds（`docs/original-baseline/raw-dumps/board-observation-1.xml`）：
+       图标 android.widget.ImageView  y=[1746,1795]  （49×49 设备 px）
+       文字 TextView                 y=[1829,1868]  （39 设备 px 高）
+     → 两段 y 区间**完全不重叠**、图标整体在文字上方，且水平中心接近（160.5 vs 174.5）
+  ② 截图 trident-campus/normal.png 视觉读图：三个 tab **都是图标在上、文字在下**
+
+  改前我方实测（CDP getBoundingClientRect，CSS px）：
+       stackGap ≈ **-18 ~ -20**（负值 = 图标与文字垂直重叠 → 说明是并排）
+       alignDelta ≈ **28 ~ 30.6**
+  改后应满足（Gate 判定，单位**显式冻结为 CSS px**，见脚本文件头）：
+       stackGap >= 0  且  alignDelta <= 12
+
+  ⚠️ 本单**只改排布方向与对齐**，不改间距值（gap）、不改 padding、不改颜色/字号/字重 ——
+     审核记录 40 明确要求 "only change shared orientation/alignment; preserve existing
+     active/inactive visual rules"，且未激活态的字号/间距精调**无证据**（NOT_EVALUATED）。
+*/
 .tabbar__item {
   display: flex;
+  /* ★ 竖排：由 row 改为 column（图标在上、文字在下） */
+  flex-direction: column;
+  /* 交叉轴居中：竖排时它负责**水平居中**（Gate 的 alignDelta <= 12 靠这一条） */
   align-items: center;
+  /* 主轴居中：让图标+文字整体在 item 高度内垂直居中 */
+  justify-content: center;
+  /* 间距保持既有值 5px（本单不改间距；原版精确间距未取证，不凭感觉调） */
   gap: 5px;
   padding: 8px 10px;
   border-radius: var(--r-pill);

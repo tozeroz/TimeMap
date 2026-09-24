@@ -1,0 +1,345 @@
+#!/usr/bin/env bash
+# ⚠️ 状态：**WIP / 未通过**（2026-09-21 14:45）
+#
+# 已实现：联合备份（DB dump + uploads 归档 + manifest）、数据库恢复、媒体恢复、
+#         DB→文件逐行核对（含 sha256）、反向 orphan 核对、以及"核对不到 2 条就判失败"
+#         这条防空洞断言；A0 还会通过**真实上传接口**造两条 fixture，
+#         避免"没有可核对对象时空洞 PASS"（与清理脚本同一条原则）。
+#
+# 未解决：把脚本用 `base64 -d | bash` 执行时会在 fixture/核对段报 bash 语法错误
+#         （报错行号与本文件对不上，怀疑是该投递方式下的解析问题，而不是脚本逻辑问题）。
+#         下一步改用 `base64 -d > /tmp/x.sh && bash /tmp/x.sh` 的落盘再执行方式复现，
+#         或用 `bash -n` 在本机（WSL 可用时）先静态校验。
+#         在跑通之前**不接入 Gate**，也不声称 M4_BACKUP_RESTORE 已交付。
+# M4：DB + 媒体存储的**联合备份与联合恢复**演练
+#
+# 依据：审核记录 13 第 7 条 + 记录 15：
+#   "从 M4 开始，pg_dump restore PASS 只能继续代表数据库恢复，
+#    不能再单独代表完整业务数据恢复。"
+# 因此本脚本输出**四个独立 key**：
+#   DATABASE_RESTORE / MEDIA_STORE_RESTORE / CROSS_REFERENCE_INTEGRITY / M4_BACKUP_RESTORE
+#
+# 与 M2 的 DB-only 演练**分开记录**，不相互替代（M2 的 BACKUP_DRILL_RESULT 继续有效，
+# 但它不覆盖媒体）。
+FAILED=0
+ok()  { printf 'PASS %s\n' "$1"; }
+bad() { printf 'FAIL %s\n' "$1"; FAILED=1; }
+
+PSQL() { PGPASSWORD="$(cat /srv/campus/.db_password)" psql -h 127.0.0.1 -U campus -d campus -Atc "$1" 2>&1; }
+PSQLD() { PGPASSWORD="$(cat /srv/campus/.db_password)" psql -h 127.0.0.1 -U campus -d "$1" -Atc "$2" 2>&1; }
+
+UPLOADS=/srv/campus/uploads
+BACKUPS=/srv/campus/backups
+RESTORE_DB=campus_m4restore
+TS="$(date +%Y%m%d-%H%M%S)"
+GEN="$BACKUPS/gen-$TS"
+RESTORE_DIR="$(mktemp -d)"
+
+echo "=== A. 联合备份（同一个 backup generation）==="
+install -d -m 0700 "$GEN"
+
+# ---------------------------------------------------------------------------
+# A0. 先造**两条真实媒体**（一条 public、一条 private）作为演练对象。
+#
+# 为什么必须先造 fixture：如果库里 media 行是 0、盘上也没文件，
+# 下面的"逐行核对"会**空洞地通过** —— 那就是假阳性（看着绿、其实什么都没验）。
+# 与清理脚本同一条原则：**没有可核对的对象时，脚本必须拒绝给出 PASS**。
+# ---------------------------------------------------------------------------
+echo "=== A0. 造演练 fixture（走真实上传接口）==="
+FIXTURE_IDS=""
+if command -v python3 >/dev/null 2>&1; then
+  W="$(mktemp -d)"
+  python3 - "$W/f.png" <<'PY'
+import struct, sys, zlib
+w, h = 24, 16
+sig = b'\x89PNG\r\n\x1a\n'
+def chunk(t, d):
+    return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+ihdr = struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)
+raw = b''.join(b'\x00' + b'\x11\x22\x33\xff' * w for _ in range(h))
+open(sys.argv[1], 'wb').write(sig + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(raw, 9)) + chunk(b'IEND', b''))
+PY
+  # 用一个临时账号上传（真实接口，与生产同一条路径）
+  rm -f /run/campus/login-codes/*.json 2>/dev/null || true
+  FP="138$(printf '%08d' $((RANDOM*RANDOM%100000000)))"
+  FREQ="$(curl -s -X POST http://127.0.0.1/api/auth/request-code -H 'Content-Type: application/json' -d "{\"phone\":\"$FP\"}")"
+  FSF="$(printf '%s' "$FREQ" | sed -n 's/.*"sink":"\([^"]*\)".*/\1/p')"
+  FCODE="$(sed -n 's/.*"code": *"\([0-9]*\)".*/\1/p' "$FSF" 2>/dev/null)"
+  FTOK="$(curl -s -X POST http://127.0.0.1/api/auth/verify-code -H 'Content-Type: application/json' -d "{\"phone\":\"$FP\",\"code\":\"$FCODE\"}" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+  FID="$(PSQL "select id from users where phone_e164='+86$FP'")"
+  for purpose in post chat; do
+    R="$(curl -s -H "Authorization: Bearer $FTOK" -X POST http://127.0.0.1/api/media \
+      -F "file=@$W/f.png" -F "purpose=$purpose" -F "uploadRequestId=$(cat /proc/sys/kernel/random/uuid)")"
+    MID="$(printf '%s' "$R" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+    [ -n "$MID" ] && FIXTURE_IDS="$FIXTURE_IDS $MID"
+  done
+  rm -rf "$W"
+  echo "  fixture 账号=$FP，上传的 media:${FIXTURE_IDS:-（无）}"
+  [ -n "$FIXTURE_IDS" ] && ok "已通过真实接口造出演练 fixture" || bad "fixture 上传失败（演练将失去意义）"
+else
+  bad "缺少 python3，无法造 fixture"
+fi
+
+# 1) 数据库
+# **必须给 PGPASSWORD**：否则 pg_dump 会等待交互式密码输入 → 脚本永久挂住
+# （本轮真实踩到的坑：跑了 10 分钟超时。所有 psql/pg_dump/pg_restore 都要带凭据。）
+PGPASSWORD="$(cat /srv/campus/.db_password)" pg_dump -Fc -h 127.0.0.1 -U campus -d campus -f "$GEN/database.dump" 2>/dev/null
+[ -s "$GEN/database.dump" ] && ok "database.dump 生成（$(stat -c %s "$GEN/database.dump") 字节）" || bad "database.dump 失败"
+
+# 2) 媒体（只打包 public/ 与 private/，不含 .tmp 与临时文件）
+tar --zstd -cf "$GEN/uploads.tar.zst" -C "$UPLOADS" public private 2>/dev/null
+[ -s "$GEN/uploads.tar.zst" ] && ok "uploads.tar.zst 生成（$(stat -c %s "$GEN/uploads.tar.zst") 字节）" || bad "uploads.tar.zst 失败"
+
+# 3) manifest：把"这次备份里到底有什么"固定下来
+DB_MEDIA_ROWS="$(PSQL 'select count(*) from media')"
+DB_USERS="$(PSQL 'select count(*) from users')"
+DB_POSTS="$(PSQL 'select count(*) from posts')"
+FS_PUBLIC="$(find "$UPLOADS/public" -type f 2>/dev/null | wc -l)"
+FS_PRIVATE="$(find "$UPLOADS/private" -type f 2>/dev/null | wc -l)"
+cat > "$GEN/manifest.json" <<JSON
+{
+  "generation": "$TS",
+  "created_at": "$(date -Iseconds)",
+  "database": {
+    "dump": "database.dump",
+    "sha256": "$(sha256sum "$GEN/database.dump" | cut -d' ' -f1)",
+    "users": $DB_USERS,
+    "posts": $DB_POSTS,
+    "media_rows": $DB_MEDIA_ROWS
+  },
+  "media_store": {
+    "archive": "uploads.tar.zst",
+    "sha256": "$(sha256sum "$GEN/uploads.tar.zst" | cut -d' ' -f1)",
+    "public_files": $FS_PUBLIC,
+    "private_files": $FS_PRIVATE
+  },
+  "note": "DB 与 media store 属于同一个 generation；恢复时必须一起用，否则会产生悬空引用"
+}
+JSON
+[ -s "$GEN/manifest.json" ] && ok "manifest.json 生成（记录两侧计数与 sha256）" || bad "manifest.json 失败"
+
+# ---------------------------------------------------------------------------
+# A2. **备份前两侧一致性检查** —— PRE_BACKUP_CROSS_REFERENCE_INTEGRITY
+#
+# ⚠ **名字更正（审核记录 19）**：这段原本被我命名为 "backup consistency barrier"，
+#   但审核指出它证明的是"**备份开始前**两侧一致"（pre-backup consistency check），
+#   它**挡不住**这个时序：
+#     检查通过 → pg_dump 完成 → 用户上传新图（行+文件都成功）
+#              → uploads.tar 收进新文件，但 pg_dump 里没有这条行
+#   于是数据库与媒体归档"各自内部正确、但不属于同一逻辑时刻"。
+#   也就是说：**这是"快照干净"，不是"窗口冻结"** —— 两件不同的保证。
+#   我原来的命名**夸大了保证强度**，这正是本项目一直在防的那类问题
+#   （把弱证据当强证据），只是这次出在我自己的命名上。
+#
+# 真正的窗口冻结在 scripts/m4/backup-with-barrier.sh：
+#   备份侧取**会话级排他** advisory 锁、业务侧取**事务级共享**锁，
+#   使 dump 与 archive 落在同一个锁窗口内 —— 对应 key BACKUP_MUTATION_BARRIER。
+# 本段断言保留且有价值（它保证备份的**输入**是干净的），只是名字必须名副其实。
+#
+# 为什么"生成了 manifest"不算屏障：那只是**记录**了这次备份里有什么。
+# 屏障的含义是：**备份只有在两侧一致时才有效** ——
+# 若 DB 里有一行却没有文件（悬空引用），或盘上有文件却没有行（未登记文件），
+# 那么这份备份本身就是不一致的，恢复出来必然还是不一致。
+# 所以这里在**归档之前**先核对两侧，不一致就直接 FAIL，不让不一致的备份"成功"。
+#
+# 与 ② 的区别：② 校验的是**恢复之后**的产物；① 校验的是**备份当时**的输入。
+# 两者都要有 —— 否则"备份时就脏、恢复后碰巧一致"这种情况会漏过去。
+BARRIER_FAIL=0
+BARRIER_CHECKED=0
+
+# 正向：每条 media 行都必须有文件，且 sha256 一致
+PSQL \
+  "select scope || ' ' || storage_key || ' ' || sha256 from media" > /tmp/m4-barrier.txt 2>/dev/null
+while read -r sc key sha; do
+  [ -n "${sc:-}" ] || continue
+  BARRIER_CHECKED=$((BARRIER_CHECKED + 1))
+  f="$UPLOADS/$sc/$key"
+  if [ ! -f "$f" ]; then
+    BARRIER_FAIL=$((BARRIER_FAIL + 1))
+    [ "$BARRIER_FAIL" -le 3 ] && echo "    悬空引用：DB 有行但盘上无文件 → $sc/$key"
+  else
+    got="$(sha256sum "$f" | cut -d' ' -f1)"
+    [ "$got" = "$sha" ] || {
+      BARRIER_FAIL=$((BARRIER_FAIL + 1))
+      [ "$BARRIER_FAIL" -le 3 ] && echo "    内容不符：$sc/$key（DB ${sha:0:12}… 文件 ${got:0:12}…）"
+    }
+  fi
+done < /tmp/m4-barrier.txt
+rm -f /tmp/m4-barrier.txt
+
+# 反向：盘上每个文件都必须有 DB 行
+find "$UPLOADS/public" "$UPLOADS/private" -type f 2>/dev/null > /tmp/m4-barrier-files.txt
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  rel="${f#$UPLOADS/}"
+  sc="${rel%%/*}"; key="${rel#*/}"
+  n="$(PSQL "select count(*) from media where scope='$sc' and storage_key='$key'")"
+  if [ "$n" != "1" ]; then
+    BARRIER_FAIL=$((BARRIER_FAIL + 1))
+    [ "$BARRIER_FAIL" -le 3 ] && echo "    未登记文件：盘上有但 DB 无行 → $rel"
+  fi
+done < /tmp/m4-barrier-files.txt
+rm -f /tmp/m4-barrier-files.txt
+
+if [ "$BARRIER_FAIL" = "0" ]; then
+  ok "**备份一致性屏障通过**：两侧一致（$BARRIER_CHECKED 条 media 行 ↔ 盘上文件，无悬空引用、无未登记文件）"
+else
+  bad "**备份一致性屏障失败**：两侧不一致（$BARRIER_FAIL 处）—— 这份备份不可信，先修正数据再备份"
+  echo "      → 盘上有未登记文件时用 dist/cleanup.mjs 清理；DB 有悬空引用时说明上传流程被打断"
+fi
+echo "  media 行数=$DB_MEDIA_ROWS  盘上文件=$((FS_PUBLIC + FS_PRIVATE))"
+
+echo
+echo "=== B. DATABASE_RESTORE：从 dump 恢复到全新库 ==="
+sudo -u postgres psql -q -c "drop database if exists $RESTORE_DB" >/dev/null 2>&1
+sudo -u postgres psql -q -c "create database $RESTORE_DB owner campus" >/dev/null 2>&1
+PGPASSWORD="$(cat /srv/campus/.db_password)" pg_restore -h 127.0.0.1 -U campus -d "$RESTORE_DB" --no-owner --no-privileges "$GEN/database.dump" >/dev/null 2>&1
+R_USERS="$(PSQLD "$RESTORE_DB" 'select count(*) from users')"
+R_MEDIA="$(PSQLD "$RESTORE_DB" 'select count(*) from media')"
+# 供 ③ 恢复后授权验证使用的真实数据（取自**恢复库**，不是原始库）
+R_THREAD="$(PSQLD "$RESTORE_DB" "select id from message_threads limit 1")"
+R_MSG="$(PSQLD "$RESTORE_DB" "select id from messages where thread_id = '$R_THREAD' and deleted_at is null limit 1")"
+R_MEMBER="$(PSQLD "$RESTORE_DB" "select user_id from thread_members where thread_id = '$R_THREAD' limit 1")"
+R_OUTSIDER="$(PSQLD "$RESTORE_DB" "select id from users where id not in (select user_id from thread_members where thread_id = '$R_THREAD') limit 1")"
+if [ "$R_USERS" = "$DB_USERS" ] && [ "$R_MEDIA" = "$DB_MEDIA_ROWS" ]; then
+  ok "users $R_USERS==$DB_USERS 且 media $R_MEDIA==$DB_MEDIA_ROWS（逐项计数一致）"
+  echo "DATABASE_RESTORE: PASS"
+else
+  bad "恢复后计数不一致（users $R_USERS/$DB_USERS, media $R_MEDIA/$DB_MEDIA_ROWS）"
+  echo "DATABASE_RESTORE: FAIL"
+fi
+# 关键函数也要随 schema 恢复（否则可见性判定会缺失）
+FN="$(PSQLD "$RESTORE_DB" "select count(*) from pg_proc where proname in ('can_read_message','can_read_media')")"
+[ "$FN" = "2" ] && ok "可见性判定函数已随 schema 恢复" || bad "恢复后缺少判定函数（$FN）"
+
+# ③ restore 后**私有权限**必须仍然成立（M4 CLOSEOUT ③，审核记录 18 点名）
+#
+# 为什么单看"函数存在"不够：**恢复了 schema 不等于恢复了安全语义**。
+# 若函数体在恢复过程中丢失/变化（例如 dump 里没带上函数体、或恢复顺序导致函数被覆盖），
+# "函数存在"这条断言照样通过，但授权实际已经失效 —— 那是最危险的静默失败。
+# 所以这里用**恢复库里的真实数据**验证授权行为本身：
+#   · 会话成员 → can_read_message = true
+#   · **非成员** → false
+#   · 撤回该消息后 → 成员也变成 false
+if [ -n "$R_THREAD" ] && [ -n "$R_MSG" ]; then
+  C_MEM="$(PSQLD "$RESTORE_DB" "select can_read_message('$R_MEMBER','$R_MSG')")"
+  C_OUT="$(PSQLD "$RESTORE_DB" "select can_read_message('$R_OUTSIDER','$R_MSG')")"
+  [ "$C_MEM" = "t" ] && ok "恢复后：会话成员仍可读该消息（授权语义随数据一起恢复）" \
+                     || bad "恢复后成员竟然读不到（授权语义丢了）：$C_MEM"
+  [ "$C_OUT" = "f" ] && ok "恢复后：**非成员仍不可读**（授权没有被恢复过程放宽）" \
+                     || bad "恢复后非成员竟可读（授权被放宽）：$C_OUT"
+  PSQLD "$RESTORE_DB" "update messages set deleted_at = now() where id = '$R_MSG'" >/dev/null
+  C_REV="$(PSQLD "$RESTORE_DB" "select can_read_message('$R_MEMBER','$R_MSG')")"
+  [ "$C_REV" = "f" ] && ok "恢复后：撤回消息后成员也读不到（撤回语义仍生效）" \
+                     || bad "恢复后撤回不生效：$C_REV"
+else
+  bad "恢复库里没有可用于授权验证的会话/消息数据（无法验证恢复后的私有权限）"
+fi
+
+echo
+echo "=== C. MEDIA_STORE_RESTORE：媒体归档恢复到新目录 ==="
+tar --zstd -xf "$GEN/uploads.tar.zst" -C "$RESTORE_DIR" 2>/dev/null
+R_FILES="$(find "$RESTORE_DIR" -type f 2>/dev/null | wc -l)"
+if [ "$R_FILES" = "$((FS_PUBLIC + FS_PRIVATE))" ]; then
+  ok "恢复文件数 $R_FILES == 备份时 $((FS_PUBLIC + FS_PRIVATE))"
+  echo "MEDIA_STORE_RESTORE: PASS"
+else
+  bad "恢复文件数不符：$R_FILES vs $((FS_PUBLIC + FS_PRIVATE))"
+  echo "MEDIA_STORE_RESTORE: FAIL"
+fi
+
+echo
+echo "=== D. CROSS_REFERENCE_INTEGRITY：恢复后的 DB 行 → 恢复后的文件，**逐行**核对 ==="
+# 这是本脚本最重要的断言：不是抽样，而是"每一条 media 行都必须能在恢复的媒体存储里找到文件"
+MISSING=0; CHECKED=0; SHA_MISMATCH=0
+# 用 concat_ws 取字段、结果先落临时文件再逐行读：
+# 避免 SQL 的 || 与 shell 在嵌套引用里产生解析歧义（本轮真实踩到的语法错误）。
+MEDIA_LIST="$(mktemp)"
+PSQLD "$RESTORE_DB" "select concat_ws('~', id, scope, storage_key, sha256) from media order by id" > "$MEDIA_LIST" 2>&1
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  mid="$(printf '%s' "$line" | cut -d'~' -f1)"
+  scope="$(printf '%s' "$line" | cut -d'~' -f2)"
+  key="$(printf '%s' "$line" | cut -d'~' -f3)"
+  dbsha="$(printf '%s' "$line" | cut -d'~' -f4)"
+  # 跳过 psql 报错行（不是 uuid 形状的）
+  case "$mid" in *-*-*-*-*) ;; *) continue ;; esac
+  CHECKED=$((CHECKED + 1))
+  F="$RESTORE_DIR/$scope/$key"
+  if [ ! -f "$F" ]; then
+    MISSING=$((MISSING + 1))
+    [ "$MISSING" -le 3 ] && echo "    缺文件: media=$mid → $scope/$key"
+  else
+    got="$(sha256sum "$F" | cut -d' ' -f1)"
+    [ "$got" = "$dbsha" ] || SHA_MISMATCH=$((SHA_MISMATCH + 1))
+  fi
+done < "$MEDIA_LIST"
+rm -f "$MEDIA_LIST"
+
+if [ "$CHECKED" -lt 2 ]; then
+  bad "**只核对到 $CHECKED 条 media 行，演练失去意义**（等于没验；不允许空洞通过）"
+fi
+if [ "$MISSING" = "0" ]; then
+  ok "**逐行核对通过**：$CHECKED 条 media 行全部在恢复的媒体存储里找到文件"
+else
+  bad "$CHECKED 条里有 $MISSING 条**找不到文件**（悬空引用）"
+fi
+if [ "$SHA_MISMATCH" = "0" ]; then
+  ok "文件 sha256 与 DB 记录**逐条一致**（内容也一致，不只是文件存在）"
+else
+  bad "$SHA_MISMATCH 条文件内容与 DB 记录不符"
+fi
+# 反向：恢复的媒体存储里有没有 DB 里查不到的文件（orphan）
+#
+# **反向也必须参与判定**（M4 CLOSEOUT ②，审核记录 18 点名）。
+# 旧版这里只是 echo 一句"⚠ ... 不影响本次联合恢复判定" —— 那不是断言，是提示。
+# 为什么反向必须 FAIL：恢复出来的媒体存储里若存在 DB 里查不到的文件，
+# 说明备份/恢复的**两侧不一致**（例如备份时把未登记的文件一起打包了），
+# 这种不一致在下一次恢复时会把问题带过去。
+# 注意：这会让"当前库里本来就有 orphan"的情况直接失败 —— 而这正是应该的：
+# 先用清扫工具把库清干净再跑演练，否则演练在掩盖问题（CROSS_REFERENCE 的意义就在这里）。
+ORPHAN=0
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  rel="${f#$RESTORE_DIR/}"
+  scope="${rel%%/*}"; key="${rel#*/}"
+  n="$(PSQLD "$RESTORE_DB" "select count(*) from media where scope='$scope' and storage_key='$key'")"
+  [ "$n" = "1" ] || ORPHAN=$((ORPHAN + 1))
+done < <(find "$RESTORE_DIR" -type f 2>/dev/null)
+if [ "$ORPHAN" = "0" ]; then
+  ok "反向核对（文件 → DB 行）：恢复的媒体存储里没有 DB 查不到的文件"
+else
+  bad "反向核对失败：恢复的媒体存储里有 $ORPHAN 个文件在 DB 里查不到（两侧不一致）"
+  echo "      → 先用 dist/cleanup.mjs 把库清干净再跑演练；不要用'提示'掩盖不一致"
+fi
+
+if [ "$FAILED" -eq 0 ]; then
+  echo "CROSS_REFERENCE_INTEGRITY: PASS"
+else
+  echo "CROSS_REFERENCE_INTEGRITY: FAIL"
+fi
+
+echo
+echo "=== E. 清理 ==="
+# 清掉 A0 造的 fixture（连落盘文件一起；否则会留下 orphan）
+for mid in $FIXTURE_IDS; do
+  [ -n "$mid" ] || continue
+  REL="$(PSQL "select scope || '/' || storage_key from media where id='$mid'")"
+  [ -n "$REL" ] && [ "$REL" != "|" ] && rm -f "$UPLOADS/$REL"
+  PSQL "delete from media where id='$mid'" >/dev/null
+done
+if [ -n "$FIXTURE_IDS" ]; then
+  PSQL "delete from sessions where user_id='$FID'" >/dev/null
+  PSQL "delete from login_challenges where phone_e164='+86$FP'" >/dev/null
+  PSQL "delete from users where id='$FID'" >/dev/null
+  LEFT_FIX="$(PSQL "select count(*) from media where owner_user_id='$FID'")"
+  [ "$LEFT_FIX" = "0" ] && ok "fixture 已清理（含落盘文件）" || bad "fixture 仍有 $LEFT_FIX 条残留"
+fi
+sudo -u postgres psql -q -c "drop database if exists $RESTORE_DB" >/dev/null 2>&1
+rm -rf "$RESTORE_DIR"
+[ -d "$GEN" ] && ok "备份 generation 保留在 $GEN（便于复查；不进 git）" || bad "备份目录消失了"
+
+echo
+echo "备份 generation: $GEN"
+if [ "$FAILED" -eq 0 ]; then echo "M4_BACKUP_RESTORE: PASS"; else echo "M4_BACKUP_RESTORE: FAIL"; fi
+exit "$FAILED"

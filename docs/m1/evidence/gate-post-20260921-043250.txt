@@ -1,0 +1,92 @@
+﻿M1 Gate  阶段=post  时间=2026-09-21 04:32:50
+仓库=G:\demo map
+
+=== 0) M0 regression（重启后第二阶段） ===
+  M0_GATE_VERSION=1
+  M0_GATE_STAGE=M1
+  
+  PASS GIT current branch == fullstack (=fullstack)
+  PASS GIT base-commit recorded
+  PASS GIT recorded M0 base commit is ancestor of HEAD
+  FAIL GIT git status --porcelain 仅允许证据产物
+       dirty:  M scripts/m0/verify-m0-server.sh
+  PASS GIT PLAN.md exists
+  PASS GIT docs/review-log contains >= 1 review
+  PASS GIT private key is NOT tracked by git
+  PASS GIT private key is NOT present in git history
+  NOTE GIT M0-diff-allowlist / SCOPE 3 条为 M0 阶段专用断言（要求前端与后端源码不得改动），
+  NOTE M1 阶段必然不成立，改由 scripts/m1/verify-m1.ps1 的 SCOPE 组按 M1 允许清单正面约束。
+  PASS ORIGINAL_BASELINE manifest.json exists
+  PASS ORIGINAL_BASELINE environment.json exists
+  PASS ORIGINAL_BASELINE SHA256SUMS exists
+  PASS ORIGINAL_BASELINE manifest expected_screens == 22 (=22)
+  PASS ORIGINAL_BASELINE completed_screens == 22 (=22)
+  PASS ORIGINAL_BASELINE every screen has required schema fields
+  PASS ORIGINAL_BASELINE every state has explicit status enum
+  PASS ORIGINAL_BASELINE every referenced evidence file exists
+  PASS ORIGINAL_BASELINE every screen has normal-state evidence
+  PASS ORIGINAL_BASELINE every evidence file has matching SHA256
+  
+  PASS REBOOT boot_id_after != boot_id_before
+  PASS REBOOT nginx active after reboot (0s)
+  PASS REBOOT postgresql active after reboot (29s)
+  PASS REBOOT campus-backend active after reboot（开机自启生效，0s）
+  PASS REBOOT /health works after reboot (={"status":"ok","service":"campus-gateway","stage":"M0"})
+  PASS REBOOT PostgreSQL still loopback-only after reboot
+  
+  PASS EXTERNAL external /health == HTTP 200 (check-host 3/3 nodes) (=3)
+  
+  M0_GATE_RESULT FAIL
+FAIL 重启后 M0 invariants FAIL
+
+=== 5) [SYSTEMD] 重启后后端自恢复 + 垂直切片仍可用 ===
+  标记: M1-E2E-1789936442
+  === A0. [MIGRATION] 全新数据库从零建表 + 幂等 ===
+  PASS 临时库 campus_m1test 创建成功
+  PASS 空库启动后 readiness=ready（schema 已建）
+  PASS posts 表 5 个字段（id/author_name/body/place/created_at）
+  PASS created_at 索引存在
+  PASS schema_migrations 记录了 001_init
+  PASS 重复执行迁移幂等（applied_at 未变）
+  PASS 二次启动未重复应用
+  PASS schema_migrations 恰有 1 个版本
+  PASS 临时库已清理
+  === A. [API] 经 Nginx 写一条 ===
+  PASS POST /api/posts 返回 id
+  PASS POST 返回 createdAt
+  === B. [VERTICAL_SLICE] 经 Nginx 读回 ===
+  PASS GET /api/posts 能读到刚写的帖子
+  PASS place 字段一致
+  === C. 直接查 PostgreSQL 确认真实落库 ===
+  PASS PG 中确有该行（不是内存缓存）
+  === D. [API] 校验：空 body 与超长 body ===
+  PASS 空 body → 400
+  PASS 超长 body → 400
+  === E. 重启 backend 后数据仍在 ===
+  PASS 重启后仍能读到（已持久化）
+  === F. [API] readiness 语义：停掉 PG 必须 503 ===
+  PASS PG 不可用时 /api/ready 返回 503
+  PASS liveness 不受 PG 影响（仍 200）
+  PASS PG 恢复后 /api/ready 自动回到 200
+  === G. [SYSTEMD] enabled + active ===
+  PASS campus-backend 已 enable（开机自启）
+  PASS campus-backend 正在运行
+  === H. [NGINX] 语义隔离 ===
+  PASS /health 由 Nginx 直接返回（gateway 语义）
+  PASS /health 未混入后端语义
+  PASS /api/health 来自 Fastify（api 语义）
+  === I. [CORS] APK WebView 来源必须放行，非白名单来源必须不放行 ===
+  PASS 预检 OPTIONS → 204
+  PASS 白名单来源回显 allow-origin
+  PASS 非白名单来源没有 allow-origin
+  === J. 端口暴露面 ===
+  PASS 3001 仅 127.0.0.1 监听
+  PASS 5432 未对外监听
+  === K. [RESOURCE_after_M1] 真实打 /api/posts 采样 ===
+  PASS 压测期间没有 OOM kill
+  PASS 压测后 readiness 仍为 200
+  PASS 压力后 MemAvailable 仍有 208MB（>50MB）
+  BACKEND_RESULT PASS
+PASS 重启后端到端断言 PASS
+
+M1_GATE_RESULT FAIL

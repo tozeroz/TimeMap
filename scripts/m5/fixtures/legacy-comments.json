@@ -1,0 +1,10 @@
+{
+  "_provenance": {
+    "source": "app/src/data/mock.ts（WO#17 之前）",
+    "extracted_at": "2026-09-22T13:24:23.492Z",
+    "extracted_by": "scripts/m5/extract-legacy-comments.mjs",
+    "reason": "WO#17（审核 62 的 A1）要求\"不再保留一真一假的双数据源\"。这份 mock 评论数据在 WO#17 之后**已无任何生产引用**，但它对应的正是原版 CommentDetailActivity 的评论内容。",
+    "why_must_not_be_used": "⚠️ 它**不是**权威数据：内容与作者均为编造，且与 FeedDetailScreen 使用的真实 /api/posts/:id/comments 会形成\"同一实体两种内容\"。只可用于对照 WO#17 的敏感度（突变把它接回去 ⇒ 门禁必须变红）。",
+    "original_ts_source": "export const comments: Comment[] = [\n  {\n    id: 'c1',\n    author: users.u6,\n    text: '这个我也有！养了两周真的长出来了',\n    time: '2 分钟前',\n    likes: 12,\n    replies: [\n      { id: 'c1r1', author: users.u1, text: '真的假的，我要去浇水了', time: '1 分钟前', likes: 3 },\n    ],\n  },\n  {\n    id: 'c2',\n    author: users.u8,\n    text: '同款娃，不过我的已经被舍友养死了',\n    time: '10 分钟前',\n    likes: 28,\n  },\n  {\n    id: 'c3',\n    author: users.u9,\n    text: '在哪里买的呀，求链接',\n    time: '18 分钟前',\n    likes: 6,\n  },\n  {\n    id: 'c4',\n    author: users.u10,\n    text: '好可爱，草长出来记得更新',\n    time: '25 分钟前',\n    likes: 4,\n  },\n]\n"
+  }
+}

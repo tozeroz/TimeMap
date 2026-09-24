@@ -1,0 +1,337 @@
+{
+  "gate_version": 1,
+  "expected_screen_count": 22,
+  "screens": [
+    {
+      "id": "trident-campus",
+      "title": "校园广场（主容器默认 tab）",
+      "target": "campusx://trident",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "loading": "not_reproducible",
+        "empty": "not_reproducible",
+        "error": "not_applicable"
+      }
+    },
+    {
+      "id": "trident-me",
+      "title": "个人主页（底部 tab 1）",
+      "target": "bottom-tab:135,1810（无 deep link）",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "loading": "not_reproducible",
+        "empty": "not_reproducible",
+        "error": "not_applicable"
+      }
+    },
+    {
+      "id": "trident-map",
+      "title": "地图页（底部 tab 3）",
+      "target": "bottom-tab:675,1810（deep link campusx://map 在 singleTask 下不生效）",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "loading": "not_reproducible",
+        "empty": "not_reproducible",
+        "error": "not_applicable"
+      }
+    },
+    {
+      "id": "feed-list",
+      "title": "校园圈",
+      "target": "campusx://feed/list",
+      "has_evidence": true,
+      "states": {
+        "error": "observed",
+        "normal": "not_reproducible",
+        "loading": "not_reproducible",
+        "empty": "not_reproducible"
+      }
+    },
+    {
+      "id": "feed-daily",
+      "title": "今日打卡",
+      "target": "campusx://feed/daily",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "empty": "observed",
+        "error": "not_reproducible",
+        "loading": "not_reproducible"
+      }
+    },
+    {
+      "id": "feed-detail",
+      "title": "动态详情",
+      "target": "campusx://feed/detail",
+      "has_evidence": true,
+      "states": {
+        "error": "observed",
+        "normal": "unknown",
+        "loading": "not_reproducible",
+        "empty": "not_reproducible"
+      }
+    },
+    {
+      "id": "comment-detail",
+      "title": "评论详情",
+      "target": "campusx://feed/comment/detail",
+      "has_evidence": true,
+      "states": {
+        "normal": "unknown",
+        "empty": "observed",
+        "error": "not_reproducible",
+        "loading": "not_reproducible"
+      },
+      "supplements": [
+        "supplements/comment-detail.json"
+      ],
+      "recovered_at": "2026-09-21T11:35:36+08:00"
+    },
+    {
+      "id": "message-board",
+      "title": "留言板",
+      "target": "campusx://messageBoard",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "empty": "unknown",
+        "loading": "not_reproducible",
+        "error": "not_reproducible"
+      },
+      "supplements": [
+        "supplements/message-board.json"
+      ]
+    },
+    {
+      "id": "poi-search",
+      "title": "地点搜索 / 选点",
+      "target": "campusx://poi/search",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "empty": "not_reproducible",
+        "loading": "not_reproducible",
+        "error": "not_reproducible"
+      }
+    },
+    {
+      "id": "poi-detail",
+      "title": "地点详情",
+      "target": "com.kairuotu.feed.poi.detail.PoiDetailActivity（真实入口：地图图钉照片 → 动态详情 → 点地点区）",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "loading": "not_reproducible",
+        "empty": "not_reproducible",
+        "error": "not_reproducible"
+      },
+      "supplements": [
+        "supplements/poi-detail.json"
+      ],
+      "recovered_at": "2026-09-21T10:21:11+08:00"
+    },
+    {
+      "id": "publish",
+      "title": "发布（相机）",
+      "target": "campusx://publish_post",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "error": "unknown",
+        "loading": "not_reproducible",
+        "empty": "not_applicable"
+      }
+    },
+    {
+      "id": "message",
+      "title": "聊天列表",
+      "target": "campusx://message",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "empty": "unknown",
+        "loading": "not_reproducible",
+        "error": "not_reproducible"
+      }
+    },
+    {
+      "id": "chat",
+      "title": "单聊",
+      "target": "campusx://chat",
+      "has_evidence": true,
+      "states": {
+        "empty": "observed",
+        "normal": "unknown",
+        "loading": "not_reproducible",
+        "error": "not_reproducible"
+      }
+    },
+    {
+      "id": "group",
+      "title": "群聊",
+      "target": "campusx://group",
+      "has_evidence": true,
+      "states": {
+        "empty": "observed",
+        "normal": "unknown",
+        "loading": "not_reproducible",
+        "error": "not_reproducible"
+      }
+    },
+    {
+      "id": "announce",
+      "title": "群公告",
+      "target": "campusx://announce",
+      "has_evidence": true,
+      "states": {
+        "empty": "observed",
+        "normal": "unknown",
+        "loading": "not_reproducible",
+        "error": "not_reproducible"
+      }
+    },
+    {
+      "id": "scanner",
+      "title": "扫码",
+      "target": "campusx://scanner",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "error": "unknown",
+        "loading": "not_reproducible",
+        "empty": "not_applicable"
+      }
+    },
+    {
+      "id": "login-select",
+      "title": "登录（选择方式）",
+      "target": "campusx://login/select",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "loading": "not_reproducible",
+        "empty": "not_applicable",
+        "error": "unknown"
+      },
+      "supplements": [
+        "supplements/login-select.json"
+      ],
+      "recovered_at": "2026-09-21T10:39:54+08:00"
+    },
+    {
+      "id": "login-sns",
+      "title": "手机号登录",
+      "target": "campusx://login/sns",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "loading": "not_reproducible",
+        "empty": "not_applicable",
+        "error": "unknown"
+      },
+      "supplements": [
+        "supplements/login-sns.json"
+      ],
+      "recovered_at": "2026-09-21T10:40:52+08:00"
+    },
+    {
+      "id": "onboarding",
+      "title": "新手引导（昵称）",
+      "target": "campusx://login/onboarding",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "loading": "not_reproducible",
+        "empty": "not_applicable",
+        "error": "unknown"
+      }
+    },
+    {
+      "id": "upgrade-alert",
+      "title": "升级弹窗",
+      "target": "campusx://upgradeAlert",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "loading": "not_reproducible",
+        "empty": "not_applicable",
+        "error": "unknown"
+      }
+    },
+    {
+      "id": "media-preview",
+      "title": "图片预览",
+      "target": "com.kairuotu.chat.conversation.preview.media.ChatMediaPreviewActivity（真实入口：聊天里点图片消息）",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "loading": "not_reproducible",
+        "empty": "not_reproducible",
+        "error": "not_reproducible"
+      },
+      "supplements": [
+        "supplements/media-preview.json"
+      ],
+      "recovered_at": "2026-09-21T10:26:31+08:00"
+    },
+    {
+      "id": "at-panel",
+      "title": "@面板",
+      "target": "com.kairuotu.chat.conversation.GroupAtPanelActivity（真实入口：群聊输入框打 @）",
+      "has_evidence": true,
+      "states": {
+        "normal": "observed",
+        "loading": "not_reproducible",
+        "empty": "not_reproducible",
+        "error": "not_reproducible"
+      },
+      "supplements": [
+        "supplements/at-panel.json"
+      ],
+      "recovered_at": "2026-09-21T10:23:52+08:00"
+    }
+  ],
+  "coverage": {
+    "note": "本块是口径的唯一真源：current 由 screens[].states.normal 推导；history 记录各阶段当时的真实口径，历史值不得被改写",
+    "current": {
+      "stage": "M3 Evidence Preflight",
+      "total_original_screens": 22,
+      "observed": 22,
+      "evidence_blocked": 0,
+      "blocked_screens": [],
+      "out_of_scope": 0,
+      "derived_from": "未到达（baseline.json 带 blocked_reason 且无 supplement）的页面记为 evidence_blocked；observed = expected - evidence_blocked"
+    },
+    "history": [
+      {
+        "stage": "M0",
+        "recorded_in": "docs/m0/ANCHOR.md",
+        "total_original_screens": 22,
+        "observed": 19,
+        "evidence_blocked": 3,
+        "blocked_screens": [
+          "poi-detail",
+          "media-preview",
+          "at-panel"
+        ],
+        "why": "这 3 页只能通过内部 Activity 进入，deep link 未注册外部 scheme → 必然回落 TridentActivity"
+      },
+      {
+        "stage": "M3 Evidence Preflight",
+        "recorded_in": "docs/m3/PREFLIGHT.md",
+        "total_original_screens": 22,
+        "observed": 22,
+        "evidence_blocked": 0,
+        "recovered": [
+          "poi-detail",
+          "media-preview",
+          "at-panel"
+        ],
+        "why": "改用真实 UI 入口取证（动态详情→地点 / 群聊输入@ / 聊天图片消息），证据以 supplements/ 追加，未改写 M0 记录"
+      }
+    ]
+  }
+}

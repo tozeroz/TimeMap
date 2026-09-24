@@ -1,4 +1,4 @@
-<#
+﻿<#
   对原版 app 做「逐按钮探测」。
   用法示例：
     & .\tools\probe.ps1 -Route 'campusx://trident' -Prefix 'campus' -Targets '键盘:540,1700','卡片:270,700'

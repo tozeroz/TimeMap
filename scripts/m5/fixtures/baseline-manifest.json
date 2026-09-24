@@ -1,0 +1,722 @@
+{
+  "_purpose": [
+    "逐屏基线的**冻结解释 manifest**（审核记录 52 建议）。",
+    "问题背景：同一份 baseline.json 被不同工作单重复人工解释，结论会漂移。",
+    "做法：每个 claim 只在这里解释一次，并给出固定的 status；",
+    "      Gate 检查**当前实现是否违反这份 manifest**，",
+    "      只有**出现新证据**时才更新本文件（更新须附证据来源）。"
+  ],
+  "_status_vocabulary": {
+    "MATCH": "当前实现与原版该 claim 一致（须能被 Gate 验证）",
+    "DEVIATION": "与 manifest 冻结的原版契约不一致。分两类：",
+    "DEVIATION_DELIBERATE": "有意的功能后撤，附 deviation_id 与批准记录（见 docs/m5/KNOWN-DEVIATIONS.md）",
+    "DEVIATION_PENDING_FIX": "确认为偏差、待修（附所属工作单）",
+    "NOT_EVALUATED": "原版证据不足，不做任何一致性主张",
+    "UNCHANGED": "原版证据不足，但我们**有意保持现状不动**（既不修也不删）"
+  },
+  "_evidence_rule": [
+    "⚠️ **按 claim 类型选择最直接的证据**（审核记录 52），不存在'XML 普遍优先于 PNG'：",
+    "  文字/resource-id/bounds/accessibility/hierarchy → XML dump",
+    "  像素外观/图标形状/颜色/视觉间距               → native PNG",
+    "  navigation / refresh semantics                → baseline observation record + runtime interaction evidence",
+    "  动态业务行为                                   → runtime evidence",
+    "  APK layout/resource                            → static evidence（只证明声明/结构，不自动证明 runtime state）"
+  ],
+  "_independent_axes": [
+    "IMPLEMENTATION_STATUS / FUNCTIONAL_VERIFICATION / ORIGINAL_CONFORMANCE /",
+    "KNOWN_DEVIATION / EVIDENCE_LIMITATION —— 五项独立，不得互相代替"
+  ],
+  "screens": {
+    "feed-list": {
+      "baseline_file": "docs/original-baseline/screens/feed-list/baseline.json",
+      "baseline_evidence_strength": "json(逐字记录) + png（截图）；无 XML dump",
+      "claims": [
+        {
+          "id": "FEED_TITLE",
+          "claim": "页面标题逐字为「校园圈」",
+          "evidence": "baseline.json title = \"校园圈\"；**设备实测**（scripts/m5/gate-wo11-feed-list.mjs 的 BASELINE_CLAIMS：titleText=\"校园圈\"、hasTitleNode=true）",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11）：顶部渲染 `校园圈` 标题",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commit 8bb42a0）"
+        },
+        {
+          "id": "FEED_LEFT_CONTROL",
+          "claim": "左上控件是**关闭**（X），不是返回箭头",
+          "evidence": "baseline.json interactions[0] = \"顶部「校园圈」+「北京交通大学 ▼」+ 左上关闭\"；**设备实测** leftAria=\"关闭\"、schoolSwitcherPresent=false",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11）：IconClose + aria-label=\"关闭\"",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commit 8bb42a0）"
+        },
+        {
+          "id": "FEED_CLOSE_NAVIGATION",
+          "claim": "关闭 → **返回上一页**（真实的历史后退语义）",
+          "evidence": "baseline.json navigation[0] = \"关闭 → 返回上一页\"；**实测裁决**（scripts/m5/diagnose-feed-close-navigation.mjs）：走 #/more → 校园圈 → #/feedlist，点左上控件后落到 **#/more**（来源页，≠ campus）",
+          "status": "MATCH",
+          "implementation_impact": "无需修改。goBack(fallback) 的实现是 `history.length>1 ? history.back() : navigate(fallback)`，主行为是**真后退**；'campus' 只是**空历史时的回落**",
+          "work_order": null,
+          "deviation_id": null,
+          "_correction_history": [
+            "① 我最初审计判 MATCH（读源码）",
+            "② 审核记录 52 认为 goBack('campus') 是'固定跳 Campus' → 判 DEVIATION",
+            "③ 我据此把自己正确的结论改成 DEVIATION",
+            "④ 复核发现审核的前提不成立（goBack 主行为是 history.back()）→ 设计**判别性实测**：",
+            "   用'上一页 ≠ campus'的路径（#/more）→ 关闭后确实回到 #/more → **H1 成立**",
+            "→ 最终回到 MATCH。教训：**当别人纠正你时，也要用可区分的证据复核那条纠正本身**；",
+            "  '我最初的判断'与'权威的意见'都不是证据，实测才是。"
+          ]
+        },
+        {
+          "id": "FEED_CLOSE_EMPTY_HISTORY_FALLBACK",
+          "claim": "空历史（无法后退）时关闭应当去哪",
+          "evidence": "baseline.json 只写\"关闭 → 返回上一页\"，**未涉及空历史情形**",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "我们回落到 #/campus（goBack 的默认 fallback）—— 这是我方选择，不声称与原版一致",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "FEED_MIDDLE_SCHOOL_SWITCHER",
+          "claim": "顶部中间是「北京交通大学 ▼」（学校名 + 下拉指示）",
+          "evidence": "baseline.json interactions[0]",
+          "status": "MATCH",
+          "implementation_impact": "保持学校名 + chevron（**名称文本**的来源另见 FEED_SCHOOL_NAME_SOURCE）",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "FEED_NO_TEST_RESIDUE",
+          "claim": "可见 feed 里不得出现测试残留（如 M1-E2E-* / TLS 日志泄漏检查）",
+          "evidence": "**服务端实测**：posts 表原有 20 条 M1 E2E 残留（占 24 条中的 20），已按审核 52 授权的七步流程删除（deleted_count=20、规范数据完好）；**设备实测** residueHits=[]",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11 层 2 数据清理）：残留清零；并加反向断言防再次泄漏",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commits 8bb42a0 / e43cdbe）"
+        },
+        {
+          "id": "FEED_SCHOOL_NAME_SOURCE",
+          "claim": "顶部学校名应有权威来源",
+          "evidence": "⚠️ schools/campuses 两表存在但**数据为空**、三个用户 school_campus_id **全为 NULL**（实测）",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "无权威来源 → 按审核 52：**HIDE / DEFER**；已实现为**不渲染学校切换**（设备实测 schoolSwitcherPresent=false）；不填静态'北京交通大学'、不临时 seed",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "FEED_RIGHT_ACTION",
+          "claim": "顶部右侧控件的行为",
+          "evidence": "baseline.json **未提及**右侧控件",
+          "status": "UNCHANGED",
+          "implementation_impact": "**保持「发布」按钮不动**（审核 52：不得因为基线没写就删除）",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "FEED_REFRESH_SEMANTICS",
+          "claim": "「刷新」→ **重新请求**（真实网络请求）",
+          "evidence": "baseline.json navigation[1] = \"刷新 → 重新请求\"；**设备实测** REFRESH_IS_REAL = {fetchDelta: 1, cardCountAfter: 4}",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11）：刷新走 listPosts() 真请求；失败时停在失败态，不回退 mock",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commit 8bb42a0）"
+        },
+        {
+          "id": "FEED_NORMAL_LIST_CONFORMANCE",
+          "claim": "正常列表（条目形态）与原版一致",
+          "evidence": "baseline.json states.normal = not_reproducible；known_unknowns = \"有后端且已登录时的正常列表长什么样（本机无法进入）\"",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "接线后只能声称'数据来源真实'，**不得**声称'条目形态与原版一致'",
+          "work_order": null,
+          "deviation_id": "L-001"
+        },
+        {
+          "id": "FEED_NO_MOCK_FEED",
+          "claim": "页面不得渲染编造的动态内容",
+          "evidence": "**设备实测**（WO#11 Gate）：DOM 的 [data-feed-id] 集合 == GET /api/posts items[].id 集合（集合级相等，4/4）",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11）：整页改接 GET /api/posts，`posts`（mock）import 已移除",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commit 8bb42a0）"
+        },
+        {
+          "id": "FEED_NO_FAKE_AUTHORITATIVE_METRICS",
+          "claim": "页面不得出现编造的统计数字（如 12,486 / 38,920）",
+          "evidence": "**设备实测**（WO#11 Gate）：fakeNumbersPresent = []（含 12486/38920 变体）",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#11）：移除两个编造数字，只显示服务端返回的真实条数",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#11（commit 8bb42a0）"
+        }
+      ]
+    },
+    "message": {
+      "baseline_file": "docs/original-baseline/screens/message/baseline.json",
+      "baseline_evidence_strength": "json(逐字记录) + png；无 XML dump",
+      "claims": [
+        {
+          "id": "MESSAGE_TITLE",
+          "claim": "顶部标题「聊天」",
+          "evidence": "baseline.json interactions[0] = \"顶部「聊天」+ 左上关闭 + 右上加号\"（注意 title 字段写\"聊天列表\"，与 interactions 不一致；以 interactions 为准）",
+          "status": "MATCH",
+          "implementation_impact": "保持 center=\"聊天\"",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "MESSAGE_LEFT_CONTROL",
+          "claim": "左上关闭",
+          "evidence": "baseline.json interactions[0]",
+          "status": "MATCH",
+          "implementation_impact": "保持 IconClose + aria-label=\"关闭\"",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "MESSAGE_RIGHT_CONTROL",
+          "claim": "右上加号 → 新建会话",
+          "evidence": "baseline.json interactions[0] + navigation[2]",
+          "status": "MATCH",
+          "implementation_impact": "保持 IconPlus + aria-label=\"新建\"（**行为未接**：新建会话流程属后续工作单）",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "MESSAGE_MORE_STUDENTS_LIST",
+          "claim": "「更多同学」列表渲染：昵称 + 相同学校标签 + MBTI/星座 + 学院-专业 + 年级",
+          "evidence": "baseline.json interactions[2]",
+          "status": "DEVIATION_DELIBERATE",
+          "implementation_impact": "整块移除，仅留结构壳 + 中性空态（无权威来源；见 D-001）",
+          "work_order": "WO#10",
+          "deviation_id": "D-001"
+        },
+        {
+          "id": "MESSAGE_SHARE_PANEL_ENTRY",
+          "claim": "「邀请同学」→ 分享面板",
+          "evidence": "baseline.json interactions[1] + navigation[1]",
+          "status": "DEVIATION_DELIBERATE",
+          "implementation_impact": "入口与面板均不再渲染（无真实分享能力；见 D-002）",
+          "work_order": "WO#10",
+          "deviation_id": "D-002"
+        },
+        {
+          "id": "MESSAGE_INVITE_CARD_FIELDS",
+          "claim": "邀请卡渲染学校 / 学院 / 年级",
+          "evidence": "baseline.json interactions[1] 描述邀请卡文案与按钮；mock.ts 的历史实现按学校/学院/年级渲染（我们的历史行为）—— 基线**未逐字**列出卡内字段",
+          "status": "DEVIATION_DELIBERATE",
+          "implementation_impact": "不渲染这三个字段（/api/auth/me 无这些字段；users 表无列；schools/campuses 空）（见 D-003）",
+          "work_order": "WO#8",
+          "deviation_id": "D-003"
+        },
+        {
+          "id": "MESSAGE_LIST_WITH_CONVERSATIONS",
+          "claim": "已存在会话时的列表样式与原版一致",
+          "evidence": "baseline.json known_unknowns = \"已存在会话时的列表样式（本机为 0 会话）\"",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "我们的会话列表样式**没有原版对照物**",
+          "work_order": null,
+          "deviation_id": "L-002"
+        }
+      ]
+    },
+    "group": {
+      "baseline_file": "docs/original-baseline/screens/group/baseline.json",
+      "baseline_evidence_strength": "json + **XML dump** + png（证据较强）",
+      "claims": [
+        {
+          "id": "GROUP_HEADER_STRUCTURE",
+          "claim": "头部四段结构：leftIcon(返回) / chatAvatar / title(群名) / rightIcon",
+          "evidence": "docs/original-baseline/screens/original-chat/20260921-205407-04-chat-open.xml（XML dump）",
+          "status": "MATCH",
+          "implementation_impact": "保持四段结构",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "GROUP_RIGHT_ACTION",
+          "claim": "rightIcon 的行为",
+          "evidence": "XML dump 显示该节点 clickable，但**目的地/行为无任何证据**",
+          "status": "UNCHANGED",
+          "implementation_impact": "渲染为**不可交互**静态元素 + aria-hidden（WO#9A 经审核 45 批准）；**不算惰性假入口** —— 它是不可点击的，与 WO#10 要消除的'可点击但无反应'不同",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "GROUP_AVATAR_DESTINATION",
+          "claim": "chatAvatar 点击后的目的地",
+          "evidence": "同上，无证据",
+          "status": "UNCHANGED",
+          "implementation_impact": "不可交互静态元素",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "GROUP_AT_PANEL_ENTRY",
+          "claim": "@面板的入口位置",
+          "evidence": "baseline.json known_unknowns 明列\"@面板入口…的位置\"为未知；我们另做了有界静态 trace（AT_TRIGGER_STATIC_SYMBOL_EVIDENCE: FOUND，含 openAtPanel）",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "我方提供的 composer @ 按钮标 PROVENANCE: OUR_DESIGN_CHOICE",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "GROUP_NORMAL_STATE_FULL_CONFORMANCE",
+          "claim": "群聊正常态**整体**与原版一致",
+          "evidence": "baseline.json states.normal = unknown（empty 是 observed）",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "只能声称局部事实一致（见下三条 OBSERVED），不得声称整体一致",
+          "work_order": null,
+          "deviation_id": "L-003"
+        },
+        {
+          "id": "GROUP_OWN_MESSAGE_ALIGNMENT",
+          "claim": "自己的消息靠右",
+          "evidence": "XML dump OBSERVED",
+          "status": "MATCH",
+          "implementation_impact": "保持",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "GROUP_TIME_SEPARATOR_PRESENCE",
+          "claim": "存在时间分隔元素",
+          "evidence": "XML dump OBSERVED",
+          "status": "MATCH",
+          "implementation_impact": "保持",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "GROUP_PEER_GROUP_PRESENTATION",
+          "claim": "对方消息的成组呈现规则",
+          "evidence": "无证据",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "不做主张",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "GROUP_TIME_SEPARATOR_INSERTION_RULE",
+          "claim": "时间分隔的插入规则（间隔多少条/多久插一个）",
+          "evidence": "无证据",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "不做主张",
+          "work_order": null,
+          "deviation_id": null
+        }
+      ]
+    },
+    "user-profile": {
+      "baseline_file": null,
+      "baseline_evidence_strength": "**无可用基线** —— docs/original-baseline/screens/ 下只有 trident-me = 「我的」tab，**不是**他人主页",
+      "claims_explanation": "按纪律 ② 显式记录\"该屏无可用基线\"，本屏**不做任何与原版一致的主张**（审核记录 53：ORIGINAL_USER_PROFILE_BASELINE: UNAVAILABLE）",
+      "claims": [
+        {
+          "id": "ORIGINAL_USER_PROFILE_CONFORMANCE",
+          "claim": "他人主页与原版一致",
+          "evidence": "**无基线**（screens/ 下没有他人主页目录）",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "即使本屏全部 Gate PASS，也只能声称：authoritative identity wiring / authoritative data semantics / fake interactions removed 三项；**不得**声称 1:1 reproduced",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "USER_PROFILE_IDENTITY_FROM_ROUTE",
+          "claim": "从路由进入后显示的身份 == 被点作者本人",
+          "evidence": "**设备实测**（gate-wo12）：点真实作者「Lemy」→ 资料页显示「Lemy」（改前显示 mock u1「蒸柿煮捞呆」）；urlUuid == /api/users/:id 返回的 id",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#12）：解析 u:<uuid> → canonical UUID → GET /api/users/:id 取权威昵称",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#12"
+        },
+        {
+          "id": "NO_MOCK_IDENTITY_FALLBACK",
+          "claim": "unknown / malformed user id → 明确不可用态；**NEVER** 回落到另一个用户",
+          "evidence": "**设备实测**（gate-wo12）：三种坏输入（无 id / 非法形状 / 不存在的 uuid）全部 state=unavailable、shownName=null、mockHit=[]；敏感度：注入 mock 回落 → INVALID_PROFILE_ID_NO_FALLBACK FAIL",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#12）。同时移除了 App.tsx 里 `route.query.id ?? 'u1'` 这处 mock 回落",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#12",
+          "_frozen_principle": "审核记录 53：该原则适用于**以后所有** identity surface"
+        },
+        {
+          "id": "USER_POSTS_SOURCE",
+          "claim": "TA 的动态来自**服务端** authorId 过滤（而非客户端 filter）",
+          "evidence": "**实测**（verify-wo12-server-extensions.sh）：GET /api/posts?authorId= 返回数量与 DB 一致；非法 authorId → 400 bad_author_id；**设备实测** uiIds 集合 == API ids 集合",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#12）：新增服务端只读 filter；客户端用 listPosts(authorId)",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#12",
+          "_frozen_principle": "审核记录 53：客户端过滤在分页后会静默变成\"不完整但看起来完整\""
+        },
+        {
+          "id": "PROFILE_DM_DESTINATION",
+          "claim": "「私信」要么通向**真实** direct 会话，要么不可用；**绝不**制造 mock thread id",
+          "evidence": "**实测**：peerId 与 DB 另一成员 id 一致（机械验证）；0 匹配时不渲染按钮而显示静态不可用说明；敏感度：注入 t1 → PROFILE_DM_NO_MOCK_THREAD_ID FAIL",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#12）：按 peerId 精确匹配已有 direct 会话；无匹配则 hide/unavailable",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#12",
+          "_frozen_principle": "审核记录 53：peerId **不**回答\"从没聊过的人怎样建会话\"；后者无经过验证的能力时不得假成功"
+        },
+        {
+          "id": "FOLLOW_CAPABILITY",
+          "claim": "「关注」是否为真实能力",
+          "evidence": "**设备实测**（改前）：纯 useState 假成功 —— fetchDelta=0 却显示\"已关注\"。无 follow 模型/接口",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "已移除该控件（WO#12）—— 审核 53：FOLLOW_CAPABILITY: NOT_IMPLEMENTED → no clickable fake follow control",
+          "work_order": null,
+          "deviation_id": null
+        }
+      ]
+    },
+    "profile-edit": {
+      "baseline_file": "docs/original-baseline/screens/trident-me/baseline.json",
+      "baseline_evidence_strength": "**入口层有基线**（trident-me/baseline.json:38 记了五个入口文案与位置、:42 记了「编辑资料」→资料编辑页）；**页面内容层无基线**（screens/ 下 26 个目录没有资料编辑页）",
+      "claims_explanation": "审核记录 54 冻结：ENTRY 有据、PAGE_STRUCTURE 无据；不得把'我们当前的实现'当成一致性主张",
+      "claims": [
+        {
+          "id": "ORIGINAL_PROFILE_EDIT_ENTRY",
+          "claim": "「编辑资料」入口及 Me 页五个条目的文案与位置",
+          "evidence": "docs/original-baseline/screens/trident-me/baseline.json:38 逐字记录；:42「编辑资料」→ 资料编辑页；docs/original-interaction-map.md:51",
+          "status": "MATCH",
+          "implementation_impact": "已实现：MeScreen 保留这五个条目（文案与位置一致），「编辑资料」进入 ProfileEditScreen",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "ORIGINAL_PROFILE_EDIT_PAGE_STRUCTURE",
+          "claim": "资料编辑页自身的内容结构（三张卡片、头像相机、昵称/简介/性别/标签、校园名片、学校卡）",
+          "evidence": "**无基线** —— docs/original-baseline/screens/ 下没有该页目录",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "本页布局记为 **OUR CURRENT IMPLEMENTATION / not a conformance claim**；原注释里的『结构按原版实测』已按审核 54 降级（不为保住注释去推断存在过证据）",
+          "work_order": null,
+          "deviation_id": "L-008"
+        },
+        {
+          "id": "ORIGINAL_INTEREST_DESTINATION",
+          "claim": "「我的兴趣」在原版进入哪个页面",
+          "evidence": "**无基线**（只证明了条目存在，未证明其目的地）",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "当前实现渲染为**不可点的行 + 「待核对」标注**（不再误路由到 ProfileEditScreen，也不再接旧的 mock 路由）—— 审核 54 冻结",
+          "work_order": null,
+          "deviation_id": "L-004"
+        },
+        {
+          "id": "ORIGINAL_TAG_DESTINATION",
+          "claim": "「我的标签」在原版进入哪个页面",
+          "evidence": "**无基线**",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "同上（渲染为不可点行 + 待核对）",
+          "work_order": null,
+          "deviation_id": "L-005"
+        },
+        {
+          "id": "ORIGINAL_BIO_DESTINATION",
+          "claim": "「介绍一下自己～」在原版进入哪个页面",
+          "evidence": "**无基线**",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "同上",
+          "work_order": null,
+          "deviation_id": "L-006"
+        },
+        {
+          "id": "ORIGINAL_SCHOOL_DESTINATION",
+          "claim": "「我的学校」在原版进入哪个页面",
+          "evidence": "**无基线**",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "同上",
+          "work_order": null,
+          "deviation_id": "L-007"
+        },
+        {
+          "id": "PROFILE_EDIT_SAVE_IS_REAL",
+          "claim": "「保存」是真实持久化写入，而不是本地 state 伪装",
+          "evidence": "**设备实测**（gate-wo13，WO13_MUTATE=1）：SAVE_PROBE {fetchDelta:1, nameAfter==target, errorShown:false}；RELOAD_PROBE 重进仍为新值；**服务端实测** 四方一致（PATCH 响应==DB==/api/auth/me==/api/users/:id）。改前对照（bd2e1ff）：**fetchDelta=0 而值变了 = 假写成功**",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#13）：新增 PATCH /api/users/me + 保存链 draft→PATCH→DB→权威响应→UI commit",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#13（commit 39652d7）"
+        },
+        {
+          "id": "PROFILE_AUX_ENTRIES_NOT_MISROUTED",
+          "claim": "「我的兴趣/我的标签/介绍一下自己～/我的学校」不得进入 ProfileEditScreen",
+          "evidence": "**设备实测**：四项渲染为 div（非 button），点击后 hash 不变（navigated:false）；改前它们全部 navigate('profile-edit')",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#13）：渲染为不可点行 + 「待核对」标注（审核 54 冻结：不能再假装『我的兴趣 = 改昵称页面』）",
+          "work_order": null,
+          "deviation_id": null,
+          "_fixed_in": "WO#13（commit 39652d7）"
+        }
+      ]
+    },
+    "at-panel": {
+      "baseline_file": "docs/original-baseline/screens/at-panel/baseline.json",
+      "baseline_evidence_strength": "baseline.json **内容为空**（所有 states not_reproducible、interactions/navigation 为空）；另有 recovered-m3-ui.xml",
+      "claims_explanation": "该 baseline 的 blocked_reason = \"deep link 无法直达；需要群聊上下文\"，其 known_unknowns 三项逐一处置如下",
+      "claims": [
+        {
+          "id": "AT_PANEL_KIND",
+          "claim": "面板以抽屉还是弹层出现",
+          "evidence": "baseline 列为未知 → **换了证据来源**：APK 静态布局 res/XZ.xml（constraintBottom_to_BottomOf=parent）",
+          "status": "MATCH",
+          "implementation_impact": "实现为底部弹层",
+          "work_order": "WO#9B",
+          "deviation_id": null
+        },
+        {
+          "id": "AT_PANEL_MEMBER_ORDER",
+          "claim": "成员列表排序规则",
+          "evidence": "无证据",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "**不把顺序写成 conformance**；服务端按 displayName 排序只为结果稳定（标我方选择）",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "AT_PANEL_SEARCH_CONTROL",
+          "claim": "面板里有没有搜索框",
+          "evidence": "docs/original-baseline/screens/at-panel/recovered-m3-ui.xml：全部可见文本只有「选择提醒的人」「所有人」；**无 EditText、无\"搜索\"字样**",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "不做主张（审核 52 明确：写 NOT_OBSERVED_IN_THIS_DUMP 是准确的，**不要升级为 ABSENT**）",
+          "work_order": null,
+          "deviation_id": null
+        }
+      ]
+    },
+    "trident-map": {
+      "baseline_file": "docs/original-baseline/screens/trident-map/baseline.json",
+      "baseline_evidence_strength": "**有基线**：states.normal=observed（normal.png）。但 known_unknowns 明记「具体缩放级别与标记规则未记录」、「首次进入的授权弹窗本次未出现」⇒ 视觉/语义类只能 NOT_EVALUATED，不得用 DOM 存在性冒充。",
+      "claims_explanation": "WO#15（Round 265–267）落地。测量块在 scripts/m5/gate-wo15-map-markers.mjs 的 BASELINE_CLAIMS_MEASURED（Gate 用 provider 无关量 + 显式 data-* 钩子）。⚠️ 本屏的\"证据\"分两类并在每条里写明：**设备实测**（真机量到的字段值）与 **源码确认**（实现里写死的目标）—— 后者不算设备验证结果。",
+      "claims": [
+        {
+          "id": "MAP_TITLE_LITERAL",
+          "claim": "顶部大标题逐字为「Map」",
+          "evidence": "baseline interactions[0] = \"顶部：大标题 Map + 地区选择…\"；**设备实测** BASELINE_CLAIMS_MEASURED.bigTitle = \"Map\"（选择器 .map__title）—— ⚠️ 我第一版用 .bigtitle__main 量到 null 造成假 FAIL：地图页**不用 BigTitle 组件**，有自己的 .map__title 结构（MapScreen.tsx:520）。",
+          "status": "MATCH",
+          "implementation_impact": "已实现：MapScreen.tsx:520 <h1 className=\"map__title\">Map</h1>",
+          "work_order": "WO#15",
+          "deviation_id": null
+        },
+        {
+          "id": "MAP_REGION_TEXT",
+          "claim": "顶部地区选择文字含「北京交通大学（校本部）」",
+          "evidence": "baseline interactions[0] = \"…地区选择「北京交通大学（校本部）」…\"；**设备实测** BASELINE_CLAIMS_MEASURED.regionText = \"北京交通大学（校本部）\"",
+          "status": "MATCH",
+          "implementation_impact": "已实现：MapScreen.tsx:521 .map__region",
+          "work_order": "WO#15",
+          "deviation_id": null
+        },
+        {
+          "id": "MAP_MESSAGE_CONTROL",
+          "claim": "顶部右上是消息图标",
+          "evidence": "baseline interactions[0] = \"…+ 右上消息图标\"；**设备实测** BASELINE_CLAIMS_MEASURED.msgAria = \"消息\"",
+          "status": "MATCH",
+          "implementation_impact": "已实现：MapScreen.tsx:526 aria-label=\"消息\"",
+          "work_order": "WO#15",
+          "deviation_id": null
+        },
+        {
+          "id": "MAP_BOTTOM_RIGHT_CONTROLS",
+          "claim": "右下有「定位复位按钮」与圆形发布按钮（+）",
+          "evidence": "baseline interactions[2] = \"右下：定位复位按钮 + 黑色圆形 +\"；**设备实测** BASELINE_CLAIMS_MEASURED.locateAria = \"回到定位\"、ctrlCount = 2、fabAria = \"发布\"（两枚 .map__ctrl + 一枚 .map__fab）",
+          "status": "MATCH",
+          "implementation_impact": "已实现：MapScreen.tsx:649 aria-label=\"回到定位\"、:652 aria-label=\"放大\"、:657 aria-label=\"发布\"",
+          "work_order": "WO#15",
+          "deviation_id": null
+        },
+        {
+          "id": "MAP_GEO_PERMISSION_MODAL",
+          "claim": "首次进入地图页有阻断式「授权地理位置」弹窗",
+          "evidence": "baseline known_unknowns[0] 记「page-map.md 记录首次进入会有阻断式『授权地理位置』弹窗；本次采集时弹窗未出现」；**设备实测** BASELINE_CLAIMS_MEASURED.geoModalPresent = true、geoModalTitle = \"授权地理位置\"（并见 WO15.6 的专门自测 selftest-dismiss-modals.mjs：强制重启 App 后弹窗必现）",
+          "status": "MATCH",
+          "implementation_impact": "已实现且**已被专门治理**：该弹窗会跨 Gate 残留（曾导致 WO#14 门禁偶发失败），现由 run-device-gate.sh 第 8 步 + dismiss-blocking-modals.mjs 收起，并加了 data-blocking-modal 通用登记位",
+          "work_order": "WO#15",
+          "deviation_id": null
+        },
+        {
+          "id": "MAP_TENCENT_BASEMAP",
+          "claim": "底图是腾讯地图 SDK",
+          "evidence": "baseline known_unknowns[1] = \"地图底图为腾讯地图 SDK\"；**设备实测** BASELINE_CLAIMS_MEASURED.providerText = \"腾讯地图\" 且 hasTencentWatermark = true（页面含 ©2026 Tencent 水印）",
+          "status": "MATCH",
+          "implementation_impact": "默认 provider 为腾讯（与之一致）；另有高德/栅格/离线自绘三条回落路径",
+          "work_order": "WO#15",
+          "deviation_id": null
+        },
+        {
+          "id": "MAP_REGION_TO_POI",
+          "claim": "点地区名 → 进入选点页（poi/search）",
+          "evidence": "baseline navigation[0] = \"地区名 → 选点页（poi/search）\"；**设备实测**该控件存在（regionText 非空）；**源码确认**其 onClick 为 navigate('poi')（MapScreen.tsx:521）⚠️ 本条**未**在设备上点击并确认落点 —— 设备侧只验了控件存在与文案；点击后的落点由源码确认（真机点击验证列为待办，不在此冒充已验）",
+          "status": "MATCH",
+          "implementation_impact": "已实现：navigate('poi')",
+          "work_order": "WO#15",
+          "deviation_id": null,
+          "_known_gap": "真机点击落点未验证（源码确认）"
+        },
+        {
+          "id": "MAP_PLUS_TO_PUBLISH",
+          "claim": "点 + → 进入发布页",
+          "evidence": "baseline navigation[1] = \"+ → 发布页\"；**设备实测** fabAria = \"发布\"；**源码确认** onClick 为 navigate('publish')（MapScreen.tsx:657）⚠️ 同 MAP_REGION_TO_POI：设备侧未点击确认落点",
+          "status": "MATCH",
+          "implementation_impact": "已实现：navigate('publish')",
+          "work_order": "WO#15",
+          "deviation_id": null,
+          "_known_gap": "真机点击落点未验证（源码确认）"
+        },
+        {
+          "id": "MAP_MARKER_PRESENTATION",
+          "claim": "主体：地图 + **用户头像标记** + **深色气泡卡片**",
+          "evidence": "baseline interactions[1] 记录了这个组合；但：① \"深色\"是**视觉属性**，DOM 存在性证明不了；② 我们的标记是「照片卡片 + 彩色图钉 + 地名」，与\"用户头像标记\"是否同一物**无定论**（supplements/poi-detail.json 记的是图钉＝**照片缩略图**，与\"头像\"表述不一致）；③ 机械像素分析（Round 266）只能给\"存在红/蓝色块\"这类**测量**，给不出语义。⇒ 不做任何一致性主张。",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "保持现状；标记配色/气泡形态另立可视化核对（见 WO15.4/15.5）",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "MAP_ZOOM_AND_MARKER_RULES",
+          "claim": "缩放级别与标记规则与原版一致",
+          "evidence": "baseline known_unknowns[1] 明记「具体缩放级别与标记规则**未记录**」⇒ 原版侧无证据可比",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "不做主张。已按审核 58 处置\"未校准投影时 offline 不渲染权威标记\"",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "MAP_OFFLINE_RENDERING",
+          "claim": "offline 底图是否应渲染权威标记",
+          "evidence": "基线**没有**离线自绘底图这回事（原版只有腾讯 SDK）⇒ 我方独有形态，无原版可比；但**我们自己的位置正确性**可判：未校准投影 ⇒ 不渲染。**设备实测** OFFLINE_RENDERS_NO_GEO_MARKERS：离线 DOM 标记数 = 0 且徽标 = offline-unsupported",
+          "status": "MATCH",
+          "implementation_impact": "审核 58 的选项 A：offline 不渲染权威标记 + 明确说明「离线底图不支持标记显示」（不能只把投影一致性写成 NOT_EVALUATED 却仍把标记画给用户看）",
+          "work_order": "WO#15",
+          "deviation_id": null
+        }
+      ]
+    },
+    "trident-campus": {
+      "baseline_file": "docs/original-baseline/screens/trident-campus/baseline.json",
+      "baseline_evidence_strength": "**有基线**：states.normal=observed。interactions[1] 逐字记「顶部：大标题 Campus + 副标题「校园广场 ▼」+ 右上消息气泡」；known_unknowns 记分页/下拉刷新手势未观察。",
+      "claims_explanation": "WO#16 层 A/B（审核 60/61）。层 A 移除 mock 学校数据、层 B 改接权威实体。测量在 gate-wo16a-campus-mock.mjs（5 键）与 gate-wo16b-schools.mjs（8 键，含面板 3 键）。⚠️ 与**地图页**的顶部控件**不是同一个东西**（审核 60/61 都强调过）：地图页显示「学校（校区）」，校园广场页显示固定标签「校园广场」——**不可互相套用**。",
+      "claims": [
+        {
+          "id": "CAMPUS_SUBTITLE_TEXT",
+          "claim": "顶部副标题逐字为「校园广场」（▼ 由 BigTitle 组件附加）",
+          "evidence": "baseline interactions[1] = \"…副标题「校园广场 ▼」…\"；**设备实测** gate-wo16a-campus-mock.mjs 的 CAMPUS_SUBTITLE_IS_LITERAL （BASELINE_CLAIMS 读 .map__title 之外，本屏读 .bigtitle__sub ⇒ subtitle=\"校园广场\"）",
+          "status": "MATCH",
+          "implementation_impact": "已实现（WO#16 层 A）：常量 CAMPUS_SUBTITLE=\"校园广场\"。⚠️ 改前此处显示 mock 的学校名（campusInfo.name），那是偏差 —— 见 A-D-LIST.md §五之二",
+          "work_order": "WO#16",
+          "deviation_id": null,
+          "_fixed_in": "WO#16 层 A（commit 2e0d3a6）"
+        },
+        {
+          "id": "CAMPUS_TAB_BAR_THREE_ITEMS",
+          "claim": "底部文字 tab 为 3 项（自定义名称6/校园/地图）",
+          "evidence": "baseline interactions[2] = \"底部导航三项 + 右下黑色圆形 + 按钮\"；对照 A-D-LIST.md §五 的定稿结论",
+          "status": "MATCH",
+          "implementation_impact": "已实现：TabBar.tsx（navigate me/campus/map）+ tabbar__fab → publish",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "CAMPUS_WATERFALL_LAYOUT",
+          "claim": "主体是两列瀑布流（双列 + 高度不等 + y 交错）",
+          "evidence": "A-D-LIST.md §五「校园广场呈现模型：原版**两列瀑布流**（见 FINDING-campus-layout-waterfall.md）」；我们 campus.css 用 column-count:2",
+          "status": "MATCH",
+          "implementation_impact": "已实现：CampusScreen 的 campus__grid + campus.css",
+          "work_order": null,
+          "deviation_id": null
+        },
+        {
+          "id": "CAMPUS_PICKER_CONTENT",
+          "claim": "点「校园广场 ▼」后面板的内容（原版 = 校区列表 + 搜索其他学校入口）",
+          "evidence": "证据在 supplements/schools.json 的 campus_picker（「北京交通大学（当前学校）」+ 校本部/威海校区/东校区 + 搜索其他学校）；⚠️ 该证据采自**地图页**同类控件，本页形态**未逐项观察** ⇒ 只按\"结构对齐\"主张；**设备实测**（gate-wo16b-schools.mjs）：CAMPUS_PANEL_TITLE（标题=\"北京交通大学（当前学校）\"）、CAMPUS_PANEL_FROM_AUTHORITY（项=该校 3 个校区）、SCHOOL_SEARCH_ENTRY_NAVIGATES（入口→#/schools）",
+          "status": "DEVIATION_DELIBERATE",
+          "implementation_impact": "层 A 曾是\"尚未接入\"占位（登记 D-004 TEMPORARY）；层 B 已改为渲染**权威实体**。⚠️ 但**计数**仍为 null（归属未建模）⇒ 该部分**未**恢复到原版形态",
+          "work_order": "WO#16",
+          "deviation_id": "D-004"
+        },
+        {
+          "id": "CAMPUS_MOCK_DATA_ABSENT",
+          "claim": "本屏不得出现 mock 的 8 所学校与编造成员数",
+          "evidence": "**设备实测** gate-wo16a-campus-mock.mjs：CAMPUS_NO_MOCK_SCHOOL_NAMES ／ CAMPUS_NO_FABRICATED_NUMBERS（禁用 12,486 ／ 38,920 ／ \"位同学\" 与 7 个**只在 mock 里存在**的学校名）；⚠️ 刻意**不**禁用「北京交通大学」——那是我们 seed 真实在用的学校名，禁用会造成假 FAIL",
+          "status": "MATCH",
+          "implementation_impact": "已实现：`campusInfo` / `schools` 已从生产 mock.ts **移出**（→ scripts/m5/fixtures/legacy-schools.json）",
+          "work_order": "WO#16",
+          "deviation_id": null,
+          "_fixed_in": "WO#16 层 A（commit 2e0d3a6）"
+        }
+      ]
+    },
+    "school-search": {
+      "baseline_file": null,
+      "baseline_evidence_strength": "**没有** screens/school-search 目录；证据在 `docs/original-baseline/supplements/schools.json` 的 `school_search` 段（M3 Evidence Preflight 采集，verdict=SUPPORTED）：搜索框「搜索选择学校...」/ 分组「更多学校」/ 行格式「学校名 (校区名)」+「N条校园圈」+ 可选「X小时前更新」/activity=com.xingin.xhsreactnative.ui.XhsReactActivity。",
+      "claims_explanation": "WO#16 层 B 新增的屏。测量在 gate-wo16b-schools.mjs（8 键，其中 5 键属本屏）。⚠️ 期望值全部从**实时 API** 取（不硬编码实体名）⇒ 换种子不会假 FAIL。",
+      "claims": [
+        {
+          "id": "SCHOOL_SEARCH_PLACEHOLDER",
+          "claim": "搜索框 placeholder 逐字「搜索选择学校...」",
+          "evidence": "supplements/schools.json → school_search[0]；**设备实测** gate-wo16b-schools.mjs 的 SCHOOL_SEARCH_PLACEHOLDER（读 .ss__input 的 placeholder 属性）",
+          "status": "MATCH",
+          "implementation_impact": "已实现：SchoolSearchScreen.tsx",
+          "work_order": "WO#16",
+          "deviation_id": null
+        },
+        {
+          "id": "SCHOOL_SEARCH_GROUP_LABEL",
+          "claim": "分组标题逐字「更多学校」",
+          "evidence": "supplements/schools.json → school_search[1]；**设备实测** SCHOOL_SEARCH_GROUP_LABEL",
+          "status": "MATCH",
+          "implementation_impact": "已实现：SchoolSearchScreen.tsx",
+          "work_order": "WO#16",
+          "deviation_id": null
+        },
+        {
+          "id": "SCHOOL_ROW_SHAPE",
+          "claim": "每行格式为「学校名 (校区名)」",
+          "evidence": "supplements/schools.json → school_search[2]（实例「北京交通大学 (校本部)」）；**设备实测** SCHOOL_ROW_SHAPE 与 SCHOOL_ROWS_FROM_AUTHORITY（用 API 返回的实体拼出期望值，做**多重集**比较，不比数组顺序）",
+          "status": "MATCH",
+          "implementation_impact": "已实现：行文本 `{school.name} ({campus.name})`",
+          "work_order": "WO#16",
+          "deviation_id": null
+        },
+        {
+          "id": "CIRCLE_COUNT_NULL_NOT_ZERO",
+          "claim": "「N条校园圈」的计数在**无法由权威归属计算**时必须是 null，且 UI 不渲染计数字段",
+          "evidence": "**审核 60 的计数策略 A**（不是从基线转述，而是审核裁定）：count=COUNT(posts WHERE school_campus_id=campus.id)；无法计算时给 null，**不是 0**、不由 place 推断。**设备实测** CIRCLE_COUNT_NULL_NOT_RENDERED（按服务端**实际返回**分支判定：全 null ⇒ 不许渲染计数；有数字 ⇒ 必须渲染出该数字）+ gate-place-not-campus.mjs 的 PLACE_DOES_NOT_IMPLY_CAMPUS_DATA",
+          "status": "MATCH",
+          "implementation_impact": "已实现：服务端返回 campusCircleCount=null（attributionEstablished=false 时全 null）；UI 仅在非 null 时渲染",
+          "work_order": "WO#16",
+          "deviation_id": null
+        },
+        {
+          "id": "SCHOOL_SEARCH_CONTENT_SCALE",
+          "claim": "学校搜索页的**内容规模**与原版一致",
+          "evidence": "原版那次快照里有 4+ 所学校（上海视觉艺术学院/上海交通大学/北京交通大学/浙江师范大学）与它们的 15/2502/4/329 计数；**我们只有 1 所**（种子北交大，3 校区）",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "**有意不复制**：审核 61 `SEARCH_CONTENT_SCALE_DIFFERENCE: ACCEPTABLE / DOCUMENTED`——那些是原版某次真实数据快照，不是我们 demo 必须复制的数据集。要对齐的是**结构与语义**（行格式/计数位置/搜索入口/选择行为），不是数据规模",
+          "work_order": "WO#16",
+          "deviation_id": null
+        },
+        {
+          "id": "ORIGINAL_EMPTY_CIRCLE_PRESENTATION",
+          "claim": "原版对「0 条校园圈」的圈子显示什么（\"0条校园圈\"？隐藏？）",
+          "evidence": "基线**未观察**到 0 条计数时的呈现（原版那次快照里每行都有非 0 计数）",
+          "status": "NOT_EVALUATED",
+          "implementation_impact": "不做主张。我们的处置（null ⇒ 不渲染）是 OUR_DESIGN_CHOICE",
+          "work_order": null,
+          "deviation_id": null
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "screen_id": "media-preview",
+  "title": "图片预览",
+  "target_route": "campusx://chat/media-preview（实测回落到 trident）",
+  "activity": "（未落到目标 Activity）",
+  "entry": {
+    "preconditions": [
+      "需要聊天中的图片资源"
+    ],
+    "steps": [
+      "尝试 deep link campusx://chat/media-preview → 前台仍是 TridentActivity"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "normal": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "error": {
+      "status": "not_reproducible",
+      "evidence": []
+    }
+  },
+  "interactions": [],
+  "navigation": [],
+  "persistence": [],
+  "known_unknowns": [
+    "预览页的缩放手势、页码指示、保存按钮位置均未观察"
+  ],
+  "blocked_reason": "deep link 无法直达；真实入口是聊天消息里的图片，而本机无聊天数据"
+}

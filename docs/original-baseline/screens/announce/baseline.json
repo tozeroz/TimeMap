@@ -1,0 +1,48 @@
+{
+  "screen_id": "announce",
+  "title": "群公告",
+  "target_route": "campusx://announce",
+  "activity": "com.kairuotu.chat.announce.AnnounceActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched",
+      "需要群参数"
+    ],
+    "steps": [
+      "deep link campusx://announce（未带参数）"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "normal": {
+      "status": "unknown",
+      "evidence": []
+    },
+    "error": {
+      "status": "not_reproducible",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "顶部标题「校园活动」+ 左上返回",
+    "内容区为空"
+  ],
+  "navigation": [
+    "返回 → 上一页"
+  ],
+  "persistence": [
+    "无"
+  ],
+  "known_unknowns": [
+    "有公告内容时的排版（标题/正文/发布者/时间）"
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "screen_id": "trident-map",
+  "title": "地图页（底部 tab 3）",
+  "target_route": "bottom-tab:675,1810（deep link campusx://map 在 singleTask 下不生效）",
+  "activity": "com.kairuotu.trident.TridentActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched",
+      "已在主容器"
+    ],
+    "steps": [
+      "deep link campusx://trident",
+      "点击底部第三个 tab（x=675,y=1810）"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "not_applicable",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "顶部：大标题 Map + 地区选择「北京交通大学（校本部）」+ 右上消息图标",
+    "主体：地图 + 用户头像标记 + 深色气泡卡片",
+    "右下：定位复位按钮 + 黑色圆形 +"
+  ],
+  "navigation": [
+    "地区名 → 选点页（poi/search）",
+    "+ → 发布页"
+  ],
+  "persistence": [
+    "无"
+  ],
+  "known_unknowns": [
+    "page-map.md 记录首次进入会有阻断式「授权地理位置」弹窗；本次采集时弹窗未出现（此前已授权/已选择过）",
+    "地图底图为腾讯地图 SDK；具体缩放级别与标记规则未记录"
+  ]
+}

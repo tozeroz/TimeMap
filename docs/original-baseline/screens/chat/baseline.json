@@ -1,0 +1,48 @@
+{
+  "screen_id": "chat",
+  "title": "单聊",
+  "target_route": "campusx://chat",
+  "activity": "com.kairuotu.chat.conversation.ChatActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched",
+      "需要会话参数"
+    ],
+    "steps": [
+      "deep link campusx://chat（未带参数）"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "normal": {
+      "status": "unknown",
+      "evidence": []
+    },
+    "error": {
+      "status": "not_reproducible",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "顶部昵称 + 返回 + 更多",
+    "底部输入框「发消息...」+ 表情 + 加号"
+  ],
+  "navigation": [
+    "返回 → 上一页"
+  ],
+  "persistence": [
+    "消息应持久化（未验证）"
+  ],
+  "known_unknowns": [
+    "带会话参数时的消息气泡样式、时间分组、已读状态"
+  ]
+}

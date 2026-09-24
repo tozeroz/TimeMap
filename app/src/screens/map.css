@@ -309,3 +309,23 @@
   background: var(--c-surface-sunken);
   text-align: center;
 }
+
+/* ===========================================================================
+   M5 WO#15：地图标记来源的**诚实状态**徽标
+   =========================================================================== */
+/* 展示"标记从哪来、有几条、是否可用"。
+   ⚠️ 刻意做成可见的徽标而不是静默 —— 与 WO#12/#14 同一纪律：
+      "没有数据"与"读不到"必须能被看见，而不是拿 mock 顶上。 */
+.map__markerBadge {
+  position: absolute;
+  left: 16px;
+  bottom: 96px;
+  z-index: 3;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}

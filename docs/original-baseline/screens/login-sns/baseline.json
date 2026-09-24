@@ -1,0 +1,66 @@
+{
+  "screen_id": "login-sns",
+  "title": "手机号登录",
+  "target_route": "campusx://login/sns",
+  "activity": "com.kairuotu.account.login.activity.CampusSnsLoginActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://login/sns"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_applicable",
+      "evidence": []
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "unknown",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "标题「输入手机号」",
+    "区号 +86 + 手机号输入框 +「获取验证码」按钮"
+  ],
+  "navigation": [
+    "获取验证码 → 进入验证码输入"
+  ],
+  "persistence": [
+    "无"
+  ],
+  "known_unknowns": [
+    "验证码倒计时、错误提示、协议勾选的强制时机"
+  ],
+  "evidence_note": "截图中的手机号已打码为 [redacted]",
+  "evidence_mask": [
+    {
+      "file": "normal.png",
+      "reason": "redacted phone number",
+      "region_normalized": {
+        "x": 0.1815,
+        "y": 0.2333,
+        "width": 0.3889,
+        "height": 0.0323
+      },
+      "pixel_box_1080x1920": {
+        "x": 196,
+        "y": 448,
+        "width": 420,
+        "height": 62
+      }
+    }
+  ]
+}

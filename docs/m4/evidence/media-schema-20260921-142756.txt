@@ -1,0 +1,52 @@
+﻿=== A. 迁移 006 的 schema 就位 ===
+PASS 表 media 存在
+PASS 表 post_media 存在
+PASS 表 message_media 存在
+PASS can_read_message / can_read_media 两个判定函数存在
+PASS messages 已有 kind 与 deleted_at
+
+=== B. 准备测试数据（public media + private media + 会话）===
+FAIL 插入 public media 失败：11111111-aaaa-4aaa-8aaa-000000000001
+INSERT 0 1
+FAIL 幂等键未生效：ERROR:  column "upload_request_id" is of type uuid but expression is of type text
+LINE 1: ...d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4','11111111-...
+                                                             ^
+HINT:  You will need to rewrite or cast the expression.
+FAIL 插入 private media 失败：11111111-bbbb-4bbb-8bbb-000000000002
+INSERT 0 1
+PASS 建了一个 U1+U2 的会话（U3 不是成员）
+
+=== C. P0-B：跨 scope 引用必须**在数据库层**被拒 ===
+PASS post_media 引用 private media → **数据库拒绝**（复合外键生效）
+PASS message_media 引用 public media → **数据库拒绝**
+PASS post_media 显式写 media_scope='private' 被 CHECK 拒绝
+PASS post_media 合法引用 public media 成功（防线不是一律拒绝）
+
+=== D. P0-A：媒体授权**复用**消息可见性（防权限漂移）===
+PASS message_media 合法引用 private media 成功
+PASS can_read_message：发送者 U1 → true
+PASS can_read_message：会话成员 U2 → true
+PASS can_read_message：非成员 U3 → false
+PASS can_read_media：发送者能读私有图
+PASS can_read_media：会话成员能读私有图
+PASS can_read_media：**非成员不能读**（知道 media id 也读不到）
+  --- 防漂移：同一 (user, message) 两个接口的结论必须一致 ---
+PASS 用户 11111111… 消息与媒体结论一致（t）
+PASS 用户 22222222… 消息与媒体结论一致（t）
+PASS 用户 33333333… 消息与媒体结论一致（f）
+
+=== E. 撤回后私有媒体必须不可读（deleted_at 参与判定）===
+PASS 第二条消息也引用了同一 private media
+PASS 撤回前：发送者可读
+PASS 撤回的消息 → can_read_message=false
+PASS 另一条未撤回的引用仍可读（撤回只影响那一条）
+PASS **全部引用消息都撤回 → 私有媒体不可读**
+
+=== F. public media 的访问模型独立验证（不与私聊图复用授权）===
+PASS public media：**任何已登录用户**可读（U3 也 true）
+  （public 走 Nginx 静态下发，授权链与 private 完全不同 —— 这是设计要求）
+
+=== G. 清理 ===
+PASS 测试数据已清理
+
+MEDIA_SCHEMA_RESULT FAIL

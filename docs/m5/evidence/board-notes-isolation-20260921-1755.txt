@@ -1,0 +1,53 @@
+M5 Slice 1（留言板 board_notes）收口 —— **第三账号真机隔离验证**
+脚本: scripts/m5/device-board-isolation.mjs
+运行: node scripts/m5/device-board-isolation.mjs（Windows 侧；设备为 MuMu 模拟器 127.0.0.1:16384）
+审核要求: board_notes：from_user_id 等身份字段 strict 400（已由 verify-board-notes.sh B8 组完成）
+          + **第三账号真机隔离验证** → Slice 1 CLOSED。本文件是后半部分的原始输出。
+
+=== [1/6] 造甲、乙两个临时账号（真实 OTP 流程）===
+  PASS 甲、乙两个临时账号已就绪（且互不相同）
+
+=== [2/6] 甲给乙留一条留言，并做服务端前置验证 ===
+  PASS 甲给乙留言 → 201
+  PASS 甲（发送方）能读到这条留言
+  PASS 乙（接收方）能读到这条留言
+
+=== [3/6] 把设备登录成丙（device-login-helper，真实 OTP 登录）===
+  PASS 丙在真机上完成真实 OTP 登录（HELPER_SELFTEST PASS）
+
+=== [4/6] 重连 CDP（App 已被 helper 冷启动，pidof 变了，必须重做转发）===
+  PASS 设备本地存在会话（丙已登录）
+  PASS **设备上登录的丙与甲、乙都不是同一人**
+  PASS 设备身份与服务端一致
+  PASS 丙（服务端侧）读不到甲乙之间的留言
+
+=== [5/6] 真机断言：丙在 App 里打开乙的留言板 ===
+  当前路由：#/board/<乙的 userId>
+  页面正文：留言 | 仅双方可见 | 可以给同学留言噢 | 😂 | 👑 | ❤️ | 👀 | 😱 | +1 | 留言
+  PASS 已进入留言板页面（标题「留言」+ 副标题存在）
+  PASS **丙在设备界面上看不到那条留言**（正文里没有唯一标记）
+  PASS 便签数为 0（页面上没有任何 .note 元素）
+  PASS 页面不是报错而是正常空态（显示「可以给同学留言噢」）
+  PASS **空态文案在页面可见文本里**（不只是 DOM 里有个元素）
+  PASS 页面没有出现「网络错误」（说明是真的空列表，不是请求失败被渲染成空）
+  PASS 丙看到的是空态，不是权限错误（服务端按"空列表"处理，不泄漏两人之间有没有留言）
+  顺带记录：丙看到 emptyText="可以给同学留言噢"，hint=null
+
+=== [6/6] 清理测试数据 ===
+  PASS 清理核对 LEFT_USERS=0
+  PASS 清理核对 LEFT_NOTES=0
+  PASS 清理核对 LEFT_SESSIONS=0
+  PASS 清理核对 LEFT_CHALLENGES=0
+  PASS 清理核对 SEED_USERS=3
+  PASS 清理核对 SINK_FILES_LEFT_FROM_THIS_RUN=0
+  种子留言数保持为 2（未删除种子数据）
+
+DEVICE_BOARD_ISOLATION_RESULT PASS
+
+备注（诚实记录）：
+1. 第一次运行时 helper 在"冷启动 → 找底部导航"这步失败，根因是**模拟器上前台是原版 App**
+   （com.kairuotu.campus 的 MessageBoardActivity）把我们 App 顶掉了。脚本现已先 force-stop 原版 App，
+   属设备环境归位，**未改动任何产品代码**。
+2. 清理逻辑改过一轮：第一版按号码段通配删 dev sink 文件，而丙的号码由 helper 随机生成、号段不可预料，
+   结果留下了 3 个文件。现改为**只删本次 request-code 响应里明确返回过的 sink 路径**。
+3. 本文件中的手机号与 userId 已做省略处理，原始完整输出见运行日志。

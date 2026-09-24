@@ -155,3 +155,121 @@
   gap: 3px;
   margin-left: auto;
 }
+
+/* ===========================================================================
+   M3 Slice 4：地点详情按**只读证据**重排
+   证据（supplements/poi-detail.json）：地点名大号加粗占满宽度；
+   下一行「距我N公里」在左、完整地址紧随；
+   再往下是该地点的动态图片（左侧、非通栏），图片上有作者标签。
+   此前的中部统计 / 两个按钮 / 「最近来过」都不在证据里，已删除。
+   =========================================================================== */
+.pd__head {
+  padding: 12px 16px 0;
+}
+
+.pd__name {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--c-text);
+}
+
+.pd__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pd__distance {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: var(--c-text-2);
+}
+
+.pd__addr {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--c-text-3);
+}
+
+.pd__feed {
+  margin-top: 14px;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pd__empty,
+.pd__state {
+  padding: 48px 16px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--c-text-3);
+}
+
+.pd__state-sub {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+/* 一条动态：左图 + 图上作者标签 + 右侧正文（对齐证据里的图片 + view_user_tag） */
+.pd__item {
+  display: flex;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.pd__imgWrap {
+  position: relative;
+  flex: 0 0 auto;
+  width: 132px;
+  height: 168px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--c-surface-sunken);
+}
+
+.pd__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 作者标签叠在图片上（原版是 view_user_tag + tv_user_tag_name，位于图片左上角） */
+.pd__userTag {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  max-width: calc(100% - 12px);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pd__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--c-text);
+}
+
+.pd__time {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--c-text-3);
+}

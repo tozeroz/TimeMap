@@ -1,0 +1,51 @@
+{
+  "screen_id": "scanner",
+  "title": "扫码",
+  "target_route": "campusx://scanner",
+  "activity": "com.kairuotu.scanner.scanner.QrCodeScannerActivityV2",
+  "entry": {
+    "preconditions": [
+      "app_launched",
+      "相机权限"
+    ],
+    "steps": [
+      "deep link campusx://scanner"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_applicable",
+      "evidence": []
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "unknown",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "左上返回箭头",
+    "取景框 + 提示「请将二维码对准扫码框中心」",
+    "底部「我的二维码」「相册」"
+  ],
+  "navigation": [
+    "我的二维码 → 二维码展示页",
+    "相册 → 系统相册选图识别"
+  ],
+  "persistence": [
+    "无"
+  ],
+  "known_unknowns": [
+    "识别成功后的结果处理路径",
+    "无相机权限时的降级界面"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "screen_id": "poi-search",
+  "title": "地点搜索 / 选点",
+  "target_route": "campusx://poi/search",
+  "activity": "com.kairuotu.poi.CampusPoiSearchActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://poi/search"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "not_reproducible",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "左上关闭、右上「确认」",
+    "搜索框提示「搜索地点」；列表首项「不添加地点」",
+    "列表项：地点名 + 地址（如「北京交通大学 / 西直门外上园村3号」）"
+  ],
+  "navigation": [
+    "选中 + 确认 → 回到来源页并带上地点"
+  ],
+  "persistence": [
+    "无"
+  ],
+  "known_unknowns": [
+    "搜索结果排序规则；无结果时的空态"
+  ]
+}

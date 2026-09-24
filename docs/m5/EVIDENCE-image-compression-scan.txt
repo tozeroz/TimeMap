@@ -1,0 +1,25 @@
+# 只读取证：原版 APK "上传前压缩" 相关类名扫描
+# 时间: 2026-09-21T17:06:00.449Z
+# APK sha256: 3373B6B2FBC997919398543DBBC59546172376BEEDEE87312154EBA095D6C294（已核验与基线一致）
+# 扫描字节: 46527924
+
+## 探针结果
+MISS  Luban                    Luban（常见的上传前压缩库）
+MISS  zibin                    top.zibin.luban 包名片段
+MISS  Compressor               id.zelory:compressor 类名片段
+HIT   compressImage            通用压缩方法名  → classes3.dex
+HIT   compressTo               通用压缩方法名  → classes.dex,classes2.dex,classes3.dex
+MISS  BitmapCompress           位图压缩类名片段
+HIT   quality                  JPEG quality 参数名（弱特征）  → classes.dex,classes2.dex,classes3.dex,classes4.dex,classes5.dex
+HIT   inSampleSize             BitmapFactory 采样参数（强特征：说明做了降采样）  → classes.dex,classes2.dex,classes3.dex,classes4.dex
+HIT   calculateInSampleSize    标准降采样算法方法名（强特征）  → classes3.dex,classes4.dex
+MISS  getScaledBitmap          缩放宽高（强特征）
+HIT   createScaledBitmap       Android API：创建缩放位图  → classes.dex,classes2.dex,classes3.dex,classes4.dex
+MISS  ImageResizer             图像缩放类名
+MISS  resizeImage              图像缩放方法名
+MISS  uploadImageCompress      上传前压缩方法名
+
+## 声明强度（重要）
+HIT  = 存在该库/能力的证据；**不等于**上传路径调用了它。
+MISS = 无这些明显命名的库；**不等于**原版不压缩（可能是自研代码 / 在 RN bundle 里 / 混淆别名）。
+→ 因此本扫描**不足以**单独判定 (B) 类"图片压缩"项是否为真实实现缺口。

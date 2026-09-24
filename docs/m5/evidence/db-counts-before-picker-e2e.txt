@@ -1,0 +1,12 @@
+﻿SNAPSHOT_AT=2026-09-21T19:09:46+08:00
+users                10
+sessions             121
+login_challenges     99
+messages             4
+media                7
+board_notes          2
+message_threads      2
+thread_members       5
+message_media        1
+SEED_USERS         3
+TEST_RESIDUE_USERS 7

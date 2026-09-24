@@ -1,0 +1,13 @@
+# HTTPS 证书健康检查定时器（每小时）
+[Unit]
+Description=Hourly check of campus TLS certificate health
+
+[Timer]
+# 每小时的第 23 分钟（避开整点），再加随机抖动
+OnCalendar=*-*-* *:23:00
+RandomizedDelaySec=5m
+# 若机器关机期间错过，开机后补跑一次
+Persistent=true
+
+[Install]
+WantedBy=timers.target

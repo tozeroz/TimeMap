@@ -314,3 +314,55 @@
   padding: 18px 0 6px;
   margin: 0;
 }
+
+/* ===========================================================================
+   M3 Slice 1：校园页的离线/错误态
+   在线时 API 是权威数据源（不再混 mock）；离线只降级到最后成功快照并明确标注；
+   既无网络也无快照 → 「网络错误 + 刷新」（与原版一致）。
+   =========================================================================== */
+.campus__offline {
+  margin: 10px 16px 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--c-surface-sunken);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--c-text-2);
+}
+
+.campus__error {
+  padding: 80px 24px;
+  text-align: center;
+  color: var(--c-text-2);
+  font-size: 15px;
+}
+
+.campus__retry {
+  margin-top: 14px;
+  padding: 8px 22px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: #111;
+  color: #fff;
+  font-size: 14px;
+}
+
+/* WO#16 层 B：校区面板的标题与「搜索其他学校」入口（基线里后者是**面板内的一个项**，
+   不是搜索框的 placeholder —— 这是层 A 时被纠正过的概念混淆） */
+.switcher__title {
+  margin: 0 0 6px;
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text-1);
+}
+
+.switcher__item--entry {
+  width: 100%;
+  justify-content: center;
+  margin-top: 6px;
+  border-top: 1px solid var(--c-line);
+  border-bottom: 0;
+  color: var(--c-text-2);
+  font-size: 13px;
+}

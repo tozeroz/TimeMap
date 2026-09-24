@@ -1,0 +1,28 @@
+{
+  "captured_at": "2026-09-21T03:00+08:00",
+  "method": "deep-link (campusx://) + adb screencap; 个人/地图 tab 用底部导航点击",
+  "device": {
+    "emulator": "MuMu (Android 12)",
+    "model": "BVL-AN00",
+    "resolution": "1080x1920",
+    "dpi": "unknown",
+    "font_scale": "unknown",
+    "locale": "zh-CN",
+    "theme": "light",
+    "orientation": "portrait (rotation locked 0)"
+  },
+  "app": {
+    "package": "com.kairuotu.campus",
+    "app_version": "unknown",
+    "version_code": "unknown",
+    "note": "APK 由用户提供并安装于模拟器；版本号未从 app 内取得"
+  },
+  "account_state": {
+    "logged_in": false,
+    "user_alias": "account-A",
+    "note": "未登录。因此依赖登录态的页面（动态详情/评论/单聊/群聊/群公告）呈现错误页或空白态，这是原版真实行为，已如实记录。"
+  },
+  "network_condition": "本机网络可达（部分页面仍返回「网络错误」，说明其强依赖后端）",
+  "data_precondition": "使用 app 本地已有数据；未做额外造数",
+  "evidence_note": "login-sns 截图中的手机号已打码处理（[redacted]）"
+}

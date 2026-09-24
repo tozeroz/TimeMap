@@ -1,0 +1,3 @@
+﻿=== A. pg_dump（custom format，archive 就是设计来重建数据库的）===
+pg_dump: error: could not open output file "/srv/campus/backups/m2-drill.dump": Permission denied
+FAIL dump 未生成或为空

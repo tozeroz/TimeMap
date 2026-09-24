@@ -1,0 +1,61 @@
+﻿=== 0. 准备：两个账号（A=发送者，B=图的所有者），A、B 同属一个会话 ===
+PASS 两个账号登录成功（A=af35a49a… B=664f8f59…）
+PASS 测试会话就绪（messages 基线 0 行）
+
+=== A0. A 上传一张 private 图（purpose=chat）===
+PASS 上传成功 media=99d4fe12-f8fb-49d7-9970-07bd1910d253 key=2026/09/99d4fe12-f8fb-49d7-9970-07bd1910d253.png
+PASS 该 media scope=private
+
+=== A1. 带 mediaId 发图片消息 → 201 + message_media(scope=private) ===
+PASS → 201
+PASS 响应回显 mediaId（客户端可确认挂上了）
+PASS message_media 行正确（99d4fe12-f8fb-49d7-9970-07bd1910d253|private|0）
+
+=== A2. GET messages 读到该引用（id/width/height）===
+PASS 消息列表里出现该 media 引用
+PASS 带 width=24（与上传解出的尺寸一致）
+PASS 消息未撤回（media 引用对成员可读）
+
+=== A3. **挂别人的私有 media** → 400 media_not_owned，且一行都不写（越权）===
+PASS B 上传了自己的私有图 media=ea5c187d-79a2-451e-ba3f-cdf3aec6d116
+PASS A 挂 B 的图 → 400
+PASS 错误码明确 media_not_owned
+PASS **别人的图没有被挂上**（message_media 无行）
+
+=== A4. 挂 scope='public' 的 media → 400 media_not_private（跨 scope 服务层先拒）===
+PASS A 上传了一张 public 图 media=876fe2ec-0102-4627-98ea-d7cd6d35a50b
+PASS public media → 400
+PASS 错误码明确 media_not_private
+PASS DB 层复核：绕过服务层直接插跨 scope 行被外键拒绝（防线仍在兜底）
+
+=== A5. 挂不存在的 media id → 400 media_not_found ===
+PASS 不存在的 media → 400
+PASS 错误码明确 media_not_found
+
+=== A6. 带 mediaId 但 kind=text → 400 media_requires_image_kind ===
+PASS kind=text + mediaId → 400
+PASS 错误码明确 media_requires_image_kind
+
+=== A7. **传数组 mediaIds[] / 非字符串 mediaId → 400 bad_media_id**（修订 1 的核心）===
+FAIL mediaIds[] 被**静默忽略**并发出了消息（{"id":"b01a53b8-81bc-4a03-bc10-dad7a58f5b70","kind":"image","mentions":[],"mediaId":null}）—— 不允许：客户端以为发了图
+PASS mediaId 非字符串 → 400
+PASS 错误码明确 bad_media_id
+PASS mediaId 非字符串 → 400
+PASS 错误码明确 bad_media_id
+
+=== A8. 非法 uuid 字符串 → 400 bad_media_id ===
+PASS 非法 uuid → 400
+PASS 错误码明确 bad_media_id
+
+=== T1. 不带 mediaId 的纯文本消息仍然 201（既有行为未被破坏）===
+PASS 纯文本 → 201
+PASS 响应里 mediaId 为 null（没有媒体）
+
+=== A9. **同事务**：上面所有失败的请求都不该留下消息行 ===
+FAIL 期望 2 条，实际 3 条 —— 存在「校验失败却写了消息」的路径
+PASS message_media 恰好 1 行（只有 A1 那次挂上）
+
+=== Z. 清理（按 owner 清理 media 行 + 逐个删盘上文件，避免留下未登记文件）===
+PASS 测试数据与盘上文件都已清理（DB 0 行、盘上 0 个残留）
+
+MESSAGE_MEDIA_RESULT FAIL

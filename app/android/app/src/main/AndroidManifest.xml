@@ -10,11 +10,16 @@
         android:supportsRtl="true"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/AppTheme">
         <!--
-            hardwareAccelerated 显式开启；wasCleartextTraffic 关闭（纯本地 demo，不需要网络）。
+            hardwareAccelerated 显式开启。
             模拟器上曾出现 WebView 渲染线程卡死（Chromium EGLImage 释放报错），
             表现为界面冻结、点击无响应；force-stop 后重新启动可恢复。
+
+            明文流量：usesCleartextTraffic 保持 false（全局禁止），
+            例外只给后端 IP，写在 res/xml/network_security_config.xml 里。
+            M1 起 App 会请求 http://8.148.156.146 的 /api/*（暂无域名与证书）。
         -->
 
         <activity
@@ -57,6 +62,55 @@
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!--
+        ⚠️ 实验性改动（2026-09-21，WO#5 语音消息 可行性探针 PREREQ-1）
+        ⚠️ 这是**为了验证"能否录音"而加的真实 APK 改动**，当前产品**尚无任何可用的录音功能**。
+
+        为什么必须加：Android 对**未声明**的权限是**直接拒绝且不弹窗**。
+        实测（加此行之前）：`getUserMedia({audio:true})` → `NotAllowedError: Permission denied`，
+        且**没有出现系统授权 UI** —— 用户连授权的机会都没有，因此无法验证后续链路。
+
+        治理约定（审核记录 34 §六）：
+          · 若后续探针 **NO-GO**（例如 P3「是否出现真实 Android 授权 UI」失败）→
+            **必须回退本行**，不要把没有任何可用功能的麦克风权限长期留在正式产品里；
+          · 探针通过后再随 WO#5 的实际实现一起保留。
+        回退方式：删除本 `<uses-permission>` 块即可（本改动是单一 commit，便于回退）。
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!--
+        ⚠️ 同一个实验性改动的一部分（WO#5 PREREQ-2 调查结论）
+
+        为什么必须**同时**声明这个：Capacitor 的 WebView 权限桥在
+        `BridgeWebChromeClient.onPermissionRequest()` 里，对 AUDIO_CAPTURE 申请的是
+        **两个**权限（读的是我们 node_modules 里的 Capacitor 源码，非猜测）：
+
+            if (resources 含 "android.webkit.resource.AUDIO_CAPTURE") {
+                permissionList.add(Manifest.permission.MODIFY_AUDIO_SETTINGS);   // ← 这个
+                permissionList.add(Manifest.permission.RECORD_AUDIO);
+            }
+            permissionLauncher.launch(permissions);   // RequestMultiplePermissions
+
+        而它的结果判定是"**全部必须授予**"：
+
+            for (Map.Entry<String, Boolean> p : isGranted.entrySet())
+                if (!p.getValue()) granted = false;
+            permissionListener.onPermissionSelect(granted);
+
+        → 我们之前只声明了 RECORD_AUDIO，未声明 MODIFY_AUDIO_SETTINGS，
+          于是该项恒为 false → 整体 granted=false → request.deny() → WebView 报
+          NotAllowedError（实测 260ms、无弹窗，与"RECORD_AUDIO 已授权故无需弹窗"完全吻合）。
+
+        MODIFY_AUDIO_SETTINGS 是 protectionLevel=normal 的安装期权限（不弹窗、无用户可见影响），
+        声明它是**让 Capacitor 既有桥能正常工作**的必要条件，
+        而不是我另写一套 WebChromeClient（审核明确禁止那样做）。
+
+        治理同前：若探针最终 NO-GO，本行与 RECORD_AUDIO 一并回退。
+    -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- 真实定位（@capacitor/geolocation）：地图蓝点跟随真实位置 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />

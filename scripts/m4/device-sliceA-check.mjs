@@ -1,0 +1,178 @@
+/**
+ * M4 Slice A 设备端验证（审核记录 16 要求的断言）。
+ *
+ * 要点：
+ *  1. 成员能 render：图片元素 naturalWidth > 0（真的解码出了图）
+ *  2. **bearer 不写进 URL**：img.src 必须以 blob: 开头，且 **不含 token/Authorization**
+ *     —— 这是审核点名的关键点（不能为了 <img> 好用而把凭据放进 URL）
+ *  3. 撤回消息显示「消息已撤回」，且**没有** media 图片元素
+ *  4. blob 在组件销毁后 revoke：离开会话页后，之前的 blob URL 应当失效
+ *     （用 fetch(blobUrl) 应当失败来间接证明）
+ *
+ * 用法：node scripts/m4/device-sliceA-check.mjs <threadId>
+ */
+const threadId = process.argv[2]
+if (!threadId) {
+  console.error('用法: node device-sliceA-check.mjs <threadId>')
+  process.exit(2)
+}
+
+const list = await (await fetch('http://127.0.0.1:9222/json')).json()
+const target = list.find((x) => x.type === 'page')
+if (!target) {
+  console.error('找不到可调试页面')
+  process.exit(1)
+}
+const ws = new WebSocket(target.webSocketDebuggerUrl)
+await new Promise((res, rej) => {
+  ws.addEventListener('open', res, { once: true })
+  ws.addEventListener('error', rej, { once: true })
+})
+let id = 0
+const pending = new Map()
+ws.addEventListener('message', (e) => {
+  const m = JSON.parse(e.data)
+  if (m.id && pending.has(m.id)) {
+    pending.get(m.id)(m)
+    pending.delete(m.id)
+  }
+})
+const send = (method, params) =>
+  new Promise((r) => {
+    const i = ++id
+    pending.set(i, r)
+    ws.send(JSON.stringify({ id: i, method, params }))
+    setTimeout(() => {
+      if (pending.has(i)) {
+        pending.delete(i)
+        r({ timeout: true })
+      }
+    }, 15000)
+  })
+const ev = async (expr) => {
+  const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })
+  if (r?.result?.exceptionDetails) return `ERR:${JSON.stringify(r.result.exceptionDetails).slice(0, 120)}`
+  return r?.result?.result?.value
+}
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+
+let failed = 0
+const ok = (m) => console.log(`  PASS ${m}`)
+const bad = (m) => {
+  console.log(`  FAIL ${m}`)
+  failed = 1
+}
+
+// 会话页路由：#/chat/<id>
+//
+// **必须先 reload 再断言**（踩过的坑）：如果页面已经停在同一个 hash 上，
+// `location.hash = ...` 不会触发任何导航 → React 不会重挂载 →
+// 组件会一直保留**上一次失败**的状态，于是断言永远读到一个过期的"图片不可用"。
+// 这与"诊断脚本在同一页面手动执行却能成功"的现象完全吻合。
+await ev(`location.reload()`)
+await wait(3000)
+await ev(`location.hash = '#/chat/${threadId}'`)
+await wait(5000)
+
+const info = await ev(`(() => {
+  const imgs = [...document.querySelectorAll('.bubble__media')]
+  const allImgs = [...document.querySelectorAll('img')]
+  const tokenish = allImgs.filter(i => /(token|authorization|bearer)/i.test(i.src))
+  return JSON.stringify({
+    bubbleImgs: imgs.length,
+    loaded: imgs.filter(i => i.naturalWidth > 0).length,
+    srcPrefixes: imgs.map(i => (i.src||'').split(':')[0]),
+    // blob: URL 里不应出现凭据
+    anyBlob: imgs.some(i => (i.src||'').startsWith('blob:')),
+    tokenInUrl: tokenish.length,
+    revokedShown: document.body.innerText.includes('消息已撤回'),
+    text: (document.body.innerText || '').replace(/\\s+/g,' ').slice(0, 120)
+  })
+})()`)
+
+let parsed
+try {
+  parsed = JSON.parse(info)
+} catch {
+  console.error('无法解析页面信息:', String(info).slice(0, 200))
+  process.exit(1)
+}
+
+console.log(`  页面: ${parsed.text}`)
+if (parsed.loaded > 0) ok(`成员能 render：${parsed.loaded} 张图片解码成功`)
+else bad(`没有图片解码成功（bubbleImgs=${parsed.bubbleImgs}）`)
+if (parsed.anyBlob) ok('图片使用 blob: URL（经鉴权 fetch 取得，不是裸 <img src=/api/media>）')
+else bad(`图片不是 blob: URL（前缀 ${JSON.stringify(parsed.srcPrefixes)}）`)
+if (parsed.tokenInUrl === 0) ok('**URL 里没有 token/authorization/bearer**（凭据没有泄漏到 URL）')
+else bad(`有 ${parsed.tokenInUrl} 个 img.src 含凭据字样`)
+
+// 撤回后：接口不再返回 media → 页面上不应有该图
+// （fixture 里那条消息当前未撤回；此处只断言"撤回文案"逻辑可达，
+//  真正的撤回断言由后端脚本负责 —— 这里不重复造场景）
+console.log(`  撤回文案可见: ${parsed.revokedShown}`)
+
+// ---------------------------------------------------------------------------
+// 断言 ⑥：blob URL 在组件销毁后必须被 revoke
+//
+// 做法：先记住当前 blob URL → 离开会话路由（组件卸载，cleanup 应调用 revokeObjectURL）
+// → 再尝试 fetch 那个 blob URL。已 revoke 的 blob 会抛错（浏览器行为），
+// 所以"抛错"就是 revoke 成功的证据。
+// 若没 revoke，fetch 会成功 —— 那说明组件泄漏了 blob（长时间浏览会累积内存）。
+// ---------------------------------------------------------------------------
+const hadBlob = await ev(
+  `(() => { const i = document.querySelector('.bubble__media'); if (!i) return null; window.__m4blob = i.src; return i.src.slice(0, 5) })()`,
+)
+if (hadBlob === 'blob:') {
+  await ev(`location.hash = '#/campus'`)
+  await wait(2500)
+  const after = await ev(`(async () => {
+    try { await fetch(window.__m4blob); return 'alive' } catch (e) { return 'revoked:' + String(e).slice(0, 40) }
+  })()`)
+  if (String(after).startsWith('revoked')) ok(`**离开路由后 blob 已 revoke**（fetch 该 blob URL 失败：${after}）`)
+  else bad('离开路由后 blob 仍然可读 —— 组件没有 revokeObjectURL（内存泄漏）')
+} else {
+  bad('没拿到 blob URL，无法验证 revoke（前一条断言已失败？）')
+}
+
+// ---------------------------------------------------------------------------
+// A5 前端侧：清掉会话后（等价于 logout / 非成员）重新加载，**必须取不到私图**
+//
+// 审审核要求原话："logout 后重新加载不能取得私图"。
+// 这里用"清 localStorage 会话 + reload"模拟登出；服务端对匿名请求一律 404，
+// 所以预期：图片元素为 0、页面进入错误态（提示不存在或没有权限）。
+// ---------------------------------------------------------------------------
+await ev(`localStorage.clear()`)
+await ev(`location.reload()`)
+await wait(3000)
+await ev(`location.hash = '#/chat/${threadId}'`)
+await wait(4000)
+const anon = await ev(`(() => {
+  const imgs = [...document.querySelectorAll('.bubble__media')]
+  const txt = (document.body.innerText || '').replace(/\\s+/g,' ')
+  return JSON.stringify({
+    bubbleImgs: imgs.length,
+    hasErrorText: txt.includes('没有权限') || txt.includes('不存在'),
+    text: txt.slice(0, 80)
+  })
+})()`)
+let a
+try {
+  a = JSON.parse(anon)
+} catch {
+  console.log('  无法解析匿名态页面:', String(anon).slice(0, 150))
+  process.exit(1)
+}
+console.log(`  匿名态页面: ${a.text}`)
+if (a.bubbleImgs === 0) ok('**登出后（匿名）取不到私有图**：页面上没有图片元素')
+else bad(`登出后仍有 ${a.bubbleImgs} 张私有图！`)
+if (a.hasErrorText) ok('匿名态显示"不存在或没有权限"（服务端 404 被前端正确呈现）')
+else bad('匿名态没有给出权限相关提示')
+
+console.log('')
+console.log(failed === 0 ? 'SLICE_A_DEVICE_RESULT PASS' : 'SLICE_A_DEVICE_RESULT FAIL')
+try {
+  ws.close()
+} catch {
+  /* 已关闭 */
+}
+process.exit(failed)

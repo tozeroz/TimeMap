@@ -1,0 +1,50 @@
+{
+  "screen_id": "message",
+  "title": "聊天列表",
+  "target_route": "campusx://message",
+  "activity": "com.kairuotu.chat.messagepage.view.MessageActivity",
+  "entry": {
+    "preconditions": [
+      "app_launched"
+    ],
+    "steps": [
+      "deep link campusx://message"
+    ]
+  },
+  "states": {
+    "loading": {
+      "status": "not_reproducible",
+      "evidence": []
+    },
+    "empty": {
+      "status": "unknown",
+      "evidence": []
+    },
+    "normal": {
+      "status": "observed",
+      "evidence": [
+        "normal.png"
+      ]
+    },
+    "error": {
+      "status": "not_reproducible",
+      "evidence": []
+    }
+  },
+  "interactions": [
+    "顶部「聊天」+ 左上关闭 + 右上加号",
+    "邀请卡「分享我的校园卡 / 邀请同学一起加入 Campus! / 邀请同学」",
+    "「更多同学」列表：昵称 + 相同学校标签 + MBTI/星座 + 学院-专业 + 年级"
+  ],
+  "navigation": [
+    "点会话 → 单聊",
+    "邀请同学 → 分享面板",
+    "右上加号 → 新建会话"
+  ],
+  "persistence": [
+    "会话列表应持久化（未验证）"
+  ],
+  "known_unknowns": [
+    "已存在会话时的列表样式（本机为 0 会话）"
+  ]
+}

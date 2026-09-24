@@ -94,3 +94,42 @@
   padding: 7px;
   overflow-x: hidden;
 }
+
+/* ===========================================================================
+   M5 WO#12：他人主页的修复相关样式
+   =========================================================================== */
+
+/* 首字占位头像（users 表没有 avatar 列 → 与全局其它位置一致的做法）
+   ⚠️ 原来这里用 mock 生成的 SVG（<img src=...>）；改为纯文字首字占位：
+      "编造的图形头像"与"编造的昵称"是同一类问题（看起来像真实资料）。 */
+.up__avatar--ph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--c-text-2);
+  background: var(--c-surface-sunken);
+  user-select: none;
+}
+
+/* 不可用态 / 加载态的说明文字（刻意中性：不区分"参数非法"与"用户不存在"）
+   —— 服务端也不区分这两者，避免把 id 空间变成可探测的。 */
+.up__unavailable-text {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--c-text-3);
+}
+
+/* 「私信」不可用时的**静态**说明（不是按钮 —— 不留 inert/fake 控件）。
+   审核记录 53：没有真实目的地时不应渲染一个点了没反应的按钮。 */
+.up__noaction {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 18px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+  color: var(--c-text-3);
+  font-size: 14px;
+}

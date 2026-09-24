@@ -1,0 +1,103 @@
+{
+  "verdict": "NATIVE_FILE_PICKER_INTERACTION",
+  "at": "2026-09-21T11:21:11.521Z",
+  "apkIndependent": true,
+  "threadId": "66666666-cccc-4ccc-8ccc-000000000003",
+  "entry": {
+    "found": true,
+    "x": 548,
+    "y": 1047,
+    "rect": {
+      "x": 530,
+      "y": 1029,
+      "w": 36,
+      "h": 36
+    },
+    "accept": "image/*",
+    "disabled": false,
+    "dpr": 1.75,
+    "vw": 618,
+    "vh": 1074
+  },
+  "bubblesBefore": 2,
+  "bubblesAfter": 3,
+  "bubblesDelta": 1,
+  "mediaBefore": 1,
+  "mediaAfter": 2,
+  "lastBubbleImgs": 1,
+  "lastBubbleOk": 1,
+  "lastBubbleNaturalWidth": [
+    640
+  ],
+  "lastBubbleText": "刚刚",
+  "pickLeft": 0,
+  "picked": "{\"name\":\"m5-picker-probe-20260921.png\",\"size\":7088,\"type\":\"image/png\"}",
+  "pageError": "",
+  "pageStatus": "",
+  "rowIds": [
+    "66666666-dddd-4ddd-8ddd-000000000004",
+    "eb4476f4-de27-47d0-bad3-32ae43738b84",
+    "61b234f8-bba8-46ba-aaee-30d544c501cd"
+  ],
+  "network": [
+    {
+      "method": "OPTIONS",
+      "url": "https://8.148.156.146/api/threads/66666666-cccc-4ccc-8ccc-000000000003/messages",
+      "status": 204,
+      "mime": ""
+    },
+    {
+      "method": "GET",
+      "url": "https://8.148.156.146/api/threads/66666666-cccc-4ccc-8ccc-000000000003/messages",
+      "status": 200,
+      "mime": "application/json"
+    },
+    {
+      "method": "OPTIONS",
+      "url": "https://8.148.156.146/api/media/f31bfcfb-82b7-403d-b835-399db1babb68",
+      "status": 204,
+      "mime": ""
+    },
+    {
+      "method": "GET",
+      "url": "https://8.148.156.146/api/media/f31bfcfb-82b7-403d-b835-399db1babb68",
+      "status": 200,
+      "mime": "image/png"
+    },
+    {
+      "method": "OPTIONS",
+      "url": "https://8.148.156.146/api/media",
+      "status": 204,
+      "mime": ""
+    },
+    {
+      "method": "POST",
+      "url": "https://8.148.156.146/api/media",
+      "status": 201,
+      "mime": "application/json"
+    },
+    {
+      "method": "POST",
+      "url": "https://8.148.156.146/api/threads/66666666-cccc-4ccc-8ccc-000000000003/messages",
+      "status": 201,
+      "mime": "application/json"
+    },
+    {
+      "method": "OPTIONS",
+      "url": "https://8.148.156.146/api/media/182638f2-f1d1-447b-8440-bc060d30e053",
+      "status": 204,
+      "mime": ""
+    },
+    {
+      "method": "GET",
+      "url": "https://8.148.156.146/api/media/182638f2-f1d1-447b-8440-bc060d30e053",
+      "status": 200,
+      "mime": "image/png"
+    }
+  ],
+  "bodies": {
+    "GET https://8.148.156.146/api/threads/66666666-cccc-4ccc-8ccc-000000000003/messages": "{\"threadId\":\"66666666-cccc-4ccc-8ccc-000000000003\",\"items\":[{\"id\":\"66666666-dddd-4ddd-8ddd-000000000004\",\"senderId\":\"22222222-2222-4222-8222-222222222222\",\"sender\":\"Lemy\",\"body\":\"[图片]\",\"kind\":\"image\",\"createdAt\":\"2026-09-21T07:23:39.982Z\",\"revoked\":false,\"media\":[]},{\"id\":\"eb4476f4-de27-47d0-bad3-32ae43738b84\",\"senderId\":\"22222222-2222-4222-8222-222222222222\",\"sender\":\"Lemy\",\"body\":\"[图片]\",\"kind\":\"image\",\"createdAt\":\"2026-09-21T10:38:26.696Z\",\"revoked\":false,\"media\":[{\"id\":\"f31bfcfb-82b7-403d-b835-399db1babb68\",\"width\":96,\"height\":64}]}]}",
+    "POST https://8.148.156.146/api/media": "{\"id\":\"182638f2-f1d1-447b-8440-bc060d30e053\",\"storageKey\":\"2026/09/182638f2-f1d1-447b-8440-bc060d30e053.png\",\"mime\":\"image/png\",\"bytes\":7088,\"width\":640,\"height\":360,\"scope\":\"private\"}",
+    "POST https://8.148.156.146/api/threads/66666666-cccc-4ccc-8ccc-000000000003/messages": "{\"id\":\"61b234f8-bba8-46ba-aaee-30d544c501cd\",\"kind\":\"image\",\"mentions\":[],\"mediaId\":\"182638f2-f1d1-447b-8440-bc060d30e053\"}"
+  }
+}

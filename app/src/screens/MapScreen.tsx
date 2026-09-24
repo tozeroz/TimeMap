@@ -7,7 +7,9 @@ import {
   IconLocation,
   IconPlus,
 } from '../components/icons'
-import { mapMarkers } from '../data/mock'
+import { listPosts, listSchools, mediaUrl } from '../api/client'
+import type { ApiPost, ApiSchool } from '../api/client'
+import type { MapMarker } from '../native/mapApi'
 import { AmapMap } from '../native/AmapMap'
 import { RealMap } from '../native/RealMap'
 import { TencentMap } from '../native/TencentMap'
@@ -33,6 +35,78 @@ interface ViewState {
   scale: number
 }
 
+/**
+ * 把**权威**帖子派生成地图标记（M5 WO#15）。
+ *
+ * ## 为什么要有这个函数（而不是直接用 mock.mapMarkers）
+ *   改前标记来自 `mock.mapMarkers`：6 条**硬编码**的校园建筑（阳光操场/教育超市/图书馆/…）
+ *   带**我们自己编的**坐标与颜色。而原版实测证据指向的是另一种模型：
+ *     · `trident-map/baseline.json`：「主体：地图 + 用户头像标记 + 深色气泡卡片」
+ *     · `docs/original-interaction-map.md:38`：「照片卡片 + 彩色图钉 + 地点名」
+ *     · `supplements/poi-detail.json`：「地图上点『用户发布的照片图钉』的**照片缩略图**
+ *       （不是地名文字）」→ 进动态详情
+ *   ⇒ 即：**标记 = 一条真实动态锚定在一个真实地点**。而我们服务端**恰好就是这个模型**
+ *     （`posts.place_id → places`，且实测 4 条 post 都有地点）。
+ *   所以正确做法是**从 posts 派生**，而不是继续渲染一份编造的清单。
+ *
+ * ## 只保留"能定位"的帖子
+ *   必须**同时**有 `placeLat` 与 `placeLng`（服务端 left join places 得到）。
+ *   缺任一个 → **不出标记**（而不是给个默认坐标 —— 那会把标记放到几内亚湾，
+ *   而且用户无法察觉是假的）。
+ *
+ * ## 关于 color / x / y（**不夸大的部分**）
+ *   · `color`：原版**确实**有红/黄图钉，但**配色规则未知**
+ *     （`trident-map/baseline.json` 的 known_unknowns 原话：「具体缩放级别与**标记规则未记录**」）。
+ *     ⇒ 因此这里用**单一确定色**，并在代码里显式标注 NOT_EVALUATED，**不假装知道规则**。
+ *   · `x` / `y`：只有离线自绘地图（SVG，viewBox 1400×2000）用像素坐标；权威数据只有经纬度，
+ *     故按 `CAMPUS_CENTER` 做**线性近似**换算。该换算的**正确性记 NOT_EVALUATED**
+ *     （无基线可比），仅用于降级路径不空白。
+ */
+export function markersFromPosts(
+  posts: ApiPost[],
+  center: [number, number] = CAMPUS_CENTER,
+): MapMarker[] {
+  // 像素换算：以校区中心为基准，1 度纬度 ≈ 111_320 m；经度按纬度收缩。
+  // 这里只求"方向与相对位置大致正确"，不追求地理精确（见上方 NOT_EVALUATED 说明）。
+  const M_PER_DEG_LAT = 111_320
+  const M_PER_DEG_LNG = 111_320 * Math.cos((center[0] * Math.PI) / 180)
+  // 把"米"映射到 SVG 像素：取 1 px ≈ 1 m 的量级（viewBox 是 1400×2000，
+  // 一张校园尺度地图用这个比例刚好铺满中心区域）
+  const PX_PER_M = 1
+  return posts
+    .filter((p) => typeof p.placeLat === 'number' && typeof p.placeLng === 'number')
+    .map((p) => {
+      const lat = p.placeLat as number
+      const lng = p.placeLng as number
+      const dxM = (lng - center[1]) * M_PER_DEG_LNG
+      const dyM = (lat - center[0]) * M_PER_DEG_LAT
+      return {
+        id: p.id,
+        place: p.place ?? '',
+        // ⚠️ 单一确定色：原版配色规则 NOT_EVALUATED（见函数头注释）
+        color: '#f5453b',
+        userId: p.authorId ?? '',
+        postId: p.id,
+        // SVG 像素空间：中心 = (700, 1000)；纬度越大越靠北 → y 越小
+        x: Math.round(700 + dxM * PX_PER_M),
+        y: Math.round(1000 - dyM * PX_PER_M),
+        lat,
+        lng,
+        /*
+          ⭐ Round 266：把**卡片所需的数据**一并放进 marker，来源就是这条权威帖子。
+          为什么必须这样做：三个地图实现改前都写 posts.find(p => p.id === m.postId)
+          去 **mock** 里查帖子 —— 而 WO#15 之后 m.postId 是真实帖子的 UUID
+          （mock 里是 p1/p2…），那个 find **永远 undefined**，
+          于是卡片封面与文字都是空的（标记仍画得出来，所以很难发现）。
+          ⇒ 让**构造 marker 的这里**（手里就有帖子对象）把数据带过去；
+            地图组件从此不需要知道帖子从哪来，也就**不再 import mock**。
+        */
+        coverUrl: p.images && p.images.length > 0 ? mediaUrl(p.images[0].id) : undefined,
+        excerpt: p.body ? p.body.slice(0, 10) : undefined,
+      }
+    })
+}
+
 const MIN_SCALE = 0.6
 const MAX_SCALE = 3
 
@@ -40,8 +114,41 @@ const MAX_SCALE = 3
  * 离线自绘地图 —— **降级方案**。
  * 在线瓦片连续加载失败（无网络 / 被墙 / 无 key）时使用，保证地图区域不是空白。
  * 拖拽、双击、捏合的数据都在这里处理。
+ *
+ * ⭐⭐ Round 266（审核记录 58 closeout 第 2 项）：**本组件不渲染权威标记**。
+ *
+ * ## 为什么（这是 correctness，不只是"原版一致性未评估"）
+ *   · 权威数据只有 **lat/lng**（`posts.place_id → places`）
+ *   · 而本组件是 **SVG 像素坐标系**（viewBox 1400×2000），需要 **x/y**
+ *   · 我先前用"按 CAMPUS_CENTER 线性近似"把 lat/lng 换成 x/y，
+ *     但**那个投影从未校准**（没有地理 bounds、没有参考锚点、没有误差 Gate）
+ *   ⇒ 只要换算不准，标记就**画在错误位置**，而用户**无法察觉** ——
+ *     这比"不显示"更糟：**它展示的是看似可信但可能错位的空间信息**。
+ *     实测那 4 条权威标记里还有「广州达美乐」一项，而本底图是**校园级**的，
+ *     一个未验证的换算更不可能安全表达它。
+ *
+ * ## 审核 58 的裁定（二选一）
+ *   A（**已采用**）：offline 模式**不渲染**权威 geo 标记，并明确说明"离线不支持标记"
+ *   B（将来可做）：定义 SVG 的地理 bounds / 投影 / 参考锚点 → 做**误差 Gate** → 再允许渲染
+ *   ⚠️ 审核 58 特别指出：**不能**只把 `OFFLINE_MAP_PROJECTION_CONFORMANCE` 写成 NOT_EVALUATED
+ *      却仍把标记画给用户看 —— 未评估的是"与原版是否一致"，
+ *      而这里首先是"**我们画的位置对不对**"的 correctness 问题。
+ *
+ * 因此下面渲染 `offlineRenderable`（**恒为空**），并在页面上给出明确说明。
+ * 将来若做 B，应把换算连同它的**误差 Gate** 一起加回来。
  */
-function OfflineMap({ view, onTilesMeta }: { view: ViewState; onTilesMeta?: (el: HTMLDivElement | null) => void }) {
+function OfflineMap({
+  view,
+  markers,
+  onTilesMeta,
+}: {
+  view: ViewState
+  /** 权威派生的标记；**本组件刻意不渲染它们**（见上方说明） */
+  markers: MapMarker[]
+  onTilesMeta?: (el: HTMLDivElement | null) => void
+}) {
+  const offlineRenderable: MapMarker[] = []
+  void markers
   const inv = 1 / view.scale
   return (
     <div
@@ -78,7 +185,8 @@ function OfflineMap({ view, onTilesMeta }: { view: ViewState; onTilesMeta?: (el:
         </g>
       </svg>
       <div className="map__markers" ref={onTilesMeta}>
-        {mapMarkers.map((m) => (
+        {/* ⭐ Round 266：恒为空 —— 未校准投影前不计渲染权威标记（见组件头说明） */}
+        {offlineRenderable.map((m) => (
           <div
             key={m.id}
             className="map__marker"
@@ -155,6 +263,60 @@ export function MapScreen() {
   const [providerState, setProviderState] = useState<'tencent' | 'amap' | 'raster'>('tencent')
   const provider = forced ?? providerState
   const offline = forceOffline || tileFailed
+
+  /*
+    ⭐ WO#15：标记改由**权威**数据派生（`GET /api/posts` 里带坐标的那些帖子）。
+    ## 三态与"不撒谎"的纪律（与 WO#12/#13/#14 同一冻结）
+      loading      → 明确"加载中"，**不显示标记**（不拿 mock 顶上）
+      ready        → 显示派生标记（可能为空数组 —— 那是**诚实的空**，不是错误）
+      unavailable  → 读到失败/未登录 → 明确不可用态 + **不显示标记**
+    ⚠️ 刻意**没有** `|| mapMarkers` 这种回落：那正是 WO#12/#14 反复修掉的
+       "用编造数据冒充真实"。
+  */
+  /*
+    ⭐ WO#16 层 B 第 4 条：地区控件改接**权威实体**。
+    ⚠️ 只取**学校名** —— 「当前选中校区」按审核 60 是 **DO NOT INFER**
+      （没有任何依据说当前选的是校本部），所以**不**显示"（校本部）"。
+      该差异登记为 MAP_REGION_CAMPUS_PART: OMITTED_NO_AUTHORITATIVE_SELECTION。
+    ⚠️ 读不到时**不回落硬编码文案**（那会退回"看起来有数据"）⇒ 显示明确"学校未知"。
+  */
+  const [school, setSchool] = useState<ApiSchool | null>(null)
+  const [schoolPhase, setSchoolPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+
+  useEffect(() => {
+    void (async () => {
+      const r = await listSchools()
+      if (r.ok && r.value.length > 0) {
+        setSchool(r.value[0])
+        setSchoolPhase('ready')
+      } else {
+        setSchool(null)
+        setSchoolPhase('unavailable')
+      }
+    })()
+  }, [])
+
+  const [markers, setMarkers] = useState<MapMarker[]>([])
+  const [markerPhase, setMarkerPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const r = await listPosts()
+      if (!alive) return
+      if (!r.ok) {
+        setMarkers([])
+        setMarkerPhase('unavailable')
+        return
+      }
+      // 只保留**能定位**的帖子（同时有 lat/lng）→ 其余不出标记
+      setMarkers(markersFromPosts(r.value))
+      setMarkerPhase('ready')
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
   // ---- 真实定位 ----
   const [fix, setFix] = useState<GeoFix | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
@@ -379,8 +541,15 @@ export function MapScreen() {
         <header className="map__head">
           <div className="map__titlewrap">
             <h1 className="map__title">Map</h1>
-            <button className="map__region" onClick={() => navigate('poi')}>
-              <span>北京交通大学（校本部）</span>
+            <button
+              className="map__region"
+              data-region-phase={schoolPhase}
+              onClick={() => navigate('poi')}
+            >
+              {/* 权威学校名（GET /api/schools）；读不到时**不显示**编造文案 */}
+              <span data-region-school>
+                {schoolPhase === 'ready' && school ? school.name : '学校未知'}
+              </span>
               <IconChevronDown size={13} />
             </button>
           </div>
@@ -403,10 +572,10 @@ export function MapScreen() {
         onTouchEnd={onTouchEnd}
       >
         {offline ? (
-          <OfflineMap view={view} />
+          <OfflineMap view={view} markers={markers} />
         ) : provider === 'tencent' ? (
           <TencentMap
-            markers={mapMarkers}
+            markers={markers}
             here={fix}
             onMarkerClick={handleMarkerClick}
             onSdkFailed={handleTencentFailed}
@@ -414,7 +583,7 @@ export function MapScreen() {
           />
         ) : provider === 'amap' ? (
           <AmapMap
-            markers={mapMarkers}
+            markers={markers}
             here={fix}
             onMarkerClick={handleMarkerClick}
             onSdkFailed={handleAmapFailed}
@@ -422,7 +591,7 @@ export function MapScreen() {
           />
         ) : (
           <RealMap
-            markers={mapMarkers}
+            markers={markers}
             here={fix}
             onMarkerClick={handleMarkerClick}
             onTilesFailed={handleTilesFailed}
@@ -430,6 +599,51 @@ export function MapScreen() {
           />
         )}
 
+        {/*
+          ⭐ WO#15：标记来源的**诚实状态**。三种态都要能被看见（也给出 Gate 一个 DOM 钩子）：
+            loading     → 加载中（**不显示标记**）
+            ready + 0   → "暂无带地点的动态"（**诚实的空**，不是错误）
+            ready + n   → 显示 n 个标记（数据来自 GET /api/posts）
+            unavailable → 读不到 → 明确说"标记不可用"，**不回落 mock**
+          ⚠️ 刻意**不**写成"没有标记就显示演示数据"那一套 —— 那正是 WO#12/#14 反复修掉的行为。
+        */}
+        {/*
+          ⭐ Round 266：**离线模式单独一条说明**（审核 58 closeout 第 2 项）。
+          为什么要显式说：offline 下我们**不渲染**权威标记（未校准投影），
+          如果不说明，用户会以为"这块校园没人发过带地点的动态" ——
+          而事实是"**离线底图不支持标记**"。这两件事必须能被区分。
+        */}
+        {offline ? (
+          <span className="map__markerBadge" data-marker-phase="offline-unsupported">
+            离线底图不支持标记显示
+          </span>
+        ) : markerPhase !== 'ready' ? (
+          <span className="map__markerBadge" data-marker-phase={markerPhase}>
+            {markerPhase === 'loading' ? '标记加载中…' : '标记不可用（读取失败或未登录）'}
+          </span>
+        ) : markers.length === 0 ? (
+          <span className="map__markerBadge" data-marker-phase="empty">
+            暂无带地点的动态
+          </span>
+        ) : (
+          /*
+            ⭐ `data-marker-places`：**测试钩子**，把"标记地点名"显式暴露出来。
+            为什么需要它（Round 266 的一次**假 FAIL**）：门禁原本用"整页文本里是否出现
+            mock 地名"来判断"是否仍在渲染 mock 地点"，结果**权威帖子的正文**里
+            出现了「图书馆四楼靠窗的位置」—— 那个"图书馆"是**帖子内容**，不是标记地点。
+            ⇒ 于是门禁把一个正确的实现判成 FAIL。
+            正确做法：断言**标记的地点名集合**，而不是"整页出现过某个词"。
+            （同类教训本会话已出现：WO#14 用整页 imgCount===0 判断头像，被帖子图片干扰。）
+          */
+          <span
+            className="map__markerBadge"
+            data-marker-phase="ready"
+            data-marker-count={String(markers.length)}
+            data-marker-places={markers.map((m) => m.place).join('\u001f')}
+          >
+            {markers.length} 个标记
+          </span>
+        )}
         {offline && (
           <span className="map__offlineBadge">
             {forceOffline ? '离线自绘底图（演示模式）' : '离线自绘底图（在线瓦片不可用）'}
@@ -475,7 +689,19 @@ export function MapScreen() {
         </button>
 
         {tipOpen && (
-          <div className="map__modal-wrap">
+          /*
+            ⭐ 给"自动弹出的阻断式覆盖层"一个**显式登记位**（M5 WO15.6）：
+            收尾脚本 `scripts/m5/dismiss-blocking-modals.mjs` 会按
+            `[data-blocking-modal]` 找到它并点里面的关闭控件。
+            为什么要有这个通用钩子：以后新增同类弹窗时只要带上这个属性就会被自动清理，
+            **不必回来改清理脚本**（而"忘了改"正是 WO#15 那次跨 Gate 残留的成因）。
+            ⚠️ 注意注释不能写成 JSX 的那种花括号注释形式并放在括号表达式的第一位 ——
+              那不是合法 JSX（括号里必须是单个元素）。用普通块注释即可。
+            ⚠️ 另：注释正文里也**不要**写出"斜杠星号"那种字符组合 ——
+              它会**提前结束本块注释**，把后面的内容变成代码。
+              （我今天在 JSDoc 里写 `screens/*` + `/baseline.json` 时刚踩过同一个坑。）
+          */
+          <div className="map__modal-wrap" data-blocking-modal="geo-permission">
             <div className="map__modal">
               <h3 className="map__modal-title">授权地理位置</h3>
               <p className="map__modal-desc">在地图上，标记属于你的校园生活</p>

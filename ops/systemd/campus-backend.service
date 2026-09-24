@@ -1,0 +1,58 @@
+# M1：真实 Fastify 常驻服务（M0 时保持 disabled/inactive 的占位 unit 在此启用）
+#
+# 口令不进 git：DATABASE_URL 放在服务器上的 /srv/campus/server.env（mode 600，属主 campus），
+# 通过 EnvironmentFile 注入。unit 文件本身可以安全入库。
+[Unit]
+Description=Campus API (Fastify + PostgreSQL)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+ExecStart=/opt/node-v24.21.0-linux-x64/bin/node /srv/campus/server/dist/index.mjs
+WorkingDirectory=/srv/campus/server
+User=campus
+Group=campus
+
+# 非机密配置写在 unit 里；机密走 EnvironmentFile（缺失时不阻止启动，便于排障）
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3001
+Environment=PG_POOL_MAX=5
+Environment=DEFAULT_AUTHOR=我
+
+# ⚠️⚠️ 两个 EnvironmentFile 的分工必须分清（Round 322 修的真实缺陷）：
+#
+#   server.env    —— **部署生成**：由 tools/deploy-server.ps1 **整个重写**
+#                    （DATABASE_URL 与 LOGIN_CODE_HMAC_KEY 都从服务器本地文件派生）。
+#                    ⇒ **运维手工往里加的东西会在下次部署时被抹掉。**
+#   operator.env  —— **运维填写**：部署脚本**从不读写**它。
+#                    第三方凭据（如阿里云短信 AK）放这里。
+#
+#   踩过的坑：我先把短信 AK 写进 server.env，下一次部署就把它覆盖没了 ——
+#   表现为"日志说未配置、进程也看不到变量"，但文件里明明写过。
+#   这类"配了又被悄悄抹掉"极难发现，所以**不能靠记性**，要靠文件分工把它变成不可能。
+#
+#   ⚠️ 两个文件都必须 mode 600 且属主 campus。缺任一都不阻止启动（前置的 `-`），
+#      便于排障；但**启动日志会明确说当前短信通道是配了还是没配**。
+EnvironmentFile=-/srv/campus/server.env
+EnvironmentFile=-/srv/campus/operator.env
+
+Restart=on-failure
+RestartSec=3
+
+# 加固：只读系统目录、禁止提权、私有 tmp
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/campus
+
+# 验证码的 dev sink 放在 /run 下（tmpfs，重启即清，不落盘持久化）。
+# 但 /run 在每次重启后是空的 —— 靠 RuntimeDirectory 让 systemd 自动创建并交给本服务用户，
+# 否则重启后 sink 目录不存在，服务又没权限在 /run 里 mkdir，登录就会失败。
+RuntimeDirectory=campus
+RuntimeDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target
