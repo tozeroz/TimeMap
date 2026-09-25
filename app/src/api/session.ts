@@ -24,6 +24,18 @@ export interface SessionUser {
   displayName: string
   /** M3 起身份是手机号（E.164）；M2 的 handle+password 已退休 */
   phone?: string | null
+  /**
+   * ⭐ TimeMap P0（F01/F07）：角色。
+   *
+   * `'admin'` = 学生管理员（同时具备普通学生功能，见需求 §2.1）；
+   * 「管理端」入口只对 admin 显示 —— 但**显示与否只是 UI**，
+   * 真正的权限由服务端 `/api/admin/*` 强校验（非 admin 一律 403）。
+   * 客户端**绝不能**把"藏起入口"当成权限控制。
+   *
+   * 可选是因为本地可能残留旧会话（P0 之前存的没有这个字段）——
+   * 缺省时按非管理员处理（**宁可少显示一个入口，也不能多给一个**）。
+   */
+  role?: string
 }
 
 export interface Session {
@@ -95,10 +107,22 @@ export function clearSession(): void {
  *   · 无会话时**什么都不做**（不凭空造一个会话）。
  *   · 只覆盖显式给出的字段；其余字段（token/expiresAt/handle/phone）原样保留。
  */
-export function updateSessionUser(patch: Partial<Pick<SessionUser, 'displayName' | 'handle' | 'phone'>>): void {
+export function updateSessionUser(
+  patch: Partial<Pick<SessionUser, 'displayName' | 'handle' | 'phone' | 'role'>>,
+): void {
   const s = getSession()
   if (!s) return
   setSession({ ...s, user: { ...s.user, ...patch } })
+}
+
+/**
+ * 当前会话是否学生管理员（仅用于**决定要不要显示入口**）。
+ *
+ * ⚠️ 这**不是**权限判定：服务端对每个 `/api/admin/*` 都独立校验 role，
+ *    非 admin 一定拿到 403。此处只避免给普通学生看一个点进去必然 403 的入口。
+ */
+export function isAdmin(): boolean {
+  return getSession()?.user?.role === 'admin'
 }
 
 /** 有会话就返回 Authorization 头，没有就返回空对象（请求照常发，由服务端决定 401） */

@@ -7,8 +7,7 @@ import {
   IconLocation,
   IconPlus,
 } from '../components/icons'
-import { listPosts, listSchools, mediaUrl } from '../api/client'
-import type { ApiPost, ApiSchool } from '../api/client'
+import { listPlaces, listPosts, listSchools, mediaUrl, type ApiPlaceListItem, type ApiPost, type ApiSchool } from '../api/client'
 import type { MapMarker } from '../native/mapApi'
 import { AmapMap } from '../native/AmapMap'
 import { RealMap } from '../native/RealMap'
@@ -35,74 +34,68 @@ interface ViewState {
   scale: number
 }
 
+/** 分类筛选：全部 / 地标 / 食堂（需求 4.1 草图顶部的 `[全部] [地标] [食堂]`） */
+type CategoryFilter = '全部' | '地标' | '食堂'
+
 /**
- * 把**权威**帖子派生成地图标记（M5 WO#15）。
+ * 把**权威地点**派生成地图标记（TimeMap P0 / F02 + US-01）。
  *
- * ## 为什么要有这个函数（而不是直接用 mock.mapMarkers）
- *   改前标记来自 `mock.mapMarkers`：6 条**硬编码**的校园建筑（阳光操场/教育超市/图书馆/…）
- *   带**我们自己编的**坐标与颜色。而原版实测证据指向的是另一种模型：
- *     · `trident-map/baseline.json`：「主体：地图 + 用户头像标记 + 深色气泡卡片」
- *     · `docs/original-interaction-map.md:38`：「照片卡片 + 彩色图钉 + 地点名」
- *     · `supplements/poi-detail.json`：「地图上点『用户发布的照片图钉』的**照片缩略图**
- *       （不是地名文字）」→ 进动态详情
- *   ⇒ 即：**标记 = 一条真实动态锚定在一个真实地点**。而我们服务端**恰好就是这个模型**
- *     （`posts.place_id → places`，且实测 4 条 post 都有地点）。
- *   所以正确做法是**从 posts 派生**，而不是继续渲染一份编造的清单。
+ * ## ⭐ 为什么改了（改前是按**帖子**派生）
+ *   改前 `markersFromPosts()` 把每条带坐标的帖子变成一个标记 ⇒ 同一地点有多少条帖子
+ *   就有多少个标记叠在一起。而需求 4.1 的草图与 4.2 的信息架构是：
+ *     地图 → **地点**（标记）→ 地点详情 → 该地点的内容
+ *   即"以地点为内容组织单位"。所以正确做法是**按地点聚合**：一个地点一个标记。
  *
- * ## 只保留"能定位"的帖子
- *   必须**同时**有 `placeLat` 与 `placeLng`（服务端 left join places 得到）。
- *   缺任一个 → **不出标记**（而不是给个默认坐标 —— 那会把标记放到几内亚湾，
- *   而且用户无法察觉是假的）。
+ *   `MapMarker.placeId` 因此成为**跳转目标**（点击进地点详情）；
+ *   `postId`/`excerpt`/`coverUrl` 退化为"代表帖"的展示信息 ——
+ *   取该地点最新一条有内容的帖子，让卡片不至于空着。
  *
- * ## 关于 color / x / y（**不夸大的部分**）
- *   · `color`：原版**确实**有红/黄图钉，但**配色规则未知**
- *     （`trident-map/baseline.json` 的 known_unknowns 原话：「具体缩放级别与**标记规则未记录**」）。
- *     ⇒ 因此这里用**单一确定色**，并在代码里显式标注 NOT_EVALUATED，**不假装知道规则**。
- *   · `x` / `y`：只有离线自绘地图（SVG，viewBox 1400×2000）用像素坐标；权威数据只有经纬度，
- *     故按 `CAMPUS_CENTER` 做**线性近似**换算。该换算的**正确性记 NOT_EVALUATED**
- *     （无基线可比），仅用于降级路径不空白。
+ * ## 只保留"能定位"的地点
+ *   必须**同时**有 latitude 与 longitude。缺任一个就**不出标记**
+ *   （而不是给个默认坐标 —— 那会把标记放到几内亚湾，且用户无法察觉是假的）。
+ *
+ * ## 关于 color（**不夸大的部分**）
+ *   原版**确实**有红/黄图钉，但**配色规则未知**（trident-map/baseline.json 的
+ *   known_unknowns：「具体缩放级别与**标记规则未记录**」）。
+ *   ⇒ 这里用**单一确定色**，并显式标注 NOT_EVALUATED，**不假装知道规则**。
+ *   （P0 起分类筛选已经**明确**，本可以按分类配色，但那仍是"我们自己定的规则"；
+ *     在没有基线的情况下换色只会让"看起来有依据"。故保持单色。）
  */
-export function markersFromPosts(
+export function markersFromPlaces(
+  places: ApiPlaceListItem[],
   posts: ApiPost[],
   center: [number, number] = CAMPUS_CENTER,
 ): MapMarker[] {
   // 像素换算：以校区中心为基准，1 度纬度 ≈ 111_320 m；经度按纬度收缩。
-  // 这里只求"方向与相对位置大致正确"，不追求地理精确（见上方 NOT_EVALUATED 说明）。
+  // 仅离线自绘底图用；该换算的正确性记 NOT_EVALUATED（无基线可比）。
   const M_PER_DEG_LAT = 111_320
   const M_PER_DEG_LNG = 111_320 * Math.cos((center[0] * Math.PI) / 180)
-  // 把"米"映射到 SVG 像素：取 1 px ≈ 1 m 的量级（viewBox 是 1400×2000，
-  // 一张校园尺度地图用这个比例刚好铺满中心区域）
   const PX_PER_M = 1
-  return posts
-    .filter((p) => typeof p.placeLat === 'number' && typeof p.placeLng === 'number')
+  return places
+    .filter((p) => typeof p.latitude === 'number' && typeof p.longitude === 'number')
     .map((p) => {
-      const lat = p.placeLat as number
-      const lng = p.placeLng as number
+      const lat = p.latitude as number
+      const lng = p.longitude as number
       const dxM = (lng - center[1]) * M_PER_DEG_LNG
       const dyM = (lat - center[0]) * M_PER_DEG_LAT
+      // 代表帖：该地点最新的一条（posts 已按时间倒序），用于卡片封面/摘要
+      const rep = posts.find((post) => post.placeId === p.id || post.place === p.name)
       return {
         id: p.id,
-        place: p.place ?? '',
+        // ⭐ 跳转目标是地点（P0 的核心改动）
+        placeId: p.id,
+        place: p.name,
         // ⚠️ 单一确定色：原版配色规则 NOT_EVALUATED（见函数头注释）
         color: '#f5453b',
-        userId: p.authorId ?? '',
-        postId: p.id,
+        userId: rep?.authorId ?? '',
+        postId: rep?.id ?? '',
         // SVG 像素空间：中心 = (700, 1000)；纬度越大越靠北 → y 越小
         x: Math.round(700 + dxM * PX_PER_M),
         y: Math.round(1000 - dyM * PX_PER_M),
         lat,
         lng,
-        /*
-          ⭐ Round 266：把**卡片所需的数据**一并放进 marker，来源就是这条权威帖子。
-          为什么必须这样做：三个地图实现改前都写 posts.find(p => p.id === m.postId)
-          去 **mock** 里查帖子 —— 而 WO#15 之后 m.postId 是真实帖子的 UUID
-          （mock 里是 p1/p2…），那个 find **永远 undefined**，
-          于是卡片封面与文字都是空的（标记仍画得出来，所以很难发现）。
-          ⇒ 让**构造 marker 的这里**（手里就有帖子对象）把数据带过去；
-            地图组件从此不需要知道帖子从哪来，也就**不再 import mock**。
-        */
-        coverUrl: p.images && p.images.length > 0 ? mediaUrl(p.images[0].id) : undefined,
-        excerpt: p.body ? p.body.slice(0, 10) : undefined,
+        coverUrl: rep?.images && rep.images.length > 0 ? mediaUrl(rep.images[0].id) : undefined,
+        excerpt: rep?.body ? rep.body.slice(0, 10) : undefined,
       }
     })
 }
@@ -298,25 +291,39 @@ export function MapScreen() {
 
   const [markers, setMarkers] = useState<MapMarker[]>([])
   const [markerPhase, setMarkerPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  /** 分类筛选（需求 4.1：`[全部] [地标] [食堂]`） */
+  const [category, setCategory] = useState<CategoryFilter>('全部')
 
+  /*
+    ⭐ P0：标记来源改为**地点**（按地点聚合），代表帖信息来自帖子列表。
+    两者都走权威接口：
+      · `GET /api/places`（**默认只返回启用地点** —— 停用地点自动退出地图，US-01⑤）
+      · `GET /api/posts`（取每个地点的最新一条，用于标记卡片封面/摘要；可以为空）
+    ⚠️ 分类筛选在**服务端**做（`?category=`）—— 与地点/帖子列表同一纪律。
+    ⚠️ 刻意**没有** `|| mockMarkers` 这种回落：那正是 WO#12/#14 反复修掉的
+       "用编造数据冒充真实"。空标记是**诚实的空**。
+  */
   useEffect(() => {
     let alive = true
     void (async () => {
-      const r = await listPosts()
+      setMarkerPhase('loading')
+      const [pr, po] = await Promise.all([
+        listPlaces(undefined, category === '全部' ? undefined : category),
+        listPosts(),
+      ])
       if (!alive) return
-      if (!r.ok) {
+      if (!pr.ok) {
         setMarkers([])
         setMarkerPhase('unavailable')
         return
       }
-      // 只保留**能定位**的帖子（同时有 lat/lng）→ 其余不出标记
-      setMarkers(markersFromPosts(r.value))
+      setMarkers(markersFromPlaces(pr.value, po.ok ? po.value : []))
       setMarkerPhase('ready')
     })()
     return () => {
       alive = false
     }
-  }, [])
+  }, [category])
   // ---- 真实定位 ----
   const [fix, setFix] = useState<GeoFix | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
@@ -526,8 +533,13 @@ export function MapScreen() {
   }, [])
 
   // 注意：这两个回调必须保持稳定引用，否则地图组件的建图 effect 会每次渲染都销毁重建地图
-  const handleMarkerClick = useCallback((postId: string) => {
-    navigate('feed', { id: postId })
+  const handleMarkerClick = useCallback((placeId: string) => {
+    /*
+      ⭐ P0：点击标记进**地点详情**（不再是动态详情）。
+      理由见 markersFromPlaces 的说明：地图的组织单位是地点（需求 4.1/4.2）。
+      ⚠️ 不回落到 postId —— 两者的语义不同，混用会让"点进哪个地点"变得不可预测。
+    */
+    navigate('poidetail', { id: placeId })
   }, [])
 
   const handleMapRef = useCallback((handle: MapHandle | null) => {
@@ -540,7 +552,7 @@ export function MapScreen() {
       header={
         <header className="map__head">
           <div className="map__titlewrap">
-            <h1 className="map__title">Map</h1>
+            <h1 className="map__title">BJTU TimeMap</h1>
             <button
               className="map__region"
               data-region-phase={schoolPhase}
@@ -560,6 +572,24 @@ export function MapScreen() {
       }
       scroll={false}
     >
+      {/*
+        分类筛选（需求 4.1 草图顶部：[全部] [地标] [食堂]）。
+        ⚠️ 筛选是**服务端**做的（`GET /api/places?category=`）——
+          与"客户端 filter"相比，服务端筛在加页/加 limit 之后不会静默变成不完整结果。
+        `data-map-category` 是验收钩子：当前生效的分类必须能被机械读到。
+      */}
+      <div className="map__cats no-scrollbar" data-map-category={category}>
+        {(['全部', '地标', '食堂'] as CategoryFilter[]).map((c) => (
+          <button
+            key={c}
+            className={`map__cat ${category === c ? 'is-active' : ''}`}
+            data-map-cat={c}
+            onClick={() => setCategory(c)}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
       <div
         className="map"
         ref={stageRef}
@@ -623,7 +653,7 @@ export function MapScreen() {
           </span>
         ) : markers.length === 0 ? (
           <span className="map__markerBadge" data-marker-phase="empty">
-            暂无带地点的动态
+            {category === '全部' ? '暂无已启用的地点' : `暂无${category}类地点`}
           </span>
         ) : (
           /*
@@ -640,6 +670,8 @@ export function MapScreen() {
             data-marker-phase="ready"
             data-marker-count={String(markers.length)}
             data-marker-places={markers.map((m) => m.place).join('\u001f')}
+            /* ⭐ P0：标记的**地点 id** 也暴露出来 —— 验收要能证明"点标记进的是这个地点" */
+            data-marker-place-ids={markers.map((m) => m.placeId).join('\u001f')}
           >
             {markers.length} 个标记
           </span>
