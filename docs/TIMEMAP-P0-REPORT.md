@@ -9,17 +9,17 @@
 
 ## 一、结论速览
 
-| 维度 | 结果 |
-|---|---|
-| P0 功能范围 | F01 账号资料 / F02 地图地点 / F03 地点详情 / F04 发布 / F05 互动 / F06 活动 / F07 举报与管理端 —— **全部实施** |
-| 服务端全链路验证 | **76/76 PASS**（真实 PostgreSQL 16 迁移） |
-| 浏览器端验证 | **57/57 PASS，4 SKIP**（SKIP 项均写明原因：需真实登录态） |
-| 线上冒烟 | **40/40 PASS** |
-| 类型检查 | 服务端 `tsc --noEmit` 0 错误；前端 `tsc -b` 0 错误 |
-| 构建 | 服务端 5 个单文件包；前端 `vite build` 成功（679KB / gzip 211KB） |
-| 部署 | 后端 + 前端均已上线并复核 |
-| **回滚演练** | **`ROLLBACK: PASS`** —— 备份经真实恢复验证可用，随后升回 P0（`applied=16/16`，线上冒烟 40/40） |
-| 修正的需求偏差 | 1 处真实缺陷 + 1 处"界面与需求结构不符"的整体重做 + 若干契约变更 |
+| 维度             | 结果                                                         |
+| ---------------- | ------------------------------------------------------------ |
+| P0 功能范围      | F01 账号资料 / F02 地图地点 / F03 地点详情 / F04 发布 / F05 互动 / F06 活动 / F07 举报与管理端 —— **全部实施** |
+| 服务端全链路验证 | **76/76 PASS**（真实 PostgreSQL 16 迁移）                    |
+| 浏览器端验证     | **57/57 PASS，4 SKIP**（SKIP 项均写明原因：需真实登录态）    |
+| 线上冒烟         | **40/40 PASS**                                               |
+| 类型检查         | 服务端 `tsc --noEmit` 0 错误；前端 `tsc -b` 0 错误           |
+| 构建             | 服务端 5 个单文件包；前端 `vite build` 成功（679KB / gzip 211KB） |
+| 部署             | 后端 + 前端均已上线并复核                                    |
+| **回滚演练**     | **`ROLLBACK: PASS`** —— 备份经真实恢复验证可用，随后升回 P0（`applied=16/16`，线上冒烟 40/40） |
+| 修正的需求偏差   | 1 处真实缺陷 + 1 处"界面与需求结构不符"的整体重做 + 若干契约变更 |
 
 ### 1.1 最终线上状态（本轮结束时的实测值）
 
@@ -43,18 +43,18 @@ P0_PROD         -> TOTAL=40 PASS=40 FAIL=0
 P0 之前仓库里跑的是**另一个复刻产品**（校园广场信息流、群聊、留言板…），
 它和 TimeMap 的差异不只是"少几个功能"，而是**信息架构不同**。以下逐条对照需求 §4.2 / §3.2：
 
-| 项 | 改前（复刻产品） | 改后（TimeMap 需求） | 需求出处 |
-|---|---|---|---|
-| 首页与底部 tab | `<昵称> / 校园 / 地图`，默认落在校园广场信息流 | **地图 / 活动 / 我的**，默认 `#/map` | 4.1 草图 |
-| 地图标记 | 按**帖子**聚合（同地点多条帖 = 多个叠在一起的标记） | 按**地点**聚合，点击进**地点详情** | 4.1 / 1.1「以地点为内容组织单位」 |
-| 分类筛选 | 无 | `[全部] [地标] [食堂]`，过滤在**服务端**做 | 4.1 / US-03 |
-| 地点详情 | 只有地点名 + 距离 + 帖子列表 | 简介 / 校史 / 老照片（年代+来源）/ 近期活动 / 帖子（最新\|近期热门）/「在这里发布」 | 4.2 草图 |
-| 发帖契约 | `{ body, place(地名文本) }` | **`{ body, placeId(必填, 必须是启用地点), mediaIds?, clientRequestId? }`** | 3.2 规则 1 / US-02① |
-| 发布页形态 | 图片合成器：拍摄 / 文字 / 语音三模式 + 字体选择 | 纯文字或普通图文（≤3 图）；**语音/拍摄模式删除**（不在 TimeMap 范围） | 3.1「纯文字或普通图文发布」 |
-| 互动 | 点赞、评论 | 点赞、评论、**收藏**（可撤销、不重复计数） | US-03 |
-| 举报与管理端 | 无 | 举报（原因码 + 不自动下架）、管理端 5 面板、操作记录 | US-08 |
-| 内容下架 | 无概念 | 软下架（`status='removed'`），**同步退出地图/地点/列表/收藏**，详情 410 | US-08③ / 4.4 |
-| 活动 | 无 | 列表 + 详情 + 状态（服务端按时间推导）+ 管理端录入 | US-04 |
+| 项             | 改前（复刻产品）                                    | 改后（TimeMap 需求）                                         | 需求出处                          |
+| -------------- | --------------------------------------------------- | ------------------------------------------------------------ | --------------------------------- |
+| 首页与底部 tab | `<昵称> / 校园 / 地图`，默认落在校园广场信息流      | **地图 / 活动 / 我的**，默认 `#/map`                         | 4.1 草图                          |
+| 地图标记       | 按**帖子**聚合（同地点多条帖 = 多个叠在一起的标记） | 按**地点**聚合，点击进**地点详情**                           | 4.1 / 1.1「以地点为内容组织单位」 |
+| 分类筛选       | 无                                                  | `[全部] [地标] [食堂]`，过滤在**服务端**做                   | 4.1 / US-03                       |
+| 地点详情       | 只有地点名 + 距离 + 帖子列表                        | 简介 / 校史 / 老照片（年代+来源）/ 近期活动 / 帖子（最新\|近期热门）/「在这里发布」 | 4.2 草图                          |
+| 发帖契约       | `{ body, place(地名文本) }`                         | **`{ body, placeId(必填, 必须是启用地点), mediaIds?, clientRequestId? }`** | 3.2 规则 1 / US-02①               |
+| 发布页形态     | 图片合成器：拍摄 / 文字 / 语音三模式 + 字体选择     | 纯文字或普通图文（≤3 图）；**语音/拍摄模式删除**（不在 TimeMap 范围） | 3.1「纯文字或普通图文发布」       |
+| 互动           | 点赞、评论                                          | 点赞、评论、**收藏**（可撤销、不重复计数）                   | US-03                             |
+| 举报与管理端   | 无                                                  | 举报（原因码 + 不自动下架）、管理端 5 面板、操作记录         | US-08                             |
+| 内容下架       | 无概念                                              | 软下架（`status='removed'`），**同步退出地图/地点/列表/收藏**，详情 410 | US-08③ / 4.4                      |
+| 活动           | 无                                                  | 列表 + 详情 + 状态（服务端按时间推导）+ 管理端录入           | US-04                             |
 
 ### 本轮发现并修复的**真实缺陷**（不是迁移既有功能，是补契约缺口）
 
@@ -63,6 +63,7 @@ P0 之前仓库里跑的是**另一个复刻产品**（校园广场信息流、�
 `TS2339: Property 'favoritedByMe' does not exist on type 'ApiPlacePost'`。
 
 处置：**在服务端补上**同型的 `exists(...)` 子查询，并加两条 E2E 断言（登录时 `true`、匿名恒 `false`）。
+
 > 反面做法是把前端类型改成可选——那样 tsc 过关、运行时永远拿到 `undefined`，"修好了"是假的。
 
 ---
@@ -71,12 +72,12 @@ P0 之前仓库里跑的是**另一个复刻产品**（校园广场信息流、�
 
 ### 服务端（4 个文件）
 
-| 文件 | 改动 |
-|---|---|
+| 文件                                                | 改动                                                         |
+| --------------------------------------------------- | ------------------------------------------------------------ |
 | `server/src/migrations/016_timemap_p0.sql` **新增** | P0 全部数据模型与种子：`users.role`；`places.category/enabled/description/history/sort_order`；`posts.client_request_id`(唯一) + `status/removed_*`；`comments.status/removed_*`；`favorites`；`activities`；`reports`；`audit_log`；`place_photos`。种子 = 10 个北交大地点（7 地标 + 3 食堂）+ 3 张 SVG 占位老照片（来源标注"演示素材"）+ 6 条活动（含进行中/已结束/已取消） |
-| `server/src/timemap.ts` **新增**（1094 行） | F05 收藏（POST/DELETE + **`GET /api/me/favorites`**）、作者删除帖子/评论、F07 举报（去重、不自动下架）、F06 活动公开读（含 `window=today\|week`）、管理端 `/api/admin/*`（reports/posts/places/activities/audit-log）。全部写操作落 `audit_log` |
-| `server/src/index.ts` | 会话带 `role`；`GET/POST /api/posts` 新契约（排除 removed、`placeId` 必填且必须启用、`clientRequestId` 幂等重放）；`GET /api/posts/:id` 已下架 → **410 gone**；`GET /api/places` 默认只返回启用地点 + `category` 过滤；`GET /api/places/:id` 重写（+ 简介/校史/老照片/活动/帖子排序，**并补 `favoritedByMe`**） |
-| `server/src/db.ts` | 注册迁移 016 |
+| `server/src/timemap.ts` **新增**（1094 行）         | F05 收藏（POST/DELETE + **`GET /api/me/favorites`**）、作者删除帖子/评论、F07 举报（去重、不自动下架）、F06 活动公开读（含 `window=today\|week`）、管理端 `/api/admin/*`（reports/posts/places/activities/audit-log）。全部写操作落 `audit_log` |
+| `server/src/index.ts`                               | 会话带 `role`；`GET/POST /api/posts` 新契约（排除 removed、`placeId` 必填且必须启用、`clientRequestId` 幂等重放）；`GET /api/posts/:id` 已下架 → **410 gone**；`GET /api/places` 默认只返回启用地点 + `category` 过滤；`GET /api/places/:id` 重写（+ 简介/校史/老照片/活动/帖子排序，**并补 `favoritedByMe`**） |
+| `server/src/db.ts`                                  | 注册迁移 016                                                 |
 
 ### 前端（20 改 + 7 新增）
 
@@ -86,17 +87,17 @@ P0 之前仓库里跑的是**另一个复刻产品**（校园广场信息流、�
 
 ### 工程工具（新增 8 个）
 
-| 文件 | 用途 |
-|---|---|
+| 文件                                                         | 用途                                                         |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
 | `tools/rollback-server.ps1` + `tools/remote/rollback-remote.sh` | **回滚**：校验备份 → 安全快照 → 恢复库（含属主交接）→ 恢复文件 → 起服 → 验证。支持 dry-run（不加 `-Yes` 只预检） |
-| `tools/setup-deploy-key.ps1` | 把 SSH 私钥复制到工作区外并收窄 ACL（Windows OpenSSH 拒绝他人可读的密钥），并**只读 ssh 验证** |
-| `tools/repair-node-modules.ps1` | 清理并重装 `node_modules`（含占用预检与真实产物验证） |
-| `tools/deploy-server.ps1` / `deploy-web.ps1` | 增加"优先使用加固密钥 + 迁移 checksum 预检" |
-| `.gitattributes` | 新增 `*.sql text eol=lf`（防 CRLF 事故，见 §五） |
-| `tools/tmp/verify-p0-e2e.mjs` | 服务端全链路 76 条断言 |
-| `tools/tmp/verify-p0-browser.mjs` | 浏览器端 57 条 DOM 断言（自写 CDP 客户端，零依赖） |
-| `tools/tmp/verify-p0-prod.mjs` | 线上冒烟 40 条（无需登录，含"P0 契约是否上线"的判别性断言） |
-| `tools/tmp/check-migration-checksums.mjs` | 产物内联迁移字节与源文件/线上库**逐条比对**（部署前置守卫） |
+| `tools/setup-deploy-key.ps1`                                 | 把 SSH 私钥复制到工作区外并收窄 ACL（Windows OpenSSH 拒绝他人可读的密钥），并**只读 ssh 验证** |
+| `tools/repair-node-modules.ps1`                              | 清理并重装 `node_modules`（含占用预检与真实产物验证）        |
+| `tools/deploy-server.ps1` / `deploy-web.ps1`                 | 增加"优先使用加固密钥 + 迁移 checksum 预检"                  |
+| `.gitattributes`                                             | 新增 `*.sql text eol=lf`（防 CRLF 事故，见 §五）             |
+| `tools/tmp/verify-p0-e2e.mjs`                                | 服务端全链路 76 条断言                                       |
+| `tools/tmp/verify-p0-browser.mjs`                            | 浏览器端 57 条 DOM 断言（自写 CDP 客户端，零依赖）           |
+| `tools/tmp/verify-p0-prod.mjs`                               | 线上冒烟 40 条（无需登录，含"P0 契约是否上线"的判别性断言）  |
+| `tools/tmp/check-migration-checksums.mjs`                    | 产物内联迁移字节与源文件/线上库**逐条比对**（部署前置守卫）  |
 
 ---
 
@@ -104,18 +105,18 @@ P0 之前仓库里跑的是**另一个复刻产品**（校园广场信息流、�
 
 ### 4.1 备份位置与内容
 
-| 项 | 位置 |
-|---|---|
-| **服务器侧备份** | `/srv/campus/backups/pre-timemap-p0-20260925-0012/` |
-| **本地侧副本** | `tools/tmp/backup-20260925/pre-timemap-p0-20260925-0012/`（scp 下载） |
+| 项               | 位置                                                         |
+| ---------------- | ------------------------------------------------------------ |
+| **服务器侧备份** | `/srv/campus/backups/pre-timemap-p0-20260925-0012/`          |
+| **本地侧副本**   | `tools/tmp/backup-20260925/pre-timemap-p0-20260925-0012/`（scp 下载） |
 
 内容（6 项，SHA256SUMS 记录全部哈希）：
 
-| 文件 | 用途 |
-|---|---|
-| `campus-db.dump` (83,895 B, PG custom format, 23 个 TABLE DATA) | 数据库全量 |
-| `dist-web-uploads.tar.gz` (1,029,635 B) | 归档内布局 `srv/campus/{server/dist, web, uploads}` |
-| `campus-backend.service` / `campus.conf` / `default` / `campus.conf.bak.*` | systemd unit 与 nginx 配置 |
+| 文件                                                         | 用途                                                |
+| ------------------------------------------------------------ | --------------------------------------------------- |
+| `campus-db.dump` (83,895 B, PG custom format, 23 个 TABLE DATA) | 数据库全量                                          |
+| `dist-web-uploads.tar.gz` (1,029,635 B)                      | 归档内布局 `srv/campus/{server/dist, web, uploads}` |
+| `campus-backend.service` / `campus.conf` / `default` / `campus.conf.bak.*` | systemd unit 与 nginx 配置                          |
 
 ⚠️ **机密文件永不进备份、也永不被回滚覆盖**：`server.env`、`operator.env`、`.db_password`、`.login_code_hmac_key`。
 ⚠️ **`TimeMap.pem` 不提交、不外传**（`.gitignore` 已排除 `*.pem`）。
@@ -147,6 +148,7 @@ P0 之前仓库里跑的是**另一个复刻产品**（校园广场信息流、�
 8. 验证（含"迁移表里不该再有 016""`users.role` 不该存在"）
 
 失败时的保证：
+
 - **停服之后的任何异常退出都会自动把服务拉回来**（EXIT trap，实测 12s 恢复）
 - **600s 看门狗**（`ROLLBACK_TIMEOUT_S` 可覆盖），避免停服状态下无限等待
 - `pg_restore` 非 0 ⇒ **立即停止**并用安全快照还原（绝不继续往下走）
@@ -179,15 +181,15 @@ systemctl start campus-backend
 
 ### 4.3 回滚后的验收判据（本轮实测值）
 
-| 判据 | 回滚后（P0 之前） | 升回 P0 后 |
-|---|---|---|
-| `/api/ready` | 200 `applied=15,expected=15` | 200 `applied=16,expected=16` |
-| `/api/activities` | **404**（P0 新接口不存在） | 200 |
-| `/api/admin/reports` | **404** | 401（存在但对匿名关闭） |
-| `/api/posts` 字段 | 旧形状（无 `placeId`/`favoriteCount`） | 含 `placeId`/`favoriteCount`/`favoritedByMe` |
-| `/api/places` | 2 个、旧形状 | P0 的 10 个 + 历史 2 个 = 12 个、含 `category`/`enabled` |
-| `schema_migrations` 含 016 | 否 | 是 |
-| `users.role` 列 | 不存在 | 存在 |
+| 判据                       | 回滚后（P0 之前）                      | 升回 P0 后                                               |
+| -------------------------- | -------------------------------------- | -------------------------------------------------------- |
+| `/api/ready`               | 200 `applied=15,expected=15`           | 200 `applied=16,expected=16`                             |
+| `/api/activities`          | **404**（P0 新接口不存在）             | 200                                                      |
+| `/api/admin/reports`       | **404**                                | 401（存在但对匿名关闭）                                  |
+| `/api/posts` 字段          | 旧形状（无 `placeId`/`favoriteCount`） | 含 `placeId`/`favoriteCount`/`favoritedByMe`             |
+| `/api/places`              | 2 个、旧形状                           | P0 的 10 个 + 历史 2 个 = 12 个、含 `category`/`enabled` |
+| `schema_migrations` 含 016 | 否                                     | 是                                                       |
+| `users.role` 列            | 不存在                                 | 存在                                                     |
 
 ### 4.4 升回 P0
 
@@ -195,20 +197,22 @@ systemctl start campus-backend
 & '.\tools\deploy-server.ps1'   # 构建 → 迁移 checksum 预检 → 上传 → 重启 → /api/ready
 & '.\tools\deploy-web.ps1'      # 构建 → 时间戳暂存 → 原子替换 → 权限 → 冒烟
 ```
+
 **必须先后端再前端**：`POST /api/posts` 契约变了，旧前端对新后端发帖会被 400。
 
 ---
 
 ## 五、验证证据
 
-| 验证 | 规模 | 证据文件 |
-|---|---|---|
-| 服务端全链路（登录→发布→互动→举报→管理端处理→下架同步退出） | **76/76 PASS** | `tools/tmp/timemap-p0/verify-p0-e2e.json` |
+| 验证                                                         | 规模                   | 证据文件                                      |
+| ------------------------------------------------------------ | ---------------------- | --------------------------------------------- |
+| 服务端全链路（登录→发布→互动→举报→管理端处理→下架同步退出）  | **76/76 PASS**         | `tools/tmp/timemap-p0/verify-p0-e2e.json`     |
 | 浏览器端 DOM（冷启动路由/tab、地图按地点聚合、分类筛选、地点详情结构、活动四要素、发布页约束、**反重复挂载**） | **57/57 PASS, 4 SKIP** | `tools/tmp/timemap-p0/verify-p0-browser.json` |
-| 线上冒烟（迁移状态、P0 契约上线判据、管理端匿名关闭、静态面） | **40/40 PASS** | 终端输出（脚本可重跑） |
-| 迁移字节一致性（产物内联 vs 源文件 vs 线上库） | 16/16 一致 | `tools/tmp/check-migration-checksums.mjs` |
+| 线上冒烟（迁移状态、P0 契约上线判据、管理端匿名关闭、静态面） | **40/40 PASS**         | 终端输出（脚本可重跑）                        |
+| 迁移字节一致性（产物内联 vs 源文件 vs 线上库）               | 16/16 一致             | `tools/tmp/check-migration-checksums.mjs`     |
 
 **验证方法的判别力**（不是"跑绿就算过"）：
+
 - 线上冒烟在**部署前**对同一生产环境跑出 **24 项 FAIL**（activities 404、admin 404、迁移 15/15、旧地点形状），部署后转绿 ⇒ 证明它真能区分新旧，而非恒真。
 - 浏览器冒烟的"反重复挂载"断言是新加的：它抓到了一个**接口测试永远看不见**的真实缺陷（见 §六）。
 - 每一条被我改过的断言都换成了**更有判别力**的表述，而不是放宽到"什么都能过"（逐条记录在 WORKLOG §四）。
@@ -219,26 +223,26 @@ systemctl start campus-backend
 
 ### 6.1 产品缺陷
 
-| 缺陷 | 发现方式 | 修法 |
-|---|---|---|
-| `GET /api/places/:id` 缺 `favoritedByMe` | `tsc` 报 TS2339 | 服务端补同型子查询 + 2 条断言 |
+| 缺陷                                                         | 发现方式              | 修法                                                         |
+| ------------------------------------------------------------ | --------------------- | ------------------------------------------------------------ |
+| `GET /api/places/:id` 缺 `favoritedByMe`                     | `tsc` 报 TS2339       | 服务端补同型子查询 + 2 条断言                                |
 | **活动页重复挂载**：`App.tsx` 里 `ActivitiesScreen` 被渲染两次（`tab === 'activities'` 与 `root === 'activities'` **条件等价**）⇒ 5 条活动画两遍、3 个筛选按钮两遍、多打一份 API 请求 | 浏览器冒烟的 DOM 计数 | 删掉重复渲染；并加**通用**断言"每个 tab/路由的独有容器只出现一次"（5/5 单实例） |
-| 已下架的帖子详情落进"网络错误"分支（410 被当网络故障） | 需求 4.4 对照 | `postIdentity` 新增 `gone` 态 + 专用状态页 |
+| 已下架的帖子详情落进"网络错误"分支（410 被当网络故障）       | 需求 4.4 对照         | `postIdentity` 新增 `gone` 态 + 专用状态页                   |
 
 ⚠️ **活动页重复挂载的关键教训**：接口只被调用一次、返回数据完全正确，**只看接口永远发现不了**——
 错误只在 DOM 结构里。这是"接口全绿 ≠ 界面对"的实例。
 
 ### 6.2 我自己的错误（如实登记，均已修）
 
-| 错误 | 后果 | 修正 |
-|---|---|---|
-| 改 `.ps1` 时丢了 UTF-8 BOM | 该仓库已记过两次的坑；`PS1_BOM_CHECK: FAIL` | 用仓库自带 `tools/fix-ps1-bom.ps1` 补回 |
-| 跑 `pnpm install` 破坏 `node_modules` 符号链接布局 | vite 找不到原生绑定，前端构建失败（**这是本轮唯一需要用户帮忙修的环境损坏**） | 新增 `repair-node-modules.ps1`；根因是沙箱不允许建符号链接 |
-| 迁移 `.sql` 在工作区是 CRLF（`core.autocrlf=true`） | 产物 checksum 与线上库不符 ⇒ **线上 fail-closed 503** | 归一化 16 个迁移为 LF + `.gitattributes` 钉死 `*.sql eol=lf` + 部署前 checksum 预检 |
-| 016 种子只写 `ON CONFLICT (id)` | 线上存在"同手机号不同 UUID"账号 ⇒ 迁移失败 | 改为**按手机号认领**（保留原 UUID） |
-| 016 活动种子硬编码 `created_by='bbbbbbbb-…'` | 该 UUID 不存在 ⇒ 外键失败 | 改为按手机号子查询真实 id |
-| 回滚脚本 7 个缺陷 | 见 §四与 WORKLOG §十；其中一个是**数据丢失**（失败被放行） | 逐个修复 + 加安全快照 + 失败即停 |
-| 多处断言写错（假红） | 例如"地点数==10"（线上有历史地点）、"tab 文案==我的"（实际是账号昵称） | 换成语义正确的判据，逐条记录 |
+| 错误                                                | 后果                                                         | 修正                                                         |
+| --------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 改 `.ps1` 时丢了 UTF-8 BOM                          | 该仓库已记过两次的坑；`PS1_BOM_CHECK: FAIL`                  | 用仓库自带 `tools/fix-ps1-bom.ps1` 补回                      |
+| 跑 `pnpm install` 破坏 `node_modules` 符号链接布局  | vite 找不到原生绑定，前端构建失败（**这是本轮唯一需要用户帮忙修的环境损坏**） | 新增 `repair-node-modules.ps1`；根因是沙箱不允许建符号链接   |
+| 迁移 `.sql` 在工作区是 CRLF（`core.autocrlf=true`） | 产物 checksum 与线上库不符 ⇒ **线上 fail-closed 503**        | 归一化 16 个迁移为 LF + `.gitattributes` 钉死 `*.sql eol=lf` + 部署前 checksum 预检 |
+| 016 种子只写 `ON CONFLICT (id)`                     | 线上存在"同手机号不同 UUID"账号 ⇒ 迁移失败                   | 改为**按手机号认领**（保留原 UUID）                          |
+| 016 活动种子硬编码 `created_by='bbbbbbbb-…'`        | 该 UUID 不存在 ⇒ 外键失败                                    | 改为按手机号子查询真实 id                                    |
+| 回滚脚本 7 个缺陷                                   | 见 §四与 WORKLOG §十；其中一个是**数据丢失**（失败被放行）   | 逐个修复 + 加安全快照 + 失败即停                             |
+| 多处断言写错（假红）                                | 例如"地点数==10"（线上有历史地点）、"tab 文案==我的"（实际是账号昵称） | 换成语义正确的判据，逐条记录                                 |
 
 **关于 CRLF 那次事故的完整因果**（值得单独记）：`db.ts` 的 `migrationChecksum` 是**朴素 sha256、不做换行归一化**，
 而迁移 checksum 被持久化用于"检测迁移文件被改动"。`core.autocrlf=true` 让工作区 `.sql` 变 CRLF
@@ -252,6 +256,7 @@ systemctl start campus-backend
 ## 七、已知限制与未完成项（如实登记，不夸大）
 
 ### 7.1 本轮未完成
+
 1. **旧复刻页未清理**：`campus / chat / board / daily / schools / feedlist` 等页面与其路由**仍然保留**
    （不占底部 tab、不是默认首页），本轮按"最小改动"原则未删除。删不删需要单独的证据与裁定。
 2. **旧门禁未回归**：`scripts/m5/**` 的 31+ 个门禁断言的是**复刻产品**的 M5 契约；
