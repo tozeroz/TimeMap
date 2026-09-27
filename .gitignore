@@ -50,3 +50,4 @@ desktop.ini
 #    或直接从服务器取：http://8.148.156.146/download/campus-demo-1.0.apk
 campus-demo-*.apk
 apk-download-qr.png
+.pnpm-store/

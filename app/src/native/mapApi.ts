@@ -40,11 +40,23 @@ export interface MapMarker {
   place: string
   color: string
   userId: string
+  /**
+   * ⭐ TimeMap P0：标记的**跳转目标**是**地点**，不是帖子。
+   *
+   * 为什么改了（这是需求 4.1/4.2 的直接后果）：
+   *   P0 之前标记 = 一条带地点的帖子 ⇒ 点开进动态详情。
+   *   而需求 4.1 把地图定义为"从地图进入**地点**"的入口：标记按**地点**聚合，
+   *   点击进地点详情，再从地点详情看该地点的内容。
+   *   ⇒ 所以 marker 必须携带 placeId；`postId` 退化为"可用于展示的代表帖"
+   *     （卡片封面/摘要仍来自它），不再是跳转目标。
+   */
+  placeId: string
+  /** 代表帖（用于标记卡片的封面与摘要）；地点聚合后可能是多条帖中最新的那条 */
   postId: string
   /** 离线自绘地图的 SVG 像素坐标（未校准投影，见上） */
   x: number
   y: number
-  /** 真实经纬度（权威来源：posts.place_id → places） */
+  /** 真实经纬度（权威来源：places.latitude/longitude） */
   lat: number
   lng: number
   /**
