@@ -136,8 +136,7 @@ export function AmapMap({
 }: {
   markers: MapMarker[]
   here?: GeoFix | null
-  /** ⭐ P0：回调参数是**地点 id**（标记按地点聚合，点击进地点详情） */
-  onMarkerClick: (placeId: string) => void
+  onMarkerClick: (postId: string) => void
   onSdkFailed: () => void
   mapRef?: (handle: MapHandle | null) => void
 }) {
@@ -170,7 +169,7 @@ export function AmapMap({
 
       for (const m of markers) {
         const el = buildMarkerElement(m)
-        el.addEventListener('click', () => onMarkerClick(m.placeId))
+        el.addEventListener('click', () => onMarkerClick(m.postId))
         // anchor: bottom-center —— 图钉尖端落在坐标点上
         const marker = new AMap.Marker({
           position: [m.lng, m.lat],

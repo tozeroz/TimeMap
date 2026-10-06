@@ -40,45 +40,12 @@
 #     holds when nothing was deployed. So we write a build-id sentinel and the
 #     verifier requires it to change.
 param(
-  [switch]$SkipBuild,
-  [string]$Key = '',
-  [string]$Target = 'root@8.148.156.146'
+  [switch]$SkipBuild
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-
-# Same key handling as deploy-server.ps1: prefer the hardened copy staged OUTSIDE the
-# workspace by tools/setup-deploy-key.ps1, because Windows OpenSSH rejects a key whose ACL
-# lists other accounts and workspace files carry sandbox-group entries.
-#
-# We SEARCH every plausible temp location rather than trusting $env:TEMP: under the agent
-# sandbox $env:TEMP is a sandbox-private directory, so the two environments disagree.
-function Find-StagedKey {
-  $candidates = @(
-    $env:TMPDIR, $env:TEMP, $env:TMP,
-    (Join-Path $env:USERPROFILE 'AppData\Local\Temp'),
-    'C:\Users\Lenovo\AppData\Local\Temp'
-  ) | Where-Object { $_ } | Select-Object -Unique
-  foreach ($c in $candidates) {
-    $p = Join-Path $c 'timemap-ssh\id_timemap.pem'
-    if (Test-Path -LiteralPath $p) { return $p }
-  }
-  return $null
-}
-if (-not $PSBoundParameters.ContainsKey('Key') -or -not $Key) {
-  $staged = Find-StagedKey
-  if ($staged) {
-    $Key = $staged
-    Write-Host "using hardened deploy key: $Key"
-  } else {
-    $Key = Join-Path $root 'TimeMap.pem'
-    Write-Host "  ! hardened key not found (searched temp dirs for timemap-ssh\id_timemap.pem)"
-    Write-Host "    falling back to the in-repo TimeMap.pem; if ssh reports"
-    Write-Host "    UNPROTECTED PRIVATE KEY FILE, run: & .\tools\setup-deploy-key.ps1"
-  }
-}
-# IdentitiesOnly=yes keeps ssh from silently offering a different key from ~/.ssh.
-$SSH_OPTS = @('-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=20', '-o', 'BatchMode=yes')
+$key  = Join-Path $root 'TimeMap.pem'
+$target = 'root@8.148.156.146'
 $web  = '/srv/campus/web'
 $remoteScript = Join-Path $root 'tools\remote\web-deploy-remote.sh'
 
@@ -99,28 +66,7 @@ if (-not $SkipBuild) {
     } finally {
       $ErrorActionPreference = $prev
     }
-    if ($code -ne 0) {
-      # FALLBACK: vite calls `exec("net use")` (to detect network drives) outside its own
-      # try/catch. In a sandbox that forbids piped spawns that throws `spawn EPERM` and kills
-      # the build. tools/tmp/vite-sandbox-shim.mjs neutralises exactly that one probe, after
-      # which vite takes its own documented fallback (plain fs.realpathSync). Tried only when
-      # the normal build actually failed, so ordinary terminals keep the reference path.
-      Write-Host "  pnpm build failed (exit $code) -- retrying via vite sandbox shim" -ForegroundColor Yellow
-      $root2 = $root
-      $shim = Join-Path $root2 'tools\tmp\vite-sandbox-shim.mjs'
-      if (-not (Test-Path -LiteralPath $shim)) { throw "pnpm build failed and shim missing: $shim" }
-      $shimUrl = ([Uri]$shim).AbsoluteUri
-      $prev2 = $ErrorActionPreference
-      $ErrorActionPreference = 'Continue'
-      try {
-        $out2 = & node --import $shimUrl (Join-Path $root2 'app\node_modules\vite\bin\vite.js') build 2>&1
-        $code2 = $LASTEXITCODE
-        $out2 | Select-String -Pattern 'built in|error|dist/assets' | ForEach-Object { "  $($_.Line.Trim())" }
-      } finally {
-        $ErrorActionPreference = $prev2
-      }
-      if ($code2 -ne 0) { throw "frontend build failed (exit $code2)" }
-    }
+    if ($code -ne 0) { throw "pnpm build failed (exit $code)" }
   } finally { Pop-Location }
 } else {
   Write-Host '  (skipped: --SkipBuild)'
@@ -142,33 +88,33 @@ $stamp = Get-Date -Format 'yyyyMMddHHmmss'
 $stage = "$web.new.$stamp"
 $slot  = "/tmp/web-upload-$stamp"
 
-& ssh -i $Key @SSH_OPTS $Target "mkdir -p '$stage' && echo staging-ready"
+& ssh -i $key -o BatchMode=yes $target "mkdir -p '$stage' && echo staging-ready"
 if ($LASTEXITCODE -ne 0) { throw "cannot create staging dir $stage (exit $LASTEXITCODE)" }
 
-& ssh -i $Key @SSH_OPTS $Target "mkdir -p '$slot' && echo upload-slot-ready"
+& ssh -i $key -o BatchMode=yes $target "mkdir -p '$slot' && echo upload-slot-ready"
 if ($LASTEXITCODE -ne 0) { throw "cannot create upload slot $slot (exit $LASTEXITCODE)" }
 
 # Transfer the directory itself (no glob). scp -r <localdir> <remote>/ creates
 # <remote>/<basename>, hence reading from $slot/dist below.
-& scp -i $Key @SSH_OPTS -r $dist "${Target}:$slot/"
+& scp -i $key -o BatchMode=yes -r $dist "${target}:$slot/"
 if ($LASTEXITCODE -ne 0) { throw "upload failed (scp exit $LASTEXITCODE) - aborted, live site untouched" }
 
-& ssh -i $Key @SSH_OPTS $Target "cp -a '$slot/dist/.' '$stage/' && echo staged && find '$stage' -type f | wc -l"
+& ssh -i $key -o BatchMode=yes $target "cp -a '$slot/dist/.' '$stage/' && echo staged && find '$stage' -type f | wc -l"
 if ($LASTEXITCODE -ne 0) { throw "staging copy failed (exit $LASTEXITCODE)" }
 
 Write-Host '=== 3) Upload remote helper ===' -ForegroundColor Cyan
-& scp -i $Key @SSH_OPTS $remoteScript "${Target}:/tmp/web-deploy-remote.sh"
+& scp -i $key -o BatchMode=yes $remoteScript "${target}:/tmp/web-deploy-remote.sh"
 if ($LASTEXITCODE -ne 0) { throw "uploading remote helper failed (exit $LASTEXITCODE)" }
 
 Write-Host '=== 4) Atomic swap + fix permissions ===' -ForegroundColor Cyan
 # swap validates $stage/index.html before touching the live dir.
-& ssh -i $Key @SSH_OPTS $Target "bash /tmp/web-deploy-remote.sh swap '$stage'"
+& ssh -i $key -o BatchMode=yes $target "bash /tmp/web-deploy-remote.sh swap '$stage'"
 $swapExit = $LASTEXITCODE
 if ($swapExit -ne 0) { Write-Host 'SWAP FAILED (old version kept)' -ForegroundColor Red; exit 1 }
-& ssh -i $Key @SSH_OPTS $Target 'bash /tmp/web-deploy-remote.sh perms'
+& ssh -i $key -o BatchMode=yes $target 'bash /tmp/web-deploy-remote.sh perms'
 
 Write-Host '=== 5) Smoke test on server ===' -ForegroundColor Cyan
-& ssh -i $Key @SSH_OPTS $Target 'bash /tmp/web-deploy-remote.sh smoke'
+& ssh -i $key -o BatchMode=yes $target 'bash /tmp/web-deploy-remote.sh smoke'
 $smokeExit = $LASTEXITCODE
 
 Write-Host '=== 6) Public check (no -k: real trust chain) ===' -ForegroundColor Cyan

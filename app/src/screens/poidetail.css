@@ -1,390 +1,275 @@
-/*
- * 地点详情（F03 / US-01；按需求 4.2 的草图重做）。
- *
- * ⚠️ 本文件在 P0 被**整体重写**：改前的类名来自"按原版 poi-detail 控件树做的页面"
- *    （.pd__imgWrap / .pd__userTag / .pd__distance 等），那个页面结构已经被替换，
- *    留着旧类名只会让下一个维护者以为还有对应结构。
- */
-
-.pd__topTitle {
-  font-size: var(--f-sub);
-  font-weight: 600;
+.pd__card {
+  background: var(--c-surface);
 }
 
-.pd {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding-bottom: 28px;
-}
-
-/* 地点封面（第一张老照片）；没有照片时**整块不渲染**（不画假封面） */
 .pd__cover {
   width: 100%;
-  height: 190px;
+  height: 180px;
   object-fit: cover;
-  background: var(--c-surface-sunken);
 }
 
-.pd__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px var(--pad-page) 0;
+.pd__info {
+  padding: 14px var(--pad-page) 16px;
 }
 
 .pd__name {
   margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.pd__addr {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0 12px;
+  font-size: 13px;
+  color: var(--c-text-3);
+}
+
+.pd__stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12.5px;
+  color: var(--c-text-3);
+}
+
+.pd__stats strong {
+  color: var(--c-text);
+  font-size: 14px;
+}
+
+.pd__cat {
+  margin-left: auto;
+  padding: 2px 9px;
+  border-radius: 5px;
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  font-size: 11px;
+}
+
+.pd__actions {
+  display: flex;
+  gap: 10px;
+  padding: 12px var(--pad-page);
+}
+
+.pd__action {
+  flex: 1 1 0;
+  height: 42px;
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pd__action--ghost {
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-divider);
+}
+
+.pd__who,
+.pd__feed {
+  margin-top: 10px;
+  padding: 14px var(--pad-page);
+  background: var(--c-surface);
+}
+
+.pd__section {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pd__avatars {
+  display: flex;
+  gap: 8px;
+}
+
+.pd__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-sunken);
+}
+
+.pd__item {
+  display: flex;
+  gap: 11px;
+  width: 100%;
+  padding: 11px 0;
+  border-top: 1px solid var(--c-divider);
+  text-align: left;
+}
+
+.pd__item:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.pd__thumb {
+  width: 74px;
+  height: 74px;
+  border-radius: var(--r-md);
+  object-fit: cover;
+  flex: 0 0 auto;
+  background: var(--c-surface-sunken);
+}
+
+.pd__item-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pd__item-text {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pd__item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+.pd__item-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+}
+
+.pd__item-likes {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+}
+
+/* ===========================================================================
+   M3 Slice 4：地点详情按**只读证据**重排
+   证据（supplements/poi-detail.json）：地点名大号加粗占满宽度；
+   下一行「距我N公里」在左、完整地址紧随；
+   再往下是该地点的动态图片（左侧、非通栏），图片上有作者标签。
+   此前的中部统计 / 两个按钮 / 「最近来过」都不在证据里，已删除。
+   =========================================================================== */
+.pd__head {
+  padding: 12px 16px 0;
+}
+
+.pd__name {
+  margin: 0 0 6px;
   font-size: 20px;
   font-weight: 700;
   line-height: 1.25;
   color: var(--c-text);
 }
 
-.pd__category {
-  flex: none;
-  padding: 2px 9px;
-  border-radius: 5px;
-  background: var(--c-accent-soft);
-  color: var(--c-accent);
-  font-size: 11px;
+.pd__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.pd__disabledTag {
-  flex: none;
-  padding: 2px 9px;
-  border-radius: 5px;
-  background: #fdeceb;
-  color: var(--c-danger);
-  font-size: 11px;
-}
-
-.pd__addr,
-.pd__desc {
-  margin: 0;
-  padding: 0 var(--pad-page);
-  font-size: var(--f-meta);
-  line-height: 1.6;
-  color: var(--c-text-3);
-}
-
-.pd__desc {
-  font-size: var(--f-body);
+.pd__distance {
+  flex: 0 0 auto;
+  font-size: 13px;
   color: var(--c-text-2);
 }
 
-/* ---- 校史与老照片 ---- */
-.pd__history,
-.pd__activities,
-.pd__feed {
-  padding: 0 var(--pad-page);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.pd__sectionTitle {
-  margin: 0;
-  font-size: var(--f-sub);
-  font-weight: 700;
-  color: var(--c-text);
-}
-
-.pd__historyText {
-  margin: 0;
-  font-size: var(--f-body);
-  line-height: 1.65;
-  color: var(--c-text-2);
-}
-
-.pd__historyEmpty {
-  margin: 0;
-  font-size: var(--f-meta);
-  color: var(--c-text-3);
-}
-
-.pd__photos {
-  list-style: none;
-  display: flex;
-  gap: 10px;
-  margin: 0;
-  padding: 0 0 4px;
-  overflow-x: auto;
-}
-
-.pd__photo {
-  flex: none;
-  width: 160px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.pd__photoImg {
-  width: 160px;
-  height: 106px;
-  object-fit: cover;
-  border-radius: var(--r-sm);
-  background: var(--c-surface-sunken);
-}
-
-.pd__photoTitle {
-  font-size: var(--f-meta);
-  font-weight: 600;
-  color: var(--c-text);
-}
-
-/* 年代与来源**都要可见**（US-01②：年代和来源必须显示，不明时如实说明） */
-.pd__photoYear {
-  font-size: var(--f-tiny);
-  color: var(--c-text-2);
-}
-
-.pd__photoSource {
-  font-size: 10.5px;
+.pd__addr {
+  font-size: 13px;
   line-height: 1.4;
   color: var(--c-text-3);
 }
 
-/* ---- 发布入口 ---- */
-.pd__actions {
-  padding: 0 var(--pad-page);
+.pd__feed {
+  margin-top: 14px;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.pd__publishBtn {
-  width: 100%;
-  height: 42px;
-  border: none;
-  border-radius: var(--r-pill);
-  background: var(--c-primary);
-  color: var(--c-primary-fg);
-  font-size: var(--f-body);
-  font-weight: 600;
-}
-
-.pd__publishHint {
-  margin: 0;
-  font-size: var(--f-meta);
+.pd__empty,
+.pd__state {
+  padding: 48px 16px;
+  text-align: center;
+  font-size: 14px;
   color: var(--c-text-3);
 }
 
-/* ---- 近期活动 ---- */
-.pd__actList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.pd__state-sub {
+  margin-top: 8px;
+  font-size: 12px;
 }
 
-.pd__act {
-  width: 100%;
+/* 一条动态：左图 + 图上作者标签 + 右侧正文（对齐证据里的图片 + view_user_tag） */
+.pd__item {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: none;
-  border-radius: var(--r-sm);
-  background: var(--c-surface-sunken);
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   text-align: left;
 }
 
-.pd__actTitle {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--f-meta);
-  font-weight: 600;
-  color: var(--c-text);
+.pd__imgWrap {
+  position: relative;
+  flex: 0 0 auto;
+  width: 132px;
+  height: 168px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--c-surface-sunken);
+}
+
+.pd__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 作者标签叠在图片上（原版是 view_user_tag + tv_user_tag_name，位于图片左上角） */
+.pd__userTag {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  max-width: calc(100% - 12px);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.6;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.pd__actMeta {
-  flex: none;
-  font-size: var(--f-tiny);
-  color: var(--c-text-3);
-}
-
-.pd__actBadge {
-  flex: none;
-  padding: 2px 8px;
-  border-radius: var(--r-pill);
-  font-size: 10.5px;
-  font-weight: 600;
-}
-
-.pd__actBadge--upcoming {
-  background: var(--c-accent-soft);
-  color: var(--c-accent);
-}
-
-.pd__actBadge--ongoing {
-  background: #e6f7ec;
-  color: #1c8b45;
-}
-
-.pd__actBadge--ended {
-  background: #e9e9ec;
-  color: var(--c-text-3);
-}
-
-.pd__actBadge--cancelled {
-  background: #fdeceb;
-  color: var(--c-danger);
-}
-
-/* ---- 帖子区 ---- */
-.pd__feedHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.pd__sorts {
-  display: flex;
-  gap: 6px;
-}
-
-.pd__sort {
-  padding: 5px 11px;
-  border: 1px solid var(--c-divider);
-  border-radius: var(--r-pill);
-  background: var(--c-surface);
-  color: var(--c-text-2);
-  font-size: var(--f-tiny);
-}
-
-.pd__sort.is-active {
-  background: var(--c-primary);
-  border-color: var(--c-primary);
-  color: var(--c-primary-fg);
-}
-
-.pd__postList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.pd__post {
-  width: 100%;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px;
-  border: none;
-  border-radius: var(--r-md);
-  background: var(--c-surface);
-  box-shadow: var(--shadow-card);
-  text-align: left;
-}
-
-.pd__postImg {
-  flex: none;
-  width: 68px;
-  height: 68px;
-  border-radius: var(--r-sm);
-  object-fit: cover;
-  background: var(--c-surface-sunken);
-}
-
-.pd__postImg--ph {
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-}
-
-.pd__postMain {
-  flex: 1;
+.pd__body {
+  flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.pd__postAuthor {
-  font-size: var(--f-meta);
-  font-weight: 600;
-  color: var(--c-text);
-}
-
-.pd__postBody {
-  font-size: var(--f-body);
+  font-size: 14px;
   line-height: 1.5;
-  color: var(--c-text-2);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.pd__postTime {
-  font-size: var(--f-tiny);
-  color: var(--c-text-3);
-}
-
-.pd__postStats {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-.pd__postStat {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: var(--f-tiny);
-  color: var(--c-text-3);
-}
-
-.pd__postStat.is-on {
-  color: #e0a300;
-}
-
-.pd__hotNote {
-  margin: 2px 0 0;
-  font-size: var(--f-tiny);
-  line-height: 1.6;
-  color: var(--c-text-3);
-}
-
-/* ---- 状态页 ---- */
-.pd__state {
-  padding: 48px var(--pad-page);
-  text-align: center;
-  font-size: var(--f-body);
-  color: var(--c-text-3);
-}
-
-.pd__stateSub {
-  margin-top: 8px;
-  font-size: var(--f-meta);
-  word-break: break-all;
-}
-
-.pd__retry {
-  margin-top: 14px;
-  padding: 8px 18px;
-  border: 1px solid var(--c-divider);
-  border-radius: var(--r-pill);
-  background: var(--c-surface);
   color: var(--c-text);
-  font-size: var(--f-meta);
 }
 
-.pd__empty {
-  margin: 0;
-  padding: 14px 0;
-  font-size: var(--f-meta);
+.pd__time {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  font-size: 12px;
   color: var(--c-text-3);
-  text-align: center;
 }

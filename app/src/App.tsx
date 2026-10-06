@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Shell } from './components/Shell'
 import { TabBar, type TabKey } from './components/TabBar'
 import { useRoute } from './router'
+import { CampusScreen } from './screens/CampusScreen'
 import { SchoolSearchScreen } from './screens/SchoolSearchScreen'
 import { MeScreen } from './screens/MeScreen'
 import { MapScreen } from './screens/MapScreen'
@@ -24,10 +25,6 @@ import { UpgradeDialog } from './screens/UpgradeDialog'
 import { MoreScreen } from './screens/MoreScreen'
 import { UserProfileScreen } from './screens/UserProfileScreen'
 import { ProfileEditScreen } from './screens/ProfileEditScreen'
-import { ActivitiesScreen } from './screens/ActivitiesScreen'
-import { ActivityDetailScreen } from './screens/ActivityDetailScreen'
-import { AdminScreen } from './screens/AdminScreen'
-import { FavoritesScreen } from './screens/FavoritesScreen'
 import {
   AboutScreen,
   AccountScreen,
@@ -38,23 +35,17 @@ import {
 } from './screens/DrawerPages'
 import './styles/pages.css'
 
-/**
- * ⭐ TimeMap P0：三个主 tab = **地图 / 活动 / 我的**（需求 4.1 的底部草图）。
- * 改前是「<昵称> / 校园 / 地图」——那是复刻的另一个产品的 tab 栏。
- * ⚠️ 复刻页（campus/chat/board/daily/schools/…）的**路由仍然保留**，
- *    只是不再占据底部 tab、也不再是默认首页（默认改为 `#/map`）。
- */
 const TAB_TITLES: Record<string, string> = {
-  map: 'BJTU TimeMap',
-  activities: '活动',
-  me: '我的',
+  me: '自定义名称6',
+  campus: '校园广场',
+  map: '地图',
 }
 
 export default function App() {
   const route = useRoute()
   const [root, param] = route.path.split('/')
   const tab: TabKey | null =
-    root === 'map' || root === 'activities' || root === 'me' ? (root as TabKey) : null
+    root === 'me' || root === 'campus' || root === 'map' ? (root as TabKey) : null
   // 深色页面：状态栏需要跟着变暗
   const dark = root === 'scanner' || root === 'media'
 
@@ -64,9 +55,9 @@ export default function App() {
 
   return (
     <Shell dark={dark}>
-      {tab === 'map' && <MapScreen />}
-      {tab === 'activities' && <ActivitiesScreen />}
+      {tab === 'campus' && <CampusScreen />}
       {tab === 'me' && <MeScreen />}
+      {tab === 'map' && <MapScreen />}
 
       {/*
         详情页的 id 取法（M3 Slice 1 修正的真实 bug）：
@@ -137,25 +128,6 @@ export default function App() {
       {root === 'announce' && <AnnounceScreen />}
       {root === 'feedlist' && <FeedListScreen />}
       {root === 'poidetail' && <PoiDetailScreen id={route.query.id ?? param ?? ''} />}
-      {/*
-        ⭐ TimeMap P0 新增的路由：
-          · `activity`       活动详情（US-04；id 解析与兄弟路由一致：query → 路径段 → 空串）
-          · `admin`          管理端（F07；仅 admin 可见入口，权限实际由服务端把关）
-          · `favorites`      我的收藏（US-03：收藏内容可在个人中心查看）
-        ⚠️ 全部沿用既有纪律：`route.query.id ?? param ?? ''`（**空串兜底**，不回落到任何 mock id）。
-
-        ⚠️⚠️ 这里**故意没有** `{root === 'activities' && <ActivitiesScreen />}`：
-          活动列表已经是底部 tab，由上面的 `{tab === 'activities' && <ActivitiesScreen />}` 渲染。
-          而 `tab` 的取法就是 `root === 'activities' ? 'activities' : null` ⇒ 两个条件**等价**，
-          写两处会让组件**同时挂载两次**。
-          实测后果（被浏览器冒烟抓到）：DOM 里出现 10 条活动（5 条画了两遍）、
-          6 个筛选按钮（3 个两遍）、两份 `[data-act-count]`，并且**多打一份 API 请求**。
-          这类重复在只看接口时完全看不见 —— 接口只被调用一次就"看起来正常"，
-          而页面结构已经错了。⇒ 一条路由只渲染一次，判据由测试的 DOM 计数守着。
-      */}
-      {root === 'activity' && <ActivityDetailScreen id={route.query.id ?? param ?? ''} />}
-      {root === 'admin' && <AdminScreen />}
-      {root === 'favorites' && <FavoritesScreen />}
       {/*
         M5 WO#9A：群聊走**同一个 ChatScreen**，只是换一个头部变体。
 

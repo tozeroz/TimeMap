@@ -15,7 +15,6 @@ import seedSchoolCampusesSql from './migrations/012_seed_school_campuses.sql'
 import seedCollegesSql from './migrations/013_seed_colleges.sql'
 import appReleaseSql from './migrations/014_app_release.sql'
 import release11Sql from './migrations/015_release_1_1.sql'
-import timemapP0Sql from './migrations/016_timemap_p0.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -77,12 +76,6 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   //        ⚠️ 刻意用 **http**：线上是私有 CA 自签证书，APK 下载会被证书告警挡住；
   //           80 端口在同一份 locations 配置里可用 ⇒ 这是**已知取舍**，不是疏忽。
   { version: '015_release_1_1', sql: release11Sql },
-
-  // 016：BJTU TimeMap P0（F01–F07）—— 用户角色、地点分类/启用/简介/校史、
-  //      帖子状态（下架同步）与幂等键、收藏、评论状态、地点老照片、活动、举报、操作记录，
-  //      以及北交大首批 10 个地点 / 3 张老照片（演示素材）/ 6 条活动的种子。
-  //      数据来源与合规标注见该文件头部注释。
-  { version: '016_timemap_p0', sql: timemapP0Sql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

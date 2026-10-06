@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { logout, me as fetchMe } from '../api/client'
-import { isAdmin, type SessionUser } from '../api/session'
+import type { SessionUser } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { Drawer } from '../components/Drawer'
 import {
@@ -9,7 +9,6 @@ import {
   IconImage,
   IconMenu,
   IconShare,
-  IconStar,
 } from '../components/icons'
 import { navigate } from '../router'
 import './me.css'
@@ -228,33 +227,6 @@ export function MeScreen() {
           <IconImage size={17} />
           <span>拍下眼前的风景</span>
         </button>
-      </section>
-
-      {/*
-        ⭐ TimeMap P0：**我的收藏**（US-03：收藏内容可在个人中心查看）与
-        **管理端**（F07；仅 role=admin 显示）。
-        ⚠️ 管理端入口按角色隐藏只是**界面便利** —— 服务端对每个 /api/admin/* 都独立校验，
-           普通学生即使手工敲 `#/admin` 也只会看到"无权限"并且拿不到任何管理数据。
-           **绝不能**把"藏起入口"当成权限控制。
-        ⚠️ `isAdmin()` 读的是本地会话；MeScreen 挂载时会调 `GET /api/auth/me`，
-           而 `me()` 会把服务端的 role 写回缓存 ⇒ 刷新后入口不会莫名消失。
-      */}
-      <section className="me__entries">
-        <button
-          className="me__entryBtn"
-          data-me-entry="favorites"
-          onClick={() => navigate('favorites')}
-        >
-          <IconStar size={17} />
-          <span>我的收藏</span>
-        </button>
-        {isAdmin() && (
-          <button className="me__entryBtn" data-me-entry="admin" onClick={() => navigate('admin')}>
-            <IconMenu size={17} />
-            <span>管理端</span>
-            <span className="me__adminTag">管理员</span>
-          </button>
-        )}
       </section>
 
       {/* 左上角三横线打开的抽屉菜单（原版实测有 8 项） */}
