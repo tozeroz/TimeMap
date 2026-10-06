@@ -33,28 +33,7 @@ export type PostResolution =
   | { state: 'ready'; post: ApiPostDetail; comments: ApiCommentNode[]; total: number; fromSnapshot: false }
   | { state: 'offline'; post: ApiPostDetail; comments: ApiCommentNode[]; total: number; fromSnapshot: true }
   | { state: 'not_found' }
-  /**
-   * ⭐ TimeMap P0（US-08）：内容**已被下架**（服务端 410 gone）。
-   *
-   * 为什么要与 not_found / error 分开：需求 4.4「内容不存在或已下架：显示状态页并提供返回入口」。
-   * 下架（管理员移除或作者删除）与"从来不存在"（404）在服务端是**两个**不同的回答：
-   *   · 410 ⇒ 曾经有、现在不公开（可以明确说"已下架"）
-   *   · 404 ⇒ 这个 id 我们没有
-   * 而两者都**不属于**网络故障 —— 改前 410 会掉进 error 分支，
-   * 界面显示「网络错误」，把一个明确的业务状态说成了网络问题（误导用户重试）。
-   */
-  | { state: 'gone' }
   | { state: 'error'; reason: string }
-
-/**
- * 判定"内容已被下架"。
- *
- * ⚠️ 与 isNotFound 同一纪律：优先用**结构化**的 status，字符串匹配只作后备。
- */
-function isGone(r: { reason?: string; status?: number }): boolean {
-  if (typeof r.status === 'number') return r.status === 410
-  return /410|gone/i.test(r.reason ?? '')
-}
 
 /**
  * 判定"服务端是不是明确说这个实体不存在"。
@@ -93,12 +72,9 @@ export async function resolvePostAndComments(id: string): Promise<PostResolution
   }
 
   /*
-    ⭐ 先判 gone / not_found：只要**服务端对这条动态本身给出了明确回答**
-      （410 已下架 / 404 不存在），就**不**再考虑快照降级
+    ⭐ 先判 not_found：只要**动态本身**明确不存在，就**不**再考虑快照降级
       —— 否则会出现"服务端说没有这条，界面却拿旧快照显示出来"的假象。
-      这正是 P0 之后最容易踩的坑：帖子被管理员下架，本地还留着它上一次成功的快照。
   */
-  if (!pr.ok && isGone(pr)) return { state: 'gone' }
   if (!pr.ok && isNotFound(pr)) return { state: 'not_found' }
 
   // 在线失败 → 只允许降级到**该 id 自己**的最后一次成功快照

@@ -26,8 +26,7 @@ export function RealMap({
   markers: MapMarker[]
   /** 真实定位结果；null = 尚未拿到，蓝点先停在校园中心 */
   here?: GeoFix | null
-  /** ⭐ P0：回调参数是**地点 id**（标记按地点聚合，点击进地点详情） */
-  onMarkerClick: (placeId: string) => void
+  onMarkerClick: (postId: string) => void
   onTilesFailed: () => void
   mapRef?: (handle: MapHandle | null) => void
 }) {
@@ -82,7 +81,7 @@ export function RealMap({
         iconAnchor: [38, 100],
       })
       const marker = L.marker([m.lat, m.lng], { icon })
-      marker.on('click', () => onMarkerClick(m.placeId))
+      marker.on('click', () => onMarkerClick(m.postId))
       marker.addTo(map)
     }
 

@@ -22,13 +22,7 @@ function parseHash(): Route {
       if (k) query[decodeURIComponent(k)] = decodeURIComponent(v ?? '')
     }
   }
-  /*
-    ⭐ TimeMap P0：默认路由从 'campus' 改为 'map'。
-    为什么：需求 4.1 把地图定为首页（"从地图进入校园内容"），
-    底部 tab 也以地图为第一项。改前默认落在复刻的「校园广场」信息流上，
-    那是另一个产品的首页 —— 冷启动进错页会让整条"地图→地点→内容"链路看不见。
-  */
-  return { path: pathPart || 'map', query }
+  return { path: pathPart || 'campus', query }
 }
 
 export function useRoute(): Route {
@@ -37,7 +31,7 @@ export function useRoute(): Route {
   useEffect(() => {
     const onChange = () => setRoute(parseHash())
     window.addEventListener('hashchange', onChange)
-    if (!window.location.hash) window.location.hash = '#/map'
+    if (!window.location.hash) window.location.hash = '#/campus'
     return () => window.removeEventListener('hashchange', onChange)
   }, [])
 
@@ -55,7 +49,7 @@ export function navigate(path: string, query?: Record<string, string>) {
 }
 
 /** 返回上一页；如果没有历史则回到主 tab */
-export function goBack(fallback = 'map') {
+export function goBack(fallback = 'campus') {
   if (window.history.length > 1) {
     window.history.back()
   } else {

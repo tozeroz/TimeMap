@@ -143,8 +143,7 @@ export function TencentMap({
 }: {
   markers: MapMarker[]
   here?: GeoFix | null
-  /** ⭐ P0：回调参数是**地点 id**（标记按地点聚合，点击进地点详情） */
-  onMarkerClick: (placeId: string) => void
+  onMarkerClick: (postId: string) => void
   onSdkFailed: () => void
   mapRef?: (handle: MapHandle | null) => void
 }) {
@@ -208,7 +207,7 @@ export function TencentMap({
         const wrap = document.createElement('div')
         wrap.className = 'rm__wrap rm__wrap--tmap'
         const el = buildMarkerElement(m)
-        el.addEventListener('click', () => onMarkerClick(m.placeId))
+        el.addEventListener('click', () => onMarkerClick(m.postId))
         wrap.appendChild(el)
         host.appendChild(wrap)
         const item: PlacedItem = { wrap, lat: m.lat, lng: m.lng }

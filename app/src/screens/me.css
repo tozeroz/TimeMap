@@ -8,47 +8,6 @@
   background: var(--c-surface);
 }
 
-/* ===========================================================================
-   ⭐ TimeMap P0：功能入口区（我的收藏 / 管理端）
-   =========================================================================== */
-/* 为什么单开一段而不是塞进 .me__side：
-   .me__side 那两列是**复刻页的四个"待核对"条目**（不可点、且目的地未评估），
-   而这两个入口是**可点的真实功能**。混在一起会让"能点的"和"不能点的"看起来一样。 */
-.me__entries {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin-top: 10px;
-  background: var(--c-divider);
-}
-
-.me__entryBtn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px var(--pad-page);
-  border: 0;
-  background: var(--c-surface);
-  color: var(--c-text);
-  font-size: var(--f-body);
-  text-align: left;
-}
-
-.me__entryBtn > span:first-of-type {
-  flex: 1;
-}
-
-/* 「管理员」标记：让"这个入口为什么会出现"一眼可读（它不是所有人都有的） */
-.me__adminTag {
-  flex: none;
-  padding: 2px 8px;
-  border-radius: var(--r-pill);
-  background: var(--c-accent-soft);
-  color: var(--c-accent);
-  font-size: var(--f-tiny);
-}
-
 .me__side {
   display: flex;
   flex-direction: column;
