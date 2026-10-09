@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Shell } from './components/Shell'
 import { TabBar, type TabKey } from './components/TabBar'
 import { useRoute } from './router'
+import { CampusScreen } from './screens/CampusScreen'
 import { SchoolSearchScreen } from './screens/SchoolSearchScreen'
 import { MeScreen } from './screens/MeScreen'
 import { MapScreen } from './screens/MapScreen'
@@ -39,13 +40,17 @@ import {
 import './styles/pages.css'
 
 /**
- * ⭐ TimeMap P0：三个主 tab = **地图 / 活动 / 我的**（需求 4.1 的底部草图）。
- * 改前是「<昵称> / 校园 / 地图」——那是复刻的另一个产品的 tab 栏。
- * ⚠️ 复刻页（campus/chat/board/daily/schools/…）的**路由仍然保留**，
- *    只是不再占据底部 tab、也不再是默认首页（默认改为 `#/map`）。
+ * ⭐ TimeMap 四个主 tab = **地图 / 帖子 / 活动 / 我**。
+ *
+ * ⚠️ 需求文档 §4.1 的底部草图是三个（[地图] [活动] [我的]）；「帖子」是**用户 2026-09-26 要求加回**的，
+ *    属有意偏离需求草图 ⇒ 差异已在交付文档里如实登记（不改需求文档）。
+ *    「帖子」= `#/campus`（校园广场瀑布流，权威数据来自 GET /api/posts）。
+ * ⚠️ 复刻页（chat/board/daily/schools/feedlist/…）的**路由仍然保留**，
+ *    只是不占底部 tab；默认首页仍是 `#/map`。
  */
 const TAB_TITLES: Record<string, string> = {
   map: 'BJTU TimeMap',
+  campus: '帖子',
   activities: '活动',
   me: '我的',
 }
@@ -53,8 +58,17 @@ const TAB_TITLES: Record<string, string> = {
 export default function App() {
   const route = useRoute()
   const [root, param] = route.path.split('/')
+  /*
+    tab 的映射：`#/campus` 在底部 tab 里叫 `feed`（标签文案是「帖子」）。
+    为什么不直接把 TabKey 叫 'campus'：`feed` 表达的是"看帖子流"这件事，
+    而 `campus` 是这个复刻页的历史路由名 —— 两者解耦后，将来换页面不必改 TabKey。
+  */
   const tab: TabKey | null =
-    root === 'map' || root === 'activities' || root === 'me' ? (root as TabKey) : null
+    root === 'map' || root === 'activities' || root === 'me'
+      ? (root as TabKey)
+      : root === 'campus'
+        ? 'feed'
+        : null
   // 深色页面：状态栏需要跟着变暗
   const dark = root === 'scanner' || root === 'media'
 
@@ -65,6 +79,7 @@ export default function App() {
   return (
     <Shell dark={dark}>
       {tab === 'map' && <MapScreen />}
+      {tab === 'feed' && <CampusScreen />}
       {tab === 'activities' && <ActivitiesScreen />}
       {tab === 'me' && <MeScreen />}
 

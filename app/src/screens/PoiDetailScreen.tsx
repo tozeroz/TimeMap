@@ -259,10 +259,23 @@ export function PoiDetailScreen({ id }: { id: string }) {
           {/*
             US-01③：**没有帖子时仍显示基础资料和发布入口** ——
             所以这里只是一条空态文案，上面的简介/校史/发布按钮都照常存在。
+
+            ⚠️ 空态文案必须**区分三种原因**（2026-10-09 用户实际提问"点近期热门怎么没东西"）：
+              ① 这个地点从来没有内容            → 邀请发布
+              ② 有内容，但都在 7 天窗口之外      → **说明"近期"的口径**，否则用户会以为坏了
+              ③ 有内容，但被「仅看图文」筛掉     → 说明是筛选的锅
+            改前只有「没有符合当前筛选的内容」一句 → 用户看到"近期热门"是空的，
+            而"最新"里明明有帖子，却没有任何解释。**界面没解释自己的口径 = 看起来像故障。**
           */}
           {visiblePosts.length === 0 ? (
-            <p className="pd__empty" data-pd-posts="empty">
-              {place.posts.length === 0 ? '这个地点还没有内容，来发第一条吧' : '没有符合当前筛选的内容'}
+            <p className="pd__empty" data-pd-posts="empty" data-pd-empty-reason={
+              place.posts.length === 0 ? 'no-content' : sort === 'hot' ? 'out-of-hot-window' : 'filtered'
+            }>
+              {place.posts.length === 0
+                ? '这个地点还没有内容，来发第一条吧'
+                : sort === 'hot'
+                  ? `近期热门只统计**近 7 天**发布的内容，这个地点近 7 天没有新帖（下方「最新」里能看到更早的 ${place.posts.length} 条）。`
+                  : '没有符合当前筛选的内容'}
             </p>
           ) : (
             <ul className="pd__postList" data-pd-posts={String(visiblePosts.length)}>
@@ -272,10 +285,14 @@ export function PoiDetailScreen({ id }: { id: string }) {
             </ul>
           )}
 
-          {/* 「近期热门」的口径必须说清楚，否则用户会以为它按全部历史排序 */}
+          {/*
+            口径说明：**空态时更要显示**（那正是用户需要解释的时候），
+            所以它放在空态/列表之外，与 visiblePosts.length 无关。
+          */}
           {sort === 'hot' && (
-            <p className="pd__hotNote">
+            <p className="pd__hotNote" data-pd-hot-note>
               近期热门 = 近 7 天内发布的内容，按 点赞×2 + 有效评论×3 + 收藏×1 − 发布超 24 小时的衰减 排序。
+              {visiblePosts.length === 0 && place.posts.length > 0 && ' 想看过往内容请切到「最新」。'}
             </p>
           )}
         </section>

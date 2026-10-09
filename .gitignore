@@ -16,6 +16,7 @@ TimeMap.pem
 
 # Capacitor / Android 构建产物
 app/android/.gradle/
+app/android/.kotlin/
 app/android/app/build/
 app/android/build/
 app/android/local.properties
@@ -33,6 +34,12 @@ app/android/app/src/main/assets/capacitor.config.json
 *.png
 # 例外：M0 冻结的原版行为基线截图必须入库（半分辨率，见 docs/original-baseline/）
 !docs/original-baseline/**/*.png
+# ⚠️ 例外：Android 的启动图与启动图标必须入库 —— 它们是**构建必需**的资源，不是截图。
+#    踩过的坑：`*.png` 把 res/ 下的 splash.png / ic_launcher*.png 一起忽略了，
+#    于是仓库里的 Android 工程**根本构建不起来**（AAPT2 报
+#      "resource drawable/splash not found"），而这个坑在原作者机器上被
+#    "那些文件本来就在本地、只是没进 git" 掩盖了很久。
+!app/android/app/src/main/res/**/*.png
 
 # 工具临时
 tools/tmp/

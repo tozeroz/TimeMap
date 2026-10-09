@@ -10,6 +10,36 @@
   letter-spacing: -0.4px;
 }
 
+/* ===========================================================================
+   登录方式切换（017：短信验证码 | 管理员密码）
+   =========================================================================== */
+/* 位置放在标题下方、手机号输入框上方：先选"怎么登"，再填凭据 —— 顺序与心智一致。
+   ⚠️ 默认高亮的是「短信验证码」（学生的主路径），管理员需要自己切过去：
+      这样普通学生不会误入一条需要密码的路径。 */
+.login__modes {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.login__mode {
+  flex: 1 1 0;
+  padding: 8px 10px;
+  border: 1px solid var(--c-divider);
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font-size: 13px;
+}
+
+.login__mode.is-active {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-weight: 600;
+}
+
+
 .login__field {
   display: flex;
   align-items: center;

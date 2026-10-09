@@ -1,22 +1,33 @@
 import { useEffect, useState } from 'react'
 import { getSession } from '../api/session'
 import { navigate } from '../router'
-import { IconAt, IconMapTab, IconPaw, IconPlus } from './icons'
+import { IconAt, IconComment, IconMapTab, IconPaw } from './icons'
 import './tabbar.css'
 
 /**
- * ⭐ TimeMap P0：三个 tab = **地图 / 活动 / 我的**（需求 4.1 地图首页草图底部）。
+ * ⭐ TimeMap 底部四个 tab = **地图 / 帖子 / 活动 / 我**。
  *
- * 改前是「<昵称> / 校园 / 地图」——那是**复刻的另一个产品**（校园广场信息流）的 tab 栏，
- * 而 TimeMap 的信息架构是"以地点为内容组织单位"：从地图进入地点、再从地点看内容。
- * 需求 4.1 的草图底部逐字写的是 `[地图] [活动] [我的]`，且 4.3 的页面清单里
- * 没有"校园广场"这一类目。
+ * ## 当前口径（用户 2026-09-26 明确要求，**以此为准**）
+ *   需求文档 §4.1 的草图写的是三个 tab（[地图] [活动] [我的]），本轮按用户要求
+ *   **加回第 4 个「帖子」**。⚠️ 这是**有意偏离需求草图**，处置方式：
+ *   在 docs/TIMEMAP-P0-REPORT.md 与 WORKLOG 里**如实登记差异**，
+ *   不去改需求文档、也不假装"草图本来就是四个"。
  *
- * ⚠️ 边界（不要过度清理）：「校园广场」等复刻页**仍在仓库里**、路由也保留
- *    （campus/chat/board/daily/schools/… 都能通过 URL 到达），本轮只改**底部 tab 与默认路由**，
- *    没有删除那些页面 —— 删不删是另一件事，需要单独的证据与裁定。
+ * ## 「帖子」指向 `#/campus`（校园广场，双列瀑布流）
+ *   内容来自 `GET /api/posts` 的**权威数据**（不是 mock）。
+ *   为什么不用 `#/feedlist`（校园圈）：那一页顶部是按**子页面**设计的
+ *   （左上「关闭」→ 返回上一页），挂成底部 tab 后语义不对 —— tab 不该有"关闭"。
+ *
+ * ## 为什么删掉 tab 栏上的发布 FAB
+ *   ① 地图页内部本来就有发布入口（`.map__fab`），两个悬浮发布按钮是冗余；
+ *   ② 4 个 tab + 一个绝对定位 FAB（`.tabbar` 为此留了 72px padding）会把 tab 挤窄，
+ *      且 FAB 有**压住最右侧 tab** 的隐患（本仓库为"FAB 压住 tab"已经改过一次 padding）。
+ *   ⇒ 发布入口收敛为两种：地图页 FAB、地点详情页「在这里发布」。
+ *
+ * ⚠️ 边界（不要过度清理）：`campus / chat / board / daily / schools / feedlist` 等页面的
+ *   **路由仍然保留**，本轮只改底部 tab 与默认路由。
  */
-export type TabKey = 'map' | 'activities' | 'me'
+export type TabKey = 'map' | 'feed' | 'activities' | 'me'
 
 /**
  * 「我的」tab 的文案跟随当前账号昵称（原版第二项就是这么做的：
@@ -56,12 +67,24 @@ export function TabBar({ active }: { active: TabKey }) {
         <IconMapTab size={22} />
         <span className="tabbar__label">地图</span>
       </button>
+      {/*
+        「帖子」= 校园广场瀑布流（#/campus）。
+        用 IconAt（@）作为图标：IconPaw 是「我的」的语义，两个 tab 用同一个图标会分不清。
+      */}
+      <button
+        className={`tabbar__item ${active === 'feed' ? 'is-active' : ''}`}
+        data-tab="feed"
+        onClick={() => navigate('campus')}
+      >
+        <IconAt size={22} />
+        <span className="tabbar__label">帖子</span>
+      </button>
       <button
         className={`tabbar__item ${active === 'activities' ? 'is-active' : ''}`}
         data-tab="activities"
         onClick={() => navigate('activities')}
       >
-        <IconAt size={22} />
+        <IconComment size={22} />
         <span className="tabbar__label">活动</span>
       </button>
       <button
@@ -71,15 +94,6 @@ export function TabBar({ active }: { active: TabKey }) {
       >
         <IconPaw size={22} />
         <span className="tabbar__label">{meLabel}</span>
-      </button>
-      {/*
-        发布 FAB：
-        ⚠️ 它是**通用入口**，不带 placeId —— 真正的"必须选地点"约束在 PublishScreen 内部
-          （US-02 验收项①：地点为必填项，只能选择启用地点）。
-          地点详情页的「在这里发布」会带 `?placeId=` 过来做预选，但仍可改。
-      */}
-      <button className="tabbar__fab" onClick={() => navigate('publish')} aria-label="发布">
-        <IconPlus size={22} />
       </button>
     </nav>
   )

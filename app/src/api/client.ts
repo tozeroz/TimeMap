@@ -1063,8 +1063,33 @@ export async function verifyLoginCode(
   return { ok: true, value: r.value.user }
 }
 
-/** 退出登录：先让服务端撤销会话，再清本地（服务端失败也要清，否则本地会一直"看起来已登录"） */
-export async function logout(): Promise<void> {
+/**
+ * 管理员密码登录（017）。
+ *
+ * ## 为什么有这条路径
+ *   管理端原先唯一的凭据路径是**短信验证码**。实测踩到：线上短信通道故障
+ *   （`503 sms_delivery_failed`）⇒ 谁也登不进去 ⇒ 管理端完全不可达 ——
+ *   而管理端恰恰是"出事了要进去处理"的地方。
+ *   ⇒ 恢复**第二条**路径（不是替换掉验证码那条；管理员两条都能用）。
+ *
+ * ## 安全边界（客户端这边只能做一部分，真正的判定在服务端）
+ *   · 服务端**只认 role='admin'**，且对"手机号不存在 / 不是管理员 / 密码错"
+ *     返回**完全相同**的 401（否则这接口就成了"哪些号是管理员"的探测器）。
+ *   · 客户端因此**不得**把 401 解释成"这个号不是管理员"—— 那等于把服务端刻意
+ *     抹平的信息又猜出来。这里统一提示"手机号或密码不正确"。
+ *   · 没有"默认密码"、没有后门：没设过密码就是登不上（要用 admin.mjs set-password）。
+ */
+export async function adminLogin(phone: string, password: string): Promise<ApiResult<SessionUser>> {
+  const r = await request<{ token: string; expiresAt: string; user: SessionUser }>(
+    '/api/auth/admin-login',
+    { method: 'POST', body: { phone, password } },
+  )
+  if (!r.ok) return r
+  setSession({ token: r.value.token, expiresAt: r.value.expiresAt, user: r.value.user })
+  return { ok: true, value: r.value.user }
+}
+
+/** 退出登录：先让服务端撤销会话，再清本地（服务端失败也要清，否则本地会一直"看起来已登录"） */export async function logout(): Promise<void> {
   try {
     await request<null>('/api/auth/logout', { method: 'POST', body: {} })
   } finally {

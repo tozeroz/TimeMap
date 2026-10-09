@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { requestLoginCode, verifyLoginCode } from '../api/client'
+import { adminLogin, requestLoginCode, verifyLoginCode } from '../api/client'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack } from '../components/icons'
 import { goBack, navigate } from '../router'
@@ -28,6 +28,14 @@ export function LoginScreen() {
   /** 服务端返回的投递方式；本项目没有短信通道，会在 dev sink 下留一条提示 */
   const [devHint, setDevHint] = useState('')
   const [cooldown, setCooldown] = useState(0)
+  /**
+   * 登录方式：短信验证码（学生/管理员都能用） | 管理员密码（017）。
+   *
+   * 为什么要有密码这条路：管理端原先只有短信一条凭据路径，而实测线上短信通道故障
+   * ⇒ 谁也登不进去 ⇒ 管理端完全不可达。密码是**第二条**路，不是替换掉短信。
+   */
+  const [mode, setMode] = useState<'otp' | 'admin'>('otp')
+  const [password, setPassword] = useState('')
   const timerRef = useRef<number | null>(null)
 
   function startCooldown(seconds: number) {
@@ -51,7 +59,38 @@ export function LoginScreen() {
     try {
       const r = await requestLoginCode(phone)
       if (!r.ok) {
-        setError(r.status === 429 ? '请求太频繁，请稍后再试' : '手机号格式不正确或服务暂不可用')
+        /*
+          ⚠️ 不能把失败原因一律说成"手机号格式不正确"（2026-09-26 实测踩到）。
+          服务端对**不同的失败**给了不同的 status 与 error：
+            · 400 invalid_phone        → 号确实不合法（这才是"格式不正确"）
+            · 429 too_many_requests    → 请求太频繁（服务端带 retry-after）
+            · 503 sms_delivery_failed  → **短信通道故障**（服务端刻意**不**回退到 dev sink，
+                                          避免把"渠道坏了"表现成"用户收到了码"）
+            · 503 login_disabled       → 服务端没配 LOGIN_CODE_HMAC_KEY
+            · 503 delivery_unavailable → dev sink 不可写
+          把 503 说成"格式不正确"会让人反复检查手机号，而真实原因在别处 ——
+          这正是"界面把明确的故障说成了另一件事"。
+          ⇒ 这里按 status + 服务端返回的 error 区分，并对 5xx 明确说"是服务端/通道的问题，不是你的号"。
+        */
+        let msg: string
+        if (r.status === 429) {
+          msg = '请求太频繁，请稍后再试'
+        } else if (r.status === 400) {
+          msg = '手机号格式不正确（仅支持中国大陆 +86，且需 1[3-9] 开头）'
+        } else if (r.status === 503) {
+          // 从 reason body 里尽力取服务端给的原因码（request() 把原文截在 reason 里）
+          const reason = /sms_delivery_failed/.test(r.reason)
+            ? '短信通道发送失败'
+            : /login_disabled/.test(r.reason)
+              ? '服务端未配置登录密钥'
+              : /delivery_unavailable/.test(r.reason)
+                ? '服务端验证码投递不可用'
+                : '服务暂时不可用'
+          msg = `验证码发送失败：${reason}（这是服务端/短信通道的问题，不是手机号的问题）`
+        } else {
+          msg = `获取验证码失败：${r.reason}`
+        }
+        setError(msg)
         return
       }
       setSent(true)
@@ -78,6 +117,35 @@ export function LoginScreen() {
 
   async function submit() {
     if (busy) return
+    /*
+      管理员密码登录（017）。与 OTP 路径分开处理：
+      服务端对"手机号不存在 / 不是管理员 / 密码错"返回**完全相同**的 401，
+      所以这里**必须**统一提示 —— 若按状态码猜原因（比如提示"该账号不是管理员"），
+      就等于把服务端刻意抹平的信息又暴露出来。
+    */
+    if (mode === 'admin') {
+      setError('')
+      setBusy(true)
+      try {
+        const r = await adminLogin(phone, password)
+        if (!r.ok) {
+          setError(
+            r.status === 429
+              ? '尝试次数过多，请稍后再试'
+              : r.status === 400
+                ? '请输入手机号与密码'
+                : '手机号或密码不正确',
+          )
+          return
+        }
+        // 管理员登录成功 → 直接进管理端（这就是他来的目的）
+        navigate('admin')
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
+
     if (!sent) {
       await requestCode()
       return
@@ -111,7 +179,35 @@ export function LoginScreen() {
       scroll
     >
       <div className="login">
-        <h1 className="login__title">输入手机号</h1>
+        <h1 className="login__title">{mode === 'admin' ? '管理员登录' : '输入手机号'}</h1>
+
+        {/* 登录方式切换：短信验证码（默认） | 管理员密码 */}
+        <div className="login__modes" role="tablist">
+          <button
+            className={`login__mode ${mode === 'otp' ? 'is-active' : ''}`}
+            data-login-mode="otp"
+            role="tab"
+            aria-selected={mode === 'otp'}
+            onClick={() => {
+              setMode('otp')
+              setError('')
+            }}
+          >
+            短信验证码
+          </button>
+          <button
+            className={`login__mode ${mode === 'admin' ? 'is-active' : ''}`}
+            data-login-mode="admin"
+            role="tab"
+            aria-selected={mode === 'admin'}
+            onClick={() => {
+              setMode('admin')
+              setError('')
+            }}
+          >
+            管理员密码
+          </button>
+        </div>
 
         <div className="login__field">
           <button className="login__prefix">+86</button>
@@ -131,7 +227,25 @@ export function LoginScreen() {
           )}
         </div>
 
-        {sent && (
+        {/* 管理员密码模式：密码输入框（替代验证码框） */}
+        {mode === 'admin' && (
+          <div className="login__field login__field--code">
+            <input
+              className="login__input"
+              data-login-password
+              type="password"
+              placeholder="请输入管理员密码"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submit()
+              }}
+            />
+          </div>
+        )}
+
+        {sent && mode === 'otp' && (
           <div className="login__field login__field--code">
             <input
               className="login__input"
@@ -152,7 +266,7 @@ export function LoginScreen() {
         )}
 
         {error && <p className="login__error">{error}</p>}
-        {devHint && (
+        {devHint && mode === 'otp' && (
           <p className="login__devhint" data-login-hint>
             {devHint}
           </p>
@@ -160,11 +274,24 @@ export function LoginScreen() {
 
         <button
           className="login__submit"
+          data-login-submit
           onClick={submit}
-          disabled={busy || (!sent && !phone) || (sent && code.length !== 6)}
+          disabled={
+            busy ||
+            (mode === 'admin'
+              ? !phone || !password
+              : (!sent && !phone) || (sent && code.length !== 6))
+          }
         >
-          {busy ? '请稍候…' : sent ? '登录' : '获取验证码'}
+          {busy ? '请稍候…' : mode === 'admin' ? '登录' : sent ? '登录' : '获取验证码'}
         </button>
+
+        {mode === 'admin' && (
+          <p className="login__agree">
+            管理员账号的密码由运维在服务器上用 <code>admin.mjs set-password</code> 设置；
+            本页没有默认密码。
+          </p>
+        )}
 
         <p className="login__agree">
           登录即表示同意 <span className="login__link">用户协议</span> 与{' '}
