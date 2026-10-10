@@ -18,6 +18,7 @@ import { createDb, type Db } from './db.ts'
 import { createDevSink, type DevSink } from './devSink.ts'
 import { createSmsSender, type SmsSender } from './sms.ts'
 import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts'
+import { registerTimemapRoutes } from './timemap.ts'
 
 /**
  * Campus 后端（M3 Slice 0B）。
@@ -38,7 +39,6 @@ import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts
  */
 
 const BODY_MAX = 500
-const PLACE_MAX = 60
 const DISPLAY_MAX = 40
 const COMMENT_MAX = 500
 const LIST_LIMIT = 50
@@ -54,7 +54,16 @@ const LIST_LIMIT = 50
  *
  * ⚠️ **向后兼容**：`mediaIds` 可选；不传时行为与旧版**完全一致** ⇒ 既有 Gate/客户端不受影响。
  */
-const POST_ALLOWED_KEYS = ['body', 'place', 'mediaIds'] as const
+/**
+ * F04（TimeMap P0）：发帖契约。
+ *   · `placeId` **必填**且必须是管理员**启用**的预设地点（US-01/US-02：地点为必填项，
+ *     只能选择启用地点）—— 旧的"自由文本 place 匹配"契约废除（那允许无地点发帖，
+ *     与"所有帖子必须关联预设地点"冲突）。
+ *   · `clientRequestId` 可选幂等键：客户端为一次逻辑发布生成 UUID，
+ *     连续点击/网络重试时服务端按它去重（US-02：连续点击发布不得产生重复帖子）。
+ *   · `mediaIds` 沿用 WO#21 契约（先上传、随帖一并挂）。
+ */
+const POST_ALLOWED_KEYS = ['body', 'placeId', 'mediaIds', 'clientRequestId'] as const
 
 /** 一条帖子最多挂几个媒体（超出直接 400，**不静默截断**） */
 const POST_MEDIA_MAX = 9
@@ -207,6 +216,8 @@ export function buildServer(deps: ServerDeps) {
     handle: string
     displayName: string
     phone: string | null
+    /** F01/F07：student | admin。管理端路由靠它做服务端强校验 */
+    role: string
   }
 
   /**
@@ -237,8 +248,9 @@ export function buildServer(deps: ServerDeps) {
         handle: string
         display_name: string
         phone_e164: string | null
+        role: string
       }>(
-        `select s.id as session_id, u.id as user_id, u.handle, u.display_name, u.phone_e164
+        `select s.id as session_id, u.id as user_id, u.handle, u.display_name, u.phone_e164, u.role
            from sessions s
            join users u on u.id = s.user_id
           where s.token_hash = $1
@@ -256,6 +268,7 @@ export function buildServer(deps: ServerDeps) {
           handle: row.handle,
           displayName: row.display_name,
           phone: row.phone_e164,
+          role: row.role,
         },
       }
     } catch (err) {
@@ -512,10 +525,10 @@ export function buildServer(deps: ServerDeps) {
     }
 
     // 登录即注册（原版是"手机号验证码登录"，没有单独的注册页）
-    let user: UserRow | undefined
+    let user: UserRow & { role: string } | undefined
     try {
-      const r = await db.pool.query<UserRow>(
-        'select id, handle, display_name from users where phone_e164 = $1',
+      const r = await db.pool.query<UserRow & { role: string }>(
+        'select id, handle, display_name, role from users where phone_e164 = $1',
         [phone],
       )
       user = r.rows[0]
@@ -523,10 +536,10 @@ export function buildServer(deps: ServerDeps) {
         const id = randomUUID()
         // 昵称走 onboarding 页设置（原版有 login/onboarding）；这里给一个明确的占位名
         const placeholder = `校园用户${phone.slice(-4)}`
-        const r2 = await db.pool.query<UserRow>(
+        const r2 = await db.pool.query<UserRow & { role: string }>(
           `insert into users (id, handle, display_name, phone_e164)
            values ($1, $2, $3, $4)
-           returning id, handle, display_name`,
+           returning id, handle, display_name, role`,
           [id, placeholder, placeholder, phone],
         )
         user = r2.rows[0]!
@@ -555,7 +568,7 @@ export function buildServer(deps: ServerDeps) {
     return {
       token,
       expiresAt: expiresAt.toISOString(),
-      user: { id: user.id, handle: user.handle, displayName: user.display_name, phone },
+      user: { id: user.id, handle: user.handle, displayName: user.display_name, phone, role: user.role },
     }
   })
 
@@ -585,6 +598,7 @@ export function buildServer(deps: ServerDeps) {
       handle: s.user.handle,
       displayName: s.user.displayName,
       phone: s.user.phone,
+      role: s.user.role,
     }
   })
 
@@ -787,9 +801,12 @@ export function buildServer(deps: ServerDeps) {
           images: unknown
           /* ⭐ 审核 68 P0：audio 与 images **分开**（images 里不得出现 audio） */
           audio: unknown
+          place_id: string | null
+          favorite_count: string
+          favorited_by_me: boolean
         }
       >(
-        `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at,
+        `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
                 -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
                 -- 为什么需要：地图页的标记按经纬度渲染（默认 provider=tencent 用
                 -- projectToContainer(LatLng)；RealMap 用 L.marker([lat,lng])），
@@ -802,11 +819,17 @@ export function buildServer(deps: ServerDeps) {
                 pl.latitude  as place_lat,
                 pl.longitude as place_lng,
                 (select count(*) from likes l where l.post_id = p.id)::text as like_count,
-                (select count(*) from comments c where c.post_id = p.id)::text as comment_count,
+                -- F05/US-03：删除后不计入有效评论量 → 只统计 published 状态的评论
+                (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
+                (select count(*) from favorites f where f.post_id = p.id)::text as favorite_count,
                 exists (
                   select 1 from likes l2
                    where l2.post_id = p.id and l2.user_id = $2::uuid
                 ) as liked_by_me,
+                exists (
+                  select 1 from favorites f2
+                   where f2.post_id = p.id and f2.user_id = $2::uuid
+                ) as favorited_by_me,
                 -- M4：帖子的**公**图片（public scope）。
                 -- 只取 public：private 是聊天媒体，结构上不可能通过 post_media 关联
                 -- （迁移 006 的复合外键钉死了 scope），这里再显式过滤一次是防御性写法。
@@ -830,6 +853,8 @@ export function buildServer(deps: ServerDeps) {
            -- ⭐ WO#15：地点坐标来自 places（left join，缺地点时两列为 null）
            left join places pl on pl.id = p.place_id
           where ($3::uuid is null or p.author_id = $3::uuid)
+            -- F07/US-08：下架/删除的帖子同步退出所有公开面
+            and p.status = 'published'
           order by p.created_at desc, p.id desc
           limit $1`,
         [LIST_LIMIT, meId, authorId],
@@ -842,6 +867,8 @@ export function buildServer(deps: ServerDeps) {
           authorId: row.author_id,
           body: row.body,
           place: row.place,
+          // F02：关联地点的权威 id（地点详情/地点页跳转用）
+          placeId: row.place_id,
           // ⭐ WO#15：地点坐标（可为 null）。**注意 pg 的 numeric 会以字符串返回**，
           //    所以这里显式 Number() 转换 —— 否则前端拿到 "39.9519" 字符串，
           //    而地图 SDK 的 LatLng 需要 number（静默的类型错误会变成"标记全在 0,0"）。
@@ -852,6 +879,9 @@ export function buildServer(deps: ServerDeps) {
           likeCount: Number.parseInt(row.like_count ?? '0', 10),
           commentCount: Number.parseInt(row.comment_count ?? '0', 10),
           likedByMe: row.liked_by_me,
+          // F05：收藏计数与"我收藏过没"
+          favoriteCount: Number.parseInt(row.favorite_count ?? '0', 10),
+          favoritedByMe: row.favorited_by_me,
           // M4：帖子图片（只给 id 与尺寸；客户端用 /api/media/:id 取图）
           images: row.images ?? [],
           /* ⭐ 审核 68 P0：audio 独立返回（语音不会被报成图片） */
@@ -890,12 +920,18 @@ export function buildServer(deps: ServerDeps) {
     }
 
     const body = typeof payload.body === 'string' ? payload.body.trim() : ''
-    const placeRaw = typeof payload.place === 'string' ? payload.place.trim() : ''
+    const placeIdRaw = typeof payload.placeId === 'string' ? payload.placeId.trim() : ''
+    const clientRequestIdRaw =
+      typeof payload.clientRequestId === 'string' ? payload.clientRequestId.trim() : ''
 
     const errors: string[] = []
     if (!body) errors.push('body 不能为空')
     else if (body.length > BODY_MAX) errors.push(`body 不能超过 ${BODY_MAX} 字`)
-    if (placeRaw.length > PLACE_MAX) errors.push(`place 不能超过 ${PLACE_MAX} 字`)
+    // US-02：地点为必填项
+    if (!placeIdRaw) errors.push('placeId 不能为空（所有帖子必须关联预设地点）')
+    else if (!/^[0-9a-f-]{36}$/i.test(placeIdRaw)) errors.push('placeId 必须是合法地点 id')
+    if (clientRequestIdRaw && !/^[0-9a-f-]{36}$/i.test(clientRequestIdRaw))
+      errors.push('clientRequestId 必须是 UUID')
 
     /*
       ⭐ WO#21：可选 mediaIds 的解析与校验。
@@ -930,31 +966,46 @@ export function buildServer(deps: ServerDeps) {
     }
 
     const id = randomUUID()
-    const place = placeRaw || null
+    const placeId = placeIdRaw
+    const clientRequestId = clientRequestIdRaw || null
 
     try {
       /*
-        M3 Slice 4：把地点文本**对到已知地点**（places.name 精确匹配）并写 place_id。
-        为什么必须有这一步：原版 poi-detail 是"按地点聚合动态"，而聚合只能靠 place_id；
-        只存文本 place 的话，地点详情页永远查不到"该地点的动态"。
-
-        **只有候选唯一时才自动绑定**（审核记录 13 的 closeout）：
-        同名地点存在时（0 个或 >1 个候选）一律保持 NULL —— 随便挑一个会把动态挂到错误的地点，
-        而且这种错误在界面上看不出来（地点名一样，只是地址/坐标不同）。
-        宁可 NULL（未知就是未知），也不要猜。
+        F04 幂等（US-02：连续点击发布不得产生重复帖子）：
+        同一 clientRequestId 已成功建过帖 → 直接返回**原帖**（200 + idempotentReplay），
+        不再插入第二条。并发下由 posts_client_request_id_uniq 唯一索引兜底。
       */
-      let placeId: string | null = null
-      if (place) {
-        const matches = await db.pool.query<{ id: string }>(
-          'select id from places where name = $1 limit 2',
-          [place],
+      if (clientRequestId) {
+        const dup = await db.pool.query<{ id: string }>(
+          'select id from posts where client_request_id = $1 and author_id = $2',
+          [clientRequestId, session.userId],
         )
-        if (matches.rows.length === 1) {
-          placeId = matches.rows[0]!.id
+        if (dup.rows[0]) {
+          return {
+            id: dup.rows[0].id,
+            idempotentReplay: true,
+          }
         }
-        // 0 个候选 → NULL（未知地点）
-        // 2 个及以上候选 → 仍然是 NULL（同名歧义，不猜）
       }
+
+      /*
+        F02/US-01：地点必须是**管理员启用**的预设地点。
+        停用地点不能再关联新帖子；不存在/停用都以 400 明确拒绝（不静默降级为无地点帖）。
+        同时取地点名做**展示快照**（posts.place），用户改名地点不影响历史帖的展示。
+      */
+      const placeRow = await db.pool.query<{ name: string; enabled: boolean }>(
+        'select name, enabled from places where id = $1',
+        [placeId],
+      )
+      if (!placeRow.rows[0]) {
+        reply.code(400)
+        return { error: 'invalid_payload', details: ['关联的地点不存在'] }
+      }
+      if (!placeRow.rows[0].enabled) {
+        reply.code(400)
+        return { error: 'invalid_payload', details: ['该地点已停用，不能再关联新帖子'] }
+      }
+      const placeName = placeRow.rows[0].name
 
       /*
         ⭐ WO#21：把"插帖 + 挂媒体"放进**同一个事务**。
@@ -999,11 +1050,12 @@ export function buildServer(deps: ServerDeps) {
         }
 
         // 作者完全来自服务端会话；author_name 存为快照（用户以后改名也保留当时的展示名）
+        // F04：place_id 必填（上面已校验启用）；place 为地点名快照；client_request_id 幂等键
         const r = await client.query<PostRow>(
-          `insert into posts (id, author_name, author_id, body, place, place_id)
-           values ($1, $2, $3, $4, $5, $6)
+          `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id)
+           values ($1, $2, $3, $4, $5, $6, $7)
            returning id, author_name, author_id, body, place, created_at`,
-          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, place, placeId],
+          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId],
         )
 
         /* 挂媒体：position 按传入顺序递增（0..n-1），与 GET 的口径一致 */
@@ -1117,12 +1169,12 @@ export function buildServer(deps: ServerDeps) {
       `with recursive tree as (
          select c.id, c.id as root_id, c.parent_id, 0 as depth
            from comments c
-          where c.post_id = $1 and c.parent_id is null
+          where c.post_id = $1 and c.parent_id is null and c.status = 'published'
          union all
          select c.id, t.root_id, c.parent_id, t.depth + 1
            from comments c
            join tree t on c.parent_id = t.id
-          where t.depth < 20
+          where t.depth < 20 and c.status = 'published'
        )
        select t.id, t.root_id, t.parent_id, t.depth,
               c.body, c.created_at, c.author_id,
@@ -1134,7 +1186,7 @@ export function buildServer(deps: ServerDeps) {
          left join users u on u.id = c.author_id
          left join comments pc on pc.id = c.parent_id
          left join users pu on pu.id = pc.author_id
-        order by t.root_id, t.depth, c.created_at, t.id`,
+        order by t.root_id, t.depth, c.created_at, c.id`,
       [postId],
     )
 
@@ -1180,8 +1232,8 @@ export function buildServer(deps: ServerDeps) {
     if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
     const meId = s.kind === 'ok' ? s.user.userId : null
     try {
-      const pr = await db.pool.query<PostRow>(
-        `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at,
+      const pr = await db.pool.query<PostRow & { status: string; place_id: string | null }>(
+        `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.status, p.place_id,
                 -- ⭐ WO#15：详情也要带地点坐标（原版 poi-detail 页有「距我N公里」，
                 -- 那需要地点经纬度 + 客户端自身位置）。
                 pl.latitude as place_lat, pl.longitude as place_lng
@@ -1195,11 +1247,33 @@ export function buildServer(deps: ServerDeps) {
         reply.code(404)
         return { error: 'not_found' }
       }
+      /*
+        F07/US-08：已下架的帖子 → 410 gone。
+        详情页据此显示"内容不存在或已下架"状态页（**不**返回正文——下架内容必须
+        同步退出所有公开面，包括详情）。
+      */
+      if (post.status !== 'published') {
+        reply.code(410)
+        return { error: 'gone', reason: '内容不存在或已下架' }
+      }
       const cr = await db.pool.query<{ n: string }>(
-        'select count(*)::text as n from comments where post_id = $1',
+        "select count(*)::text as n from comments where post_id = $1 and status='published'",
         [id],
       )
       const like = await likeStateFor(id, meId)
+      // F05：收藏状态
+      const favCount = await db.pool.query<{ n: string }>(
+        'select count(*)::text as n from favorites where post_id = $1',
+        [id],
+      )
+      let favoritedByMe = false
+      if (meId) {
+        const fm = await db.pool.query<{ exists: boolean }>(
+          'select exists(select 1 from favorites where post_id = $1 and user_id = $2) as exists',
+          [id, meId],
+        )
+        favoritedByMe = fm.rows[0]?.exists ?? false
+      }
       // M4：详情也要带图片（与列表同口径：只取 public，只给 id 与尺寸）
       /*
         ⭐⭐ 审核 68 P0（我引入的真实缺陷）：按 mime 分流，**images 里不得出现 audio**。
@@ -1231,6 +1305,8 @@ export function buildServer(deps: ServerDeps) {
         authorId: post.author_id,
         body: post.body,
         place: post.place,
+        // F02：地点权威 id（帖子详情跳地点页用）
+        placeId: post.place_id,
         // ⭐ WO#15：地点坐标（可为 null）。显式 Number() —— 见 PostRow 上的注释
         // （pg 可能以字符串返回数值，前端地图 SDK 需要 number）。
         placeLat: post.place_lat === null || post.place_lat === undefined ? null : Number(post.place_lat),
@@ -1239,6 +1315,9 @@ export function buildServer(deps: ServerDeps) {
         commentCount: Number.parseInt(cr.rows[0]?.n ?? '0', 10),
         likeCount: like.likeCount,
         likedByMe: like.likedByMe,
+        // F05：收藏计数与状态（US-03：收藏内容可在个人中心查看，取消后移除）
+        favoriteCount: Number.parseInt(favCount.rows[0]?.n ?? '0', 10),
+        favoritedByMe,
         /* ⭐ 审核 68 P0：audio 是**独立附件类型**，不出现在 images 里（见上方 imgs 查询的分流） */
         audio,
         images,
@@ -1258,7 +1337,7 @@ export function buildServer(deps: ServerDeps) {
       return { error: 'invalid_id' }
     }
     try {
-      const exists = await db.pool.query('select 1 from posts where id = $1', [id])
+      const exists = await db.pool.query("select 1 from posts where id = $1 and status = 'published'", [id])
       if (!exists.rowCount) {
         reply.code(404)
         return { error: 'not_found' }
@@ -1307,20 +1386,21 @@ export function buildServer(deps: ServerDeps) {
     }
 
     try {
-      const pr = await db.pool.query('select 1 from posts where id = $1', [id])
+      // F07：只能对**未下架**的帖子发评论（下架帖同步退出互动面）
+      const pr = await db.pool.query("select 1 from posts where id = $1 and status = 'published'", [id])
       if (!pr.rowCount) {
         reply.code(404)
         return { error: 'not_found' }
       }
       if (parentId) {
-        // 被回复的评论必须存在**且属于同一篇帖子** —— 否则就会跨帖挂载
-        const pp = await db.pool.query('select 1 from comments where id = $1 and post_id = $2', [
-          parentId,
-          id,
-        ])
+        // 被回复的评论必须存在**且属于同一篇帖子**且未被删除 —— 否则就会跨帖挂载
+        const pp = await db.pool.query(
+          "select 1 from comments where id = $1 and post_id = $2 and status = 'published'",
+          [parentId, id],
+        )
         if (!pp.rowCount) {
           reply.code(400)
-          return { error: 'invalid_payload', details: ['parentId 不属于该帖子'] }
+          return { error: 'invalid_payload', details: ['parentId 不属于该帖子或已删除'] }
         }
       }
       const cr = await db.pool.query<{ id: string; created_at: Date }>(
@@ -1389,7 +1469,8 @@ export function buildServer(deps: ServerDeps) {
       return { error: 'invalid_id' }
     }
     try {
-      const pr = await db.pool.query('select 1 from posts where id = $1', [id])
+      // F07：下架帖不再可点赞（公开互动面同步）
+      const pr = await db.pool.query("select 1 from posts where id = $1 and status = 'published'", [id])
       if (!pr.rowCount) {
         reply.code(404)
         return { error: 'not_found' }
@@ -1466,17 +1547,26 @@ export function buildServer(deps: ServerDeps) {
   // -------------------------------------------------------------------------
   app.get('/api/places', async (req, reply) => {
     const q = String((req.query as { q?: string }).q ?? '').trim()
+    const category = String((req.query as { category?: string }).category ?? '').trim()
+    const includeDisabled = String((req.query as { includeDisabled?: string }).includeDisabled ?? '') === '1'
     try {
       /*
         ⚠️ 用参数化 + 上限，避免无界返回；
           `q` 用 ILIKE 子串匹配（与 mock 版本的 includes 语义一致）。
+        F02：默认只返回**启用**地点（地图与前端选择器用）；includeDisabled=1 供管理端。
       */
+      const conds: string[] = []
       const params: unknown[] = []
-      let where = ''
       if (q) {
         params.push('%' + q + '%')
-        where = "where pl.name ilike $1 or coalesce(pl.address, '') ilike $1"
+        conds.push(`(pl.name ilike $${params.length} or coalesce(pl.address, '') ilike $${params.length})`)
       }
+      if (category === '地标' || category === '食堂') {
+        params.push(category)
+        conds.push(`pl.category = $${params.length}`)
+      }
+      if (!includeDisabled) conds.push('pl.enabled = true')
+      const where = conds.length ? `where ${conds.join(' and ')}` : ''
       params.push(200)
       const r = await db.pool.query<{
         id: string
@@ -1484,13 +1574,15 @@ export function buildServer(deps: ServerDeps) {
         address: string | null
         latitude: number | null
         longitude: number | null
+        category: string
+        enabled: boolean
         post_count: string
       }>(
-        'select pl.id, pl.name, pl.address, pl.latitude, pl.longitude, ' +
-          '(select count(*) from posts p where p.place_id = pl.id)::text as post_count ' +
+        'select pl.id, pl.name, pl.address, pl.latitude, pl.longitude, pl.category, pl.enabled, ' +
+          "(select count(*) from posts p where p.place_id = pl.id and p.status = 'published')::text as post_count " +
           'from places pl ' +
           where +
-          ' order by pl.name, pl.id limit $' +
+          ' order by pl.sort_order, pl.name, pl.id limit $' +
           String(params.length),
         params,
       )
@@ -1499,8 +1591,10 @@ export function buildServer(deps: ServerDeps) {
           id: row.id,
           name: row.name,
           address: row.address,
-          latitude: row.latitude,
-          longitude: row.longitude,
+          latitude: row.latitude === null ? null : Number(row.latitude),
+          longitude: row.longitude === null ? null : Number(row.longitude),
+          category: row.category,
+          enabled: row.enabled,
           /**
            * 真实计数（posts.place_id 是直接外键 ⇒ 无需推断）。
            * ⚠️ 与 campusCircleCount 的 null 语义**不同**，别混。
@@ -1515,12 +1609,24 @@ export function buildServer(deps: ServerDeps) {
     }
   })
 
+  /*
+    F03：地点详情（TimeMap P0）。
+    返回：基础资料（名称/分类/坐标/简介/校史）+ 老照片（年代与来源可追溯）
+         + 近期活动（US-04：进入某地点时能看到该地点即将举行的活动）
+         + 帖子（US-01/US-03：最新 或 近期热门；食堂标签筛选）。
+    热度规则（冻结在 timemap.ts 头部注释）：点赞×2 + 有效评论×3 + 收藏×1 − 发布超24小时后的衰减。
+    慢内容（校史/老照片）与近期内容（帖子/活动）分层 —— 同一接口两个 section。
+  */
   app.get('/api/places/:id', async (req, reply) => {
     const id = (req.params as { id?: string }).id ?? ''
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
       reply.code(400)
       return { error: 'invalid_id' }
     }
+    // 可选会话（likedByMe/favoritedByMe 需要）
+    const sess = await resolveSession(req.headers.authorization)
+    if (sess.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    const meId = sess.kind === 'ok' ? sess.user.userId : null
     try {
       const pr = await db.pool.query<{
         id: string
@@ -1528,32 +1634,133 @@ export function buildServer(deps: ServerDeps) {
         address: string | null
         latitude: number | null
         longitude: number | null
-      }>('select id, name, address, latitude, longitude from places where id = $1', [id])
+        category: string
+        enabled: boolean
+        description: string | null
+        history: string | null
+      }>(
+        'select id, name, address, latitude, longitude, category, enabled, description, history from places where id = $1',
+        [id],
+      )
       const place = pr.rows[0]
       if (!place) {
         reply.code(404)
         return { error: 'not_found' }
       }
-      const posts = await db.pool.query<PostRow>(
-        `select id, author_name, author_id, body, place, created_at
-           from posts
-          where place_id = $1
-          order by created_at desc, id desc
-          limit $2`,
-        [id, LIST_LIMIT],
+      // 老照片（慢内容）：年代 + 来源必须可追溯
+      const photos = await db.pool.query<{
+        id: string
+        title: string
+        year_label: string
+        source: string
+        image_url: string | null
+      }>(
+        'select id, title, year_label, source, image_url from place_photos where place_id = $1 order by position, created_at',
+        [id],
+      )
+      // 近期活动（US-04）：未结束 + 7 天内结束的；取消的醒目返回（前端标红）
+      const activities = await db.pool.query<{
+        id: string
+        title: string
+        starts_at: Date
+        ends_at: Date | null
+        eff_status: string
+        source: string
+      }>(
+        `select a.id, a.title, a.starts_at, a.ends_at, a.source,
+                case
+                  when a.status = 'cancelled' then 'cancelled'
+                  when coalesce(a.ends_at, a.starts_at + interval '2 hours') < now() then 'ended'
+                  when a.starts_at <= now() then 'ongoing'
+                  else 'upcoming'
+                end as eff_status
+           from activities a
+          where a.place_id = $1
+            and coalesce(a.ends_at, a.starts_at + interval '2 hours') > now() - interval '7 day'
+          order by a.starts_at
+          limit 20`,
+        [id],
+      )
+      // 帖子：最新（默认）或 近期热门（近 7 天按冻结的热度公式）
+      const sort = String((req.query as { sort?: string }).sort ?? 'latest')
+      const posts = await db.pool.query<
+        PostRow & {
+          place_id: string | null
+          like_count: string
+          comment_count: string
+          favorite_count: string
+          liked_by_me: boolean
+          favorited_by_me: boolean
+          images: unknown
+        }
+      >(
+        `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
+                pl.latitude as place_lat, pl.longitude as place_lng,
+                (select count(*) from likes l where l.post_id = p.id)::text as like_count,
+                (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
+                (select count(*) from favorites f where f.post_id = p.id)::text as favorite_count,
+                exists (select 1 from likes l2 where l2.post_id = p.id and l2.user_id = $2::uuid) as liked_by_me,
+                -- F05：地点详情里的帖子也要能显示"我收藏了没"（与 likedByMe 同一套写法）。
+                -- ⚠️ meId 为 null（未登录）时 exists(... uuid = null) 得 false —— 正确。
+                exists (select 1 from favorites f2 where f2.post_id = p.id and f2.user_id = $2::uuid) as favorited_by_me,
+                coalesce((
+                  select json_agg(json_build_object('id', m.id, 'width', m.width, 'height', m.height) order by pm.position)
+                    from post_media pm join media m on m.id = pm.media_id
+                   where pm.post_id = p.id and m.scope = 'public' and m.mime like 'image/%'
+                ), '[]'::json) as images
+           from posts p
+           left join places pl on pl.id = p.place_id
+          where p.place_id = $1 and p.status = 'published'
+            and ($3 = 'latest' or p.created_at > now() - interval '7 day')
+          order by case when $3 = 'hot' then
+                  (select count(*) from likes l where l.post_id = p.id) * 2
+                + (select count(*) from comments c where c.post_id = p.id and c.status='published') * 3
+                + (select count(*) from favorites f where f.post_id = p.id)
+                - greatest(0, extract(epoch from (now() - p.created_at)) / 3600.0 - 24)::int
+              else 0 end desc,
+             p.created_at desc, p.id desc
+          limit $4`,
+        [id, meId, sort, LIST_LIMIT],
       )
       return {
         id: place.id,
         name: place.name,
         address: place.address,
-        latitude: place.latitude,
-        longitude: place.longitude,
+        latitude: place.latitude === null ? null : Number(place.latitude),
+        longitude: place.longitude === null ? null : Number(place.longitude),
+        category: place.category,
+        enabled: place.enabled,
+        description: place.description,
+        history: place.history,
+        photos: photos.rows.map((ph) => ({
+          id: ph.id,
+          title: ph.title,
+          yearLabel: ph.year_label,
+          source: ph.source,
+          imageUrl: ph.image_url,
+        })),
+        activities: activities.rows.map((a) => ({
+          id: a.id,
+          title: a.title,
+          startsAt: a.starts_at.toISOString(),
+          endsAt: a.ends_at ? a.ends_at.toISOString() : null,
+          status: a.eff_status,
+          source: a.source,
+        })),
         posts: posts.rows.map((row) => ({
           id: row.id,
           author: row.author_name,
           authorId: row.author_id,
           body: row.body,
+          placeId: row.place_id,
           createdAt: row.created_at.toISOString(),
+          likeCount: Number.parseInt(row.like_count ?? '0', 10),
+          commentCount: Number.parseInt(row.comment_count ?? '0', 10),
+          favoriteCount: Number.parseInt(row.favorite_count ?? '0', 10),
+          likedByMe: row.liked_by_me,
+          // F05：与 likedByMe 同型 —— "我收藏了没"必须来自服务端（前端不得推算）
+          favoritedByMe: row.favorited_by_me,
+          images: row.images ?? [],
         })),
         postCount: posts.rows.length,
       }
@@ -2910,6 +3117,18 @@ export function buildServer(deps: ServerDeps) {
       reply.code(500)
       return { error: 'db_error', message: (err as Error).message }
     }
+  })
+
+  // -------------------------------------------------------------------------
+  // BJTU TimeMap P0 新增路由（F05 收藏 / F06 活动 / F07 举报与管理端 / 作者删除）。
+  // 路由体在 ./timemap.ts；这里只注入本文件已有的会话解析与错误响应助手。
+  // -------------------------------------------------------------------------
+  registerTimemapRoutes({
+    app,
+    db,
+    resolveSession,
+    unauthorized,
+    dbUnavailable,
   })
 
   return app

@@ -1,5 +1,5 @@
 import type { FeedPost, User } from '../data/types'
-import { authHeaders, clearSession, setSession, type SessionUser } from './session'
+import { authHeaders, clearSession, setSession, updateSessionUser, type SessionUser } from './session'
 
 /**
  * 后端 API 客户端（M1）。
@@ -48,6 +48,15 @@ export interface ApiPost {
   body: string
   place: string | null
   /**
+   * ⭐ TimeMap P0（F02）：帖子关联的**预设地点 id**（locations 是权威归属）。
+   *
+   * 为什么不再靠 `place`（地名文本）判归属：文本可以被改名、可以重复，
+   * 而 P0 的核心业务规则是「所有帖子必须关联管理员启用的预设地点」——
+   * 那是一条**引用关系**，必须用 id 表达。`place` 退化为**展示快照**（发帖时的地点名）。
+   * 历史数据可能为 null（P0 之前的帖子没有 place_id）。
+   */
+  placeId?: string | null
+  /**
    * ⭐ M5 WO#15：地点经纬度（服务端 left join places 得到；无地点时为 null）。
    * 为什么需要：地图页按**经纬度**渲染标记（tencent / real 两个实现都是），
    * 而此前前端只有 place（地名文本）→ 拿不到坐标就无法把 mock 换成权威。
@@ -60,6 +69,13 @@ export interface ApiPost {
   likeCount?: number
   commentCount?: number
   likedByMe?: boolean
+  /**
+   * ⭐ TimeMap P0（F05）：收藏数 / 我是否收藏过。
+   * 与 likeCount 同型：**计数来自服务端**，前端不得自己加减
+   * （撤销收藏、重复收藏、内容下架都会让本地推算失真）。
+   */
+  favoriteCount?: number
+  favoritedByMe?: boolean
   /** M4：帖子的公图片（只含 id 与尺寸；用 mediaUrl(id) 取图） */
   images?: ApiMediaRef[]
 }
@@ -613,24 +629,387 @@ export function patchMyDisplayName(displayName: string): Promise<ApiResult<ApiUs
  * 客户端一旦提交 author/authorId 会被服务端 strict 400 拒绝（见 server/src/index.ts）。
  * 这里把字段从类型里去掉，让"想传也传不了"。
  *
- * ⭐ WO#21（Round 319）：新增可选 `mediaIds` —— 让发布页的**图片与语音**真正随帖入库。
- *   ```
- *   背景：post_media 表一直存在，但服务端对它的引用**全是 select** ⇒ 没有任何接口能挂媒体；
- *        而本文件的 createPost 也从不传图片 ⇒ **发布页的图片与语音都只存在于本机**。
- *   ```
+ * ⭐ WO#21（Round 319）：新增可选 `mediaIds` —— 让发布页的**图片**真正随帖入库。
  *   ⚠️ 服务端会**严格校验**每个 id：必须存在、scope='public'（聊天媒体挂不上）、
  *      且**属于当前会话用户**（否则 403）。所以调用方必须先 `uploadMedia(f, 'post', ...)`
  *      拿到 id 再传进来。
  *   ⚠️ 顺序：**先传媒体、再发帖**。反过来会先产生一条没图的帖子，
  *      而补挂媒体的接口我们没有（服务端只有"发帖时一并挂"这一条路）。
+ *
+ * ⭐⭐ TimeMap P0（F04）：**契约变更** —— `place`（地名文本）已被删除，
+ *   改为必填 `placeId`（必须是**存在且启用**的预设地点），并新增 `clientRequestId`。
+ *
+ *   · 为什么必须改成 placeId：P0 核心规则是「所有帖子必须关联管理员启用的预设地点」。
+ *     按地名文本发帖时，服务端无法可靠判断"这个地点存在吗、启用了吗"——
+ *     文本可以被改名、可以一字之差。用 id 才能让"归属"可机械校验。
+ *     ⚠️ 旧版前端（还在传 place）会被服务端 **400** 拒绝：服务端与本前端必须一起部署。
+ *
+ *   · 为什么要 clientRequestId（US-02：连续点击发布不得产生重复帖子）：
+ *     幂等键由**客户端生成一次**、重试时复用；服务端凭 (clientRequestId, author) 认出
+ *     重放并**返回原帖**（带 idempotentReplay:true），而不是插入第二条。
+ *     ⚠️ 关键纪律：它必须在**用户开始这次发布时生成一次**并保存在组件状态里，
+ *        绝不能每次调用现生成 —— 那样连点两次会得到两个不同的键，等于没有幂等。
+ *     ⚠️ 服务端**不因重放而报错**（返回 200 + 原帖 id），所以调用方不能只看 status。
  */
 export function createPost(input: {
   body: string
-  place?: string
-  /** 已上传的 **public** 媒体 id（图片/语音）；顺序即展示顺序 */
+  /** 必填：预设地点 id（管理员已启用）。缺省/非法都会被服务端 400 拒绝 */
+  placeId: string
+  /** 已上传的 **public** 媒体 id（图片）；顺序即展示顺序 */
   mediaIds?: string[]
+  /** 幂等键（UUID）：同一次发布的重试必须复用**同一个**值 */
+  clientRequestId?: string
 }): Promise<ApiResult<ApiPost>> {
   return request<ApiPost>('/api/posts', { method: 'POST', body: input })
+}
+
+// ===========================================================================
+// TimeMap P0（F05 互动 / F06 活动 / F07 举报与管理端）
+//
+// 为什么要单独一段而不是散在文件各处：P0 的这七个面是一组**同时引入**的能力，
+// 集中在一起才能一眼看出"这一版新增了什么"。每条都标了它对应的用户故事（US-xx）。
+// ===========================================================================
+
+/** 收藏/取消收藏的返回：**服务端权威计数**（不是客户端推算） */
+export interface FavoriteState {
+  favorited: boolean
+  favoriteCount: number
+}
+
+/** 收藏一条帖子（US-03）。服务端幂等：重复收藏不重复计数 */
+export function favoritePost(postId: string): Promise<ApiResult<FavoriteState>> {
+  return request<FavoriteState>(`/api/posts/${encodeURIComponent(postId)}/favorite`, {
+    method: 'POST',
+    body: {},
+  })
+}
+
+/** 取消收藏（US-03：收藏可撤销，取消后从个人中心移除） */
+export function unfavoritePost(postId: string): Promise<ApiResult<FavoriteState>> {
+  return request<FavoriteState>(`/api/posts/${encodeURIComponent(postId)}/favorite`, {
+    method: 'DELETE',
+  })
+}
+
+/**
+ * 我的收藏（US-03：收藏内容可在个人中心查看）。
+ *
+ * 形状与 `GET /api/posts` 一致（同一套 ApiPost 渲染路径），且 `favoritedByMe` 恒为 true。
+ * ⚠️ 服务端只返回**仍公开**（status='published'）的帖子：被下架的内容会同步消失，
+ *    这是需求 US-08「下架后同步退出各展示入口」的一部分，**不是**丢数据。
+ */
+export function listMyFavorites(): Promise<ApiResult<ApiPost[]>> {
+  return request<{ items: ApiPost[] }>('/api/me/favorites').then((r) =>
+    r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
+  )
+}
+
+/** 作者删除自己的帖子（US-02：只有作者能删；服务端校验归属，非作者 403） */
+export function deleteMyPost(postId: string): Promise<ApiResult<void>> {
+  return request<void>(`/api/posts/${encodeURIComponent(postId)}`, { method: 'DELETE' })
+}
+
+/** 作者删除自己的评论（US-03：只能删自己的；删除后不计入有效评论量） */
+export function deleteMyComment(commentId: string): Promise<ApiResult<void>> {
+  return request<void>(`/api/comments/${encodeURIComponent(commentId)}`, { method: 'DELETE' })
+}
+
+/**
+ * 举报原因码（US-08）。
+ *
+ * 为什么用固定枚举而不是自由文本：管理端要能**分类统计与筛选**；
+ * 自由文本会让"同类举报"变成一堆无法聚合的字符串。
+ * 补充说明走 detail 字段。
+ */
+export const REPORT_REASONS = [
+  { code: 'inappropriate', label: '不当内容' },
+  { code: 'spam', label: '垃圾广告' },
+  { code: 'harassment', label: '人身攻击' },
+  { code: 'false_info', label: '虚假信息' },
+  { code: 'other', label: '其他' },
+] as const
+
+export type ReportReasonCode = (typeof REPORT_REASONS)[number]['code']
+
+export interface ApiReport {
+  id: string
+  targetType: 'post' | 'comment'
+  targetId: string
+  reasonCode: string
+  detail: string | null
+  status: 'pending' | 'resolved'
+  resolution: 'no_action' | 'removed' | null
+  handleReason: string | null
+  reporterName?: string
+  createdAt: string
+  handledAt?: string | null
+}
+
+/**
+ * 提交举报（US-08）。
+ *
+ * ⚠️ 服务端**不会**因为被举报而下架内容 —— 这是需求明确冻结的规则
+ * （"举报成功后进入管理端待处理列表，但不自动下架内容"）。
+ * 所以调用方**不得**在举报成功后把内容从界面上拿掉。
+ * 同一用户对同一目标重复举报会被服务端去重（返回同一条 pending）。
+ */
+export function createReport(input: {
+  targetType: 'post' | 'comment'
+  targetId: string
+  reasonCode: string
+  detail?: string
+}): Promise<ApiResult<ApiReport>> {
+  return request<ApiReport>('/api/reports', { method: 'POST', body: input })
+}
+
+/**
+ * 活动展示态（US-04）。
+ *
+ * 注意这里有**两个**状态，别混：
+ *   · `status`          库存态（管理员视角）：scheduled / cancelled
+ *   · `effectiveStatus` 展示态（学生视角）：upcoming / ongoing / ended / cancelled
+ * 展示态由**服务端按时间推导**（cancelled 为人工覆盖），前端**不得**自己按本地时间算
+ * —— 客户端时钟可能与服务端不一致，那会让"进行中"变成假象。
+ */
+export type ActivityEffectiveStatus = 'upcoming' | 'ongoing' | 'ended' | 'cancelled'
+
+export interface ApiActivity {
+  id: string
+  title: string
+  description: string | null
+  startsAt: string
+  endsAt: string | null
+  source: string
+  /** 库存态：管理员录入口径 */
+  status: 'scheduled' | 'cancelled'
+  /** 展示态：学生口径（服务端推导） */
+  effectiveStatus: ActivityEffectiveStatus
+  place: { id: string; name: string; latitude: number | null; longitude: number | null; enabled: boolean }
+}
+
+export interface ApiPlaceActivity {
+  id: string
+  title: string
+  startsAt: string
+  endsAt: string | null
+  /** 地点详情里返回的**已经是展示态**（字段名就叫 status，见 server 的地点详情契约） */
+  status: ActivityEffectiveStatus
+  source: string
+}
+
+/**
+ * 活动列表（US-04）。
+ *
+ * `window` 的口径由**服务端**定义（前端不自己筛）：
+ *   · `today` 今天开始/进行中的
+ *   · `week`  一周内开始/进行中的
+ *   · 缺省    近期活动 = 未结束的 + 刚结束（7 天内）的 + 近期取消的
+ * ⇒ 所以"已结束超 7 天"的活动**按设计不出现在默认列表里**，这不是漏数据。
+ */
+export function listActivities(
+  window?: 'today' | 'week',
+): Promise<ApiResult<ApiActivity[]>> {
+  const q = window ? `?window=${window}` : ''
+  return request<{ items: ApiActivity[] }>(`/api/activities${q}`).then((r) =>
+    r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
+  )
+}
+
+/** 活动详情（US-04：标题/时间/地点/来源/状态必须与列表一致） */
+export function getActivity(id: string): Promise<ApiResult<ApiActivity>> {
+  return request<ApiActivity>(`/api/activities/${encodeURIComponent(id)}`)
+}
+
+// ---------------------------------------------------------------------------
+// F07：管理端（role='admin' 才可用；非管理员服务端一律 403，前端隐藏入口只是 UI）
+// ---------------------------------------------------------------------------
+
+/** 管理员：待处理/已处理举报列表 */
+export function adminListReports(
+  status: 'pending' | 'resolved' = 'pending',
+): Promise<ApiResult<ApiReport[]>> {
+  return request<{ items: ApiReport[] }>(`/api/admin/reports?status=${status}`).then((r) =>
+    r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
+  )
+}
+
+/**
+ * 管理员：处理举报（US-08）。
+ *
+ * ⚠️ **reason 必填** —— 需求原文："管理员选择不处理或下架时必须记录原因"。
+ *    服务端缺 reason 会 400，前端因此也必须在 UI 上强制填写（不能只靠服务端兜底，
+ *    否则用户点完才被告知失败）。
+ * ⚠️ resolution='removed' 会**同时**下架目标内容（帖子或评论），
+ *    内容随即退出列表/详情/地点页/收藏 —— 前端必须重新拉取，不能只改本地状态。
+ */
+export function adminResolveReport(
+  reportId: string,
+  resolution: 'no_action' | 'removed',
+  reason: string,
+): Promise<ApiResult<{ id: string; status: string; resolution: string }>> {
+  return request(`/api/admin/reports/${encodeURIComponent(reportId)}/resolve`, {
+    method: 'POST',
+    body: { resolution, reason },
+  })
+}
+
+export interface ApiAdminPost {
+  id: string
+  author: string
+  body: string
+  place: string | null
+  status: 'published' | 'removed'
+  removedReason: string | null
+  createdAt: string
+}
+
+/** 管理员：全部帖子（含已下架，用于内容管理） */
+export function adminListPosts(): Promise<ApiResult<ApiAdminPost[]>> {
+  return request<{ items: ApiAdminPost[] }>('/api/admin/posts').then((r) =>
+    r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
+  )
+}
+
+/** 管理员：直接下架某条帖子（绕过举报，reason 必填 —— 审计要求） */
+export function adminTakedownPost(postId: string, reason: string): Promise<ApiResult<void>> {
+  return request<void>(`/api/admin/posts/${encodeURIComponent(postId)}/takedown`, {
+    method: 'POST',
+    body: { reason },
+  })
+}
+
+export interface ApiAuditEntry {
+  id: string
+  action: string
+  targetType: string
+  targetId: string | null
+  reason: string | null
+  createdAt: string
+  /** 管理员标识（服务端 join users 得到的显示名）—— US-08「操作记录包含管理员、对象、时间和动作」 */
+  actorName: string
+}
+
+/** 管理员：操作记录（US-08） */
+export function adminListAuditLog(): Promise<ApiResult<ApiAuditEntry[]>> {
+  return request<{ items: ApiAuditEntry[] }>('/api/admin/audit-log').then((r) =>
+    r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
+  )
+}
+
+/**
+ * 管理员：地点列表（**含停用**）。
+ *
+ * ⚠️ 与公开的 `listPlaces` 是两个接口，别混：
+ *    公开列表默认只给启用的（学生视角），管理端必须能看到停用的，
+ *    否则"停用后无法再启用"（看不到它，也就没有开关可点）。
+ */
+export interface ApiAdminPlace {
+  id: string
+  name: string
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+  category: string
+  enabled: boolean
+  description: string | null
+  history: string | null
+  sortOrder: number
+  /** 该地点**当前公开**的帖子数（下架的不计） */
+  postCount: number
+}
+
+export function adminListPlaces(): Promise<ApiResult<ApiAdminPlace[]>> {
+  return request<{ items: ApiAdminPlace[] }>('/api/admin/places').then((r) =>
+    r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
+  )
+}
+
+/** 管理员：新建地点（F02：预设地点由管理员维护，学生不能自建） */
+export function adminCreatePlace(input: {
+  name: string
+  category: '地标' | '食堂'
+  address?: string
+  latitude?: number
+  longitude?: number
+  description?: string
+  history?: string
+}): Promise<ApiResult<{ id: string }>> {
+  return request<{ id: string }>('/api/admin/places', { method: 'POST', body: input })
+}
+
+/**
+ * 管理员：修改地点（F02）。
+ *
+ * ⚠️ `enabled: false` 是**停用**：该地点立即退出地图与公开列表，
+ *    并且**不能再关联新帖子**（服务端发帖时强校验）—— 已有帖子仍在。
+ *    这不是删除，可随时再启用。
+ */
+export function adminUpdatePlace(
+  placeId: string,
+  patch: Partial<{
+    name: string
+    category: '地标' | '食堂'
+    address: string | null
+    description: string | null
+    history: string | null
+    enabled: boolean
+    sortOrder: number
+  }>,
+): Promise<ApiResult<{ id: string }>> {
+  return request<{ id: string }>(`/api/admin/places/${encodeURIComponent(placeId)}`, {
+    method: 'PATCH',
+    body: patch,
+  })
+}
+
+/** 管理员：活动列表（含已结束/更早的 —— 学生侧的"近期活动"窗口不适用于管理端） */
+export function adminListActivities(): Promise<ApiResult<ApiActivity[]>> {
+  return request<{ items: ApiActivity[] }>('/api/admin/activities').then((r) =>
+    r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
+  )
+}
+
+/**
+ * 管理员：新建活动（F06）。
+ *
+ * ⚠️ 服务端**强校验**：地点必须存在**且启用**、startsAt 必须是合法 ISO 时间、
+ *    给了 endsAt 就必须晚于 startsAt（US-04：「缺少必要时间或地点时不能作为正式活动发布」）。
+ *    这些规则前端**不重复实现**（只做基本必填提示），以免两套判定分叉。
+ */
+export function adminCreateActivity(input: {
+  title: string
+  placeId: string
+  startsAt: string
+  endsAt?: string | null
+  description?: string
+  source?: string
+}): Promise<ApiResult<{ id: string }>> {
+  return request<{ id: string }>('/api/admin/activities', { method: 'POST', body: input })
+}
+
+/**
+ * 管理员：修改活动。
+ *
+ * `status` 只有两个值可用：`scheduled` / `cancelled`。
+ * ⚠️ 这里**没有** upcoming/ongoing/ended —— 那三个是**展示态**，由服务端按时间推导，
+ *    人工只能"取消"或"恢复"。前端不得提供"把活动设成进行中"这种入口（那是假状态）。
+ */
+export function adminUpdateActivity(
+  activityId: string,
+  patch: Partial<{
+    title: string
+    placeId: string
+    startsAt: string
+    endsAt: string | null
+    description: string | null
+    source: string
+    status: 'scheduled' | 'cancelled'
+  }>,
+): Promise<ApiResult<{ id: string }>> {
+  return request<{ id: string }>(`/api/admin/activities/${encodeURIComponent(activityId)}`, {
+    method: 'PATCH',
+    body: patch,
+  })
 }
 
 /**
@@ -696,7 +1075,23 @@ export async function logout(): Promise<void> {
 /** 当前用户（未登录时返回 null，不抛异常） */
 export async function me(): Promise<SessionUser | null> {
   const r = await request<SessionUser>('/api/auth/me')
-  return r.ok ? r.value : null
+  if (!r.ok) return null
+  /*
+    ⭐ TimeMap P0：把服务端的权威字段（含 **role**）写回本地会话缓存。
+    为什么必须补这一步：`role` 是 P0 才进 `GET /api/auth/me` 的，
+    而本地 localStorage 里可能存着**登录时那个响应**——它可能比这次 me 更旧；
+    更关键的是 MeScreen 用 `isAdmin()` 读的是**缓存**，若不同步，
+    "刷新页面后管理端入口就消失"（缓存里没有 role）这类假象就会出现。
+    ⚠️ 只写服务端给的值，不根据任何本地推断补 role（不猜权限）。
+  */
+  const u = r.value
+  updateSessionUser({
+    ...(u.displayName ? { displayName: u.displayName } : {}),
+    ...(u.handle ? { handle: u.handle } : {}),
+    phone: u.phone ?? null,
+    ...(u.role ? { role: u.role } : {}),
+  })
+  return u
 }
 
 // ---------------------------------------------------------------------------
@@ -806,6 +1201,8 @@ export interface ApiPostDetail {
   authorId: string | null
   body: string
   place: string | null
+  /** ⭐ P0（F02）：地点权威 id —— 详情页据此跳地点页，而不是拿地名文本去猜 */
+  placeId?: string | null
   /**
    * ⭐ M5 WO#15：地点经纬度（服务端 left join places 得到；无地点时为 null）。
    * 为什么需要：地图页按**经纬度**渲染标记（tencent / real 两个实现都是），
@@ -820,6 +1217,9 @@ export interface ApiPostDetail {
   likeCount: number
   /** 当前会话用户是否点过赞（未登录恒 false） */
   likedByMe: boolean
+  /** ⭐ P0（F05）：收藏计数与"我收藏了没" */
+  favoriteCount: number
+  favoritedByMe: boolean
   /** M4：帖子的公图片（只含 id 与尺寸；用 mediaUrl(id) 取图） */
   images?: ApiMediaRef[]
 }
@@ -894,22 +1294,82 @@ export interface ApiPlacePost {
   author: string
   authorId: string | null
   body: string
+  /** ⭐ P0：地点权威 id（地点详情里的帖子必然有值 —— 它们就是按 place_id 查出来的） */
+  placeId: string | null
   createdAt: string
+  likeCount: number
+  commentCount: number
+  favoriteCount: number
+  likedByMe: boolean
+  /** ⭐ P0（F05）：我是否收藏过这条（与 likedByMe 同型，值来自服务端） */
+  favoritedByMe: boolean
+  /** 公图片（只给 id 与尺寸；用 mediaUrl(id) 取图） */
+  images?: ApiMediaRef[]
 }
 
+/**
+ * 地点老照片（F03 / US-01）。
+ *
+ * ⚠️ 验收标准原文：「历史照片显示年代和来源，**年代不明时如实说明**」。
+ *    因此 `yearLabel` 是**文本**而不是数字 —— 真实史料里年代常常只能写成
+ *    "约1930年代""不详"，硬塞进 number 会逼着上游编一个假年份。
+ */
+export interface ApiPlacePhoto {
+  id: string
+  title: string
+  /** 年代（自由文本，如「1990年代」）；不明时上游应写"年代不详" */
+  yearLabel: string
+  /** 来源（必须可追溯；演示素材如实标注） */
+  source: string
+  imageUrl: string | null
+}
+
+/**
+ * 地点详情（F03；按需求 4.2 的草图重做后的契约）。
+ *
+ * 结构是**两层**：
+ *   慢内容 —— 地点本体（简介/校史）+ 老照片
+ *   近期内容 —— 该地点的活动 + 帖子（最新 | 近期热门）
+ * 这样划分的原因：校史与老照片几乎不变，而帖子每天都在动；
+ * 混成一个平铺结构会让调用方分不清哪些需要重新拉取。
+ */
 export interface ApiPlaceDetail {
   id: string
   name: string
   address: string | null
   latitude: number | null
   longitude: number | null
+  /** '地标' | '食堂'（F02：地图首页的分类筛选就是这个字段） */
+  category: string
+  /** 是否启用（停用地点不出现在公开列表，也不能关联新帖） */
+  enabled: boolean
+  /** 地点简介与校园背景（US-01） */
+  description: string | null
+  /** 校史；**可能为 null** —— 没有史料就如实为空，不编造（US-01） */
+  history: string | null
+  /** 老照片（年代 + 来源可追溯） */
+  photos: ApiPlacePhoto[]
+  /** 近期活动（未结束 + 7 天内结束的 + 近期取消的）；status 已是展示态 */
+  activities: ApiPlaceActivity[]
+  /** 帖子：默认最新；`sort=hot` 时按冻结的热度公式（近 7 天） */
   posts: ApiPlacePost[]
   postCount: number
 }
 
-/** 地点详情：地点本体 + 该地点的动态（原版的「按地点聚合动态」） */
-export async function getPlace(id: string): Promise<ApiResult<ApiPlaceDetail>> {
-  return request<ApiPlaceDetail>(`/api/places/${encodeURIComponent(id)}`)
+/**
+ * 地点详情。
+ *
+ * `sort` 的口径：`'latest'`（缺省，按时间倒序）/ `'hot'`（近期热门）。
+ * 热度规则**冻结在服务端**（timemap.ts 头注释）：
+ *   score = 点赞×2 + 有效评论×3 + 收藏×1 − max(0, 发布起小时数 − 24)
+ * ⇒ 前端**不**自己算排序：同分、撤销互动、内容下架这些边界只在服务端那一份实现里统一处理。
+ */
+export function getPlace(
+  id: string,
+  sort: 'latest' | 'hot' = 'latest',
+): Promise<ApiResult<ApiPlaceDetail>> {
+  const q = sort === 'hot' ? '?sort=hot' : ''
+  return request<ApiPlaceDetail>(`/api/places/${encodeURIComponent(id)}${q}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -934,14 +1394,30 @@ export interface ApiPlaceListItem {
   address: string | null
   latitude: number | null
   longitude: number | null
+  /** ⭐ P0（F02）：'地标' | '食堂' —— 地图首页的分类筛选依据 */
+  category: string
+  /** ⭐ P0（F02）：是否启用。公开列表默认只含启用的（服务端过滤） */
+  enabled: boolean
   /** 真实计数（直接外键，无需推断）；**不是** null 语义 */
   postCount: number
 }
 
-/** 地点列表；`q` 为服务端子串过滤（沿用 WO#12 纪律：不用客户端 filter） */
-export async function listPlaces(q?: string): Promise<ApiResult<ApiPlaceListItem[]>> {
-  const qs = q && q.trim() ? '?q=' + encodeURIComponent(q.trim()) : ''
-  const r = await request<{ items: ApiPlaceListItem[] }>('/api/places' + qs)
+/**
+ * 地点列表（F02：地图首页的权威数据源）。
+ *
+ * ⚠️ 服务端**默认只返回启用地点**；`category` 过滤也在服务端做
+ *    （沿用 WO#12 纪律：不用客户端 filter —— 一旦加 limit，客户端筛会静默变成"不完整"）。
+ * ⚠️ `q` 与 `category` 可以同时用（服务端把条件 and 起来）。
+ */
+export async function listPlaces(
+  q?: string,
+  category?: '地标' | '食堂',
+): Promise<ApiResult<ApiPlaceListItem[]>> {
+  const params = new URLSearchParams()
+  if (q && q.trim()) params.set('q', q.trim())
+  if (category) params.set('category', category)
+  const qs = params.toString()
+  const r = await request<{ items: ApiPlaceListItem[] }>('/api/places' + (qs ? `?${qs}` : ''))
   if (!r.ok) return r
   return { ok: true, value: r.value.items ?? [] }
 }

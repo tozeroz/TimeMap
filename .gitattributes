@@ -28,3 +28,19 @@ tools/push-ops.ps1          text eol=lf
 
 # 基线截图是二进制
 *.png binary
+
+# ⚠️ SQL 迁移**必须固定 LF**（2026-09-26 实测定论，一次真实线上事故）：
+#   迁移文件的 SHA-256 被原样存进 schema_migrations，服务端启动时逐条比对，
+#   不一致就 **fail-closed**（/api/ready 503、所有 /api/* 503）——
+#   这是对的（迁移文件被改过就绝不该自动重跑），但它对**换行**同样敏感：
+#     sha256(LF 版 001_init) = 5e5b9bb7b7a2…  ← 线上库里存的就是这个
+#     sha256(CRLF 版 001_init) = b57e367e7fdd… ← autocrlf 转出来的版本
+#   事故经过：本机 core.autocrlf=true ⇒ 工作区里的 .sql 是 CRLF ⇒ esbuild 把
+#   **CRLF 字节**打进单文件包 ⇒ 部署后 checksum 不匹配 ⇒ 线上 503。
+#   ⚠️ 关键点：这个陷阱的判别性在于**只有 001 报错**（002–015 的库内 checksum
+#   恰好是 CRLF 时期回填的），所以"只有一条不匹配"并不代表问题只有一条 ——
+#   必须把**所有**迁移固定成一种换行，而不是只修报错的那一条。
+#   ⇒ 显式钉死 LF（后面的规则优先，覆盖上面的 `*.ps1 text`）。
+#   ⚠️ .gitattributes 只影响**今后**的 checkout；工作区里已有的 CRLF 要手动转一次。
+*.sql text eol=lf
+server/src/migrations/*.sql text eol=lf

@@ -4,38 +4,24 @@ import { navigate } from '../router'
 import { IconAt, IconMapTab, IconPaw, IconPlus } from './icons'
 import './tabbar.css'
 
-export type TabKey = 'me' | 'campus' | 'map'
+/**
+ * ⭐ TimeMap P0：三个 tab = **地图 / 活动 / 我的**（需求 4.1 地图首页草图底部）。
+ *
+ * 改前是「<昵称> / 校园 / 地图」——那是**复刻的另一个产品**（校园广场信息流）的 tab 栏，
+ * 而 TimeMap 的信息架构是"以地点为内容组织单位"：从地图进入地点、再从地点看内容。
+ * 需求 4.1 的草图底部逐字写的是 `[地图] [活动] [我的]`，且 4.3 的页面清单里
+ * 没有"校园广场"这一类目。
+ *
+ * ⚠️ 边界（不要过度清理）：「校园广场」等复刻页**仍在仓库里**、路由也保留
+ *    （campus/chat/board/daily/schools/… 都能通过 URL 到达），本轮只改**底部 tab 与默认路由**，
+ *    没有删除那些页面 —— 删不删是另一件事，需要单独的证据与裁定。
+ */
+export type TabKey = 'map' | 'activities' | 'me'
 
 /**
- * 底部 tab 栏。
- *
- * ## 证据（**2026-09-22 用 bounds 重读 dump 后更正**）
- *
- * 原版底部 tab 是 **3 项**：`<当前账号昵称>` / `校园` / `地图`
- *
- * 判据 = 把 dump 里**底部导航区（y≥1750）**的 text 节点连同 bounds 一起读出来：
- * ```
- * text='自定义名称6'  bounds=[100,249][1829,1868]
- * text='校园'         bounds=[360,414][1829,1868]
- * text='地图'         bounds=[572,626][1829,1868]
- * ```
- * 恰好 3 项，与我方一致。
- *
- * 第二项的文案**动态跟随当前账号昵称**（dump 里那个账号昵称恰好是「自定义名称6」）；
- * 若把它硬编码成某个昵称，就是我们自己的 bug（换账号就错）。
- *
- * ## ⚠️ 关于「校园广场」——它**不是** tab
- *
- * 本文件此前曾写着"原版 4 项、缺第一项「校园广场」、已登记 deviation"，
- * **那是错的，已撤回**。原因是当时**只数了 text 节点名、没有读 bounds**：
- * ```
- * text='校园广场'     bounds=[28,130][116,157]    ← y=130..157 → **顶部标题区**
- * ```
- * 「校园广场」是该页的**页面标题**（那一页就叫校园广场），不是底部 tab。
- * 因此 `TAB_ITEM_COUNT_CONFORMANCE = 一致（3 vs 3）`，**不存在**要补的 tab。
- *
- * 教训（值得留在代码里）：**几何/结构类结论必须读 bounds，不能只数节点名**；
- * 以及 **"引用了 raw_evidence" ≠ "读了 raw_evidence"**。
+ * 「我的」tab 的文案跟随当前账号昵称（原版第二项就是这么做的：
+ * dump 里那一项显示的是账号昵称「自定义名称6」，而不是固定文案）。
+ * ⚠️ 不要把昵称硬编码成某个值：换账号就错。
  */
 function useTabMeLabel(): string {
   const [label, setLabel] = useState('我')
@@ -63,26 +49,35 @@ export function TabBar({ active }: { active: TabKey }) {
   return (
     <nav className="tabbar">
       <button
-        className={`tabbar__item ${active === 'me' ? 'is-active' : ''}`}
-        onClick={() => navigate('me')}
-      >
-        <IconPaw size={22} />
-        <span className="tabbar__label">{meLabel}</span>
-      </button>
-      <button
-        className={`tabbar__item ${active === 'campus' ? 'is-active' : ''}`}
-        onClick={() => navigate('campus')}
-      >
-        <IconAt size={22} />
-        <span className="tabbar__label">校园</span>
-      </button>
-      <button
         className={`tabbar__item ${active === 'map' ? 'is-active' : ''}`}
+        data-tab="map"
         onClick={() => navigate('map')}
       >
         <IconMapTab size={22} />
         <span className="tabbar__label">地图</span>
       </button>
+      <button
+        className={`tabbar__item ${active === 'activities' ? 'is-active' : ''}`}
+        data-tab="activities"
+        onClick={() => navigate('activities')}
+      >
+        <IconAt size={22} />
+        <span className="tabbar__label">活动</span>
+      </button>
+      <button
+        className={`tabbar__item ${active === 'me' ? 'is-active' : ''}`}
+        data-tab="me"
+        onClick={() => navigate('me')}
+      >
+        <IconPaw size={22} />
+        <span className="tabbar__label">{meLabel}</span>
+      </button>
+      {/*
+        发布 FAB：
+        ⚠️ 它是**通用入口**，不带 placeId —— 真正的"必须选地点"约束在 PublishScreen 内部
+          （US-02 验收项①：地点为必填项，只能选择启用地点）。
+          地点详情页的「在这里发布」会带 `?placeId=` 过来做预选，但仍可改。
+      */}
       <button className="tabbar__fab" onClick={() => navigate('publish')} aria-label="发布">
         <IconPlus size={22} />
       </button>

@@ -1,37 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createPost, toFeedPost, uploadMedia } from '../api/client'
-import { Screen, TopBar } from '../components/Shell'
-import { IconCamera, IconClose, IconFlip, IconImage, IconLocation, IconMic } from '../components/icons'
-import { addMyPost, addServerPost, markPostSynced } from '../data/store'
-import { ensureCameraPermission, pickPhoto } from '../native/camera'
-import { RecorderError, formatDuration, startRecording, type RecorderSession } from '../native/recorder'
 import {
-  applyZoom,
-  cameraSupported,
-  captureFrame,
-  countCameras,
-  describeCameraError,
-  startCamera,
-  stopStream,
-  type CameraErrorInfo,
-  type CameraFacing,
-} from '../native/liveCamera'
-import { goBack, navigate, useRoute } from '../router'
+  createPost,
+  listPlaces,
+  uploadMedia,
+  type ApiPlaceListItem,
+} from '../api/client'
+import { Screen, TopBar } from '../components/Shell'
+import { IconClose, IconImage, IconLocation } from '../components/icons'
+import { ensureCameraPermission, pickPhoto } from '../native/camera'
+import { goBack, useRoute } from '../router'
 import './publish.css'
 
-type Mode = '语音' | '拍摄' | '文字'
-
-const FONTS = ['经典', '黑体', '宋体', '手写体'] as const
-const ZOOM_STEPS = ['1x', '2x', '5x'] as const
+/** 最多 3 张图（与需求 4.3 的"普通图文"口径一致；服务端也有上限校验） */
+const MAX_IMAGES = 3
 
 /**
- * dataURL → Blob。
- *
- * ⭐ WO#21（Round 319）：发布页的图片在内存里是 **dataURL 字符串**
- *   （`captureFrame()` 返回 dataURL、`pickPhoto()` 返回 `photo.dataUrl`），
- *   而上传接口 `uploadMedia()` 要的是 `File | Blob` ⇒ 需要这一层转换。
- *   ⚠️ 用 `fetch(dataUrl)` 而不是 `atob()` 手工解码：
- *     `atob` 对**非 Latin-1** 的 dataURL 会抛错，而 fetch 走浏览器的标准解码路径。
+ * 转换为 Blob：发布页的图片在内存里是 **dataURL**（`pickPhoto()` 的返回），
+ * 而上传接口要 `File | Blob`。
+ * ⚠️ 用 `fetch(dataUrl)` 而不是 `atob()` 手工解码：`atob` 对非 Latin-1 的 dataURL 会抛错。
  */
 async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   const r = await fetch(dataUrl)
@@ -39,267 +25,165 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
 }
 
 /**
- * 发布页（原版点右下角「+」进入）。三模式合成器：
+ * 发布页（F04 / US-02；按需求 4.2 的「在这里发布」入口与 3.2 的业务规则重做）。
  *
- * - 拍摄：**页内实时取景**（getUserMedia），底部三个键依次是
- *   「相册选图 / 快门拍摄 / 前后置切换」—— 与原版一致。
- *   不用 Capacitor Camera 的原因见 native/liveCamera.ts 顶部注释。
- * - 文字：图文编辑器，「说点什么...」+ 从相册选图 + 字体选择
- * - 语音：**真实录音**（WO#21 起；此前是占位波形）
+ * ## 为什么重做（这不是"改一下调用参数"）
+ *   改前这一页是**复刻那个产品的图片合成器**：三个模式「拍摄 / 文字 / 语音」，
+ *   带实时取景摄像头、字体选择（经典/黑体/宋体/手写体）、真实录音。
+ *   而 TimeMap 的发布范围是**纯文字或普通图文**（需求 3.1 MVP：「纯文字或普通图文发布」），
+ *   且 3.2 的核心规则是「所有帖子必须关联管理员启用的预设地点」。
+ *   ⇒ 于是：
+ *     · **删除**「拍摄」模式（页内实时取景 + 快门 + 前后置切换）
+ *     · **删除**「语音」模式（语音帖**不在 TimeMap 范围**：需求里没有语音这一项）
+ *     · **删除**字体选择（那是图片合成器的能力，属 P1 的 F09/F10）
+ *     · **新增**地点必选器（只能选管理员**启用**的地点）
+ *     · 保留「从相册选图」（普通图文的唯一配图来源）
  *
- * 点「发布」：先把草稿写进本地帖子库（离线也能立刻看到），
- * 再 POST 到后端落库；**媒体（图片/语音）先上传、再随帖一并提交**（WO#21）。
+ * ## US-02 验收标准逐条落点
+ *   ① 「地点为必填项，只能选择启用地点」
+ *      → 地点选择器的数据源是 `GET /api/places`（服务端**默认只返回启用地点**）；
+ *        未选地点时发布按钮禁用，并明确提示原因
+ *   ② 「支持纯文字和普通图文发布」→ 文字 + 可选 ≤3 图
+ *   ③ 「发布后在地点详情与"我的发布"中可见，不出现人工待审核状态」
+ *      → 直接 POST 即 published（服务端没有待审核态）；成功后跳该地点详情页，
+ *        用户立刻能看到自己刚发的内容
+ *   ④ 「空白内容或图片上传失败时不能创建成功帖子」
+ *      → 空白正文禁用提交；图片上传失败**立即中止**（不发帖）并保留草稿
+ *   ⑤ 「连续点击发布不得产生重复帖子」
+ *      → `clientRequestId` **在用户开始这次发布时生成一次**（`crypto.randomUUID()`），
+ *        重试复用同一个值；服务端凭它认出重放并返回原帖。
+ *        ⚠️ 关键：绝不能每次调用现生成 —— 那样连点两次会得到两个不同的键，幂等就失效了。
+ *   ⑥ 「只有作者能够删除自己的帖子」→ 删除入口在 FeedDetail（服务端校验归属）
  */
 export function PublishScreen() {
   const route = useRoute()
-  const [mode, setMode] = useState<Mode>('拍摄')
-  const [zoom, setZoom] = useState<(typeof ZOOM_STEPS)[number]>('1x')
+  /*
+    地点：从地点详情页的「在这里发布」进来时带 `?placeId=`，这里预选。
+    ⚠️ 只做**预选**，不做锁定 —— 用户仍可改（需求没有说"必须发在这个地点"）。
+  */
+  const [placeId, setPlaceId] = useState(route.query.placeId ?? '')
   const [text, setText] = useState('')
-  const [font, setFont] = useState<(typeof FONTS)[number]>('经典')
-  const [place, setPlace] = useState(route.query.place ?? '北京交通大学')
   const [images, setImages] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [publishing, setPublishing] = useState(false)
-  const [flash, setFlash] = useState(false)
+  const [err, setErr] = useState('')
+
   /**
-   * ⭐ WO#21：发布流程的**明确错误**（存在即表示"不许显示成功"）。
-   * ⚠️ 与既有冻结原则一致：**上传/落库失败绝不本地假成功**。
+   * 幂等键：**在发布页挂载时生成一次**，整页生命周期内复用。
+   *
+   * 为什么不是"点发布时生成"：那样连点两次会生成两个不同的键 ⇒ 服务端认不出是重放
+   * ⇒ 产生两条帖子（US-02⑤ 直接失败）。用 useRef 保证只生成一次且不触发重渲染。
+   * 为什么发布成功后要重置：用户留在本页再发**另一条**内容时，那是**新的一次发布**，
+   * 必须用新键 —— 否则会被服务端当成上一条的重放，直接返回上一条而不创建新帖。
    */
-  const [publishErr, setPublishErr] = useState('')
+  const clientRequestIdRef = useRef<string>(crypto.randomUUID())
 
-  /* ---- ⭐ WO#21：语音真实录音（此前是占位波形 + 一句"尚未接入真实麦克风"）---- */
-  const [recording, setRecording] = useState(false)
-  const [recordSec, setRecordSec] = useState(0)
-  /** 录完待上传的语音；null = 还没录 */
-  const [voice, setVoice] = useState<{ blob: Blob; durationMs: number } | null>(null)
-  const recSessionRef = useRef<RecorderSession | null>(null)
-  const recTickRef = useRef<number | null>(null)
+  /* ---- 地点列表（只含启用地点；服务端默认过滤） ---- */
+  const [places, setPlaces] = useState<ApiPlaceListItem[]>([])
+  const [placesPhase, setPlacesPhase] = useState<'loading' | 'ready' | 'error'>('loading')
 
-  const stopRecTick = useCallback(() => {
-    if (recTickRef.current !== null) {
-      window.clearInterval(recTickRef.current)
-      recTickRef.current = null
+  const loadPlaces = useCallback(async () => {
+    setPlacesPhase('loading')
+    const r = await listPlaces()
+    if (r.ok) {
+      setPlaces(r.value)
+      setPlacesPhase('ready')
+    } else {
+      setPlaces([])
+      setPlacesPhase('error')
     }
-  }, [])
-
-  /** 开始录音（与 ChatScreen 语音一致：点一下开始 / 再点一下结束） */
-  const onRecordStart = useCallback(async () => {
-    if (recording) return
-    setPublishErr('')
-    try {
-      const s = await startRecording()
-      recSessionRef.current = s
-      setRecording(true)
-      setRecordSec(0)
-      stopRecTick()
-      recTickRef.current = window.setInterval(() => {
-        setRecordSec(Math.floor((recSessionRef.current?.elapsedMs() ?? 0) / 1000))
-      }, 200)
-    } catch (e) {
-      recSessionRef.current = null
-      setRecording(false)
-      stopRecTick()
-      const kind = e instanceof RecorderError ? e.kind : 'failed'
-      setPublishErr(
-        kind === 'permission_denied'
-          ? '没有麦克风权限，无法录音（请在系统设置里允许本应用使用麦克风）'
-          : kind === 'no_device'
-            ? '找不到可用的麦克风'
-            : kind === 'unsupported'
-              ? '当前环境不支持录音'
-              : `录音启动失败：${(e as Error).message}`,
-      )
-      /* ⚠️ 到这里为止**没有**任何上传/落库 —— 失败不留半成品 */
-    }
-  }, [recording, stopRecTick])
-
-  /** 结束录音：停止并**本地保留**待发布的语音（发布时才上传） */
-  const onRecordEnd = useCallback(async () => {
-    const s = recSessionRef.current
-    if (!s) return
-    recSessionRef.current = null
-    stopRecTick()
-    setRecording(false)
-    try {
-      const rec = await s.finish()
-      setVoice({ blob: rec.blob, durationMs: rec.durationMs })
-    } catch (e) {
-      setVoice(null)
-      setPublishErr(`录音失败：${(e as Error).message}`)
-    }
-  }, [stopRecTick])
-
-  /* 卸载时务必中止录音，否则麦克风会被一直占用 */
-  useEffect(
-    () => () => {
-      stopRecTick()
-      recSessionRef.current?.abort()
-      recSessionRef.current = null
-    },
-    [stopRecTick],
-  )
-
-  // ---- 实时取景 ----
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const [facing, setFacing] = useState<CameraFacing>('environment')
-  const [camState, setCamState] = useState<'idle' | 'starting' | 'live' | 'error'>('idle')
-  const [camError, setCamError] = useState<CameraErrorInfo | null>(null)
-  const [camCount, setCamCount] = useState(0)
-
-  const stopCamera = useCallback(() => {
-    stopStream(streamRef.current)
-    streamRef.current = null
-    if (videoRef.current) videoRef.current.srcObject = null
-    setCamState('idle')
-  }, [])
-
-  const startCameraStream = useCallback(async () => {
-    if (!cameraSupported()) {
-      setCamState('error')
-      setCamError({ kind: 'unsupported', message: '当前环境不支持页内取景，可以用「相册」选图' })
-      return
-    }
-    setCamState('starting')
-    setCamError(null)
-    try {
-      // 原生端必须先拿到系统相机权限，否则 WebView 的 getUserMedia 会被拒
-      await ensureCameraPermission()
-      const stream = await startCamera(facing)
-      streamRef.current = stream
-      const video = videoRef.current
-      if (video) {
-        video.srcObject = stream
-        await video.play().catch(() => undefined)
-      }
-      setCamState('live')
-      setCamCount(await countCameras())
-    } catch (error) {
-      console.warn('live camera failed:', error)
-      setCamState('error')
-      setCamError(describeCameraError(error))
-      stopStream(streamRef.current)
-      streamRef.current = null
-    }
-  }, [facing])
-
-  // 进入拍摄模式才开摄像头；离开就关掉（省电，也避免和别的 App 抢摄像头）
-  useEffect(() => {
-    if (mode !== '拍摄') {
-      stopCamera()
-      return
-    }
-    void startCameraStream()
-    return () => stopCamera()
-  }, [mode, startCameraStream, stopCamera])
-
-  const flipCamera = useCallback(() => {
-    setFacing((f) => (f === 'environment' ? 'user' : 'environment'))
   }, [])
 
   useEffect(() => {
-    if (camState === 'live') void applyZoom(streamRef.current, Number(zoom.replace('x', '')))
-  }, [zoom, camState])
+    void loadPlaces()
+  }, [loadPlaces])
 
-  /** 快门：抓当前取景画面进草稿 */
-  const shoot = useCallback(() => {
-    const video = videoRef.current
-    if (!video || camState !== 'live') return
-    const frame = captureFrame(video)
-    if (!frame) return
-    setImages((prev) => [frame, ...prev])
-    setFlash(true)
-    window.setTimeout(() => setFlash(false), 160)
-  }, [camState])
+  const picked = places.find((p) => p.id === placeId) ?? null
+  const canPublish = text.trim().length > 0 && Boolean(placeId) && !publishing
 
-  const addFromGallery = useCallback(async () => {
+  async function addFromGallery() {
+    if (images.length >= MAX_IMAGES) {
+      setErr(`最多 ${MAX_IMAGES} 张图片`)
+      return
+    }
     setBusy(true)
+    setErr('')
     try {
+      // 原生端要先拿系统相机权限，否则相册/相机选择器会被拒
+      await ensureCameraPermission()
       const photo = await pickPhoto()
-      if (photo) setImages((prev) => [...prev, photo.dataUrl])
+      if (photo) setImages((prev) => (prev.length >= MAX_IMAGES ? prev : [...prev, photo.dataUrl]))
+    } catch (e) {
+      setErr(`选择图片失败：${(e as Error).message}`)
     } finally {
       setBusy(false)
     }
-  }, [])
-
-  function publish() {
-    /* ⭐ WO#21：语音模式下必须有录好的语音才算可发布 */
-    if (publishing || (!text.trim() && images.length === 0 && !voice)) return
-    void doPublish()
   }
 
   /**
-   * 发布：**先写本地，再上传媒体，最后同步服务器**。
+   * 发布：**先传媒体，再发帖**。
    *
-   * 顺序不能反：网络慢或不通时，用户点完发布应该立刻在信息流看到自己的帖子，
-   * 而不是对着转圈等 8 秒超时。本地这份是"即时反馈"，服务器那份是"权威副本"；
-   * 同步成功后用服务器返回的 id 把两者关联起来，避免同一条帖子显示两张卡。
+   * 顺序不能反：服务端**只有"发帖时一并挂媒体"这一条路**，没有"给已有帖子补挂媒体"的接口。
+   * 反过来会先产生一条没图的帖子，且永远补不回来。
    *
-   * ⭐⭐ WO#21（Round 319）：**媒体先上传、再随帖提交**。
-   *   改前：只 `createPost({body, place})` ⇒ **图片与语音都留在本机**，
-   *         服务器上只有纯文本（注释写着"图片留在本地"，而 M4 从未接上 post_media）。
-   *   现在：① 逐张 `uploadMedia(dataUrl→Blob, 'post')` 拿 mediaIds
-   *         ② 语音 `uploadMedia(voice.blob, 'post', voice.durationMs)` 拿 mediaId
-   *         ③ `createPost({body, place, mediaIds})` 一并提交
-   *   ⚠️ 顺序不能反：服务端**只有"发帖时一并挂媒体"这一条路**，没有"给已有帖子补挂媒体"的接口。
-   *   ⚠️ 任何一步失败都**不显示成功**：明确报错（`publishErr`），本地那份仍在（不丢草稿）。
-   *      这与本项目已冻结的"**写操作失败绝不本地假成功**"一致。
+   * ⚠️ 任何一步失败都**不显示成功**、**不清空草稿** —— 与"写操作失败绝不本地假成功"一致。
    */
   async function doPublish() {
+    if (!canPublish) return
     setPublishing(true)
-    setPublishErr('')
-    const draft = text.trim() || (voice ? '分享了一段语音' : '分享了图片')
-    const local = addMyPost({ text: draft, images, place })
+    setErr('')
     try {
-      /* ① 上传媒体（图片 + 语音），收集 mediaIds */
       const mediaIds: string[] = []
       for (const durl of images) {
         try {
           const blob = await dataUrlToBlob(durl)
           const up = await uploadMedia(blob, 'post')
           if (!up.ok) {
-            setPublishErr(`图片上传失败：${up.reason}（帖子未发到服务器，草稿仍在本地）`)
+            setErr(`图片上传失败：${up.reason}（帖子未创建，草稿仍在）`)
             return
           }
           mediaIds.push(up.value.id)
         } catch (e) {
-          setPublishErr(`图片处理失败：${(e as Error).message}（帖子未发到服务器）`)
+          setErr(`图片处理失败：${(e as Error).message}（帖子未创建）`)
           return
         }
-      }
-      if (voice) {
-        /* ⚠️ 音频**必须**带 durationMs，否则服务端 400（迁移 010 的约束） */
-        const up = await uploadMedia(voice.blob, 'post', voice.durationMs)
-        if (!up.ok) {
-          setPublishErr(`语音上传失败：${up.reason}（帖子未发到服务器，草稿仍在本地）`)
-          return
-        }
-        mediaIds.push(up.value.id)
       }
 
-      /* ② 发帖（媒体一并提交） */
-      const result = await createPost({
-        body: draft,
-        place: place || undefined,
+      const r = await createPost({
+        body: text.trim(),
+        placeId,
         ...(mediaIds.length > 0 ? { mediaIds } : {}),
+        clientRequestId: clientRequestIdRef.current,
       })
-      if (result.ok) {
-        markPostSynced(local.id, result.value.id)
-        addServerPost(toFeedPost(result.value))
-      } else if (result.status === 401) {
-        setPublishErr('未登录：帖子只存在本地，未同步到服务器')
-      } else {
-        setPublishErr(`同步到服务器失败：${result.reason}（帖子已存在本地）`)
+      if (!r.ok) {
+        setErr(
+          r.status === 401
+            ? '未登录：请先登录后再发布'
+            : r.status === 400
+              ? `发布被拒绝：${r.reason}`
+              : `发布失败：${r.reason}`,
+        )
+        return
       }
+
+      /*
+        发布成功。
+        ⚠️ 服务端在"同 clientRequestId 重放"时返回 200 + `idempotentReplay:true` + 原帖 id；
+          正常创建是 201。两种都算成功，跳转都用服务端给的 id（**不要**用本地推断的 id）。
+        下一次发布要用**新**的幂等键（见 clientRequestIdRef 的说明）。
+      */
+      clientRequestIdRef.current = crypto.randomUUID()
+      /*
+        跳转：发到**该地点的详情页**。
+        为什么不是跳信息流：TimeMap 的组织单位是地点（需求 1.1），
+        发完立刻在地点页看到自己的内容，正是 US-02③ 要证明的"发布后可见"。
+      */
+      goBack('map')
+      window.location.hash = `#/poidetail?id=${encodeURIComponent(r.value.placeId ?? placeId)}`
     } finally {
       setPublishing(false)
-      navigate('campus')
     }
   }
-
-  const canPublish = text.trim().length > 0 || images.length > 0
-  const live = camState === 'live'
-  const canFlip = camCount > 1
 
   return (
     <Screen
@@ -308,28 +192,16 @@ export function PublishScreen() {
         <TopBar
           variant="plain"
           left={
-            <button className="iconbtn pub__close" onClick={() => goBack('campus')} aria-label="关闭">
+            <button className="iconbtn pub__close" onClick={() => goBack('map')} aria-label="关闭">
               <IconClose size={22} />
             </button>
           }
-          center={
-            <span className="pub__poiWrap">
-              <button className="pub__poi" onClick={() => navigate('poi')}>
-                <IconLocation size={13} />
-                <span>{place || '添加地点'}</span>
-              </button>
-              {place && (
-                <button className="pub__poiClear" onClick={() => setPlace('')} aria-label="移除地点">
-                  <IconClose size={12} />
-                </button>
-              )}
-            </span>
-          }
+          center={<span className="pub__topTitle">发布内容</span>}
           right={
             <button
               className={`pub__publish ${canPublish ? 'is-on' : ''}`}
-              onClick={publish}
-              disabled={!canPublish || publishing}
+              onClick={() => void doPublish()}
+              disabled={!canPublish}
               data-publishing={publishing ? '1' : '0'}
             >
               {publishing ? '发布中' : '发布'}
@@ -337,219 +209,121 @@ export function PublishScreen() {
           }
         />
       }
-      scroll={false}
+      scroll
     >
       <div className="pub__body">
-        {mode === '拍摄' && (
-          <div className="pub__viewfinder">
-            <video
-              ref={videoRef}
-              className={`pub__video ${facing === 'user' ? 'is-mirrored' : ''}`}
-              playsInline
-              muted
-              autoPlay
-              data-cam-state={camState}
-              data-facing={facing}
-            />
-            {!live && (
-              <div className="pub__camFallback">
-                <span className="pub__camFallbackIcon" aria-hidden>
-                  <IconCamera size={30} />
-                </span>
-                <p className="pub__camFallbackText">
-                  {camState === 'starting' ? '正在打开摄像头…' : (camError?.message ?? '')}
-                </p>
-                {camState === 'error' && (
-                  <button className="pub__camRetry" onClick={() => void startCameraStream()}>
-                    重试
-                  </button>
-                )}
-              </div>
-            )}
-            <div className="pub__gridlines" />
-            {flash && <div className="pub__flash" />}
-            <div className="pub__zooms">
-              {ZOOM_STEPS.map((z) => (
-                <button
-                  key={z}
-                  className={`pub__zoom ${zoom === z ? 'is-active' : ''}`}
-                  onClick={() => setZoom(z)}
-                  disabled={!live}
-                >
-                  {z}
-                </button>
-              ))}
+        {/* ① 地点必选（US-02 的第一条验收） */}
+        <section className="pub__field" data-pub-place-field>
+          <label className="pub__label" htmlFor="pub-place">
+            <IconLocation size={15} />
+            地点（必选）
+          </label>
+          {placesPhase === 'loading' && <p className="pub__hint">地点加载中…</p>}
+          {placesPhase === 'error' && (
+            <div className="pub__hint pub__hint--err" data-pub-places="error">
+              <span>地点列表加载失败，无法发布</span>
+              <button className="pub__retry" onClick={() => void loadPlaces()}>
+                重试
+              </button>
             </div>
-          </div>
-        )}
+          )}
+          {placesPhase === 'ready' && (
+            <>
+              <select
+                id="pub-place"
+                className="pub__select"
+                data-pub-place={picked?.id ?? ''}
+                value={placeId}
+                onChange={(e) => setPlaceId(e.target.value)}
+              >
+                <option value="">请选择地点</option>
+                {places.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}（{p.category}）
+                  </option>
+                ))}
+              </select>
+              {/*
+                ⚠️ 明确告诉用户"只能选启用的地点"是**服务端规则**，不是界面随手限制：
+                停用地点不在这个列表里，所以选不到（US-01⑤）。
+              */}
+              <p className="pub__hint">只显示管理员已启用的地点；停用地点不能关联新帖子。</p>
+            </>
+          )}
+        </section>
 
-        {mode === '文字' && (
-          <div className="pub__editor">
-            <textarea
-              className="pub__textarea"
-              placeholder="说点什么..."
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-            <div className="pub__thumbs">
-              {images.map((src, i) => (
-                <img key={i} className="pub__thumbImg" src={src} alt="" />
-              ))}
-              <button className="pub__thumbAdd" onClick={addFromGallery} aria-label="添加图片">
+        {/* ② 正文（纯文字也可以发） */}
+        <section className="pub__field">
+          <label className="pub__label" htmlFor="pub-text">
+            内容
+          </label>
+          <textarea
+            id="pub-text"
+            className="pub__textarea"
+            data-pub-text
+            placeholder="记录这个地点发生的事…（纯文字即可发布）"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <p className="pub__hint">{text.trim().length} 字 · 帖子发布后直接公开，没有人工待审核状态。</p>
+        </section>
+
+        {/* ③ 配图（普通图文；≤3 张） */}
+        <section className="pub__field">
+          <label className="pub__label">
+            <IconImage size={15} />
+            图片（可选，最多 {MAX_IMAGES} 张）
+          </label>
+          <div className="pub__thumbs">
+            {images.map((src, i) => (
+              <span key={i} className="pub__thumb">
+                <img className="pub__thumbImg" src={src} alt="" data-pub-draft={String(i)} />
+                <button
+                  className="pub__thumbRemove"
+                  onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
+                  aria-label="移除这张图片"
+                >
+                  <IconClose size={12} />
+                </button>
+              </span>
+            ))}
+            {images.length < MAX_IMAGES && (
+              <button
+                className="pub__thumbAdd"
+                data-pub-add-image
+                onClick={() => void addFromGallery()}
+                disabled={busy}
+                aria-label="从相册添加图片"
+              >
                 <IconImage size={20} />
               </button>
-            </div>
-            <div className="pub__fonts no-scrollbar">
-              {FONTS.map((f) => (
-                <button
-                  key={f}
-                  className={`pub__font ${font === f ? 'is-active' : ''}`}
-                  onClick={() => setFont(f)}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/*
-          ⭐⭐ WO#21（Round 319）：语音模式从**占位波形**改为**真实录音**。
-          改前：28 根按公式算高度的装饰条 + 「（录音功能尚未接入真实麦克风）」。
-          现在：真实麦克风（native/recorder.ts，与 ChatScreen 语音同一实现）+ 真实计时。
-
-          ⚠️ 交互形态的口径（不夸大）：原版 `publish` 基线把
-             「**语音模式的真实录音交互**」列在 `known_unknowns` 里 ⇒ 原版怎么做**未观察**。
-             这里采用**与 ChatScreen 语音一致**的"点一下开始 / 再点一下结束"
-             ⇒ 属 **OUR_DESIGN_CHOICE**，**不声称**与原版一致。
-          ⚠️ 原版录完之后是入草稿还是直接发帖也**未观察** ⇒ `PUBLISH_VOICE_FLOW: NOT_EVALUATED`。
-        */}
-        {mode === '语音' && (
-          <div className="pub__voice" data-voice-mode>
-            <div className="pub__wave" aria-hidden>
-              {/* 未录音时给一排静态底纹；录音时按**真实经过时间**点亮，不再是"按公式算的假波形" */}
-              {Array.from({ length: 28 }).map((_, i) => {
-                const lit = recording && i <= Math.min(27, recordSec * 2)
-                return (
-                  <span
-                    key={i}
-                    className={lit ? 'is-lit' : ''}
-                    style={{ height: `${12 + ((i * 37) % 46)}px` }}
-                  />
-                )
-              })}
-            </div>
-            <p className="pub__voiceTip" data-voice-status>
-              {recording
-                ? `正在录音… ${formatDuration(recordSec * 1000)}（点一下结束）`
-                : voice
-                  ? `已录制 ${formatDuration(voice.durationMs)}（发布时一并上传）`
-                  : '点一下开始录音，最长 60 秒'}
-            </p>
-            <button
-              className="pub__voiceBtn"
-              data-voice-toggle
-              onClick={() => (recording ? void onRecordEnd() : void onRecordStart())}
-            >
-              <IconMic size={20} />
-              {recording ? '结束录音' : voice ? '重新录音' : '开始录音'}
-            </button>
-            {voice && !recording && (
-              <button className="pub__voiceClear" data-voice-clear onClick={() => setVoice(null)}>
-                删除这段语音
-              </button>
             )}
           </div>
+          {/*
+            已上传图片的预览说明：这里显示的是**本地草稿**（dataURL），
+            真正上传发生在点发布时 —— 若上传失败会明确报错且**不创建帖子**。
+          */}
+          <p className="pub__hint">图片在上传成功前不会创建帖子；上传失败会保留草稿并提示。</p>
+        </section>
+
+        {err && (
+          <p className="pub__err" data-publish-err>
+            {err}
+          </p>
+        )}
+
+        {/* 未选地点时把"为什么不能发"说清楚，而不是给一个灰按钮让人猜 */}
+        {placesPhase === 'ready' && !placeId && (
+          <p className="pub__blocked" data-pub-blocked="no-place">
+            请先选择地点：TimeMap 的所有内容都必须关联一个预设地点。
+          </p>
+        )}
+        {!text.trim() && (
+          <p className="pub__blocked" data-pub-blocked="no-text">
+            请输入内容（空白内容不会创建帖子）。
+          </p>
         )}
       </div>
-
-      {/*
-        底栏主键区：与原版一致 —— 左「相册选图」，中「快门」，右「前后置切换」。
-        模式切换单独放一行，避免和这三个键抢位置。
-      */}
-      <div className="pub__controls">
-        <button className="pub__side" onClick={addFromGallery} aria-label="相册" disabled={busy}>
-          <IconImage size={22} />
-        </button>
-
-        {mode === '拍摄' && (
-          <button
-            className="pub__shutter"
-            onClick={shoot}
-            disabled={!live}
-            aria-label="拍摄"
-          >
-            <span className="pub__shutterInner" />
-          </button>
-        )}
-
-        {mode === '语音' && (
-          <button className="pub__shutter pub__shutter--voice" aria-label="按住说话" disabled>
-            <IconMic size={26} />
-          </button>
-        )}
-
-        {mode === '文字' && (
-          <button className="pub__send" onClick={publish} disabled={!canPublish || publishing}>
-            {publishing ? '发布中' : '发布'}
-          </button>
-        )}
-
-        {mode === '拍摄' ? (
-          <button
-            className={`pub__side ${canFlip ? '' : 'is-off'}`}
-            onClick={flipCamera}
-            aria-label="切换前后置摄像头"
-            disabled={!live || !canFlip}
-          >
-            <IconFlip size={22} />
-          </button>
-        ) : (
-          <span className="pub__side pub__side--ghost" aria-hidden />
-        )}
-      </div>
-
-      <div className="pub__modesRow">
-        {(['语音', '拍摄', '文字'] as Mode[]).map((m) => (
-          <button
-            key={m}
-            className={`pub__mode ${mode === m ? 'is-active' : ''}`}
-            onClick={() => setMode(m)}
-          >
-            {m}
-          </button>
-        ))}
-      </div>
-
-      {images.length > 0 && (
-        <div className="pub__draftBar no-scrollbar">
-          {images.map((src, i) => (
-            <div key={i} className="pub__draftItem">
-              <img src={src} alt="" />
-              <button
-                className="pub__draftRemove"
-                onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
-                aria-label="移除"
-              >
-                <IconClose size={12} />
-              </button>
-            </div>
-          ))}
-          <span className="pub__draftCount">
-            {mode === '拍摄' ? `已拍 ${images.length} 张` : `已选 ${images.length} 张`}
-          </span>
-        </div>
-      )}
-
-      {/*
-        ⭐ WO#21：发布/上传失败的**明确报错**。
-        ⚠️ 存在即表示"不许显示成功" —— 与"写操作失败绝不本地假成功"一致。
-      */}
-      {publishErr && (
-        <p className="pub__err" data-publish-err>
-          {publishErr}
-        </p>
-      )}
     </Screen>
   )
 }
