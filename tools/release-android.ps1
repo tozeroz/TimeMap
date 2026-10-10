@@ -21,6 +21,15 @@
 # empty, producing "mkdir: cannot create directory ''".
 # Chinese rationale for this project lives in docs/ and in the .sh files.
 #
+# ⚠️ WHEN THE REPO PATH CONTAINS NON-ASCII CHARACTERS, USE tools/build-apk.ps1 INSTEAD.
+#    (Update 2026-10-09.) This script's step 4 calls gradlew directly. If the checkout path has
+#    non-ASCII characters, the Kotlin compile fails with the very misleading
+#      "error: cannot access 'String' which is a supertype of ..."
+#    because Gradle escapes non-ASCII paths as \uXXXX in its compiler argfiles and the Kotlin
+#    compiler does not understand that escape. tools/build-apk.ps1 builds through an ASCII
+#    junction view of the same files and verifies the packaged version + in-APK web bundle.
+#    This script remains useful for its device-install and device-gate steps on an ASCII path.
+#
 # USAGE
 #   powershell -File tools/release-android.ps1                 # full: build+sync+provenance+install+provenance
 #   powershell -File tools/release-android.ps1 -SkipInstall    # build + sync + provenance (no device needed)

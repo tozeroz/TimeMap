@@ -16,6 +16,8 @@ import seedCollegesSql from './migrations/013_seed_colleges.sql'
 import appReleaseSql from './migrations/014_app_release.sql'
 import release11Sql from './migrations/015_release_1_1.sql'
 import timemapP0Sql from './migrations/016_timemap_p0.sql'
+import adminPasswordSql from './migrations/017_admin_password.sql'
+import release12Sql from './migrations/018_release_1_2.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -83,6 +85,16 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   //      以及北交大首批 10 个地点 / 3 张老照片（演示素材）/ 6 条活动的种子。
   //      数据来源与合规标注见该文件头部注释。
   { version: '016_timemap_p0', sql: timemapP0Sql },
+
+  // 017：为**管理员**恢复密码凭据（users.password_hash，可空；学生恒 NULL）。
+  //      原因与边界见迁移头部：短信通道故障时管理端必须仍可达，
+  //      而"凭据唯一化到一条依赖第三方通道的路径"等于给管理能力绑了单点故障。
+  { version: '017_admin_password', sql: adminPasswordSql },
+
+  // 018：发布 App 1.2（自更新清单指向我们自己构建并托管的 campus-demo-1.2.apk）。
+  //      ⚠️ 发布纪律：**先**上传 APK 并校验 sha256 / HTTP 200 / Content-Type，
+  //         **再**执行本迁移；反过来会出现"清单说 1.2、点下载 404"的假发布。
+  { version: '018_release_1_2', sql: release12Sql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

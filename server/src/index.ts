@@ -17,6 +17,7 @@ import { DEFAULT_CORS_ORIGINS, loadConfig } from './config.ts'
 import { createDb, type Db } from './db.ts'
 import { createDevSink, type DevSink } from './devSink.ts'
 import { createSmsSender, type SmsSender } from './sms.ts'
+import { fakeVerify, verifyPassword } from './password.ts'
 import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts'
 import { registerTimemapRoutes } from './timemap.ts'
 
@@ -154,6 +155,15 @@ export function buildServer(deps: ServerDeps) {
   const requestLimiter = createRateLimiter(deps.loginRequestMax, deps.loginWindowSeconds * 1000)
   /** 校验验证码失败的限流（按 手机号） */
   const verifyLimiter = createRateLimiter(deps.loginVerifyMaxAttempts, deps.loginWindowSeconds * 1000)
+  /**
+   * 管理员密码登录的限流（按 手机号+IP）。
+   *
+   * ⚠️ 为什么单独一个、而且更严：这是**密码**接口，可以被离线/在线爆破。
+   *    复用 verifyLimiter 会让"短信码失败次数"和"密码失败次数"互相影响
+   *    （学生会因为管理员被爆破而被一起限流，反之亦然）—— 两件事必须分开计量。
+   *    窗口与阈值沿用配置里的 loginVerifyMaxAttempts（默认 5 次 / 300s）。
+   */
+  const adminLoginLimiter = createRateLimiter(deps.loginVerifyMaxAttempts, deps.loginWindowSeconds * 1000)
 
   app.addHook('onRequest', async (req, reply) => {
     const origin = req.headers.origin
@@ -569,6 +579,95 @@ export function buildServer(deps: ServerDeps) {
       token,
       expiresAt: expiresAt.toISOString(),
       user: { id: user.id, handle: user.handle, displayName: user.display_name, phone, role: user.role },
+    }
+  })
+
+  /**
+   * 管理员密码登录（017）。
+   *
+   * ## 为什么需要它
+   *   管理端是"出事了要进去处理"的地方，而原先它唯一的凭据路径是**短信验证码**。
+   *   实测踩到：线上短信通道故障（`503 sms_delivery_failed`）⇒ 谁也登不进去 ⇒ 管理端完全不可达。
+   *   把管理能力绑在一条依赖第三方通道的路径上，等于给它加了一个单点故障。
+   *   ⇒ 恢复**第二条**路径（不是替换掉验证码那条）。
+   *
+   * ## 安全边界（四条都要看，少一条就是漏洞）
+   *   ① **只认 role='admin'**：查库时把 role 一起选出来，非 admin 直接走 fakeVerify 后拒绝。
+   *   ② **不泄露账号状态**：手机号不存在 / 存在但不是管理员 / 密码错 —— 三种情况返回
+   *      **完全相同**的 401 与同一句话。否则这个接口就成了"哪些手机号是管理员"的探测器。
+   *   ③ **等价耗时**：失败路径也跑一次 scrypt（`fakeVerify`），否则响应时间能区分出前三种情况。
+   *   ④ **独立限流**：见 adminLoginLimiter 的说明。
+   *
+   * ## 明确不做的事
+   *   · **不**给学生开密码登录（学生账号 password_hash 恒为 NULL，这里也要求 role=admin）
+   *   · **不**在没有密码时给任何默认值（没有默认密码、没有后门；没设过密码就是登不上）
+   */
+  app.post('/api/auth/admin-login', async (req, reply) => {
+    const payload = (req.body ?? {}) as Record<string, unknown>
+    const phoneRaw = typeof payload.phone === 'string' ? payload.phone : ''
+    const password = typeof payload.password === 'string' ? payload.password : ''
+    const phone = normalizePhone(phoneRaw)
+    if (!phone || !password) {
+      reply.code(400)
+      return { error: 'invalid_payload', details: ['需要手机号与密码'] }
+    }
+
+    const limitKey = `${req.ip}|${phone}`
+    const limited = adminLoginLimiter.hit(limitKey)
+    if (limited.limited) {
+      reply.header('retry-after', String(limited.retryAfterS))
+      reply.code(429)
+      return { error: 'too_many_attempts', retryAfterS: limited.retryAfterS }
+    }
+
+    // 统一失败响应：三种失败原因共用同一句话（见边界②）
+    const deny = (): { error: string } => {
+      adminLoginLimiter.fail(limitKey)
+      reply.code(401)
+      return { error: 'invalid_credentials' }
+    }
+
+    type AdminRow = { id: string; handle: string; display_name: string; role: string; password_hash: string | null }
+    let row: AdminRow | undefined
+    try {
+      const r = await db.pool.query<AdminRow>(
+        'select id, handle, display_name, role, password_hash from users where phone_e164 = $1',
+        [phone],
+      )
+      row = r.rows[0]
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+
+    // 边界①③：不是管理员（含不存在）⇒ 也跑一次等价耗时，再拒绝
+    if (!row || row.role !== 'admin') {
+      await fakeVerify(password)
+      return deny()
+    }
+    const okPassword = await verifyPassword(password, row.password_hash)
+    if (!okPassword) return deny()
+
+    adminLoginLimiter.reset(limitKey)
+
+    const token = newSessionToken()
+    const expiresAt = new Date(Date.now() + deps.sessionTtlDays * 24 * 60 * 60 * 1000)
+    try {
+      await db.pool.query(
+        `insert into sessions (id, user_id, token_hash, expires_at) values ($1, $2, $3, $4)`,
+        [randomUUID(), row.id, tokenHash(token), expiresAt],
+      )
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+
+    return {
+      token,
+      expiresAt: expiresAt.toISOString(),
+      user: { id: row.id, handle: row.handle, displayName: row.display_name, phone, role: row.role },
     }
   })
 

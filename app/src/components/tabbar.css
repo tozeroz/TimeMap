@@ -4,8 +4,13 @@
   align-items: center;
   justify-content: space-around;
   height: var(--h-tabbar);
-  /* 右侧留出悬浮按钮的位置，避免 FAB 压住「地图」tab */
-  padding: 0 72px 0 8px;
+  /*
+   * ⚠️ 改成 4 个 tab（地图/帖子/活动/我）后，这里**不再**给悬浮按钮留 72px 右侧 padding。
+   *    原因：tab 栏上的发布 FAB 已移除（地图页内部本来就有 `.map__fab`，两个悬浮发布入口冗余），
+   *    而 4 个 tab 需要完整宽度 —— 留着那段 padding 会把 tab 挤窄并可能触发文字省略。
+   *    （本仓库曾因"FAB 压住最右侧 tab"专门加过那段 padding，所以这里写清它为何可以删。）
+   */
+  padding: 0 6px;
   /*
    * 底部安全区（手势条）。
    * ⚠️ 加 `--safe-area-inset-bottom` 优先：与顶部同源 —— Android 15+ 强制 edge-to-edge 后
@@ -51,13 +56,16 @@
   justify-content: center;
   /* 间距保持既有值 5px（本单不改间距；原版精确间距未取证，不凭感觉调） */
   gap: 5px;
-  padding: 8px 10px;
+  /* ⚠️ 4 个 tab 时横向内边距从 10px 收到 6px：每个 tab 约 96px，
+     标签「地图/帖子/活动」各 2 字，收窄 padding 后不会触发 .tabbar__label 的省略号。 */
+  padding: 8px 6px;
   border-radius: var(--r-pill);
   color: var(--c-text-3);
   font-size: 12px;
   font-weight: 500;
   transition: background 0.15s ease, color 0.15s ease;
-  flex: 0 1 auto;
+  /* 4 等分：让四个 tab 等宽（flex:0 1 auto 会让宽标签占更多，导致图标不对齐） */
+  flex: 1 1 0;
   min-width: 0;
 }
 
