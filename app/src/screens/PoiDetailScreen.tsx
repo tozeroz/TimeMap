@@ -214,7 +214,7 @@ export function PoiDetailScreen({ id }: { id: string }) {
                     className="pd__act"
                     data-place-activity={a.id}
                     data-activity-status={a.status}
-                    onClick={() => navigate('activity', { id: a.id })}
+                    onClick={() => navigate('activity', { id: a.id, placeId: place.id })}
                   >
                     <span className="pd__actTitle">{a.title}</span>
                     <span className="pd__actMeta">{formatWhen(a)}</span>

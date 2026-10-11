@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { listActivities, type ActivityEffectiveStatus, type ApiActivity } from '../api/client'
 import { Screen } from '../components/Shell'
 import { IconChevronRight, IconLocation, IconRefresh } from '../components/icons'
-import { navigate } from '../router'
+import { useRoute, navigate } from '../router'
 import './activities.css'
 
 /**
@@ -19,12 +19,18 @@ import './activities.css'
  *     现在可能正在 `ongoing`。前端按本地时间算会因为客户端时钟偏差而说谎。
  *   · 今天/本周筛选交给**服务端**（`window=today|week`）—— 与地点/帖子同一纪律：
  *     不在客户端 filter，否则加页之后会静默变成"不完整但看起来完整"。
+ *   · 默认只展示"即将开始"和"进行中"的活动，由前端过滤实现。
+ *   · 地点筛选：支持从地点详情页跳转时自动筛选该地点的活动。
  */
 export function ActivitiesScreen() {
+  const route = useRoute()
+  const placeId = route.query.placeId ?? route.param ?? '' // 接收placeId参数
   const [items, setItems] = useState<ApiActivity[]>([])
+  const [displayItems, setDisplayItems] = useState<ApiActivity[]>([])
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
   const [errText, setErrText] = useState('')
   const [win, setWin] = useState<'' | 'today' | 'week'>('')
+  const [statusFilter, setStatusFilter] = useState<ActivityEffectiveStatus[]>([])
 
   const load = useCallback(async () => {
     setPhase('loading')
@@ -39,6 +45,27 @@ export function ActivitiesScreen() {
       setPhase('error')
     }
   }, [win])
+
+  // 筛选逻辑
+  useEffect(() => {
+    let filtered = items
+
+    // 地点筛选：如果从地点详情跳转而来，只显示该地点的活动
+    if (placeId) {
+      filtered = filtered.filter((a) => a.place.id === placeId)
+    }
+
+    // 状态筛选
+    if (statusFilter.length === 0) {
+      // "全部"状态：默认只显示即将开始和进行中的活动
+      filtered = filtered.filter((a) => a.effectiveStatus === 'upcoming' || a.effectiveStatus === 'ongoing')
+    } else {
+      // 选择了特定状态
+      filtered = filtered.filter((a) => statusFilter.includes(a.effectiveStatus))
+    }
+
+    setDisplayItems(filtered)
+  }, [items, statusFilter, placeId])
 
   useEffect(() => {
     void load()
@@ -56,7 +83,9 @@ export function ActivitiesScreen() {
       }
       scroll
     >
+      {/* 第一行：时间筛选 */}
       <div className="acts__filters" role="tablist">
+        <span className="acts__filterLabel">时间</span>
         {(
           [
             { key: '', label: '全部' },
@@ -77,6 +106,46 @@ export function ActivitiesScreen() {
         ))}
       </div>
 
+      {/* 第二行：状态筛选 */}
+      <div className="acts__filters" role="tablist">
+        <span className="acts__filterLabel">状态</span>
+        <button
+          className={`acts__chip ${statusFilter.length === 0 ? 'is-active' : ''}`}
+          data-act-status-filter="all"
+          onClick={() => setStatusFilter([])}
+        >
+          默认
+        </button>
+        <button
+          className={`acts__chip ${statusFilter.includes('upcoming') && statusFilter.length === 1 ? 'is-active' : ''}`}
+          data-act-status-filter="upcoming"
+          onClick={() => setStatusFilter(['upcoming'])}
+        >
+          即将开始
+        </button>
+        <button
+          className={`acts__chip ${statusFilter.includes('ongoing') && statusFilter.length === 1 ? 'is-active' : ''}`}
+          data-act-status-filter="ongoing"
+          onClick={() => setStatusFilter(['ongoing'])}
+        >
+          进行中
+        </button>
+        <button
+          className={`acts__chip ${statusFilter.includes('ended') && statusFilter.length === 1 ? 'is-active' : ''}`}
+          data-act-status-filter="ended"
+          onClick={() => setStatusFilter(['ended'])}
+        >
+          已结束
+        </button>
+        <button
+          className={`acts__chip ${statusFilter.includes('cancelled') && statusFilter.length === 1 ? 'is-active' : ''}`}
+          data-act-status-filter="cancelled"
+          onClick={() => setStatusFilter(['cancelled'])}
+        >
+          已取消
+        </button>
+      </div>
+
       {phase === 'loading' && <p className="acts__state">加载中…</p>}
 
       {phase === 'error' && (
@@ -94,15 +163,19 @@ export function ActivitiesScreen() {
         ⚠️ 文案要说明**默认窗口的口径**（未结束的 + 7 天内结束的 + 近期取消的），
            否则用户会以为"学校没有活动"，而事实可能是"更早的活动按设计不在这里"。
       */}
-      {phase === 'ready' && items.length === 0 && (
+      {phase === 'ready' && displayItems.length === 0 && (
         <p className="acts__state" data-act-phase="empty">
-          {win === '' ? '近期没有活动（更早的活动已退出近期列表）' : '这个时间段没有活动'}
+          {win === '' && statusFilter.length === 0
+            ? '近期没有活动（更早的活动已退出近期列表）'
+            : win === ''
+            ? '没有符合条件的活动'
+            : '这个时间段没有活动'}
         </p>
       )}
 
-      {phase === 'ready' && items.length > 0 && (
-        <ul className="acts__list" data-act-phase="ready" data-act-count={String(items.length)}>
-          {items.map((a) => (
+      {phase === 'ready' && displayItems.length > 0 && (
+        <ul className="acts__list" data-act-phase="ready" data-act-count={String(displayItems.length)}>
+          {displayItems.map((a) => (
             <li key={a.id}>
               <button
                 className="acts__item"
