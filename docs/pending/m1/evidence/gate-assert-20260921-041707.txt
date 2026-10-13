@@ -1,0 +1,113 @@
+﻿M1 Gate  阶段=assert  时间=2026-09-21 04:17:07
+仓库=G:\demo map
+
+NOTE 已按参数跳过 M0 regression（不可作为最终验收依据）
+
+=== ENC) 带中文的 .ps1 必须有 UTF-8 BOM ===
+PASS 所有含非 ASCII 的 .ps1 都有 BOM（检查 18 个文件）
+
+=== 8) [SCOPE] 改动范围必须落在 M1 允许清单内 ===
+  改动文件数: 33
+    .gitignore
+    app/.env.example
+    app/android/app/src/main/AndroidManifest.xml
+    app/android/app/src/main/res/xml/network_security_config.xml
+    app/capacitor.config.ts
+    app/src/api/client.ts
+    app/src/data/store.ts
+    app/src/screens/CampusScreen.tsx
+    app/src/screens/PublishScreen.tsx
+    docs/pending/m0/ANCHOR.md
+    docs/pending/m1/SPEC.md
+    ops/systemd/campus-backend.service
+    PLAN.md
+    scripts/m0/verify-m0.ps1
+    scripts/m1/device-e2e.mjs
+    scripts/m1/device-persistence.ps1
+    scripts/m1/device-probe.js
+    scripts/m1/verify-backend.sh
+    scripts/m1/verify-m1.ps1
+    server/build.mjs
+    server/package.json
+    server/pnpm-lock.yaml
+    server/pnpm-workspace.yaml
+    server/src/config.ts
+    server/src/db.ts
+    server/src/index.ts
+    server/src/migrations/001_init.sql
+    server/src/sql.d.ts
+    server/tsconfig.json
+    tools/deploy-server.ps1
+    tools/remote/m1-check.sh
+    tools/remote/m1-diag.sh
+    tools/remote/m1-provision.sh
+PASS 所有改动都在允许清单内
+
+=== 8b) [SCOPE] 库里不得新增业务表 ===
+  表: psql: warning: extra command-line argument "tablename" ignored, psql: warning: extra command-line argument "from" ignored, psql: warning: extra command-line argument "pg_tables" ignored, psql: warning: extra command-line argument "where" ignored, psql: warning: extra command-line argument "schemaname=public" ignored, psql: warning: extra command-line argument "order" ignored, psql: warning: extra command-line argument "by" ignored, psql: warning: extra command-line argument "1" ignored
+FAIL 出现了预期外的表: psql: warning: extra command-line argument "tablename" ignored, psql: warning: extra command-line argument "from" ignored, psql: warning: extra command-line argument "pg_tables" ignored, psql: warning: extra command-line argument "where" ignored, psql: warning: extra command-line argument "schemaname=public" ignored, psql: warning: extra command-line argument "order" ignored, psql: warning: extra command-line argument "by" ignored, psql: warning: extra command-line argument "1" ignored
+
+=== 1/2/3/5/6/7) [MIGRATION][API][VERTICAL_SLICE][SYSTEMD][NGINX][RESOURCE] 后端现场断言 ===
+标记: M1-E2E-1789935430
+=== A0. [MIGRATION] 全新数据库从零建表 + 幂等 ===
+  PASS 临时库 campus_m1test 创建成功
+  PASS 空库启动后 readiness=ready（schema 已建）
+  FAIL posts 表字段数异常: 5
+  PASS created_at 索引存在
+  PASS schema_migrations 记录了 001_init
+  PASS 重复执行迁移幂等（applied_at 未变）
+  PASS 二次启动未重复应用
+  PASS schema_migrations 恰有 1 个版本
+  PASS 临时库已清理
+=== A. [API] 经 Nginx 写一条 ===
+  PASS POST /api/posts 返回 id
+  PASS POST 返回 createdAt
+=== B. [VERTICAL_SLICE] 经 Nginx 读回 ===
+  PASS GET /api/posts 能读到刚写的帖子
+  PASS place 字段一致
+=== C. 直接查 PostgreSQL 确认真实落库 ===
+  PASS PG 中确有该行（不是内存缓存）
+=== D. [API] 校验：空 body 与超长 body ===
+  PASS 空 body → 400
+  PASS 超长 body → 400
+=== E. 重启 backend 后数据仍在 ===
+  PASS 重启后仍能读到（已持久化）
+=== F. [API] readiness 语义：停掉 PG 必须 503 ===
+  PASS PG 不可用时 /api/ready 返回 503
+  PASS liveness 不受 PG 影响（仍 200）
+  PASS PG 恢复后 /api/ready 自动回到 200
+=== G. [SYSTEMD] enabled + active ===
+  PASS campus-backend 已 enable（开机自启）
+  PASS campus-backend 正在运行
+=== H. [NGINX] 语义隔离 ===
+  PASS /health 由 Nginx 直接返回（gateway 语义）
+  PASS /health 未混入后端语义
+  PASS /api/health 来自 Fastify（api 语义）
+=== I. [CORS] APK WebView 来源必须放行，非白名单来源必须不放行 ===
+  PASS 预检 OPTIONS → 204
+  PASS 白名单来源回显 allow-origin
+  PASS 非白名单来源没有 allow-origin
+=== J. 端口暴露面 ===
+  PASS 3001 仅 127.0.0.1 监听
+  PASS 5432 未对外监听
+=== K. [RESOURCE_after_M1] 真实打 /api/posts 采样 ===
+  PASS 压测期间没有 OOM kill
+  PASS 压测后 readiness 仍为 200
+  PASS 压力后 MemAvailable 仍有 212MB（>50MB）
+  BACKEND_RESULT FAIL
+FAIL 后端现场断言 FAIL
+
+=== 4a) [FRONTEND] 构建产物里确实带上了 API 地址 ===
+PASS 构建产物含 API base 8.148.156.146（index-CnJ3Rn-A.js）
+PASS 构建产物含 /api/posts 调用
+PASS cap sync 已把该产物同步进 android 工程
+
+NOTE 已按参数跳过设备组（不可作为最终验收依据）
+
+=== 阶段报告口径（审核强制，绝不允许写成 19/19） ===
+total original screens: 22
+observed baseline:      19
+evidence-blocked:        3   (poi-detail / media-preview / at-panel，M3 从真实入口恢复)
+out-of-scope:            0
+
+M1_GATE_RESULT FAIL

@@ -469,3 +469,5 @@
   opacity: 0.6;
 }
 
+
+.feed__mediaImg--sticker { object-fit: contain; background: transparent; max-height: 400px; }

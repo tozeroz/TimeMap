@@ -305,7 +305,7 @@ export function BlacklistScreen() {
  * ⚠️⚠️ Round 319（A5 机械切片外溢发现）：本页改前有**两处不实信息**
  * ```
  *   ① <div className="dpcard__version">v2.10.0</div>   ← **编造的版本号**（无任何出处）
- *      ⚠️ `docs/original-baseline/screens/` 的 24 个基线目录里**没有**本屏
+ *      ⚠️ `docs/test/original-baseline/screens/` 的 24 个基线目录里**没有**本屏
  *         ⇒ 原版「版本信息」页的**内容/版本号从未被观察** ⇒ `ORIGINAL_VERSION_INFO_PAGE: NOT_EVALUATED`
  *   ② <p>本 demo 为本地复刻版本，**数据全部为 mock，无任何网络请求**。</p>
  *      ← **与事实不符**：应用现在处处走自建后端 API，mock.ts 也已整体退出现代代码
@@ -318,7 +318,7 @@ export function AboutScreen() {
   return (
     <DrawerPage title="版本信息" onBack={() => goBack('me')}>
       <div className="dpcard dpcard--center">
-        <div className="dpcard__brand">Campus</div>
+        <div className="dpcard__brand">TimeMap</div>
         {/*
           ⭐ WO#23：这里显示**本机真实版本**（来自单一定义的 app/src/version.ts）。
           ⚠️ 它与 `android/app/build.gradle` 的 versionName 的**一致性由门禁机械校验** ——

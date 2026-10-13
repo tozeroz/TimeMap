@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-13",
+  "environment": "Chromium 390x844, mocked API, no provider calls",
+  "additionalPasses": [
+    "图片草稿恢复正文、地标和原图",
+    "恢复草稿不自动调用抠图",
+    "处理中可编辑正文与地标",
+    "成功换图保留正文与地标并清除旧效果",
+    "旧抠图响应不覆盖新图"
+  ],
+  "findings": [
+    {
+      "id": "F01",
+      "problem": "重新生成返回空透明图片，预览失败后仍允许采用旧贴纸",
+      "confirmed": true
+    },
+    {
+      "id": "F02",
+      "problem": "发布中跳转离开导致失败反馈与提交标识丢失",
+      "confirmed": true
+    }
+  ]
+}

@@ -12,7 +12,7 @@ import './feedlist.css'
  * 校园圈（对应原版 campusx://feed/list）—— M5 WO#11 接线完成。
  *
  * ## 原版基线（证据级）
- * `docs/original-baseline/screens/feed-list/baseline.json`：
+ * `docs/test/original-baseline/screens/feed-list/baseline.json`：
  *   title        = "校园圈"
  *   activity     = com.kairuotu.feed.list.FeedActivity
  *   interactions = ["顶部「校园圈」+「北京交通大学 ▼」+ 左上关闭",

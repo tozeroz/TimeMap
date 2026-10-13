@@ -30,7 +30,7 @@
   M5 WO#6：tab 项改为**竖排**（图标在上、文字在下）。
 
   ## 依据（两条独立原版证据，审核记录 40 已批准）
-  ① dump 的 bounds（`docs/original-baseline/raw-dumps/board-observation-1.xml`）：
+  ① dump 的 bounds（`docs/test/original-baseline/raw-dumps/board-observation-1.xml`）：
        图标 android.widget.ImageView  y=[1746,1795]  （49×49 设备 px）
        文字 TextView                 y=[1829,1868]  （39 设备 px 高）
      → 两段 y 区间**完全不重叠**、图标整体在文字上方，且水平中心接近（160.5 vs 174.5）

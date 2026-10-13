@@ -9,7 +9,7 @@
   "_status_vocabulary": {
     "MATCH": "当前实现与原版该 claim 一致（须能被 Gate 验证）",
     "DEVIATION": "与 manifest 冻结的原版契约不一致。分两类：",
-    "DEVIATION_DELIBERATE": "有意的功能后撤，附 deviation_id 与批准记录（见 docs/m5/KNOWN-DEVIATIONS.md）",
+    "DEVIATION_DELIBERATE": "有意的功能后撤，附 deviation_id 与批准记录（见 docs/pending/m5/KNOWN-DEVIATIONS.md）",
     "DEVIATION_PENDING_FIX": "确认为偏差、待修（附所属工作单）",
     "NOT_EVALUATED": "原版证据不足，不做任何一致性主张",
     "UNCHANGED": "原版证据不足，但我们**有意保持现状不动**（既不修也不删）"
@@ -28,7 +28,7 @@
   ],
   "screens": {
     "feed-list": {
-      "baseline_file": "docs/original-baseline/screens/feed-list/baseline.json",
+      "baseline_file": "docs/test/original-baseline/screens/feed-list/baseline.json",
       "baseline_evidence_strength": "json(逐字记录) + png（截图）；无 XML dump",
       "claims": [
         {
@@ -157,7 +157,7 @@
       ]
     },
     "message": {
-      "baseline_file": "docs/original-baseline/screens/message/baseline.json",
+      "baseline_file": "docs/test/original-baseline/screens/message/baseline.json",
       "baseline_evidence_strength": "json(逐字记录) + png；无 XML dump",
       "claims": [
         {
@@ -226,13 +226,13 @@
       ]
     },
     "group": {
-      "baseline_file": "docs/original-baseline/screens/group/baseline.json",
+      "baseline_file": "docs/test/original-baseline/screens/group/baseline.json",
       "baseline_evidence_strength": "json + **XML dump** + png（证据较强）",
       "claims": [
         {
           "id": "GROUP_HEADER_STRUCTURE",
           "claim": "头部四段结构：leftIcon(返回) / chatAvatar / title(群名) / rightIcon",
-          "evidence": "docs/original-baseline/screens/original-chat/20260921-205407-04-chat-open.xml（XML dump）",
+          "evidence": "docs/test/original-baseline/screens/original-chat/20260921-205407-04-chat-open.xml（XML dump）",
           "status": "MATCH",
           "implementation_impact": "保持四段结构",
           "work_order": null,
@@ -314,7 +314,7 @@
     },
     "user-profile": {
       "baseline_file": null,
-      "baseline_evidence_strength": "**无可用基线** —— docs/original-baseline/screens/ 下只有 trident-me = 「我的」tab，**不是**他人主页",
+      "baseline_evidence_strength": "**无可用基线** —— docs/test/original-baseline/screens/ 下只有 trident-me = 「我的」tab，**不是**他人主页",
       "claims_explanation": "按纪律 ② 显式记录\"该屏无可用基线\"，本屏**不做任何与原版一致的主张**（审核记录 53：ORIGINAL_USER_PROFILE_BASELINE: UNAVAILABLE）",
       "claims": [
         {
@@ -381,14 +381,14 @@
       ]
     },
     "profile-edit": {
-      "baseline_file": "docs/original-baseline/screens/trident-me/baseline.json",
+      "baseline_file": "docs/test/original-baseline/screens/trident-me/baseline.json",
       "baseline_evidence_strength": "**入口层有基线**（trident-me/baseline.json:38 记了五个入口文案与位置、:42 记了「编辑资料」→资料编辑页）；**页面内容层无基线**（screens/ 下 26 个目录没有资料编辑页）",
       "claims_explanation": "审核记录 54 冻结：ENTRY 有据、PAGE_STRUCTURE 无据；不得把'我们当前的实现'当成一致性主张",
       "claims": [
         {
           "id": "ORIGINAL_PROFILE_EDIT_ENTRY",
           "claim": "「编辑资料」入口及 Me 页五个条目的文案与位置",
-          "evidence": "docs/original-baseline/screens/trident-me/baseline.json:38 逐字记录；:42「编辑资料」→ 资料编辑页；docs/original-interaction-map.md:51",
+          "evidence": "docs/test/original-baseline/screens/trident-me/baseline.json:38 逐字记录；:42「编辑资料」→ 资料编辑页；docs/test/original-interaction-map.md:51",
           "status": "MATCH",
           "implementation_impact": "已实现：MeScreen 保留这五个条目（文案与位置一致），「编辑资料」进入 ProfileEditScreen",
           "work_order": null,
@@ -397,7 +397,7 @@
         {
           "id": "ORIGINAL_PROFILE_EDIT_PAGE_STRUCTURE",
           "claim": "资料编辑页自身的内容结构（三张卡片、头像相机、昵称/简介/性别/标签、校园名片、学校卡）",
-          "evidence": "**无基线** —— docs/original-baseline/screens/ 下没有该页目录",
+          "evidence": "**无基线** —— docs/test/original-baseline/screens/ 下没有该页目录",
           "status": "NOT_EVALUATED",
           "implementation_impact": "本页布局记为 **OUR CURRENT IMPLEMENTATION / not a conformance claim**；原注释里的『结构按原版实测』已按审核 54 降级（不为保住注释去推断存在过证据）",
           "work_order": null,
@@ -462,7 +462,7 @@
       ]
     },
     "at-panel": {
-      "baseline_file": "docs/original-baseline/screens/at-panel/baseline.json",
+      "baseline_file": "docs/test/original-baseline/screens/at-panel/baseline.json",
       "baseline_evidence_strength": "baseline.json **内容为空**（所有 states not_reproducible、interactions/navigation 为空）；另有 recovered-m3-ui.xml",
       "claims_explanation": "该 baseline 的 blocked_reason = \"deep link 无法直达；需要群聊上下文\"，其 known_unknowns 三项逐一处置如下",
       "claims": [
@@ -487,7 +487,7 @@
         {
           "id": "AT_PANEL_SEARCH_CONTROL",
           "claim": "面板里有没有搜索框",
-          "evidence": "docs/original-baseline/screens/at-panel/recovered-m3-ui.xml：全部可见文本只有「选择提醒的人」「所有人」；**无 EditText、无\"搜索\"字样**",
+          "evidence": "docs/test/original-baseline/screens/at-panel/recovered-m3-ui.xml：全部可见文本只有「选择提醒的人」「所有人」；**无 EditText、无\"搜索\"字样**",
           "status": "NOT_EVALUATED",
           "implementation_impact": "不做主张（审核 52 明确：写 NOT_OBSERVED_IN_THIS_DUMP 是准确的，**不要升级为 ABSENT**）",
           "work_order": null,
@@ -496,7 +496,7 @@
       ]
     },
     "trident-map": {
-      "baseline_file": "docs/original-baseline/screens/trident-map/baseline.json",
+      "baseline_file": "docs/test/original-baseline/screens/trident-map/baseline.json",
       "baseline_evidence_strength": "**有基线**：states.normal=observed（normal.png）。但 known_unknowns 明记「具体缩放级别与标记规则未记录」、「首次进入的授权弹窗本次未出现」⇒ 视觉/语义类只能 NOT_EVALUATED，不得用 DOM 存在性冒充。",
       "claims_explanation": "WO#15（Round 265–267）落地。测量块在 scripts/m5/gate-wo15-map-markers.mjs 的 BASELINE_CLAIMS_MEASURED（Gate 用 provider 无关量 + 显式 data-* 钩子）。⚠️ 本屏的\"证据\"分两类并在每条里写明：**设备实测**（真机量到的字段值）与 **源码确认**（实现里写死的目标）—— 后者不算设备验证结果。",
       "claims": [
@@ -604,7 +604,7 @@
       ]
     },
     "trident-campus": {
-      "baseline_file": "docs/original-baseline/screens/trident-campus/baseline.json",
+      "baseline_file": "docs/test/original-baseline/screens/trident-campus/baseline.json",
       "baseline_evidence_strength": "**有基线**：states.normal=observed。interactions[1] 逐字记「顶部：大标题 Campus + 副标题「校园广场 ▼」+ 右上消息气泡」；known_unknowns 记分页/下拉刷新手势未观察。",
       "claims_explanation": "WO#16 层 A/B（审核 60/61）。层 A 移除 mock 学校数据、层 B 改接权威实体。测量在 gate-wo16a-campus-mock.mjs（5 键）与 gate-wo16b-schools.mjs（8 键，含面板 3 键）。⚠️ 与**地图页**的顶部控件**不是同一个东西**（审核 60/61 都强调过）：地图页显示「学校（校区）」，校园广场页显示固定标签「校园广场」——**不可互相套用**。",
       "claims": [
@@ -659,7 +659,7 @@
     },
     "school-search": {
       "baseline_file": null,
-      "baseline_evidence_strength": "**没有** screens/school-search 目录；证据在 `docs/original-baseline/supplements/schools.json` 的 `school_search` 段（M3 Evidence Preflight 采集，verdict=SUPPORTED）：搜索框「搜索选择学校...」/ 分组「更多学校」/ 行格式「学校名 (校区名)」+「N条校园圈」+ 可选「X小时前更新」/activity=com.xingin.xhsreactnative.ui.XhsReactActivity。",
+      "baseline_evidence_strength": "**没有** screens/school-search 目录；证据在 `docs/test/original-baseline/supplements/schools.json` 的 `school_search` 段（M3 Evidence Preflight 采集，verdict=SUPPORTED）：搜索框「搜索选择学校...」/ 分组「更多学校」/ 行格式「学校名 (校区名)」+「N条校园圈」+ 可选「X小时前更新」/activity=com.xingin.xhsreactnative.ui.XhsReactActivity。",
       "claims_explanation": "WO#16 层 B 新增的屏。测量在 gate-wo16b-schools.mjs（8 键，其中 5 键属本屏）。⚠️ 期望值全部从**实时 API** 取（不硬编码实体名）⇒ 换种子不会假 FAIL。",
       "claims": [
         {

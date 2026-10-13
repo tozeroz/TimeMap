@@ -9,7 +9,7 @@ import './announce.css'
  * ════════════════════════════════════════════════════════════════════
  * ⭐⭐ Round 319（A5 机械切片查出的**新偏差**，已修）
  * ════════════════════════════════════════════════════════════════════
- * 原版基线（`docs/original-baseline/screens/announce/baseline.json`，**observed**）：
+ * 原版基线（`docs/test/original-baseline/screens/announce/baseline.json`，**observed**）：
  * ```
  *   title        = 群公告
  *   interactions = ["顶部标题「校园活动」+ 左上返回", "内容区为空"]

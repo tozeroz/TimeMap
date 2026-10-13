@@ -7,6 +7,10 @@ import type { MapHandle } from './mapApi'
 import { activeTileConfig, CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
+}
+
 /**
  * 栅格瓦片地图（Leaflet + 可配置瓦片源）—— 官方 SDK 不可用时的兜底。
  *
@@ -27,7 +31,7 @@ export function RealMap({
   /** 真实定位结果；null = 尚未拿到，蓝点先停在校园中心 */
   here?: GeoFix | null
   /** ⭐ P0：回调参数是**地点 id**（标记按地点聚合，点击进地点详情） */
-  onMarkerClick: (placeId: string) => void
+  onMarkerClick: (placeId: string, postId?: string) => void
   onTilesFailed: () => void
   mapRef?: (handle: MapHandle | null) => void
 }) {
@@ -66,11 +70,11 @@ export function RealMap({
     for (const m of markers) {
             const cover = m.coverUrl
       const body = cover
-        ? `<img class="rm__img" src="${cover}" alt="" />`
-        : `<span class="rm__img rm__img--text">${(m.excerpt ?? '').slice(0, 10)}</span>`
+        ? `<img class="rm__img" src="${escapeHtml(cover)}" alt="" />`
+        : `<span class="rm__img rm__img--text">${escapeHtml((m.excerpt ?? '').slice(0, 10))}</span>`
       const html = `
-        <div class="rm">
-          <div class="rm__card">${body}<span class="rm__name">${m.place}</span></div>
+        <div class="rm ${m.imageMode === 'sticker' ? 'rm--sticker' : ''} ${m.highlight ? 'rm--highlight' : ''} ${!cover && m.postId ? 'rm--text' : ''}">
+          <div class="rm__card">${body}${cover && m.imageMode !== 'sticker' ? `<span class="rm__likes">♥ ${m.likeCount ?? 0}</span>` : ''}<span class="rm__name">${escapeHtml(m.place)}</span></div>
           <span class="rm__pin" style="color:${m.color}">
             <svg width="18" height="24" viewBox="0 0 20 26"><path d="M10 25.5S19 15.6 19 9.6A9 9 0 0 0 1 9.6c0 6 9 15.9 9 15.9Z" fill="currentColor"/><circle cx="10" cy="9.6" r="3.4" fill="#fff"/></svg>
           </span>
@@ -82,7 +86,7 @@ export function RealMap({
         iconAnchor: [38, 100],
       })
       const marker = L.marker([m.lat, m.lng], { icon })
-      marker.on('click', () => onMarkerClick(m.placeId))
+      marker.on('click', (e) => onMarkerClick(m.placeId, (e.originalEvent.target as Element)?.closest('.rm__card') ? m.postId || undefined : undefined))
       marker.addTo(map)
     }
 

@@ -155,7 +155,7 @@ export function PostCard({
  * 校区选择面板（WO#16 层 B；审核 61 批准）—— 点 CampusScreen 的「校园广场 ▼」后打开。
  *
  * ## 基线依据
- * `docs/original-baseline/supplements/schools.json` 的 campus_picker：
+ * `docs/test/original-baseline/supplements/schools.json` 的 campus_picker：
  * ```
  * 标题：「北京交通大学（当前学校）」
  * 项： 校本部 ／ 威海校区 ／ 东校区 ／ **搜索其他学校**

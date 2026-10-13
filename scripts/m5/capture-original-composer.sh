@@ -10,7 +10,7 @@
 # ## 关于"进入会话是否算写"的判断（如实记录）
 #   进入会话页在多数 IM 里会触发"标记已读"（一次服务端写）。
 #   本群 `GroupForEvidence(1)` 的 2 条消息**全部由本账号自己发出**
-#   （出处：docs/original-baseline/screens/original-chat/INDEX.md 〇节 + POLICY-VIOLATION 文档），
+#   （出处：docs/test/original-baseline/screens/original-chat/INDEX.md 〇节 + POLICY-VIOLATION 文档），
 #   因此"把自己发的消息标记为已读"在语义上是**空操作**（没有第二方的已读状态会因此改变）。
 #   ⚠ 这是**判断**不是**证明**：我无法只读地观测"服务端是否收到了一次已读上报"。
 #     若审核认为这一点仍不可接受，应记为 BLOCKED_BY_POLICY 并停止本条采集 —— 请裁定。
@@ -23,7 +23,7 @@
 set -u
 ADB='G:\Program Files\Netease\MuMu\nx_main\adb.exe'
 SERIAL='127.0.0.1:16384'
-OUTDIR='G:\demo map\docs\original-baseline\screens\original-composer'
+OUTDIR='G:\demo map\docs\test\original-baseline\screens\original-composer'
 PKG='com.kairuotu.campus'
 
 mkdir -p "$OUTDIR"

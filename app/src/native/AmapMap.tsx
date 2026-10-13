@@ -94,7 +94,7 @@ export function loadAmapSdk(): Promise<AMapSdk | null> {
 function buildMarkerElement(m: MapMarker): HTMLDivElement {
     const cover = m.coverUrl
   const el = document.createElement('div')
-  el.className = 'rm'
+  el.className = `rm ${m.imageMode === 'sticker' ? 'rm--sticker' : ''} ${m.highlight ? 'rm--highlight' : ''} ${!cover && m.postId ? 'rm--text' : ''}`
   el.dataset.markerId = m.id
 
   const card = document.createElement('div')
@@ -105,6 +105,11 @@ function buildMarkerElement(m: MapMarker): HTMLDivElement {
     img.src = cover
     img.alt = ''
     card.appendChild(img)
+    if (m.imageMode !== 'sticker') {
+      const likes = document.createElement('span')
+      likes.className = 'rm__likes'; likes.textContent = `♥ ${m.likeCount ?? 0}`
+      card.appendChild(likes)
+    }
   } else {
     const span = document.createElement('span')
     span.className = 'rm__img rm__img--text'
@@ -137,7 +142,7 @@ export function AmapMap({
   markers: MapMarker[]
   here?: GeoFix | null
   /** ⭐ P0：回调参数是**地点 id**（标记按地点聚合，点击进地点详情） */
-  onMarkerClick: (placeId: string) => void
+  onMarkerClick: (placeId: string, postId?: string) => void
   onSdkFailed: () => void
   mapRef?: (handle: MapHandle | null) => void
 }) {
@@ -170,7 +175,7 @@ export function AmapMap({
 
       for (const m of markers) {
         const el = buildMarkerElement(m)
-        el.addEventListener('click', () => onMarkerClick(m.placeId))
+        el.addEventListener('click', (e) => onMarkerClick(m.placeId, (e.target as Element).closest('.rm__card') ? m.postId || undefined : undefined))
         // anchor: bottom-center —— 图钉尖端落在坐标点上
         const marker = new AMap.Marker({
           position: [m.lng, m.lat],

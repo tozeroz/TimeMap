@@ -10,7 +10,7 @@
 #   只比"两次运行是否一致"会被**假幂等**骗过 ——
 #   如果 seed 源改了值而库里用 DO NOTHING 保留了旧值，两次运行当然一样，
 #   但那个"一样"的值已经偏离 canonical 了。
-#   canonical 哈希放在 docs/m2/seed-canonical.txt（入库、需要显式更新）。
+#   canonical 哈希放在 docs/pending/m2/seed-canonical.txt（入库、需要显式更新）。
 #
 # 只读 canonical，不会自动改写它 —— Gate 不允许改变被测试对象。
 FAILED=0

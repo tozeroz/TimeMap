@@ -200,7 +200,7 @@ export function MeScreen() {
               className="me__authBtn me__authBtn--primary"
               onClick={() => navigate('loginselect')}
             >
-              登录 Campus
+              登录 TimeMap
             </button>
           </>
         )}

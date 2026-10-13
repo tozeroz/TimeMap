@@ -24,7 +24,7 @@ import './activities.css'
  */
 export function ActivitiesScreen() {
   const route = useRoute()
-  const placeId = route.query.placeId ?? route.param ?? '' // 接收placeId参数
+  const placeId = route.query.placeId ?? route.path.split('/')[1] ?? '' // 接收placeId参数
   const [items, setItems] = useState<ApiActivity[]>([])
   const [displayItems, setDisplayItems] = useState<ApiActivity[]>([])
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')

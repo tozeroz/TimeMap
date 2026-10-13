@@ -1,5 +1,5 @@
 ﻿<#
-  M2 Gate（对应 docs/m2/SPEC.md 第八节）。
+  M2 Gate（对应 docs/pending/m2/SPEC.md 第八节）。
 
   结构按审核记录 04 §10.3 收束：本里程碑的验收放在 scripts/gates/m2/，
   历史的 M0/M1 入口保持原样（scripts/m0/verify-m0.ps1、scripts/m1/verify-m1.ps1）。
@@ -10,7 +10,7 @@
   用法：
     & '.\scripts\gates\m2\milestone.ps1'                 # 全量
     & '.\scripts\gates\m2\milestone.ps1' -SkipDevice     # 没开模拟器时
-  证据：docs/m2/evidence/gate-<时间戳>.txt
+  证据：docs/pending/m2/evidence/gate-<时间戳>.txt
 #>
 param(
   [switch]$SkipM0,
@@ -20,7 +20,7 @@ param(
 
 $ErrorActionPreference = 'Continue'
 $repo = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
-$evidenceDir = Join-Path $repo 'docs\m2\evidence'
+$evidenceDir = Join-Path $repo 'docs\pending\m2\evidence'
 New-Item -ItemType Directory -Force -Path $evidenceDir | Out-Null
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $evidencePath = Join-Path $evidenceDir "gate-$stamp.txt"
@@ -131,7 +131,7 @@ if (-not $SkipServer) {
   # verify-auth.sh 测的是 M2 冻结的 handle+password 契约。当前产品已退休那条路径
   # （POST /api/auth/login → 410），所以：
   #   - 这份脚本必须保留：它是 M2 阶段的审计产物，删掉就等于抹掉历史 Gate 的可复现性
-  #   - 但它只能对 **M2 修订** 运行（复现步骤见 docs/m3/CLOSEOUT-SLICE0B.md）
+  #   - 但它只能对 **M2 修订** 运行（复现步骤见 docs/pending/m3/CLOSEOUT-SLICE0B.md）
   #   - 拿它跑当前部署会（正确地）失败 —— 那说明产品已前进，不是缺陷
   # 当前产品的认证断言在 M3 的 Gate 里（scripts/gates/m3/slice0b.ps1 → verify-auth-otp.sh）。
   # ===========================================================================
@@ -161,7 +161,7 @@ if (-not $SkipServer) {
 # ---------------------------------------------------------------------------
 # 数据模型追溯性（审核 scope gate 的证据必须存在）
 Head 'TRACEABILITY) 每张表都能追溯到已观察实体'
-$dm = Join-Path $repo 'docs\m2\DATA-MODEL.md'
+$dm = Join-Path $repo 'docs\pending\m2\DATA-MODEL.md'
 if (Test-Path -LiteralPath $dm) {
   $dmText = [IO.File]::ReadAllText($dm, [Text.Encoding]::UTF8)
   $missing = @()
@@ -172,7 +172,7 @@ if (Test-Path -LiteralPath $dm) {
   }
   if ($missing.Count -eq 0) { Ok 'DATA-MODEL.md 覆盖全部 16 张业务表（含 M3 新增的 schools/campuses/login_challenges）' }
   else { Bad "DATA-MODEL.md 缺少追溯: $($missing -join ', ')" }
-} else { Bad '缺少 docs/m2/DATA-MODEL.md（scope gate 的证据）' }
+} else { Bad '缺少 docs/pending/m2/DATA-MODEL.md（scope gate 的证据）' }
 
 # ---------------------------------------------------------------------------
 if ($SkipDevice) {
@@ -229,10 +229,10 @@ psql -h 127.0.0.1 -U campus -d campus -Atc "select count(*) from posts p join us
 
 # ---------------------------------------------------------------------------
 Head '阶段报告口径（审核强制，唯一真源 = manifest.coverage）'
-# 口径不再硬编码在 Gate 里：由 docs/original-baseline/manifest.json 的 coverage.current 推导。
+# 口径不再硬编码在 Gate 里：由 docs/test/original-baseline/manifest.json 的 coverage.current 推导。
 # 原因（审核记录 07 P1-2）：三个 blocked 页面取证成功后口径应当**当场改变**，
 # 硬编码会让 Gate 继续打印过期的 19/3。历史值保留在 coverage.history 里可审计。
-$manPath = Join-Path $repo 'docs\original-baseline\manifest.json'
+$manPath = Join-Path $repo 'docs\test\original-baseline\manifest.json'
 if (Test-Path -LiteralPath $manPath) {
   $cov = (Get-Content -LiteralPath $manPath -Raw -Encoding UTF8 | ConvertFrom-Json).coverage
   Say "  （当前口径来自 coverage.current @ $($cov.current.stage)）"
@@ -243,7 +243,7 @@ if (Test-Path -LiteralPath $manPath) {
   if ($cov.current.evidence_blocked -gt 0) { Say "  仍被阻断: $($cov.current.blocked_screens -join ', ')" }
   Say "  （历史口径: $(($cov.history | ForEach-Object { "$($_.stage)=$($_.observed) observed/$($_.evidence_blocked) blocked" }) -join '; ')）"
 } else {
-  Bad '缺少 docs/original-baseline/manifest.json（无法取得口径）'
+  Bad '缺少 docs/test/original-baseline/manifest.json（无法取得口径）'
 }
 
 Say ''

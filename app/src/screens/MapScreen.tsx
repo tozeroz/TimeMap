@@ -82,6 +82,8 @@ export function markersFromPlaces(
       const rep = posts.find((post) => post.placeId === p.id || post.place === p.name)
       return {
         id: p.id,
+        imageMode: rep?.imageMode,
+        likeCount: rep?.likeCount ?? 0,
         // ⭐ 跳转目标是地点（P0 的核心改动）
         placeId: p.id,
         place: p.name,
@@ -94,7 +96,7 @@ export function markersFromPlaces(
         y: Math.round(1000 - dyM * PX_PER_M),
         lat,
         lng,
-        coverUrl: rep?.images && rep.images.length > 0 ? mediaUrl(rep.images[0].id) : undefined,
+        coverUrl: rep?.mapMediaId ? mediaUrl(rep.mapMediaId) : rep?.images && rep.images.length > 0 ? mediaUrl(rep.images[0].id) : undefined,
         excerpt: rep?.body ? rep.body.slice(0, 10) : undefined,
       }
     })
@@ -290,9 +292,13 @@ export function MapScreen() {
   }, [])
 
   const [markers, setMarkers] = useState<MapMarker[]>([])
+  const [published, setPublished] = useState<ApiPost | null>(null)
+  const [showPublished, setShowPublished] = useState(Boolean(route.query.newPostId))
+  const [selectedPlace, setSelectedPlace] = useState(route.query.placeId ?? '')
   const [markerPhase, setMarkerPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   /** 分类筛选（需求 4.1：`[全部] [地标] [食堂]`） */
   const [category, setCategory] = useState<CategoryFilter>('全部')
+  const [showText, setShowText] = useState(true)
 
   /*
     ⭐ P0：标记来源改为**地点**（按地点聚合），代表帖信息来自帖子列表。
@@ -317,13 +323,16 @@ export function MapScreen() {
         setMarkerPhase('unavailable')
         return
       }
-      setMarkers(markersFromPlaces(pr.value, po.ok ? po.value : []))
+      const posts = po.ok ? po.value : []
+      const fresh = posts.find(p => p.id === route.query.newPostId)
+      setPublished(fresh ?? null)
+      setMarkers(markersFromPlaces(pr.value, fresh ? [fresh, ...posts.filter(p => p.id !== fresh.id)] : posts).map(m => ({ ...m, highlight: Boolean(fresh && m.postId === fresh.id) })))
       setMarkerPhase('ready')
     })()
     return () => {
       alive = false
     }
-  }, [category])
+  }, [category, route.query.newPostId])
   // ---- 真实定位 ----
   const [fix, setFix] = useState<GeoFix | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
@@ -337,6 +346,20 @@ export function MapScreen() {
   const stageRef = useRef<HTMLDivElement | null>(null)
   const mapHandleRef = useRef<MapHandle | null>(null)
   const stopWatchRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    if (!route.query.newPostId) return
+    setShowPublished(true)
+    const timer = setTimeout(() => {
+      setShowPublished(false)
+      setMarkers(items => items.map(m => ({ ...m, highlight: false })))
+    }, 10000)
+    return () => clearTimeout(timer)
+  }, [route.query.newPostId])
+  useEffect(() => {
+    const target = markers.find(m => m.placeId === route.query.placeId)
+    if (target) mapHandleRef.current?.flyTo(target.lat, target.lng, 18)
+  }, [markers, route.query.placeId])
 
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s))
 
@@ -533,19 +556,25 @@ export function MapScreen() {
   }, [])
 
   // 注意：这两个回调必须保持稳定引用，否则地图组件的建图 effect 会每次渲染都销毁重建地图
-  const handleMarkerClick = useCallback((placeId: string) => {
+  const handleMarkerClick = useCallback((placeId: string, postId?: string) => {
     /*
       ⭐ P0：点击标记进**地点详情**（不再是动态详情）。
       理由见 markersFromPlaces 的说明：地图的组织单位是地点（需求 4.1/4.2）。
       ⚠️ 不回落到 postId —— 两者的语义不同，混用会让"点进哪个地点"变得不可预测。
     */
+    if (postId) { navigate('feed', { id: postId }); return }
+    setSelectedPlace(placeId)
     navigate('poidetail', { id: placeId })
   }, [])
 
   const handleMapRef = useCallback((handle: MapHandle | null) => {
     mapHandleRef.current = handle
-    if (handle) setTilesOk(true)
-  }, [])
+    if (handle) {
+      setTilesOk(true)
+      const target = markers.find(m => m.placeId === route.query.placeId)
+      if (target) handle.flyTo(target.lat, target.lng, 18)
+    }
+  }, [markers, route.query.placeId])
 
   return (
     <Screen
@@ -589,9 +618,10 @@ export function MapScreen() {
             {c}
           </button>
         ))}
+        <button className={`map__cat ${showText ? 'is-active' : ''}`} aria-pressed={showText} onClick={() => setShowText(v => !v)}>文字弹幕</button>
       </div>
       <div
-        className="map"
+        className={`map ${showText ? '' : 'map--hide-text'}`}
         ref={stageRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -601,6 +631,13 @@ export function MapScreen() {
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
+        {showPublished && route.query.newPostId && <div className="map__published" role="status" onPointerDown={e => e.stopPropagation()}>
+          <strong>发布成功{published?.place ? ` · ${published.place}` : ''}</strong>
+          {published?.images?.[0] && <img src={mediaUrl(published.mapMediaId || published.images[0].id)} alt="刚发布的内容" />}
+          {published?.body && <p>{published.body.slice(0, 60)}</p>}
+          <button onClick={() => navigate('feed', { id: route.query.newPostId })}>查看帖子</button>
+          <button aria-label="关闭发布提示" onClick={() => setShowPublished(false)}>关闭</button>
+        </div>}
         {offline ? (
           <OfflineMap view={view} markers={markers} />
         ) : provider === 'tencent' ? (
@@ -716,7 +753,7 @@ export function MapScreen() {
           </button>
         </div>
 
-        <button className="map__fab" onClick={() => navigate('publish')} aria-label="发布">
+        <button className="map__fab" onClick={() => navigate('publish', selectedPlace ? { placeId: selectedPlace } : undefined)} aria-label="发布">
           <IconPlus size={22} />
         </button>
 

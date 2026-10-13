@@ -6,7 +6,7 @@
 
   输出：
     .mumu-capture/baseline/<screen-id>.png          原始 1080x1920
-    docs/original-baseline/screens/<id>/normal.png  540x960（入库）
+    docs/test/original-baseline/screens/<id>/normal.png  540x960（入库）
     .mumu-capture/baseline/capture-report.txt       每页的 Activity / 文件大小
 
   用法： & '.\tools\capture-baseline.ps1'
@@ -24,7 +24,7 @@ $docsDir = Join-Path $root 'docs\original-baseline'
 New-Item -ItemType Directory -Force -Path $rawDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $docsDir 'screens') | Out-Null
 
-# 22 个有界面的原版页面（来源：APK 内 TheRouter 路由表，见 docs/page-map.md）
+# 22 个有界面的原版页面（来源：APK 内 TheRouter 路由表，见 docs/public/page-map.md）
 $pages = [ordered]@{
   'trident-campus' = 'campusx://trident'
   'trident-me'     = 'campusx://trident?tab=me'      # 备注：需落个人 tab，见下方 special 处理

@@ -6,7 +6,7 @@
  * ===========================================================================
  * ```
  * ASSET_ORIGIN:          ORIGINAL_WORK（依据：用 aapt2 对原版 APK 做了**全量**矢量 path 比对）
- * VERIFICATION:          机械比对，**自检通过**（详见 docs/m5/I1-ICON-PROVENANCE-FINDING.md）
+ * VERIFICATION:          机械比对，**自检通过**（详见 docs/pending/m5/I1-ICON-PROVENANCE-FINDING.md）
  *
  * 做法与结果（可复算；脚本 scripts/m5/i1-icon-provenance-aapt2.mjs）：
  *   ① `aapt2 dump resources target.apk` 取全部 xml 资源路径（2626 个）

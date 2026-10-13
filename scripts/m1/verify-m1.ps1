@@ -1,5 +1,5 @@
 ﻿<#
-  M1 Gate（对应 docs/m1/SPEC.md 第六节）。
+  M1 Gate（对应 docs/pending/m1/SPEC.md 第六节）。
 
   口径：M1 PASS = M0 invariants PASS + M1 new invariants PASS。
   任一必需项失败 → 退出码非 0、打印 M1_GATE_RESULT FAIL。
@@ -10,7 +10,7 @@
     & '.\scripts\m1\verify-m1.ps1' -Phase pre         # 重启 Gate 第一阶段：记 boot_id
     & '.\scripts\m1\verify-m1.ps1' -Phase post        # 重启 Gate 第二阶段：断言已重启且服务自恢复
 
-  证据落在 docs/m1/evidence/gate-<phase>-<时间戳>.txt
+  证据落在 docs/pending/m1/evidence/gate-<phase>-<时间戳>.txt
 #>
 param(
   [ValidateSet('assert', 'pre', 'post')][string]$Phase = 'assert',
@@ -21,7 +21,7 @@ param(
 
 $ErrorActionPreference = 'Continue'
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$evidenceDir = Join-Path $repo 'docs\m1\evidence'
+$evidenceDir = Join-Path $repo 'docs\pending\m1\evidence'
 New-Item -ItemType Directory -Force -Path $evidenceDir | Out-Null
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $evidencePath = Join-Path $evidenceDir "gate-$Phase-$stamp.txt"

@@ -23,7 +23,7 @@ export function isNative(): boolean {
 
 /** 用 canvas 把图片压到合理尺寸，避免本地存储被大图撑爆 */
 async function compress(dataUrl: string): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => {
       const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height))
@@ -40,14 +40,14 @@ async function compress(dataUrl: string): Promise<string> {
       ctx.drawImage(img, 0, 0, w, h)
       resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY))
     }
-    img.onerror = () => resolve(dataUrl)
+    img.onerror = () => reject(new Error('图片格式无法读取，请选择 JPEG、PNG 或 WebP 图片'))
     img.src = dataUrl
   })
 }
 
 /** 浏览器兜底：文件选择（可选 capture 走摄像头） */
 function pickViaInput(capture: boolean): Promise<CapturedImage | null> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
@@ -59,8 +59,11 @@ function pickViaInput(capture: boolean): Promise<CapturedImage | null> {
         return
       }
       const reader = new FileReader()
-      reader.onload = async () => resolve({ dataUrl: await compress(String(reader.result)), format: 'jpeg' })
-      reader.onerror = () => resolve(null)
+      reader.onload = async () => {
+        try { resolve({ dataUrl: await compress(String(reader.result)), format: 'jpeg' }) }
+        catch (e) { reject(e) }
+      }
+      reader.onerror = () => reject(new Error('读取图片失败'))
       reader.readAsDataURL(file)
     }
     input.oncancel = () => resolve(null)
@@ -83,8 +86,8 @@ export async function takePhoto(): Promise<CapturedImage | null> {
     return { dataUrl: await compress(photo.dataUrl), format: photo.format ?? 'jpeg' }
   } catch (error) {
     // 用户取消不应该抛到界面上
-    console.warn('takePhoto cancelled/failed:', error)
-    return null
+    if (/cancel/i.test(String((error as Error).message))) return null
+    throw new Error('相机不可用或未获授权，请从相册选择图片')
   }
 }
 
@@ -102,8 +105,8 @@ export async function pickPhoto(): Promise<CapturedImage | null> {
     if (!photo.dataUrl) return null
     return { dataUrl: await compress(photo.dataUrl), format: photo.format ?? 'jpeg' }
   } catch (error) {
-    console.warn('pickPhoto cancelled/failed:', error)
-    return null
+    if (/cancel/i.test(String((error as Error).message))) return null
+    throw new Error('无法访问相册，请检查相册权限')
   }
 }
 

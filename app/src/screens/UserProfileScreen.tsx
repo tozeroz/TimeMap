@@ -46,7 +46,7 @@ import './userprofile.css'
  * ## 证据边界（**不得**夸大）
  * ```
  * ORIGINAL_USER_PROFILE_BASELINE: UNAVAILABLE
- *   （docs/original-baseline/screens/ 下没有他人主页的基线，只有 trident-me = 「我的」tab）
+ *   （docs/test/original-baseline/screens/ 下没有他人主页的基线，只有 trident-me = 「我的」tab）
  * ORIGINAL_USER_PROFILE_CONFORMANCE: NOT_EVALUATED
  *   → 本页即使全部 Gate PASS，也只能声称：
  *       authoritative identity wiring: PASS

@@ -8,7 +8,7 @@ import './schoolsearch.css'
 /**
  * 学校搜索页（WO#16 层 B；审核 61 批准）—— 对应原版的「搜索选择学校」独立页。
  *
- * ## 基线依据（docs/original-baseline/supplements/schools.json 的 school_search）
+ * ## 基线依据（docs/test/original-baseline/supplements/schools.json 的 school_search）
  * ```
  * 搜索框 placeholder：「搜索选择学校...」+ 取消
  * 分组标题：「更多学校」

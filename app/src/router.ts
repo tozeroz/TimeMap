@@ -5,6 +5,12 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 
+let navigationGuard: ((hash: string) => boolean) | null = null
+export function registerNavigationGuard(guard: (hash: string) => boolean) {
+  navigationGuard = guard
+  return () => { if (navigationGuard === guard) navigationGuard = null }
+}
+
 export interface Route {
   /** 路径，例如 'campus' / 'feed/p1' / 'chat/t1' */
   path: string
@@ -35,7 +41,10 @@ export function useRoute(): Route {
   const [route, setRoute] = useState<Route>(() => parseHash())
 
   useEffect(() => {
-    const onChange = () => setRoute(parseHash())
+    const onChange = () => {
+      if (navigationGuard && !navigationGuard(window.location.hash)) return
+      setRoute(parseHash())
+    }
     window.addEventListener('hashchange', onChange)
     if (!window.location.hash) window.location.hash = '#/map'
     return () => window.removeEventListener('hashchange', onChange)
@@ -51,7 +60,9 @@ export function navigate(path: string, query?: Record<string, string>) {
         .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
         .join('&')
     : ''
-  window.location.hash = `#/${path}${qs}`
+  const hash = `#/${path}${qs}`
+  if (navigationGuard && !navigationGuard(hash)) return
+  window.location.hash = hash
 }
 
 /** 返回上一页；如果没有历史则回到主 tab */

@@ -28,7 +28,7 @@ import './message.css'
  * 本文件此前**整页都读 mock**（`import { groups, me, threads, users } from '../data/mock'`）。
  * 实测后果：从这一页点进会话会跳到 `#/group?id=g1` / `#/chat?id=t1` —— id 全是 mock 的，
  * 而真实后端只认 UUID，于是**用户从「消息」永远到不了真实会话**（详见
- * `docs/m5/WO8-PREFIX-FAIL-EVIDENCE.md`）。
+ * `docs/pending/m5/WO8-PREFIX-FAIL-EVIDENCE.md`）。
  *
  * 现在按区块区分，**每个区块只有一个明确的数据来源**：
  *
@@ -51,7 +51,7 @@ import './message.css'
  *     （`scripts/m5/probe-school-source.sh` 实测）。
  *   姓名我们有权威来源（会话），那几个字段没有 —— 所以只接姓名，
  *   其余**不填假值**。不把整张卡"半接线成看起来全真"是刻意的：**半真半假比明确未接线更危险**。
- *   → WO#10 按字段级 inventory 处理（`docs/m5/WO10-PLAN-message-screen-field-inventory.md`）。
+ *   → WO#10 按字段级 inventory 处理（`docs/pending/m5/WO10-PLAN-message-screen-field-inventory.md`）。
  */
 
 /** 会话行要显示的名字：群聊用 title；单聊用对方昵称（后端新给的 peerName） */
@@ -167,11 +167,11 @@ export function MessageScreen() {
           </div>
           <div>
             <div className="invite__title">分享我的校园卡</div>
-            <div className="invite__sub">邀请同学一起加入 Campus!</div>
+            <div className="invite__sub">邀请同学一起加入 TimeMap!</div>
           </div>
         </div>
         <div className="invite__card">
-          <div className="invite__brand">Campus</div>
+          <div className="invite__brand">TimeMap</div>
           <div className="invite__info">
             <div className="invite__name" data-me-name>
               {meName}

@@ -36,6 +36,9 @@ export type MapProvider = MapHandle['provider'] | 'offline'
  *     因此 Round 266 起 **offline 模式不再渲染权威标记**（见 MapScreen 的说明）。
  */
 export interface MapMarker {
+  imageMode?: 'photo' | 'sticker'
+  likeCount?: number
+  highlight?: boolean
   id: string
   place: string
   color: string

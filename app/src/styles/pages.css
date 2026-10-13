@@ -127,3 +127,5 @@
   border-color: transparent;
   color: var(--c-accent);
 }
+/* Shared publish entry on the three other primary pages. */
+.app__publish { position: absolute; z-index: 60; right: 20px; bottom: calc(88px + env(safe-area-inset-bottom)); width: 52px; height: 52px; border: 0; border-radius: 50%; background: var(--c-primary); color: var(--c-primary-fg); font-size: 32px; box-shadow: 0 4px 16px #0003; }

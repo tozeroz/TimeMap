@@ -18,6 +18,8 @@ import release11Sql from './migrations/015_release_1_1.sql'
 import timemapP0Sql from './migrations/016_timemap_p0.sql'
 import adminPasswordSql from './migrations/017_admin_password.sql'
 import release12Sql from './migrations/018_release_1_2.sql'
+import publishStickerSql from './migrations/019_publish_sticker.sql'
+import imageTextMapSql from './migrations/020_image_text_map_media.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -29,6 +31,7 @@ import type { AppConfig } from './config.ts'
  * 新增迁移就往这个数组追加一项（顺序即执行顺序）。
  */
 export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
+  // Entries execute in their listed order; new schema is appended below.
   { version: '001_init', sql: initSql },
   { version: '002_identity', sql: identitySql },
   { version: '003_data_model_v01', sql: dataModelSql },
@@ -95,6 +98,8 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   //      ⚠️ 发布纪律：**先**上传 APK 并校验 sha256 / HTTP 200 / Content-Type，
   //         **再**执行本迁移；反过来会出现"清单说 1.2、点下载 404"的假发布。
   { version: '018_release_1_2', sql: release12Sql },
+  { version: '019_publish_sticker', sql: publishStickerSql },
+  { version: '020_image_text_map_media', sql: imageTextMapSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

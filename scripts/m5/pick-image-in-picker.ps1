@@ -16,7 +16,7 @@
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Name,
-  [string]$EvidenceDir = 'G:\demo map\docs\m5\evidence',
+  [string]$EvidenceDir = 'G:\demo map\docs\pending\m5\evidence',
   [string]$Adb = 'G:\Program Files\Netease\MuMu\nx_main\adb.exe',
   [string]$Serial = '127.0.0.1:16384',
   [int]$TapTimeoutSec = 25

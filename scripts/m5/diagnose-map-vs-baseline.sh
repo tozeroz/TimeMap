@@ -2,7 +2,7 @@
 # WO15 诊断：核对"原版基线 vs 我们数据"在**地点维度**的对应关系
 #
 # ## 为什么做这个
-#   刚发现结构化基线 `docs/original-baseline/supplements/schools.json` 里记了一条原版实测：
+#   刚发现结构化基线 `docs/test/original-baseline/supplements/schools.json` 里记了一条原版实测：
 #     「北京交通大学 (校本部) **4条校园圈**」
 #   而我们的库里有 **4 条 post 带 place_id** —— 需要核对这是不是巧合，
 #   以及我们的 `school_campus_id` 是否为 NULL（基线说 M3 起应有该列）。

@@ -6,7 +6,7 @@ import './login.css'
 /**
  * 登录入口（原版 CampusLoginActivity / campusx://login/select）。
  *
- * 1:1 依据（M3 Slice 0A 实测，见 docs/m3/SLICE0-LOGIN-SEMANTICS.md）：
+ * 1:1 依据（M3 Slice 0A 实测，见 docs/pending/m3/SLICE0-LOGIN-SEMANTICS.md）：
  *   - 整页是品牌拼贴 + 居中「Campus」标识 + 底部黑色胶囊按钮「登录 Campus」
  *     （原版 id: cl_phone_login，内含手机图标 iv_phone + 文本 tv_phone）
  *   - 按钮下方是**未勾选的协议复选框**（原版 id: cb_agreement）
@@ -52,10 +52,8 @@ export function LoginSelectScreen() {
           <span className="ls__deco ls__deco--6" aria-hidden />
 
           <div className="ls__brand">
-            <span className="ls__brandMark" aria-hidden>
-              e
-            </span>
-            <span className="ls__brandText">Campus</span>
+            <img className="ls__brandMark" src="./timemap-logo.png" alt="TimeMap Logo" />
+            <span className="ls__brandText">TimeMap</span>
           </div>
         </div>
 
@@ -67,7 +65,7 @@ export function LoginSelectScreen() {
               <rect x="1" y="1" width="20" height="13" rx="3.4" fill="#fff" />
               <rect x="8.4" y="11" width="5.2" height="1.4" rx="0.7" fill="#111" />
             </svg>
-            <span>登录 Campus</span>
+            <span>登录 TimeMap</span>
           </button>
 
           <div className="ls__agree">

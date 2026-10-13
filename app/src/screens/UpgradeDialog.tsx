@@ -112,7 +112,7 @@ export function UpgradeDialog() {
         */}
         <div className="up__dialog" data-upgrade-platform={web ? 'web' : 'native'}>
           <div className="up__hero" aria-hidden>
-            <span className="up__hero-text">Campus</span>
+            <span className="up__hero-text">TimeMap</span>
             <span className="up__hero-sub">
               {phase === 'available' ? '发现新版本' : phase === 'checking' ? '正在检查更新' : '版本信息'}
             </span>

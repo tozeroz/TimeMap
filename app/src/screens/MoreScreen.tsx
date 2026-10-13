@@ -57,7 +57,7 @@ export function MoreScreen() {
            应用现在处处走自建后端 API（8.148.156.146），mock.ts 也已退出现代代码。
         ⇒ 改为如实描述，并且**避免**再写"全部/无"这类笼统断言（它们会随时间变成假话）。
       */}
-      <p className="more__foot">Campus demo · 数据来自自建后端 API · 未实现的能力会如实标注</p>
+      <p className="more__foot">TimeMap demo · 数据来自自建后端 API · 未实现的能力会如实标注</p>
     </Screen>
   )
 }

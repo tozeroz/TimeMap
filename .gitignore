@@ -32,8 +32,8 @@ app/android/app/src/main/assets/capacitor.config.json
 .mumu-capture/
 .playwright-mcp/
 *.png
-# 例外：M0 冻结的原版行为基线截图必须入库（半分辨率，见 docs/original-baseline/）
-!docs/original-baseline/**/*.png
+# 例外：M0 冻结的原版行为基线截图必须入库（半分辨率，见 docs/test/original-baseline/）
+!docs/test/original-baseline/**/*.png
 # ⚠️ 例外：Android 的启动图与启动图标必须入库 —— 它们是**构建必需**的资源，不是截图。
 #    踩过的坑：`*.png` 把 res/ 下的 splash.png / ic_launcher*.png 一起忽略了，
 #    于是仓库里的 Android 工程**根本构建不起来**（AAPT2 报
@@ -58,3 +58,9 @@ desktop.ini
 campus-demo-*.apk
 apk-download-qr.png
 .pnpm-store/
+
+# 本地文档、个人草稿和临时测试产物
+/docs/local/
+
+# Local PostgreSQL binaries, database files, credentials and development logs
+/.local/

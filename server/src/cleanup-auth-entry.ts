@@ -2,8 +2,8 @@
  * 认证相关表的清扫 CLI（E3）—— `sessions` 与 `login_challenges` 的过期/死亡数据回收。
  *
  * 依据：审核记录 39（明确了顺序：先查状态分布 → 冻结 retention 语义 → 独立 auth cleanup → Gate 查 stale/dead）
- *      与 E2 冻结文档 `docs/m5/E2-RETENTION-FREEZE-auth.md`。
- *      E1 审计输出：`docs/m5/EVIDENCE-auth-hygiene-audit.txt`。
+ *      与 E2 冻结文档 `docs/pending/m5/E2-RETENTION-FREEZE-auth.md`。
+ *      E1 审计输出：`docs/pending/m5/EVIDENCE-auth-hygiene-audit.txt`。
  *
  * ===========================================================================
  * ## 为什么是**独立工具**，而不是塞进 media cleanup

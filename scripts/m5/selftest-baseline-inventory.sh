@@ -22,8 +22,8 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT" || exit 2
-SUP='docs/original-baseline/supplements/at-panel.json'
-HID='docs/original-baseline/supplements/at-panel.json.hidden-by-selftest'
+SUP='docs/test/original-baseline/supplements/at-panel.json'
+HID='docs/test/original-baseline/supplements/at-panel.json.hidden-by-selftest'
 FAIL=0
 
 # ⭐ 无论怎么退出都还原（否则会把基线弄成"少一个补采"的状态）
@@ -68,7 +68,7 @@ else
   echo "  **FAIL** 还原后仍不是 PASS —— 自测污染了环境"
   FAIL=1
 fi
-ls -1 docs/original-baseline/supplements/ | sed 's/^/    现有补采: /'
+ls -1 docs/test/original-baseline/supplements/ | sed 's/^/    现有补采: /'
 
 echo
 if [ "$FAIL" -eq 0 ]; then

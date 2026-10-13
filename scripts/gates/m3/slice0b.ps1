@@ -1,7 +1,7 @@
 ﻿<#
   M3 Slice 0B 阶段 Gate
   ==========================================================================
-  依据：docs/review-log/08（Slice 0B 的三处修订）+ PLAN §10 的 Gate 方法论
+  依据：docs/pending/review-log/08（Slice 0B 的三处修订）+ PLAN §10 的 Gate 方法论
   Gate 只做两件事：**检查**与**FAIL**。它从不自动修复任何东西。
 
   三层结构（审核记录 04 冻结）：
@@ -242,7 +242,7 @@ Emit-Section '5.4 TLS 服务器侧（M2）' 'TLS_SERVER_RESULT' (Run-Remote (Joi
 $script:CurrentSlice = 'PRE'
 $script:CurrentLayer = 'PERSISTENT'
 Head '6) PERSISTENT：基线证据完整性（M0 冻结项 + supplements 审计）'
-$manPath = Join-Path $repo 'docs\original-baseline\manifest.json'
+$manPath = Join-Path $repo 'docs\test\original-baseline\manifest.json'
 if (Test-Path -LiteralPath $manPath) {
   $man = Get-Content -LiteralPath $manPath -Raw -Encoding UTF8 | ConvertFrom-Json
   $cov = $man.coverage.current
@@ -395,7 +395,7 @@ Say '  口径（审核记录 11）：baseline coverage remains 22/0；本组增�
 # ---------------------------------------------------------------------------
 $script:CurrentLayer = 'PERSISTENT'
 Head '6.9) MODEL：四个必答模型问题必须都有结论（不允许悬空）'
-$mvPath = Join-Path $repo 'docs\m3\MODEL-VALIDATION.md'
+$mvPath = Join-Path $repo 'docs\pending\m3\MODEL-VALIDATION.md'
 if (Test-Path -LiteralPath $mvPath) {
   $mv = Get-Content -LiteralPath $mvPath -Raw -Encoding UTF8
   # 每个必答问题都要在状态表里出现 SUPPORTED / NOT_SUPPORTED，不能还是 PENDING
@@ -406,23 +406,23 @@ if (Test-Path -LiteralPath $mvPath) {
     if ($mv -match [regex]::Escape($k)) { Ok "模型登记表覆盖 $k" } else { Bad "模型登记表缺少 $k" }
   }
   if ($mv -match '用户对用户私密留言') { Ok 'board_notes 结论已落盘（用户对用户私密留言）' } else { Bad 'board_notes 结论缺失' }
-} else { Bad '缺少 docs/m3/MODEL-VALIDATION.md' }
+} else { Bad '缺少 docs/pending/m3/MODEL-VALIDATION.md' }
 Head '7) POLICY：第三方只读约束的执行情况（用户 2026-09-21 明确要求）'
-$pvPath = Join-Path $repo 'docs\POLICY-VIOLATION-2026-09-21.md'
+$pvPath = Join-Path $repo 'docs\pending\POLICY-VIOLATION-2026-09-21.md'
 if (Test-Path -LiteralPath $pvPath) {
   $pv = Get-Content -LiteralPath $pvPath -Raw -Encoding UTF8
-  Ok '违规记录 docs/POLICY-VIOLATION-2026-09-21.md 存在（不得删除：它是审计线索）'
+  Ok '违规记录 docs/pending/POLICY-VIOLATION-2026-09-21.md 存在（不得删除：它是审计线索）'
   if ($pv -match '严禁任何写操作') { Ok '记录里含硬约束原文' } else { Bad '记录里缺少硬约束原文' }
   if ($pv -match '补救') { Ok '记录里含补救选项（待用户裁定）' } else { Bad '记录里缺少补救选项' }
 } else {
-  Bad '缺少 docs/POLICY-VIOLATION-2026-09-21.md —— 违规记录被删除'
+  Bad '缺少 docs/pending/POLICY-VIOLATION-2026-09-21.md —— 违规记录被删除'
 }
 # PLAN 里的硬约束必须还在
 $planText = Get-Content -LiteralPath (Join-Path $repo 'PLAN.md') -Raw -Encoding UTF8
 if ($planText -match '第三方系统只读约束') { Ok 'PLAN §3.1 硬约束存在' } else { Bad 'PLAN 缺少 §3.1 第三方只读约束' }
 if ($planText -match 'BLOCKED_BY_POLICY') { Ok 'PLAN 已登记 BLOCKED_BY_POLICY 标签' } else { Bad 'PLAN 缺少 BLOCKED_BY_POLICY' }
 # 带违规标记的补充证据必须自曝其违规状态（不能悄悄当普通 observed）
-$pvFiles = @(Get-ChildItem -LiteralPath (Join-Path $repo 'docs\original-baseline\supplements') -Filter '*.json' |
+$pvFiles = @(Get-ChildItem -LiteralPath (Join-Path $repo 'docs\test\original-baseline\supplements') -Filter '*.json' |
   Where-Object { (Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8) -match 'POLICY_VIOLATION' })
 Say "  带 POLICY_VIOLATION 标记的补充证据: $($pvFiles.Count) 个（$((($pvFiles | ForEach-Object { $_.BaseName }) -join ', '))）"
 
@@ -431,7 +431,7 @@ Say "  带 POLICY_VIOLATION 标记的补充证据: $($pvFiles.Count) 个（$((($
 $needsExclusion = @('at-panel', 'media-preview', 'comment-detail')
 $badExclusion = @()
 foreach ($id in $needsExclusion) {
-  $fp = Join-Path $repo "docs\original-baseline\supplements\$id.json"
+  $fp = Join-Path $repo "docs\test\original-baseline\supplements\$id.json"
   if (-not (Test-Path -LiteralPath $fp)) { $badExclusion += "$id(缺补充证据)"; continue }
   $txt = Get-Content -LiteralPath $fp -Raw -Encoding UTF8
   if ($txt -notmatch '"conformance_evidence"') { $badExclusion += "$id(未标 conformance_evidence)" }
@@ -443,9 +443,9 @@ if ($badExclusion.Count -eq 0) {
   Bad "以下证据未正确排除出一致性证据: $($badExclusion -join ', ')"
 }
 # provenance 审计文档必须存在（它是 Slice 4 的开工前置）
-if (Test-Path -LiteralPath (Join-Path $repo 'docs\m3\EVIDENCE-PROVENANCE-AUDIT.md')) {
+if (Test-Path -LiteralPath (Join-Path $repo 'docs\pending\m3\EVIDENCE-PROVENANCE-AUDIT.md')) {
   Ok 'provenance 审计文档存在（Slice 4 开工前置已满足）'
-} else { Bad '缺少 docs/m3/EVIDENCE-PROVENANCE-AUDIT.md' }
+} else { Bad '缺少 docs/pending/m3/EVIDENCE-PROVENANCE-AUDIT.md' }
 if ($pvFiles.Count -ge 3) { Ok '违规取得的证据已自曝标签（未被当作普通 observed）' } else { Bad "带违规标记的补充证据只有 $($pvFiles.Count) 个（期望 >=3）" }
 
 # ---------------------------------------------------------------------------

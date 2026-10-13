@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Shell } from './components/Shell'
 import { TabBar, type TabKey } from './components/TabBar'
-import { useRoute } from './router'
+import { navigate, useRoute } from './router'
 import { CampusScreen } from './screens/CampusScreen'
 import { SchoolSearchScreen } from './screens/SchoolSearchScreen'
 import { MeScreen } from './screens/MeScreen'
@@ -73,7 +73,7 @@ export default function App() {
   const dark = root === 'scanner' || root === 'media'
 
   useEffect(() => {
-    document.title = TAB_TITLES[root] ?? 'Campus'
+    document.title = TAB_TITLES[root] ?? 'TimeMap'
   }, [root])
 
   return (
@@ -95,7 +95,7 @@ export default function App() {
       {/*
         ⭐ WO#19（审核 65）：**已删除** #/comments 独立产品路由。
         为什么删而不是保留：原版**根本没有**独立的 comments 屏 ——
-        M3 证据（docs/original-baseline/supplements/comment-detail.json）明确：
+        M3 证据（docs/test/original-baseline/supplements/comment-detail.json）明确：
           "评论区作为 ViewPager(id/vp_detail) 的一页**内联在动态详情里**"，
           且该 supplement 带 supersedes，取代了 M0 的 deep-link 观察（那只是无参空态）。
         ⇒ 评论区现由 #/feed（FeedDetailScreen）**内联渲染** —— 它早已按 M3 实现
@@ -235,13 +235,14 @@ export default function App() {
               ORIGINAL_TAG_DESTINATION:      NOT_EVALUATED
               ORIGINAL_BIO_DESTINATION:      NOT_EVALUATED
               ORIGINAL_SCHOOL_DESTINATION:   NOT_EVALUATED
-            （见 docs/m5/WO13-PLAN-profile-edit-field-inventory.md）
+            （见 docs/pending/m5/WO13-PLAN-profile-edit-field-inventory.md）
           · 注意：本次**不是**"仓库里任何地方都不能出现字符串 12,486"——
             审核 54 提醒应检查**可执行/可呈现的 surface**，而不是全仓字符串绝迹
             （mock.ts 里可能仍有未被治理页面的数据）。
       */}
 
       {tab && <TabBar active={tab} />}
+      {tab && root !== 'map' && <button className="app__publish" aria-label="发布" onClick={() => navigate('publish')}>＋</button>}
     </Shell>
   )
 }

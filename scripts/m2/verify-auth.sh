@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M2 认证契约 + 归属信任验证（对应 docs/m2/SPEC.md 第八节 AUTH_CONTRACT / AUTHOR_TRUST / CONSTRAINTS）
+# M2 认证契约 + 归属信任验证（对应 docs/pending/m2/SPEC.md 第八节 AUTH_CONTRACT / AUTHOR_TRUST / CONSTRAINTS）
 #
 # 全部经 Nginx（http://127.0.0.1/api/...），不是直连 Node。
 #

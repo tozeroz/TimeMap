@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # M5 工作单 #2 —— unattached media 的 TTL GC（审核记录 21 修订 2）
 #
-# 依据：docs/m5/WORKORDER-2.md（修订 2：上传成功但消息发送失败留下的 media 必须有 TTL GC）
+# 依据：docs/pending/m5/WORKORDER-2.md（修订 2：上传成功但消息发送失败留下的 media 必须有 TTL GC）
 #       server/src/cleanup-entry.ts（实现；TTL 默认 24h，取值依据写在该文件头部注释）
 #
 # 本脚本覆盖的断言（对应 cleanup-entry.ts 的 A 类 orphan 与 B 类 unattached 两类泄漏）：

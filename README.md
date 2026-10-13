@@ -1,5 +1,7 @@
 # Campus 复刻 Demo（可安装 APK）
 
+项目文档统一入口：[docs/README.md](docs/README.md)，分类与维护规则见 [文档管理约定](docs/public/文档管理约定.md)。
+
 把 MuMu 模拟器里的安卓 app **`com.kairuotu.campus` v2.10.0** 复刻成一个可 `adb install` 的
 安卓应用：全部页面、Capacitor + Web 实现、数据全部本地 mock（内容真实感）、纯本地无后端。
 
@@ -11,11 +13,11 @@
 | 源码 | `app/src/`（页面组件 + 数据层 + 组件层 + 原生能力封装） |
 | mock 数据 | `app/src/data/mock.ts`（唯一数据源） |
 | 地图 Key 配置 | `app/.env.example` → 复制为 `app/.env.local`（仓库不含真 Key） |
-| 页面地图 | `docs/page-map.md` |
-| 一致性对比报告 | `docs/comparison.md` |
-| 设备端验收报告 | `docs/device-walkthrough.md` |
-| 真实能力接入记录 | `docs/real-map-and-posting.md` |
-| 事故报告（对话异常停止） | `docs/incident-2026-09-12-turn-abort.md` |
+| 页面地图 | `docs/public/page-map.md` |
+| 一致性对比报告 | `docs/test/comparison.md` |
+| 设备端验收报告 | `docs/test/device-walkthrough.md` |
+| 真实能力接入记录 | `docs/public/real-map-and-posting.md` |
+| 事故报告（对话异常停止） | `docs/pending/incident-2026-09-12-turn-abort.md` |
 | 原版截图 | `.mumu-capture/sweep/`（18 张） |
 | demo 截图（浏览器） | `.mumu-capture/demo/`（22 张） |
 | demo 截图（真机） | `.mumu-capture/device/`（22 张） |
@@ -137,7 +139,7 @@ node 'G:\demo map\tools\device-gesture.mjs' pinch 540 900 80 300 12             
    这也是与原版一致性评分停在 7/10 的主要原因。
 2. **地图底图**：原版是腾讯地图 SDK 实时瓦片；demo 已接入**腾讯地图 GL JS SDK**
    （官方 Key，与原版同款服务），后面依次是高德官方 JSAPI → 栅格瓦片 → 离线自绘兜底 ——
-   见 `docs/real-map-and-posting.md`。
+   见 `docs/public/real-map-and-posting.md`。
 3. **相机 / 扫码**：拍摄页是**页内实时取景**（WebView + getUserMedia），与原版形态一致；
    相册走系统选择器。扫码仍是扫描线动画模拟。
 4. **校园圈**：原版在无后端时就是「网络错误」页，demo 如实复刻该错误态，

@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, rename, statfs, unlink, writeFile } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import multipart, { type MultipartFile } from '@fastify/multipart'
@@ -19,6 +20,7 @@ import { createDevSink, type DevSink } from './devSink.ts'
 import { createSmsSender, type SmsSender } from './sms.ts'
 import { fakeVerify, verifyPassword } from './password.ts'
 import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts'
+import { registerCutoutRoutes } from './cutout.ts'
 import { registerTimemapRoutes } from './timemap.ts'
 
 /**
@@ -64,10 +66,10 @@ const LIST_LIMIT = 50
  *     连续点击/网络重试时服务端按它去重（US-02：连续点击发布不得产生重复帖子）。
  *   · `mediaIds` 沿用 WO#21 契约（先上传、随帖一并挂）。
  */
-const POST_ALLOWED_KEYS = ['body', 'placeId', 'mediaIds', 'clientRequestId'] as const
+const POST_ALLOWED_KEYS = ['body', 'placeId', 'mediaIds', 'clientRequestId', 'imageMode', 'mapMediaId'] as const
 
 /** 一条帖子最多挂几个媒体（超出直接 400，**不静默截断**） */
-const POST_MEDIA_MAX = 9
+const POST_MEDIA_MAX = 1
 
 /**
  * PATCH /api/users/me 只接受这一个字段（M5 WO#13，审核记录 54 冻结的契约）。
@@ -82,6 +84,8 @@ const ME_PATCH_ALLOWED_KEYS = ['displayName'] as const
 const READINESS_EXEMPT = new Set(['/api/health', '/api/ready'])
 
 interface PostRow {
+  map_media_id?: string | null
+  image_mode: 'photo' | 'sticker'
   id: string
   author_name: string
   author_id: string | null
@@ -905,7 +909,7 @@ export function buildServer(deps: ServerDeps) {
           favorited_by_me: boolean
         }
       >(
-        `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
+        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
                 -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
                 -- 为什么需要：地图页的标记按经纬度渲染（默认 provider=tencent 用
                 -- projectToContainer(LatLng)；RealMap 用 L.marker([lat,lng])），
@@ -940,13 +944,13 @@ export function buildServer(deps: ServerDeps) {
                   select json_agg(json_build_object('id', m.id, 'width', m.width, 'height', m.height) order by pm.position)
                     from post_media pm
                     join media m on m.id = pm.media_id
-                   where pm.post_id = p.id and m.scope = 'public' and m.mime like 'image/%'
+                   where pm.post_id = p.id and pm.purpose = 'post' and m.scope = 'public' and m.mime like 'image/%'
                 ), '[]'::json) as images,
                 coalesce((
                   select json_agg(json_build_object('id', m.id, 'mime', m.mime, 'durationMs', m.duration_ms) order by pm.position)
                     from post_media pm
                     join media m on m.id = pm.media_id
-                   where pm.post_id = p.id and m.scope = 'public' and m.mime = 'audio/webm'
+                   where pm.post_id = p.id and pm.purpose = 'post' and m.scope = 'public' and m.mime = 'audio/webm'
                 ), '[]'::json) as audio
            from posts p
            -- ⭐ WO#15：地点坐标来自 places（left join，缺地点时两列为 null）
@@ -965,7 +969,9 @@ export function buildServer(deps: ServerDeps) {
           // M1 历史帖子为 null（当时没有可信身份，不伪造归属）
           authorId: row.author_id,
           body: row.body,
-          place: row.place,
+          imageMode: row.image_mode,
+          mapMediaId: row.map_media_id ?? null,
+            place: row.place,
           // F02：关联地点的权威 id（地点详情/地点页跳转用）
           placeId: row.place_id,
           // ⭐ WO#15：地点坐标（可为 null）。**注意 pg 的 numeric 会以字符串返回**，
@@ -1024,8 +1030,7 @@ export function buildServer(deps: ServerDeps) {
       typeof payload.clientRequestId === 'string' ? payload.clientRequestId.trim() : ''
 
     const errors: string[] = []
-    if (!body) errors.push('body 不能为空')
-    else if (body.length > BODY_MAX) errors.push(`body 不能超过 ${BODY_MAX} 字`)
+    if (Array.from(body).length > BODY_MAX) errors.push(`body 不能超过 ${BODY_MAX} 字`)
     // US-02：地点为必填项
     if (!placeIdRaw) errors.push('placeId 不能为空（所有帖子必须关联预设地点）')
     else if (!/^[0-9a-f-]{36}$/i.test(placeIdRaw)) errors.push('placeId 必须是合法地点 id')
@@ -1059,6 +1064,15 @@ export function buildServer(deps: ServerDeps) {
       }
     }
 
+    const mapMediaId = payload.mapMediaId
+    if (mapMediaId !== undefined && (typeof mapMediaId !== 'string' || !/^[0-9a-f-]{36}$/i.test(mapMediaId) || mediaIds.length !== 1 || mediaIds.includes(mapMediaId))) {
+      errors.push('mapMediaId 必须是独立的地图图片，且同时关联一张帖子图片')
+    }
+    const allMediaIds = typeof mapMediaId === 'string' ? [...mediaIds, mapMediaId] : mediaIds
+    if (!body && mediaIds.length === 0) errors.push('正文和图片不能同时为空')
+    const imageMode = payload.imageMode ?? 'photo'
+    if (imageMode !== 'photo' && imageMode !== 'sticker') errors.push('imageMode 无效')
+    if (imageMode === 'sticker' && mediaIds.length !== 1) errors.push('贴纸必须关联一张图片')
     if (errors.length) {
       reply.code(400)
       return { error: 'invalid_payload', details: errors }
@@ -1121,23 +1135,23 @@ export function buildServer(deps: ServerDeps) {
       try {
         await client.query('begin')
 
-        if (mediaIds.length > 0) {
-          const mr = await client.query<{ id: string; owner_user_id: string; scope: string }>(
-            'select id, owner_user_id, scope from media where id = any($1::uuid[])',
-            [mediaIds],
+        if (allMediaIds.length > 0) {
+          const mr = await client.query<{ id: string; owner_user_id: string; scope: string; mime: string }>(
+            'select id, owner_user_id, scope, mime from media where id = any($1::uuid[])',
+            [allMediaIds],
           )
           const byId = new Map(mr.rows.map((x) => [x.id, x]))
-          for (const mid of mediaIds) {
+          for (const mid of allMediaIds) {
             const m = byId.get(mid)
             if (!m) {
               await client.query('rollback')
               reply.code(400)
               return { error: 'invalid_media', details: [`媒体不存在: ${mid}`] }
             }
-            if (m.scope !== 'public') {
+            if (m.scope !== 'public' || !m.mime.startsWith('image/') || (imageMode === 'sticker' && m.mime !== 'image/png')) {
               await client.query('rollback')
               reply.code(400)
-              return { error: 'invalid_media', details: [`媒体不是公图/公语音（scope=${m.scope}）: ${mid}`] }
+              return { error: 'invalid_media', details: [`媒体必须是公共图片，贴纸必须为PNG（scope=${m.scope}）: ${mid}`] }
             }
             /* ⭐ 归属校验 —— 不允许把**别人**的媒体挂到自己的帖子上（OUR_DESIGN_CHOICE，安全优先） */
             if (m.owner_user_id !== session.userId) {
@@ -1151,10 +1165,10 @@ export function buildServer(deps: ServerDeps) {
         // 作者完全来自服务端会话；author_name 存为快照（用户以后改名也保留当时的展示名）
         // F04：place_id 必填（上面已校验启用）；place 为地点名快照；client_request_id 幂等键
         const r = await client.query<PostRow>(
-          `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id)
-           values ($1, $2, $3, $4, $5, $6, $7)
-           returning id, author_name, author_id, body, place, created_at`,
-          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId],
+          `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id, image_mode)
+           values ($1, $2, $3, $4, $5, $6, $7, $8)
+           returning image_mode, id, author_name, author_id, body, place, created_at`,
+          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode],
         )
 
         /* 挂媒体：position 按传入顺序递增（0..n-1），与 GET 的口径一致 */
@@ -1165,10 +1179,15 @@ export function buildServer(deps: ServerDeps) {
           )
         }
 
+        if (typeof mapMediaId === 'string') {
+          await client.query("insert into post_media (post_id, media_id, media_scope, position, purpose) values ($1, $2, 'public', 1, 'map')", [id, mapMediaId])
+        }
+
         await client.query('commit')
         inserted = true
 
         const row = r.rows[0]!
+        row.map_media_id = typeof mapMediaId === 'string' ? mapMediaId : null
         /*
           响应里带回媒体 —— 与 `GET /api/posts/:id` **同一形状**，这样客户端发布后
           不需要再发一次请求就能把媒体渲染出来。
@@ -1191,7 +1210,7 @@ export function buildServer(deps: ServerDeps) {
         }>(
           `select m.id, m.mime, m.width, m.height, m.duration_ms
              from post_media pm join media m on m.id = pm.media_id
-            where pm.post_id = $1 and m.scope = 'public'
+            where pm.post_id = $1 and pm.purpose = 'post' and m.scope = 'public'
             order by pm.position`,
           [id],
         )
@@ -1207,7 +1226,9 @@ export function buildServer(deps: ServerDeps) {
           author: row.author_name,
           authorId: row.author_id,
           body: row.body,
-          place: row.place,
+          imageMode: row.image_mode,
+          mapMediaId: row.map_media_id ?? null,
+            place: row.place,
           createdAt: row.created_at.toISOString(),
           /* ⭐ 审核 68 P0：按 mime 分流（images 里**不得**出现 audio） */
           images,
@@ -1230,7 +1251,7 @@ export function buildServer(deps: ServerDeps) {
   // -------------------------------------------------------------------------
   // 帖子详情 / 评论 / 回复（M3 Slice 1）
   //
-  // 1:1 依据（原版实测，见 docs/m3/MODEL-VALIDATION.md §2.7 与 supplements/comment-detail.json）：
+  // 1:1 依据（原版实测，见 docs/pending/m3/MODEL-VALIDATION.md §2.7 与 supplements/comment-detail.json）：
   //   - 评论区**内联**在动态详情里，顶层评论各自带一个"回复列表"（嵌套渲染，EXPANDED）
   //   - 每条评论都有独立的「回复」入口；回复编辑器标题是「回复 @某人」
   //   - 回复行渲染为：「<作者> 回复 <目标> · <时间>」+ 正文
@@ -1332,7 +1353,7 @@ export function buildServer(deps: ServerDeps) {
     const meId = s.kind === 'ok' ? s.user.userId : null
     try {
       const pr = await db.pool.query<PostRow & { status: string; place_id: string | null }>(
-        `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.status, p.place_id,
+        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.status, p.place_id,
                 -- ⭐ WO#15：详情也要带地点坐标（原版 poi-detail 页有「距我N公里」，
                 -- 那需要地点经纬度 + 客户端自身位置）。
                 pl.latitude as place_lat, pl.longitude as place_lng
@@ -1388,7 +1409,7 @@ export function buildServer(deps: ServerDeps) {
         `select m.id, m.mime, m.width, m.height, m.duration_ms
            from post_media pm
            join media m on m.id = pm.media_id
-          where pm.post_id = $1 and m.scope = 'public'
+          where pm.post_id = $1 and pm.purpose = 'post' and m.scope = 'public'
           order by pm.position`,
         [id],
       )
@@ -1403,6 +1424,8 @@ export function buildServer(deps: ServerDeps) {
         author: post.author_name,
         authorId: post.author_id,
         body: post.body,
+        imageMode: post.image_mode,
+        mapMediaId: post.map_media_id ?? null,
         place: post.place,
         // F02：地点权威 id（帖子详情跳地点页用）
         placeId: post.place_id,
@@ -1793,7 +1816,7 @@ export function buildServer(deps: ServerDeps) {
           images: unknown
         }
       >(
-        `select p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
+        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
                 pl.latitude as place_lat, pl.longitude as place_lng,
                 (select count(*) from likes l where l.post_id = p.id)::text as like_count,
                 (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
@@ -1805,7 +1828,7 @@ export function buildServer(deps: ServerDeps) {
                 coalesce((
                   select json_agg(json_build_object('id', m.id, 'width', m.width, 'height', m.height) order by pm.position)
                     from post_media pm join media m on m.id = pm.media_id
-                   where pm.post_id = p.id and m.scope = 'public' and m.mime like 'image/%'
+                   where pm.post_id = p.id and pm.purpose = 'post' and m.scope = 'public' and m.mime like 'image/%'
                 ), '[]'::json) as images
            from posts p
            left join places pl on pl.id = p.place_id
@@ -1851,6 +1874,8 @@ export function buildServer(deps: ServerDeps) {
           author: row.author_name,
           authorId: row.author_id,
           body: row.body,
+          imageMode: row.image_mode,
+          mapMediaId: row.map_media_id ?? null,
           placeId: row.place_id,
           createdAt: row.created_at.toISOString(),
           likeCount: Number.parseInt(row.like_count ?? '0', 10),
@@ -2437,6 +2462,13 @@ export function buildServer(deps: ServerDeps) {
       // 私有媒体的响应头：不允许任何缓存（含中间代理）
       reply.header('Cache-Control', 'private, no-store')
       reply.header('X-Content-Type-Options', 'nosniff')
+
+      // Local development has no Nginx; authorization still uses can_read_media above.
+      if (process.env.LOCAL_MEDIA_SERVE === '1') {
+        reply.header('Content-Type', row.mime)
+        reply.header('X-Media-Scope', row.scope)
+        return reply.send(createReadStream(join(UPLOAD_ROOT, row.scope, row.storage_key)))
+      }
 
       if (row.scope === 'public') {
         // public 走 Nginx 静态；302 过去，字节不经过 Node
@@ -3222,6 +3254,12 @@ export function buildServer(deps: ServerDeps) {
   // BJTU TimeMap P0 新增路由（F05 收藏 / F06 活动 / F07 举报与管理端 / 作者删除）。
   // 路由体在 ./timemap.ts；这里只注入本文件已有的会话解析与错误响应助手。
   // -------------------------------------------------------------------------
+  registerCutoutRoutes(app, db, UPLOAD_ROOT, async (req) => {
+    const session = await resolveSession(req.headers.authorization)
+    if (session.kind === 'db_down') throw new Error('session lookup unavailable')
+    return session.kind === 'none' ? null : session.user.userId
+  })
+
   registerTimemapRoutes({
     app,
     db,

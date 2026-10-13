@@ -107,7 +107,7 @@ mkdir -p "$PROFILE"
 #    于是断言验的是应用逻辑，而不是"这台机器有没有摄像头"。
 #    ⚠️ --use-fake-ui-for-media-stream 会自动同意权限弹窗。
 #       代价：**无法**用它测"用户拒绝授权"这条分支 ⇒ 那一分支需要单独的方式验证，
-#       不能因此声称已覆盖。（详见 docs/WEB-FRONTEND.md）
+#       不能因此声称已覆盖。（详见 docs/public/WEB-FRONTEND.md）
 #    ⚠️ 可用 FAKE_MEDIA=0 关掉这两个开关（用于验证"无设备/拒绝授权"时的显式状态）。
 # （FAKE_MEDIA / CHROME_FLAGS / DESIRED_FLAGS 已在上面定义 —— 那里是"复用判断"所需，
 #  这里不再重复定义，避免两处定义将来各自漂移。）

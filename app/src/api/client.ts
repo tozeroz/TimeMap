@@ -78,6 +78,8 @@ export interface ApiPost {
   favoritedByMe?: boolean
   /** M4：帖子的公图片（只含 id 与尺寸；用 mediaUrl(id) 取图） */
   images?: ApiMediaRef[]
+  imageMode?: 'photo' | 'sticker'
+  mapMediaId?: string | null
 }
 
 /** M4：一张媒体资源的引用（只暴露 id 与尺寸，不含存储路径） */
@@ -286,11 +288,11 @@ export async function uploadMedia(
    * （`performance.now()` 差），而不是 `audio.duration`。
    */
   durationMs?: number,
+  uploadRequestId: string = crypto.randomUUID(),
 ): Promise<ApiResult<ApiUploadedMedia>> {
   const form = new FormData()
-  form.append('file', file)
   form.append('purpose', purpose)
-  form.append('uploadRequestId', crypto.randomUUID())
+  form.append('uploadRequestId', uploadRequestId)
   if (durationMs !== undefined) {
     // 只接受正整数；非法值在这里就拦掉，避免把明显错误的值发给服务端再换回 400
     if (!Number.isSafeInteger(durationMs) || durationMs <= 0) {
@@ -298,6 +300,8 @@ export async function uploadMedia(
     }
     form.append('durationMs', String(durationMs))
   }
+  // The server reads metadata before consuming the multipart file stream.
+  form.append('file', file)
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS)
@@ -657,10 +661,26 @@ export function createPost(input: {
   placeId: string
   /** 已上传的 **public** 媒体 id（图片）；顺序即展示顺序 */
   mediaIds?: string[]
+  mapMediaId?: string
   /** 幂等键（UUID）：同一次发布的重试必须复用**同一个**值 */
   clientRequestId?: string
+  imageMode?: 'photo' | 'sticker'
 }): Promise<ApiResult<ApiPost>> {
   return request<ApiPost>('/api/posts', { method: 'POST', body: input })
+}
+
+export async function generateCutout(mediaId: string, requestId: string): Promise<ApiResult<{ dataUrl: string }>> {
+  try {
+    const res = await fetch(`${API_ORIGIN}/api/media/cutout`, {
+      method: 'POST', headers: { ...authHeaders(), 'content-type': 'application/json' },
+      body: JSON.stringify({ mediaId, requestId }), signal: AbortSignal.timeout(70000),
+    })
+    const result = await res.json()
+    if (!res.ok) return { ok: false, status: res.status, reason: result.message ?? result.error ?? '处理失败' }
+    return { ok: true, value: result }
+  } catch {
+    return { ok: false, reason: '网络中断或请求超时，请重试以查询同一次处理结果' }
+  }
 }
 
 // ===========================================================================
@@ -1199,7 +1219,7 @@ export function toFeedPost(p: ApiPost): FeedPost {
 // ===========================================================================
 // M3 Slice 1：帖子详情 / 评论 / 回复
 //
-// 1:1 依据（原版实测，见 docs/m3/MODEL-VALIDATION.md §2.7）：
+// 1:1 依据（原版实测，见 docs/pending/m3/MODEL-VALIDATION.md §2.7）：
 //   - 评论区**内联**在动态详情里；顶层评论各自带一层「回复列表」（嵌套渲染）
 //   - 回复行渲染为「<作者> 回复 <目标> · <时间>」+ 正文
 //   - 「评论 N」的计数**把回复也算进去**
@@ -1221,6 +1241,7 @@ export interface ApiCommentNode extends ApiComment {
 }
 
 export interface ApiPostDetail {
+  imageMode?: 'photo' | 'sticker'
   id: string
   author: string
   authorId: string | null

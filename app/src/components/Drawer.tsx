@@ -25,7 +25,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
       <div className="drawer__mask" onClick={onClose} />
       <nav className="drawer__panel">
         <header className="drawer__head">
-          <span className="drawer__brand">Campus</span>
+          <span className="drawer__brand">TimeMap</span>
         </header>
         <ul className="drawer__list">
           {ITEMS.map((item) => (

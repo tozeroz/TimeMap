@@ -153,26 +153,19 @@
 }
 
 .ls__brand {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 10px;
 }
 
 .ls__brandMark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 12px;
-  background: #ffd166;
-  border: 1.5px solid rgba(43, 43, 43, 0.75);
-  color: #2b2b2b;
-  font-size: 26px;
-  font-weight: 800;
-  font-style: italic;
-  letter-spacing: -1px;
-  box-shadow: 1px 1px 0 rgba(43, 43, 43, 0.55);
+  display: block;
+  width: 86px;
+  height: 86px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .ls__brandText {

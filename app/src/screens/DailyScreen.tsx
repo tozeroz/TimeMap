@@ -30,7 +30,7 @@ export function DailyScreen() {
       <div className="daily">
         {/* 黄色品牌插画区 */}
         <section className="daily__hero">
-          <span className="daily__heroBrand">Campus</span>
+          <span className="daily__heroBrand">TimeMap</span>
           <span className="daily__heroMark" aria-hidden>
             <svg width="72" height="52" viewBox="0 0 72 52" fill="none">
               <ellipse cx="36" cy="26" rx="34" ry="24" fill="#2b2b2b" />

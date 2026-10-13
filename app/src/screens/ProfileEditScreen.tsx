@@ -15,11 +15,11 @@ import './profileedit.css'
  * ## ⚠️ 基线的两个层次（**必须分开看**，审核记录 54 明确要求）
  * ```
  * ORIGINAL_PROFILE_EDIT_ENTRY:          SUPPORTED by trident-me baseline
- *   （docs/original-baseline/screens/trident-me/baseline.json:38 逐字记了
+ *   （docs/test/original-baseline/screens/trident-me/baseline.json:38 逐字记了
  *     「我的兴趣 ›」「我的标签 ›」「编辑资料」「介绍一下自己～ ›」「我的学校 ›」的位置与文案；
  *     :42 记了「编辑资料」→ 资料编辑页）
  * ORIGINAL_PROFILE_EDIT_PAGE_STRUCTURE: NOT_EVALUATED
- *   （docs/original-baseline/screens/ 下 26 个屏目录里**没有**资料编辑页的内容基线）
+ *   （docs/test/original-baseline/screens/ 下 26 个屏目录里**没有**资料编辑页的内容基线）
  * Current layout: OUR CURRENT IMPLEMENTATION / **not a conformance claim**
  * ```
  * ⚠️ 本文件此前写着"结构按原版实测：三张卡片…" —— 那是**无落盘基线支撑的结构主张**，

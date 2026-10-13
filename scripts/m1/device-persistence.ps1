@@ -1,5 +1,5 @@
 ﻿<#
-  M1 设备端持久化验证（对应 docs/m1/SPEC.md Gate 第 4 组后半句）：
+  M1 设备端持久化验证（对应 docs/pending/m1/SPEC.md Gate 第 4 组后半句）：
   「该路径不依赖 localStorage（清空 localStorage 后仍能看到）」
 
   做法：pm clear 把 App 数据全部抹掉（WebView 的 localStorage 也在里面），

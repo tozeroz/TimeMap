@@ -588,7 +588,7 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
                 群聊头部（M5 WO#9A）——按**原版群聊页 dump** 的可见结构复刻：
                   leftIcon(返回) / chatAvatar(群头像) / title(群名) / rightIcon(右侧入口)
                   y=[42,154]，title 文案就是纯群名（**不含成员数**）
-                来源：docs/original-baseline/screens/original-chat/20260921-205407-04-chat-open.xml
+                来源：docs/test/original-baseline/screens/original-chat/20260921-205407-04-chat-open.xml
 
                 ⚠️ 证据边界（审核记录 45 明确要求，不许编假行为）：
                   原版里 chatAvatar 与 rightIcon **都是 clickable 节点**，但**目的地/行为没有任何证据**
@@ -824,7 +824,7 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
             /*
               自己发的消息靠右、对方的靠左。
               依据：原版会话页里**自己发的那条**气泡落在右半（x=[625,975]，屏宽 1080）、
-              头像贴最右（x=[989,1052]）—— 见 docs/m5/CHAT-SENDER-PRESENTATION-CONFIRMED.md。
+              头像贴最右（x=[989,1052]）—— 见 docs/pending/m5/CHAT-SENDER-PRESENTATION-CONFIRMED.md。
               此前这里硬编码 `--peer`，把「我发的」也画在左边，是真实偏差。
 
               ⚠ `meId` 为 null（未登录 / 读不到会话）时 `mine` 恒为 false → 降级成 `--peer`（原行为）。

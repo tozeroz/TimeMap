@@ -428,7 +428,7 @@ export const boardNotes: BoardNote[] = [
 /*
   留言板表情行。
   留言板表情行。**数量以可复核的原始 dump 为准 = 6 个**：
-    · docs/original-baseline/raw-dumps/message-board-dump.xml（deep link 只读进入留言板后 dump）
+    · docs/test/original-baseline/raw-dumps/message-board-dump.xml（deep link 只读进入留言板后 dump）
       中 fl_emoji_root 出现 **6** 次。
     · 更早的记录称"恰好 7 个"，但那份**原始产物从未入库、无法复核**；按证据纪律
       **以可复核者为准**。该记录已于 2026-09-21 在 supplements/message-board.json 里更正。
