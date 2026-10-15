@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listActivities, type ActivityEffectiveStatus, type ApiActivity } from '../api/client'
+import {
+  favoriteActivity,
+  listActivities,
+  unfavoriteActivity,
+  type ActivityEffectiveStatus,
+  type ApiActivity,
+} from '../api/client'
+import { isLoggedIn } from '../api/session'
 import { Screen } from '../components/Shell'
-import { IconChevronRight, IconLocation, IconRefresh } from '../components/icons'
+import { IconChevronRight, IconLocation, IconRefresh, IconStar } from '../components/icons'
 import { useRoute, navigate } from '../router'
 import './activities.css'
 
@@ -31,6 +38,9 @@ export function ActivitiesScreen() {
   const [errText, setErrText] = useState('')
   const [win, setWin] = useState<'' | 'today' | 'week'>('')
   const [statusFilter, setStatusFilter] = useState<ActivityEffectiveStatus[]>([])
+  // 收藏：busy 防止连点；favMsg 用于如实提示失败（不本地假成功）
+  const [favBusy, setFavBusy] = useState(false)
+  const [favMsg, setFavMsg] = useState('')
 
   const load = useCallback(async () => {
     setPhase('loading')
@@ -70,6 +80,36 @@ export function ActivitiesScreen() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /**
+   * 收藏 / 取消收藏（US-04）。三条纪律与帖子收藏一致（见 FeedDetailScreen.toggleFavorite）：
+   *   ① 用**服务端返回**的 favorited 覆盖本地，不自己取反（撤销/重复/并发下本地推算会失真）
+   *   ② 未登录先跳登录，不发必然 401 的请求
+   *   ③ 失败**不本地假成功**：提示原因，界面维持服务端已知的状态
+   */
+  async function toggleFavorite(a: ApiActivity) {
+    if (favBusy) return
+    if (!isLoggedIn()) {
+      setFavMsg('请先登录后再收藏')
+      navigate('loginselect')
+      return
+    }
+    setFavBusy(true)
+    try {
+      const r = a.favoritedByMe ? await unfavoriteActivity(a.id) : await favoriteActivity(a.id)
+      if (!r.ok) {
+        setFavMsg(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${r.reason}`)
+        return
+      }
+      // displayItems 由 useEffect 从 items 派生，所以改 items 就够了
+      setItems((prev) =>
+        prev.map((x) => (x.id === a.id ? { ...x, favoritedByMe: r.value.favorited } : x)),
+      )
+      setFavMsg('')
+    } finally {
+      setFavBusy(false)
+    }
+  }
 
   return (
     <Screen
@@ -173,10 +213,17 @@ export function ActivitiesScreen() {
         </p>
       )}
 
+      {/* 收藏失败的如实提示（不本地假成功） */}
+      {favMsg && (
+        <p className="acts__favmsg" data-act-fav-msg>
+          {favMsg}
+        </p>
+      )}
+
       {phase === 'ready' && displayItems.length > 0 && (
         <ul className="acts__list" data-act-phase="ready" data-act-count={String(displayItems.length)}>
           {displayItems.map((a) => (
-            <li key={a.id}>
+            <li key={a.id} className="acts__row">
               <button
                 className="acts__item"
                 data-act-id={a.id}
@@ -192,12 +239,38 @@ export function ActivitiesScreen() {
                       <IconLocation size={13} />
                       {a.place.name}
                     </span>
+                    {/* ACT-003 / 需求 §9.1 草图：列表里地点后面紧跟主办方。没填就不占位 */}
+                    {a.organizer && (
+                      <>
+                        <span className="acts__dot">·</span>
+                        <span className="acts__itemOrganizer" data-act-organizer>
+                          {a.organizer}
+                        </span>
+                      </>
+                    )}
                   </span>
                   {/* 来源可追溯（US-04 验收项①：列表与详情的来源必须一致） */}
                   <span className="acts__itemSource">{a.source}</span>
                 </span>
                 <StatusBadge status={a.effectiveStatus} />
                 <IconChevronRight size={16} />
+              </button>
+              {/*
+                收藏按钮是**兄弟节点**而不是嵌在那个 button 里 —— 嵌套 button 是无效 HTML，
+                点击内层还会连带触发外层 onClick（跳详情）。所以 li 是 flex 行：
+                [卡片 flex:1] [收藏按钮]。
+                ⚠️ 状态值用服务端返回的 favoritedByMe，不在本地取反。
+              */}
+              <button
+                type="button"
+                className={`acts__fav ${a.favoritedByMe ? 'is-on' : ''}`}
+                data-act-fav-id={a.id}
+                data-act-fav-on={a.favoritedByMe ? 'true' : 'false'}
+                aria-pressed={a.favoritedByMe}
+                aria-label={a.favoritedByMe ? `取消收藏 ${a.title}` : `收藏 ${a.title}`}
+                onClick={() => void toggleFavorite(a)}
+              >
+                <IconStar size={18} filled={a.favoritedByMe} />
               </button>
             </li>
           ))}

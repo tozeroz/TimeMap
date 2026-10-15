@@ -110,6 +110,60 @@
   gap: 12px;
 }
 
+/* 收藏按钮与卡片同行。⚠️ 按钮是**兄弟节点**，不能嵌进 .acts__item 里
+   （嵌套 button 是无效 HTML，且点击内层会连带触发外层的跳转 onClick） */
+.acts__row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+/* 卡片让出收藏按钮那一列；其余样式完全不动 */
+.acts__row .acts__item {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.acts__fav {
+  flex: none;
+  width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 16px;
+  background: var(--c-surface);
+  color: var(--c-text-3);
+  cursor: pointer;
+  transition: color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.acts__fav:hover {
+  color: var(--c-primary);
+}
+
+.acts__fav:active {
+  transform: scale(0.94);
+}
+
+/* 收藏态用金色，与帖子收藏一致（feed.css .feed__action.is-faved / favorites.css
+   .fav__mark--on 同为 #e0a300）—— 这样"收藏"在全站是同一种颜色语义 */
+.acts__fav.is-on {
+  color: #e0a300;
+}
+
+/* 收藏失败的如实提示 */
+.acts__favmsg {
+  margin: 0;
+  padding: 4px var(--pad-page) 0;
+  font-size: var(--f-meta);
+  color: var(--c-danger);
+}
+
 .acts__item {
   width: 100%;
   display: flex;
@@ -204,6 +258,14 @@
   margin-top: 2px;
 }
 
+/* 主办方（ACT-003）：跟在地点后面，超长省略而不是换行撑破卡片 */
+.acts__itemOrganizer {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 状态徽标：四态都要**明确**可读（US-04③「已结束或取消活动按规则退出推荐或明确标注」） */
 .acts__badge {
   flex: none;
@@ -245,6 +307,36 @@
   padding: var(--pad-page) var(--pad-page) 32px;
 }
 
+/* 封面图（ACT-003）。没有封面时**不渲染**，所以这里不用考虑空态占位 */
+.actd__cover {
+  display: block;
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: 14px;
+  margin-bottom: 14px;
+}
+
+/* 参与方式：外部链接（ACT-003） */
+.actd__link {
+  margin: 18px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.actd__linkLabel {
+  font-size: var(--f-tiny);
+  color: var(--c-text-3);
+}
+
+.actd__linkUrl {
+  font-size: var(--f-body);
+  color: var(--c-accent);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
 .actd__titleRow {
   display: flex;
   align-items: flex-start;
@@ -259,6 +351,40 @@
   line-height: 1.4;
   color: var(--c-text);
   letter-spacing: -0.02em;
+}
+
+/* 详情页收藏按钮：与列表页的 .acts__fav 同色语义（收藏态 = #e0a300） */
+.actd__fav {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 12px;
+  background: var(--c-surface-sunken);
+  color: var(--c-text-3);
+  cursor: pointer;
+  transition: color 0.2s ease, transform 0.15s ease;
+}
+
+.actd__fav:hover {
+  color: var(--c-primary);
+}
+
+.actd__fav:active {
+  transform: scale(0.94);
+}
+
+.actd__fav.is-on {
+  color: #e0a300;
+}
+
+.actd__favmsg {
+  margin: 12px 0 0;
+  font-size: var(--f-meta);
+  color: var(--c-danger);
 }
 
 .actd__facts {

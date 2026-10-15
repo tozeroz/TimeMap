@@ -20,6 +20,9 @@ import adminPasswordSql from './migrations/017_admin_password.sql'
 import release12Sql from './migrations/018_release_1_2.sql'
 import publishStickerSql from './migrations/019_publish_sticker.sql'
 import imageTextMapSql from './migrations/020_image_text_map_media.sql'
+import activityFavoritesSql from './migrations/021_activity_favorites.sql'
+import activityFieldsSql from './migrations/022_activity_fields.sql'
+import seedActivityFieldsSql from './migrations/023_seed_activity_fields.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -100,6 +103,26 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '018_release_1_2', sql: release12Sql },
   { version: '019_publish_sticker', sql: publishStickerSql },
   { version: '020_image_text_map_media', sql: imageTextMapSql },
+
+  // 021：活动收藏（F06 / US-04）—— 独立成表，**不**泛化 016 的 favorites。
+  //      理由：favorites 有 NOT NULL 的 post_id 外键且线上已有真实数据，泛化成
+  //      (target_type, target_id) 要迁移数据 + 重写两个已上线端点；兄弟表则让
+  //      帖子那条路径**逐字节不动**。UNIQUE(user_id, activity_id) 即幂等保证。
+  { version: '021_activity_favorites', sql: activityFavoritesSql },
+
+  // 022：补齐 ACT-003 要求、但 016 没建的活动字段（活动类型 / 主办方 / 外部链接 / 封面图）。
+  //      ⚠️ activity_type **不加 CHECK**：取值集在 ACT-002 里是「待讨论」，
+  //         按文档纪律不得由开发/ AI 自行补齐 ⇒ 只建列，枚举与筛选等评审。
+  //      ⚠️ cover_image_id 指向 media(id) 而不是存 URL —— 图片一律走既有媒体管线。
+  { version: '022_activity_fields', sql: activityFieldsSql },
+
+  // 023：回填 016 那 6 条演示活动的 ACT-003 字段。
+  //      ⚠️ 为什么不直接改 016：它有 SHA-256 校验和，改了服务端 fail-closed（全线 503）。
+  //      ⚠️ 值是**演示数据**（主办方是合理但未核实的名目，外链一律指向 example.com），
+  //         与 016 的 source='管理员录入（演示数据）' 保持一致。
+  //      ⚠️ 不含封面：迁移造不出二进制文件，指向不存在的文件会渲染出坏图。
+  //      用 coalesce 保证**不覆盖**管理员已填过的值。
+  { version: '023_seed_activity_fields', sql: seedActivityFieldsSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

@@ -11,6 +11,8 @@
  *   · DELETE /api/comments/:id              → US-03 只能删除自己的评论；删除后不计入有效评论量
  *   · POST /api/reports                     → US-08 举报进入待处理列表但**不自动下架**
  *   · GET /api/activities(:id)              → US-04 活动列表/详情 + 时间地点状态一致
+ *   · POST/DELETE /api/activities/:id/favorite → US-04 活动收藏可撤销、重复请求不重复计数
+ *   · GET /api/me/activity-favorites        → US-04 我的活动收藏（失效活动**保留**并标注状态）
  *   · /api/admin/*                          → US-08 管理员处理举报/内容/地点/活动 + 操作记录
  *
  * 热度规则（迭代一前确定并冻结的需求，先在此登记）：
@@ -358,12 +360,25 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
   // US-04：近期活动（公开只读）
   // ===========================================================================
 
+  /**
+   * 活动行的共享 SELECT。
+   *
+   * ⚠️ **接受一个参数 `$1`**：当前查看者的 user id（可为 NULL = 未登录）。
+   *    只用于推导 `favoritedByMe`，不参与任何过滤 —— 活动始终是公开只读的，
+   *    未登录也能看列表和详情（这一点与帖子收藏不同）。
+   *    调用方必须传参：登录时传 user id、未登录传 null、管理端传 null。
+   */
   const ACTIVITY_SELECT = `
     select a.id, a.title, a.description, a.starts_at, a.ends_at, a.source, a.status,
+           a.activity_type, a.organizer, a.external_link, a.cover_image_id,
            ${ACTIVITY_EFF_STATUS_SQL} as eff_status,
            a.starts_at, coalesce(a.ends_at, a.starts_at + interval '2 hours') as eff_ends_at,
            pl.id as place_id, pl.name as place_name, pl.latitude as place_lat, pl.longitude as place_lng,
-           pl.enabled as place_enabled
+           pl.enabled as place_enabled,
+           exists (select 1 from activity_favorites af
+                    where af.activity_id = a.id and af.user_id = $1::uuid) as favorited_by_me,
+           (select count(*) from activity_favorites afc
+             where afc.activity_id = a.id)::text as favorite_count
       from activities a
       join places pl on pl.id = a.place_id
   `
@@ -383,6 +398,12 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
     place_lat: number | string | null
     place_lng: number | string | null
     place_enabled: boolean
+    favorited_by_me: boolean
+    favorite_count: string
+    activity_type: string | null
+    organizer: string | null
+    external_link: string | null
+    cover_image_id: string | null
   }
 
   function activityToJson(row: ActivityRow) {
@@ -405,6 +426,19 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
         longitude: row.place_lng === null ? null : Number(row.place_lng),
         enabled: row.place_enabled,
       },
+      /** 当前查看者是否收藏过（US-04）。未登录恒为 false —— 活动列表/详情不需要登录。 */
+      favoritedByMe: row.favorited_by_me,
+      /** 收藏总数（**服务端权威值**，与帖子收藏同一口径：::text 取出后 parseInt） */
+      favoriteCount: Number.parseInt(row.favorite_count ?? '0', 10),
+      /**
+       * ACT-003 要求的四个字段。
+       * ⚠️ `activityType` 目前**没有任何取值约束**（取值集在 ACT-002 里是「待讨论」），
+       *    所以它是自由文本、也**没有**对应的筛选功能 —— 不要在前端按它分组/筛选。
+       */
+      activityType: row.activity_type,
+      organizer: row.organizer,
+      externalLink: row.external_link,
+      coverImageId: row.cover_image_id,
     }
   }
 
@@ -423,6 +457,11 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       // 更早的历史活动自动退出近期列表
       windowCond = `where coalesce(a.ends_at, a.starts_at + interval '2 hours') > now() - interval '7 day'`
     }
+    // 可选会话：活动**不需要**登录即可浏览，登录只用来推导 favoritedByMe
+    // （与 index.ts:1749 的地点详情同一写法：未登录 ⇒ meId = null ⇒ favoritedByMe 恒 false）
+    const sess = await resolveSession(req.headers.authorization)
+    if (sess.kind === 'db_down') return ctx.dbUnavailable(reply, new Error('session lookup failed'))
+    const meId = sess.kind === 'ok' ? sess.user.userId : null
     try {
       const r = await db.pool.query<ActivityRow>(
         `${ACTIVITY_SELECT}
@@ -432,6 +471,7 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
                     when 'ended' then 2 else 3 end,
                   a.starts_at
          limit ${LIST_LIMIT}`,
+        [meId],
       )
       return { items: r.rows.map(activityToJson) }
     } catch (err) {
@@ -447,13 +487,117 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       reply.code(400)
       return { error: 'invalid_id' }
     }
+    // 可选会话：同列表，活动详情也不需要登录（见 ACTIVITY_SELECT 的 $1 说明）
+    const sess = await resolveSession(req.headers.authorization)
+    if (sess.kind === 'db_down') return ctx.dbUnavailable(reply, new Error('session lookup failed'))
+    const meId = sess.kind === 'ok' ? sess.user.userId : null
     try {
-      const r = await db.pool.query<ActivityRow>(`${ACTIVITY_SELECT} where a.id = $1`, [id])
+      // ⚠️ $1 被 ACTIVITY_SELECT 的 favoritedByMe 占用，活动 id 因此是 $2
+      const r = await db.pool.query<ActivityRow>(`${ACTIVITY_SELECT} where a.id = $2`, [meId, id])
       if (!r.rows[0]) {
         reply.code(404)
         return { error: 'not_found' }
       }
       return activityToJson(r.rows[0])
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return ctx.dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  // ===========================================================================
+  // F06 / US-04：活动收藏 —— 与帖子的 F05 收藏**对称**，但独立成表。
+  //
+  // ⚠️ 与帖子收藏的两点差异，都是**有意**的：
+  //   ① 活动是公开只读内容（未登录也能看列表/详情）⇒ 这三个端点是**新增面**，
+  //      帖子那三个端点（/api/posts/:id/favorite、/api/me/favorites）一字未动。
+  //   ② 活动**没有**删除/下架概念（学生不能改活动，US-04 验收④）⇒ 已结束/已取消
+  //      的活动**保留**在收藏列表里，靠 effectiveStatus 标注状态，不做过滤。
+  //      理由：活动状态是**时间推导**的，大量活动会自然结束；收藏了却找不到
+  //      才是真的坏体验。（帖子那边相反：下架内容必须退出各展示入口，US-08。）
+  // ===========================================================================
+
+  /** 收藏一个活动（US-04）。幂等：UNIQUE(user_id, activity_id)，重复收藏不重复计数 */
+  app.post('/api/activities/:id/favorite', async (req, reply) => {
+    const g = await requireUser(req)
+    if (!g.ok) return fail(reply, g)
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!UUID_RE.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    try {
+      const act = await db.pool.query<{ id: string }>('select id from activities where id = $1', [id])
+      if (!act.rows[0]) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      // 唯一约束保证重复请求不重复计数；重复收藏是幂等成功
+      await db.pool.query(
+        'insert into activity_favorites (id, activity_id, user_id) values ($1,$2,$3) on conflict (user_id, activity_id) do nothing',
+        [randomUUID(), id, g.user.userId],
+      )
+      const c = await db.pool.query<{ n: string }>(
+        'select count(*)::text as n from activity_favorites where activity_id = $1',
+        [id],
+      )
+      reply.code(201)
+      return { favorited: true, favoriteCount: Number(c.rows[0]!.n) }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return ctx.dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  /** 取消收藏活动（US-04：收藏可撤销）。幂等：本来没收藏也返回 200 favorited=false */
+  app.delete('/api/activities/:id/favorite', async (req, reply) => {
+    const g = await requireUser(req)
+    if (!g.ok) return fail(reply, g)
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!UUID_RE.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    try {
+      await db.pool.query('delete from activity_favorites where activity_id = $1 and user_id = $2', [
+        id,
+        g.user.userId,
+      ])
+      const c = await db.pool.query<{ n: string }>(
+        'select count(*)::text as n from activity_favorites where activity_id = $1',
+        [id],
+      )
+      return { favorited: false, favoriteCount: Number(c.rows[0]!.n) }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return ctx.dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  /**
+   * 我的活动收藏（US-04）。与帖子的 /api/me/favorites 对称。
+   *
+   * ⚠️ **刻意不过滤**已结束/已取消的活动 —— 见本节顶部注释。
+   *    排序按**收藏时间倒序**（最近收藏的在前），不是活动开始时间。
+   */
+  app.get('/api/me/activity-favorites', async (req, reply) => {
+    const g = await requireUser(req)
+    if (!g.ok) return fail(reply, g)
+    try {
+      // $1 同时服务两处，且两者恒等（都是当前登录用户）：
+      //   · ACTIVITY_SELECT 里的 favoritedByMe 子查询
+      //   · 下面这个 join 的 user 过滤
+      const r = await db.pool.query<ActivityRow>(
+        `${ACTIVITY_SELECT}
+           join activity_favorites af2 on af2.activity_id = a.id and af2.user_id = $1
+          order by af2.created_at desc
+          limit ${LIST_LIMIT}`,
+        [g.user.userId],
+      )
+      return { items: r.rows.map(activityToJson) }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return ctx.dbUnavailable(reply, err)
       reply.code(500)
@@ -871,8 +1015,11 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
     const g = await requireAdmin(req)
     if (!g.ok) return fail(reply, g)
     try {
+      // 管理端传 null：这里是"看全部活动"，不是"我的收藏视图"，
+      // favoritedByMe 无意义（恒 false）。但 ACTIVITY_SELECT 必须拿到 $1。
       const r = await db.pool.query<ActivityRow>(
         `${ACTIVITY_SELECT} order by a.starts_at desc limit ${LIST_LIMIT}`,
+        [null],
       )
       return { items: r.rows.map(activityToJson) }
     } catch (err) {
@@ -912,6 +1059,55 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       fields.description = typeof payload.description === 'string' ? payload.description.trim() || null : null
     if (payload.source !== undefined)
       fields.source = typeof payload.source === 'string' ? payload.source.trim() || '管理员录入' : '管理员录入'
+
+    /*
+      ---- ACT-003 新增字段（022）----
+      ① 三个文本字段沿用 description 的既有口径：trim 后为空 ⇒ 存 null。
+         不把空串写进库 —— 空串与"没填"在展示层是两回事。
+      ② `activityType` **故意不做取值校验**：取值集在 ACT-002 里是「待讨论」，
+         这里编一套枚举就是文档明令禁止的"由开发/AI 自行补齐"。
+         只加长度上限，防止把整篇文章塞进来。
+      ③ `externalLink` 只校验"是不是无凭证的 http(s) 绝对地址"，
+         **不**在这里决定打开方式（新窗口 / 风险提示在 ACT-003 里是「待讨论」）。
+    */
+    const TEXT_LIMITS: Record<string, number> = { activityType: 40, organizer: 60, externalLink: 500 }
+    for (const [key, max] of Object.entries(TEXT_LIMITS)) {
+      if (payload[key] === undefined) continue
+      const raw = payload[key]
+      if (raw === null) {
+        fields[key] = null
+        continue
+      }
+      if (typeof raw !== 'string') {
+        errors.push(`${key} 必须是字符串或 null`)
+        continue
+      }
+      const v = raw.trim()
+      if (!v) fields[key] = null
+      else if (v.length > max) errors.push(`${key} 不能超过 ${max} 字`)
+      else fields[key] = v
+    }
+    if (fields.externalLink) {
+      let ok = false
+      try {
+        const u = new URL(fields.externalLink as string)
+        ok = (u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password
+      } catch {
+        ok = false
+      }
+      // 不是"尽力解析"，是拒绝：带凭证的链接（https://user:pass@…）会被原样渲染出去
+      if (!ok) {
+        errors.push('externalLink 必须是 http(s) 开头、且不含账号密码的合法链接')
+        delete fields.externalLink
+      }
+    }
+    if (payload.coverImageId !== undefined) {
+      if (payload.coverImageId === null) fields.coverImageId = null
+      else if (typeof payload.coverImageId === 'string' && UUID_RE.test(payload.coverImageId))
+        fields.coverImageId = payload.coverImageId
+      else errors.push('coverImageId 必须是合法媒体 id 或 null')
+    }
+
     return { errors, fields }
   }
 
@@ -949,8 +1145,9 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
         return { error: 'invalid_payload', details: ['endsAt 必须晚于 startsAt'] }
       }
       await client.query(
-        `insert into activities (id, title, description, place_id, starts_at, ends_at, source, status, created_by)
-         values ($1,$2,$3,$4,$5,$6,$7,'scheduled',$8)`,
+        `insert into activities (id, title, description, place_id, starts_at, ends_at, source, status, created_by,
+                                 activity_type, organizer, external_link, cover_image_id)
+         values ($1,$2,$3,$4,$5,$6,$7,'scheduled',$8,$9,$10,$11,$12)`,
         [
           id,
           fields.title,
@@ -960,6 +1157,10 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
           fields.endsAt ?? null,
           fields.source ?? '管理员录入',
           g.user.userId,
+          fields.activityType ?? null,
+          fields.organizer ?? null,
+          fields.externalLink ?? null,
+          fields.coverImageId ?? null,
         ],
       )
       await audit(client, g.user.userId, 'activity_create', 'activity', id, null)
@@ -1034,8 +1235,22 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
         return { error: 'invalid_payload', details: ['endsAt 必须晚于 startsAt'] }
       }
       const cols = Object.keys(fields)
+      /*
+        ⚠️ 这个映射表是**必需**的，不是可选的美化：没被映射到的字段会被**原样当列名**拼进 SQL。
+        所以每加一个 camelCase 字段（activityType / externalLink / coverImageId …），
+        必须在这里补一条，否则拼出 `activityType = $n` ⇒ 列不存在 ⇒ 整个 PATCH 500。
+        （title / description / source / organizer 是单词，蛇形与驼峰相同，无需映射。）
+      */
+      const COLUMN_OF: Record<string, string> = {
+        placeId: 'place_id',
+        startsAt: 'starts_at',
+        endsAt: 'ends_at',
+        activityType: 'activity_type',
+        externalLink: 'external_link',
+        coverImageId: 'cover_image_id',
+      }
       const sets = cols.map((c, i) => {
-        const col = c === 'placeId' ? 'place_id' : c === 'startsAt' ? 'starts_at' : c === 'endsAt' ? 'ends_at' : c
+        const col = COLUMN_OF[c] ?? c
         return `${col} = $${i + 1}`
       })
       sets.push(`updated_at = now()`)
