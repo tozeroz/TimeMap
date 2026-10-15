@@ -1,9 +1,35 @@
 /*
- * 我的收藏（F05 / US-03）。
+ * 我的收藏（F05 / US-03 帖子；F06 / US-04 活动）。
  */
 
 .fav__topTitle {
   font-size: var(--f-sub);
+  font-weight: 600;
+}
+
+/* 活动 / 帖子两个 tab（默认落在「活动」） */
+.fav__tabs {
+  display: flex;
+  gap: 8px;
+  padding: 4px var(--pad-page) 12px;
+}
+
+.fav__tab {
+  padding: 7px 16px;
+  border: 1px solid var(--c-divider);
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  color: var(--c-text-3);
+  font-size: var(--f-meta);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.fav__tab.is-active {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
   font-weight: 600;
 }
 

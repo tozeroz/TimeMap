@@ -12,7 +12,9 @@ import {
   adminTakedownPost,
   adminUpdateActivity,
   adminUpdatePlace,
+  mediaUrl,
   relativeTime,
+  uploadMedia,
   type ApiActivity,
   type ApiAdminPlace,
   type ApiAdminPost,
@@ -441,11 +443,56 @@ function ActivitiesPanel() {
   const places = useLoader<ApiAdminPlace[]>(() => adminListPlaces())
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
-  const [form, setForm] = useState<{ title: string; placeId: string; startsAt: string; endsAt: string; description: string } | null>(
-    null,
-  )
+  /** 022：ACT-003 新增 activityType / organizer / externalLink / coverImageId 四项 */
+  type ActivityForm = {
+    title: string
+    placeId: string
+    startsAt: string
+    endsAt: string
+    description: string
+    activityType: string
+    organizer: string
+    externalLink: string
+    coverImageId: string | null
+  }
+  const EMPTY_FORM: ActivityForm = {
+    title: '',
+    placeId: '',
+    startsAt: '',
+    endsAt: '',
+    description: '',
+    activityType: '',
+    organizer: '',
+    externalLink: '',
+    coverImageId: null,
+  }
+  const [form, setForm] = useState<ActivityForm | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   const enabledPlaces = (places.data ?? []).filter((p) => p.enabled)
+
+  /**
+   * 封面上传（022）。
+   *
+   * 先上传拿 media id，再把 id 填进表单 —— 和发布页同一套流程：**先传媒体、后提交实体**，
+   * 这样实体创建失败时不会留下半个引用。
+   * purpose 用 'activity' ⇒ 服务端映射到 scope='public'（见 POST /api/media）。
+   */
+  async function pickCover(file: File) {
+    setUploading(true)
+    setNotice('')
+    try {
+      const r = await uploadMedia(file, 'activity')
+      if (!r.ok) {
+        // 上传失败**不清空**已选内容，也不假装成功
+        setNotice(`封面上传失败：${r.reason}`)
+        return
+      }
+      setForm((f) => (f ? { ...f, coverImageId: r.value.id } : f))
+    } finally {
+      setUploading(false)
+    }
+  }
 
   async function submit() {
     if (!form) return
@@ -463,6 +510,10 @@ function ActivitiesPanel() {
         startsAt: new Date(form.startsAt).toISOString(),
         endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
         ...(form.description.trim() ? { description: form.description.trim() } : {}),
+        ...(form.activityType.trim() ? { activityType: form.activityType.trim() } : {}),
+        ...(form.organizer.trim() ? { organizer: form.organizer.trim() } : {}),
+        ...(form.externalLink.trim() ? { externalLink: form.externalLink.trim() } : {}),
+        ...(form.coverImageId ? { coverImageId: form.coverImageId } : {}),
       })
       if (!r.ok) {
         setNotice(`创建失败：${r.reason}`)
@@ -493,7 +544,7 @@ function ActivitiesPanel() {
   return (
     <section className="adm__pane">
       <div className="adm__row">
-        <button className="adm__btn adm__btn--primary" data-admin-new-activity onClick={() => setForm({ title: '', placeId: '', startsAt: '', endsAt: '', description: '' })}>
+        <button className="adm__btn adm__btn--primary" data-admin-new-activity onClick={() => setForm({ ...EMPTY_FORM })}>
           新建活动
         </button>
         <button className="adm__chip adm__chip--ghost" onClick={() => void reload()}>
@@ -593,6 +644,60 @@ function ActivitiesPanel() {
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
+            {/*
+              022 / ACT-003 新增四项。
+              ⚠️ 「活动类型」输入框刻意**没有下拉选项** —— 取值集在 ACT-002 里是
+                 「待讨论」，由开发自己编一套枚举就是文档明令禁止的行为。
+                 现在只能手填自由文本；等评审定下取值后再换成枚举 + 筛选。
+            */}
+            <input
+              className="adm__input"
+              data-activity-type
+              placeholder="活动类型（可选；取值集待评审，暂为自由文本）"
+              maxLength={40}
+              value={form.activityType}
+              onChange={(e) => setForm({ ...form, activityType: e.target.value })}
+            />
+            <input
+              className="adm__input"
+              data-activity-organizer
+              placeholder="主办方（可选）"
+              maxLength={60}
+              value={form.organizer}
+              onChange={(e) => setForm({ ...form, organizer: e.target.value })}
+            />
+            <input
+              className="adm__input"
+              data-activity-external
+              type="url"
+              placeholder="参与方式外部链接（可选，http(s)://；仅展示，不做站内报名）"
+              maxLength={500}
+              value={form.externalLink}
+              onChange={(e) => setForm({ ...form, externalLink: e.target.value })}
+            />
+            <label className="adm__label">
+              封面图（可选）
+              <input
+                className="adm__input"
+                type="file"
+                accept="image/*"
+                data-activity-cover
+                disabled={uploading || busy}
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) void pickCover(f)
+                }}
+              />
+            </label>
+            {uploading && <p className="adm__modalDesc">封面上传中…</p>}
+            {form.coverImageId && (
+              <img
+                className="adm__coverPreview"
+                data-activity-cover-preview={form.coverImageId}
+                src={mediaUrl(form.coverImageId)}
+                alt="封面预览"
+              />
+            )}
             {notice && <p className="adm__err">{notice}</p>}
             <div className="adm__modalActions">
               <button className="adm__btn" onClick={() => setForm(null)} disabled={busy}>

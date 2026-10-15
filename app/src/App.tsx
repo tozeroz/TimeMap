@@ -156,7 +156,7 @@ export default function App() {
         ⭐ TimeMap P0 新增的路由：
           · `activity`       活动详情（US-04；id 解析与兄弟路由一致：query → 路径段 → 空串）
           · `admin`          管理端（F07；仅 admin 可见入口，权限实际由服务端把关）
-          · `favorites`      我的收藏（US-03：收藏内容可在个人中心查看）
+          · `favorites`      我的收藏（US-03 帖子 + US-04 活动：收藏内容可在个人中心查看）
         ⚠️ 全部沿用既有纪律：`route.query.id ?? param ?? ''`（**空串兜底**，不回落到任何 mock id）。
 
         ⚠️⚠️ 这里**故意没有** `{root === 'activities' && <ActivitiesScreen />}`：

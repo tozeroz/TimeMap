@@ -2206,11 +2206,15 @@ export function buildServer(deps: ServerDeps) {
       return { error: 'missing_upload_request_id' }
     }
     // purpose → scope 的映射在**服务端**；客户端不能直接指定 scope
+    //   post     → public    帖子配图
+    //   activity → public    活动封面（022：ACT-003 的"封面"）
+    //   chat     → private   聊天图片/语音
     const purpose = ((data.fields?.purpose as { value?: string } | undefined)?.value ?? 'post').trim()
-    const scope = purpose === 'chat' ? 'private' : purpose === 'post' ? 'public' : null
+    const scope =
+      purpose === 'chat' ? 'private' : purpose === 'post' || purpose === 'activity' ? 'public' : null
     if (!scope) {
       reply.code(400)
-      return { error: 'bad_purpose', allowed: ['post', 'chat'] }
+      return { error: 'bad_purpose', allowed: ['post', 'chat', 'activity'] }
     }
 
     /**

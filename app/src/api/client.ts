@@ -278,7 +278,7 @@ export interface ApiUploadedMedia {
  */
 export async function uploadMedia(
   file: File | Blob,
-  purpose: 'post' | 'chat',
+  purpose: 'post' | 'chat' | 'activity',
   /**
    * 语音时长（毫秒）。**仅音频需要传**，且服务端会强制：
    * audio/webm 必须带正时长、image/* 禁止带。（审核记录 35）
@@ -690,23 +690,29 @@ export async function generateCutout(mediaId: string, requestId: string): Promis
 // 集中在一起才能一眼看出"这一版新增了什么"。每条都标了它对应的用户故事（US-xx）。
 // ===========================================================================
 
-/** 收藏/取消收藏的返回：**服务端权威计数**（不是客户端推算） */
-export interface FavoriteState {
+/**
+ * 收藏/取消收藏的返回：**服务端权威计数**（不是客户端推算）。
+ *
+ * ⚠️ 类型名 `FavoriteResult` 取自《概要设计与详细设计文档》§2.3.1（活动模块类图）。
+ *    帖子收藏与活动收藏**共用这一个返回形状**（`favorited` + `favoriteCount`），
+ *    所以不按模块拆成两个同名不同义的类型。
+ */
+export interface FavoriteResult {
   favorited: boolean
   favoriteCount: number
 }
 
 /** 收藏一条帖子（US-03）。服务端幂等：重复收藏不重复计数 */
-export function favoritePost(postId: string): Promise<ApiResult<FavoriteState>> {
-  return request<FavoriteState>(`/api/posts/${encodeURIComponent(postId)}/favorite`, {
+export function favoritePost(postId: string): Promise<ApiResult<FavoriteResult>> {
+  return request<FavoriteResult>(`/api/posts/${encodeURIComponent(postId)}/favorite`, {
     method: 'POST',
     body: {},
   })
 }
 
 /** 取消收藏（US-03：收藏可撤销，取消后从个人中心移除） */
-export function unfavoritePost(postId: string): Promise<ApiResult<FavoriteState>> {
-  return request<FavoriteState>(`/api/posts/${encodeURIComponent(postId)}/favorite`, {
+export function unfavoritePost(postId: string): Promise<ApiResult<FavoriteResult>> {
+  return request<FavoriteResult>(`/api/posts/${encodeURIComponent(postId)}/favorite`, {
     method: 'DELETE',
   })
 }
@@ -805,6 +811,33 @@ export interface ApiActivity {
   /** 展示态：学生口径（服务端推导） */
   effectiveStatus: ActivityEffectiveStatus
   place: { id: string; name: string; latitude: number | null; longitude: number | null; enabled: boolean }
+  /**
+   * 当前登录用户是否收藏过该活动（US-04）。
+   *
+   * ⚠️ 活动是**公开只读**内容：未登录也能读列表/详情，此时恒为 `false`（**不是** 401）。
+   *    与帖子收藏不同 —— 帖子列表要求登录，这里不要求。
+   */
+  favoritedByMe: boolean
+  /**
+   * 收藏总数（服务端权威值）。
+   *
+   * ⚠️ 《概要设计与详细设计文档》§2.3.1 的活动类图把 `favoriteCount` 列为 `Activity`
+   *    的字段 ⇒ 接口必须返回。**是否在页面上展示由 UI 决定**（文档未规定展示位置）。
+   */
+  favoriteCount: number
+  /**
+   * ---- ACT-003 要求的四个字段（迁移 022）----
+   *
+   * ⚠️ `activityType` 目前**没有任何取值约束**：取值集在 ACT-002 里列为「待讨论」，
+   *    所以它是自由文本，**也还没有对应的筛选功能**。
+   *    不要在前端按它分组、或做筛选 UI —— 那会把一个待定项伪装成已定型的功能。
+   */
+  activityType: string | null
+  organizer: string | null
+  /** 参与方式：外部链接（仅展示，不做站内报名）。打开方式与风险提示待讨论。 */
+  externalLink: string | null
+  /** 封面图：**media id**（不是 URL）。用 `mediaUrl(id)` 取图；null 表示没有封面。 */
+  coverImageId: string | null
 }
 
 export interface ApiPlaceActivity {
@@ -838,6 +871,37 @@ export function listActivities(
 /** 活动详情（US-04：标题/时间/地点/来源/状态必须与列表一致） */
 export function getActivity(id: string): Promise<ApiResult<ApiActivity>> {
   return request<ApiActivity>(`/api/activities/${encodeURIComponent(id)}`)
+}
+
+// ---- 活动收藏（US-04）。与下面的帖子收藏**对称**，但服务端是独立的表 ----
+
+/** 收藏一个活动（US-04）。服务端幂等：重复收藏不重复计数 */
+export function favoriteActivity(activityId: string): Promise<ApiResult<FavoriteResult>> {
+  return request<FavoriteResult>(`/api/activities/${encodeURIComponent(activityId)}/favorite`, {
+    method: 'POST',
+    body: {},
+  })
+}
+
+/** 取消收藏活动（US-04：收藏可撤销） */
+export function unfavoriteActivity(activityId: string): Promise<ApiResult<FavoriteResult>> {
+  return request<FavoriteResult>(`/api/activities/${encodeURIComponent(activityId)}/favorite`, {
+    method: 'DELETE',
+  })
+}
+
+/**
+ * 我的活动收藏（US-04）。
+ *
+ * ⚠️ 与 `listMyFavorites`（帖子）**有意不同**：这里**不做**失效过滤。
+ *    活动状态是服务端按时间推导的，大量活动会自然「已结束」；收藏了却在列表里
+ *    找不到才是真的坏体验。⇒ 已结束/已取消的活动**保留**，由前端按 `effectiveStatus`
+ *    标状态徽标。（帖子那边相反：下架内容必须退出各展示入口，见 US-08。）
+ */
+export function listMyActivityFavorites(): Promise<ApiResult<ApiActivity[]>> {
+  return request<{ items: ApiActivity[] }>('/api/me/activity-favorites').then((r) =>
+    r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -1003,6 +1067,12 @@ export function adminCreateActivity(input: {
   endsAt?: string | null
   description?: string
   source?: string
+  /** 022：ACT-003 新增。三个文本字段 trim 后为空会被服务端存成 null */
+  activityType?: string
+  organizer?: string
+  externalLink?: string
+  /** 022：封面 media id（先用 uploadMedia(file, 'activity') 拿到 id） */
+  coverImageId?: string | null
 }): Promise<ApiResult<{ id: string }>> {
   return request<{ id: string }>('/api/admin/activities', { method: 'POST', body: input })
 }
@@ -1024,6 +1094,11 @@ export function adminUpdateActivity(
     description: string | null
     source: string
     status: 'scheduled' | 'cancelled'
+    /** 022：ACT-003 新增 */
+    activityType: string | null
+    organizer: string | null
+    externalLink: string | null
+    coverImageId: string | null
   }>,
 ): Promise<ApiResult<{ id: string }>> {
   return request<{ id: string }>(`/api/admin/activities/${encodeURIComponent(activityId)}`, {
