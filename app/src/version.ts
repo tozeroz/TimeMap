@@ -10,4 +10,4 @@
  *   · 那会多一个**原生插件**（要 cap sync + gradle 重建），而这里只是要一个版本号
  *   · 用常量 + 机械校验，既没有额外依赖，也不会"悄悄漂移"（漂移会被门禁抓住）
  */
-export const APP_VERSION = '1.3'
+export const APP_VERSION = '1.3.1'
