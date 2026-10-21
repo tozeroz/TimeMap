@@ -213,7 +213,24 @@ export function TencentMap({
         const wrap = document.createElement('div')
         wrap.className = 'rm__wrap rm__wrap--tmap'
         const el = buildMarkerElement(m)
-        el.addEventListener('click', (e) => onMarkerClick(m.placeId, (e.target as Element).closest('.rm__card') ? m.postId || undefined : undefined))
+        /*
+         * 监听挂在 wrap 而不是 .rm 上：.rm 有 translate(-50%,-100%)，
+         * 真正可点的可视化区域与 wrap 的布局盒错开；而 z-index 抬高的也是 wrap，
+         * 所以点击事件的 target 可能是 .rm、.rm__card 甚至 wrap 自己 —— 统一在 wrap 上收口。
+         *
+         * 另外记录 pointerdown 位置：从标记上起手的拖动不应该导航（浏览器仍会补发 click），
+         * 位移超过阈值就丢弃这次 click，避免「想拖地图却进了地点详情」。
+         */
+        let downX = 0
+        let downY = 0
+        wrap.addEventListener('pointerdown', (e) => {
+          downX = e.clientX
+          downY = e.clientY
+        })
+        wrap.addEventListener('click', (e) => {
+          if (Math.abs(e.clientX - downX) > 8 || Math.abs(e.clientY - downY) > 8) return
+          onMarkerClick(m.placeId, (e.target as Element).closest('.rm__card') ? m.postId || undefined : undefined)
+        })
         wrap.appendChild(el)
         host.appendChild(wrap)
         const item: PlacedItem = { wrap, lat: m.lat, lng: m.lng }

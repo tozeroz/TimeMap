@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  avatarFor,
   getPlace,
   mediaUrl,
   relativeTime,
@@ -49,8 +48,12 @@ export function PoiDetailScreen({ id }: { id: string }) {
   const [place, setPlace] = useState<ApiPlaceDetail | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'not_found' | 'error'>('loading')
   const [err, setErr] = useState('')
-  /** 帖子区排序：'latest' 最新 | 'hot' 近期热门（排序**由服务端做**） */
-  const [sort, setSort] = useState<'latest' | 'hot'>('latest')
+  /** 帖子区排序：'latest' 最新 | 'hot' 近期热门（排序**由服务端做**）。
+   *
+   *  ⚠️ 默认值必须是 **'hot'（近期热门）**：需求 PLACE-002 逐字写「少量双列的帖子，
+   *     支持最新/热门切换，**默认热门**」。改前这里是 'latest'，与需求相反 ——
+   *     这是 QA 全盘测试判定的「与需求不符」，不是口味问题。 */
+  const [sort, setSort] = useState<'latest' | 'hot'>('hot')
   /** 内容筛选：全部 | 带图（US-03「地点页面支持最新、近期热门及食堂标签筛选」） */
   const [filter, setFilter] = useState<'all' | 'image'>('all')
 
@@ -72,7 +75,7 @@ export function PoiDetailScreen({ id }: { id: string }) {
         setState('not_found')
         return
       }
-      setErr(r.reason)
+      setErr(r.human ?? r.reason)
       setState('error')
     },
     [id],
@@ -203,7 +206,21 @@ export function PoiDetailScreen({ id }: { id: string }) {
 
         {/* 近期活动：标题 / 时间 / 状态（草图的中间一段） */}
         <section className="pd__activities" data-place-activities={String(place.activities.length)}>
-          <h3 className="pd__sectionTitle">近期活动</h3>
+          <div className="pd__sectionHead">
+            <h3 className="pd__sectionTitle">近期活动</h3>
+            {/*
+              PLACE-003（已确认）：「少量近期活动 + **查看全部** → 活动一级入口并自动筛选该地点」。
+              改前这里没有「查看全部」——地点页是活动的终点站，用户想看更多只能自己回活动页再筛。
+              ⇒ 带上 placeId 跳到活动一级入口，活动页读 `?placeId=` 自动生效筛选。
+            */}
+            <button
+              className="pd__more"
+              data-pd-act-all={place.id}
+              onClick={() => navigate('activities', { placeId: place.id })}
+            >
+              查看全部
+            </button>
+          </div>
           {place.activities.length === 0 ? (
             <p className="pd__empty">近期没有在此地点举办的活动</p>
           ) : (
@@ -253,6 +270,17 @@ export function PoiDetailScreen({ id }: { id: string }) {
               >
                 {filter === 'image' ? '仅看图文' : '内容筛选'}
               </button>
+              {/*
+                PLACE-002（已确认）：「少量双列帖子 + **查看全部** → 校园一级入口并自动筛选该地点全部用户帖子」。
+                改前没有这个入口，地点页只展示「少量」却没有任何通往全量的路径。
+              */}
+              <button
+                className="pd__more"
+                data-pd-all={place.id}
+                onClick={() => navigate('campus', { placeId: place.id })}
+              >
+                查看全部
+              </button>
             </div>
           </div>
 
@@ -274,7 +302,7 @@ export function PoiDetailScreen({ id }: { id: string }) {
               {place.posts.length === 0
                 ? '这个地点还没有内容，来发第一条吧'
                 : sort === 'hot'
-                  ? `近期热门只统计**近 7 天**发布的内容，这个地点近 7 天没有新帖（下方「最新」里能看到更早的 ${place.posts.length} 条）。`
+                  ? `近期热门只统计近 7 天发布的内容，这个地点近 7 天没有新帖（下方「最新」里能看到更早的 ${place.posts.length} 条）。`
                   : '没有符合当前筛选的内容'}
             </p>
           ) : (
@@ -301,43 +329,47 @@ export function PoiDetailScreen({ id }: { id: string }) {
   )
 }
 
+/**
+ * 地点页的帖子卡片（PLACE-002：**双列**）。
+ *
+ * ⚠️ 改前是"一行一条"的横向行（左边小图 + 中间作者/正文 + 右边计数），
+ *    靠 `.pd__postList { flex-direction: column }` 排成单列 —— 与需求「少量**双列**帖子」不符。
+ *    现在改成与校园流一致的**竖向卡片**（图在上、文字和计数在下），交给 CSS 做两列瀑布流。
+ *    没有配图时不再塞一个「作者头像当封面」的假图（那会让纯文字帖看起来像图片帖）。
+ */
 function PostRow({ post }: { post: ApiPlacePost }) {
   const img = post.images && post.images.length > 0 ? mediaUrl(post.images[0]!.id) : null
   return (
     <li>
       <button
-        className="pd__post"
+        className={`pd__post ${img ? 'pd__post--media' : 'pd__post--text'}`}
         data-pd-post={post.id}
         data-post-favorites={String(post.favoriteCount)}
         onClick={() => navigate('feed', { id: post.id })}
       >
-        {img ? (
-          <img className="pd__postImg" src={img} alt="" loading="lazy" />
-        ) : (
-          <img className="pd__postImg pd__postImg--ph" src={avatarFor(post.author)} alt="" />
-        )}
+        {img && <img className="pd__postImg" src={img} alt="" loading="lazy" />}
         <span className="pd__postMain">
           <span className="pd__postAuthor">{post.author}</span>
           <span className="pd__postBody">{post.body}</span>
           <span className="pd__postTime">{relativeTime(post.createdAt)}</span>
-        </span>
-        <span className="pd__postStats">
-          {/* 0 赞/0 评论时不渲染计数（沿用既有口径）；收藏数同理 */}
-          {post.likeCount > 0 && (
-            <span className="pd__postStat">
-              <IconHeart size={13} />
-              {post.likeCount}
+          <span className="pd__postStats">
+            {/* 0 赞/0 评论时不渲染计数（沿用既有口径）；收藏数同理 */}
+            {post.likeCount > 0 && (
+              <span className="pd__postStat">
+                <IconHeart size={13} />
+                {post.likeCount}
+              </span>
+            )}
+            {post.commentCount > 0 && (
+              <span className="pd__postStat">
+                <IconComment size={13} />
+                {post.commentCount}
+              </span>
+            )}
+            <span className={`pd__postStat ${post.favoritedByMe ? 'is-on' : ''}`}>
+              <IconStar size={13} filled={post.favoritedByMe} />
+              {post.favoriteCount > 0 ? post.favoriteCount : ''}
             </span>
-          )}
-          {post.commentCount > 0 && (
-            <span className="pd__postStat">
-              <IconComment size={13} />
-              {post.commentCount}
-            </span>
-          )}
-          <span className={`pd__postStat ${post.favoritedByMe ? 'is-on' : ''}`}>
-            <IconStar size={13} filled={post.favoritedByMe} />
-            {post.favoriteCount > 0 ? post.favoriteCount : ''}
           </span>
         </span>
       </button>

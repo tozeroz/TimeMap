@@ -127,15 +127,6 @@
   color: #fff;
 }
 
-.map__geoFarBtn {
-  border: 0;
-  border-radius: var(--r-pill);
-  padding: 2px 8px;
-  font-size: 11px;
-  background: rgba(255, 255, 255, 0.9);
-  color: #111;
-}
-
 /* 地图舞台：接管指针事件实现拖拽 */
 .map {
   position: relative;
@@ -313,6 +304,92 @@
   color: var(--c-text);
 }
 
+/* ===========================================================================
+   MAP-002 / MAP-003：地图内的「搜索地标」面板
+   =========================================================================== */
+/* 结果只来自 `GET /api/places?q=`（团队维护的预设地点），不提供自建地点。 */
+.map__search {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 10px;
+  z-index: 600; /* 必须高于地图 SDK 的内部层级（与 .map__controls 同理） */
+  display: flex;
+  flex-direction: column;
+  max-height: 62%;
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+}
+
+.map__searchHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  /* 分隔线取样例文档记录的 #ececee（page-map.md 设计令牌） */
+  border-bottom: 1px solid #ececee;
+  color: var(--c-text-2);
+}
+
+.map__searchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  color: var(--c-text);
+}
+
+.map__searchBody {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.map__searchEmpty {
+  margin: 0;
+  padding: 16px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--c-text-2);
+}
+
+.map__searchList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.map__searchRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid #ececee;
+  background: transparent;
+  text-align: left;
+}
+
+.map__searchRow:last-child {
+  border-bottom: 0;
+}
+
+.map__searchName {
+  font-size: 14px;
+  color: var(--c-text);
+}
+
+.map__searchAddr {
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
 .map__fab {
   position: absolute;
   right: 14px;
@@ -365,3 +442,51 @@
 .map__published img { width: 64px; height: 64px; object-fit: contain; }
 .map__published p { width: 100%; margin: 0; font-size: 14px; }
 .map__published button { border: 0; padding: 8px 12px; border-radius: 8px; background: #f2f3f5; color: #333; }
+
+/* 读失败时的重试入口。
+   ⚠️ `.map__markerBadge` 本身是 `pointer-events: none`（它是纯状态提示，不能挡住地图手势），
+      所以带按钮的变体必须显式恢复可点击 —— 否则按钮看起来在、实际点不到。 */
+.map__markerBadge--action {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.map__markerRetry {
+  padding: 2px 9px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.9);
+  color: #111;
+  font-size: 11.5px;
+  font-weight: 600;
+  pointer-events: auto;
+}
+
+/* 帖子列表失败（地点还在、内容读不到）：与"离线底图"同级的状态条，同样允许重试 */
+.map__postsFailed {
+  position: absolute;
+  left: 16px;
+  bottom: 96px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* 两个状态条同时出现时错开，避免互相盖住（marker badge 在 96px，这条下移） */
+.map__markerBadge[data-marker-phase='ready'] + .map__markerRetry,
+.map__markerBadge[data-marker-phase='ready'] ~ .map__postsFailed {
+  bottom: 74px;
+}
+
+.map__markerBadge[data-marker-phase='ready'] ~ .map__offlineBadge {
+  top: 10px;
+}

@@ -28,7 +28,10 @@
 .acts__filters {
   display: flex;
   align-items: center;
-  gap: 12px;
+  /* ACT-002 落地后筛选从两行变三行（时间/状态/地标），状态那一行有 5 个 chip：
+     430px 宽下不换行会溢出到屏幕外（点击目标直接点不到）⇒ 必须允许换行。 */
+  flex-wrap: wrap;
+  gap: 4px 12px;
   padding: 8px var(--pad-page);
 }
 
@@ -42,6 +45,10 @@
 
 .acts__chip {
   flex: none;
+  /* 地标 chip 里带一个 ▾ 图标：用 inline-flex + gap 让它跟文字在同一基线 */
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   padding: 6px 0;
   border: none;
   background: transparent;
@@ -307,7 +314,7 @@
   padding: var(--pad-page) var(--pad-page) 32px;
 }
 
-/* 封面图（ACT-003）。没有封面时**不渲染**，所以这里不用考虑空态占位 */
+/* 封面图（ACT-003）。没有封面时渲染一个如实说明的占位（不塞假图） */
 .actd__cover {
   display: block;
   width: 100%;
@@ -315,6 +322,20 @@
   object-fit: cover;
   border-radius: 14px;
   margin-bottom: 14px;
+}
+
+/* 无封面占位：高度与有封面时接近，避免详情页顶部塌陷 */
+.actd__cover--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  background: var(--c-fill, #eef1f4);
+  color: var(--c-text-3);
+}
+
+.actd__coverEmptyText {
+  font-size: var(--f-meta);
 }
 
 /* 参与方式：外部链接（ACT-003） */

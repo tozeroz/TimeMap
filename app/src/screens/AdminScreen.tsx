@@ -20,6 +20,7 @@ import {
   type ApiAdminPost,
   type ApiAuditEntry,
   type ApiReport,
+  failText,
 } from '../api/client'
 import { isAdmin } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
@@ -125,7 +126,7 @@ function useLoader<T>(load: () => Promise<{ ok: true; value: T } | { ok: false; 
       setErr('')
     } else {
       setData(null)
-      setErr(r.reason)
+      setErr(failText(r))
       setPhase('error')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -185,7 +186,7 @@ function ReportsPanel() {
       setErr('')
     } else {
       setItems([])
-      setErr(r.reason)
+      setErr(failText(r))
       setPhase('error')
     }
   }, [status])
@@ -211,7 +212,7 @@ function ReportsPanel() {
     try {
       const r = await adminResolveReport(handling.id, handling.resolution, reason)
       if (!r.ok) {
-        setNotice(`处理失败：${r.reason}`)
+        setNotice(`处理失败：${failText(r)}`)
         return
       }
       setHandling(null)
@@ -353,7 +354,7 @@ function PostsPanel() {
     try {
       const r = await adminTakedownPost(takedown.id, reason)
       if (!r.ok) {
-        setNotice(`下架失败：${r.reason}`)
+        setNotice(`下架失败：${failText(r)}`)
         return
       }
       setTakedown(null)
@@ -485,7 +486,7 @@ function ActivitiesPanel() {
       const r = await uploadMedia(file, 'activity')
       if (!r.ok) {
         // 上传失败**不清空**已选内容，也不假装成功
-        setNotice(`封面上传失败：${r.reason}`)
+        setNotice(`封面上传失败：${failText(r)}`)
         return
       }
       setForm((f) => (f ? { ...f, coverImageId: r.value.id } : f))
@@ -516,7 +517,7 @@ function ActivitiesPanel() {
         ...(form.coverImageId ? { coverImageId: form.coverImageId } : {}),
       })
       if (!r.ok) {
-        setNotice(`创建失败：${r.reason}`)
+        setNotice(`创建失败：${failText(r)}`)
         return
       }
       setForm(null)
@@ -532,7 +533,7 @@ function ActivitiesPanel() {
     try {
       const r = await adminUpdateActivity(id, { status })
       if (!r.ok) {
-        setNotice(`操作失败：${r.reason}`)
+        setNotice(`操作失败：${failText(r)}`)
         return
       }
       await reload()
@@ -740,7 +741,7 @@ function PlacesPanel() {
         ...(form.description.trim() ? { description: form.description.trim() } : {}),
       })
       if (!r.ok) {
-        setNotice(`创建失败：${r.reason}`)
+        setNotice(`创建失败：${failText(r)}`)
         return
       }
       setForm(null)
@@ -756,7 +757,7 @@ function PlacesPanel() {
     try {
       const r = await adminUpdatePlace(p.id, { enabled: !p.enabled })
       if (!r.ok) {
-        setNotice(`操作失败：${r.reason}`)
+        setNotice(`操作失败：${failText(r)}`)
         return
       }
       await reload()

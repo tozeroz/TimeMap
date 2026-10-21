@@ -1,0 +1,43 @@
+/* 「我的发布」（ME-002 双列瀑布流）。
+   ⚠️ 双列本身复用校园流的 `.campus__grid { column-count: 2 }`（campus.css），
+     这里只补本页自己的状态容器 —— 不要再定义第二套列布局，
+     否则两处的列宽/间隙会各自漂移（"同一形态两套实现"是这类页面最常见的坏味道）。 */
+
+.mp__title {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.mp__grid {
+  background: var(--c-surface);
+}
+
+.mp__state {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 40px 80px;
+}
+
+.mp__stateText {
+  margin: 0;
+  font-size: 14px;
+  color: var(--c-text-3);
+  text-align: center;
+}
+
+.mp__primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 20px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-size: 14px;
+  font-weight: 600;
+}

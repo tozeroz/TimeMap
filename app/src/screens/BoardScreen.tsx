@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getBoardNotes, postBoardNote, relativeTime, type ApiBoardNote } from '../api/client'
+import { failText, getBoardNotes, postBoardNote, relativeTime, type ApiBoardNote } from '../api/client'
 import { Screen, TopBar } from '../components/Shell'
 import { IconClose } from '../components/icons'
 import { boardEmojis } from '../data/uiConstants'
@@ -66,7 +66,7 @@ export function BoardScreen({ peerId }: { peerId: string }) {
       setEmptyText(r.value.emptyText)
       setState('ready')
     } else {
-      setErr(r.reason)
+      setErr(failText(r))
       setState('error')
     }
   }
@@ -91,7 +91,7 @@ export function BoardScreen({ peerId }: { peerId: string }) {
       // （排序、可见性、字段都由服务端决定，本地插入容易和服务端不一致）
       await load()
     } else {
-      setErr(r.reason)
+      setErr(failText(r))
       setState('error')
     }
   }

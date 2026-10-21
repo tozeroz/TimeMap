@@ -895,6 +895,68 @@ export function buildServer(deps: ServerDeps) {
       authorId = authorIdRaw
     }
 
+    /*
+      ---- CAMP-002 / PLACE-002：排序（`sort`）与地标过滤（`placeId` / `placeIds`）----
+
+      ## 为什么排序必须在服务端
+        "热门"是**全量**排序口径（点赞/评论/收藏加权 + 时间衰减），客户端只能对
+        已经取回的那一页重排 —— 那不是"热门"，是"这一页里最热的"。
+        `LIST_LIMIT` 一旦小于总帖数，客户端排序就会把榜外的热帖永久藏起来。
+
+      ## 口径与地点面板（`/api/places/:id`）必须**逐项一致**
+        点赞×2 + 有效评论×3 + 收藏×1 − max(0, 距发布小时数 − 24)。
+        两处如果口径不同，同一个帖子在"校园流热门"和"地点面板热门"里的顺序会互相矛盾
+        —— 用户看不出为什么，只会觉得排序坏了。
+
+      ## 为什么 hot 不套"近 7 天"窗口
+        地点面板的 hot 有 7 天窗口（`out-of-hot-window` 空态），是因为它只显示"少量"帖子。
+        校园流是主列表，套 7 天窗口会在冷清时段变成"空页面"——比排序不完美更糟。
+        所以这里 hot = 全部已发布帖子按分数排序，时间衰减已经承担了"让旧帖下沉"的职责。
+
+      ## placeIds 的语义（CAMP-003）
+        多选 = "属于任意一个所选地标"（需求 §6.3 的建议口径），因此是 `= any($n::uuid[])`。
+        空数组 = 不过滤（等价"全部地标"）。非法 id → 400 `bad_place_id`（显式拒绝，
+        不做静默忽略：静默忽略会让调用方看见"全部帖子"却以为筛过了）。
+    */
+    const query = req.query as { sort?: unknown; placeId?: unknown; placeIds?: unknown } | undefined
+    const sortRaw = query?.sort
+    let sort: 'latest' | 'hot' = 'latest'
+    if (sortRaw !== undefined) {
+      if (sortRaw !== 'latest' && sortRaw !== 'hot') {
+        reply.code(400)
+        return { error: 'bad_sort', got: typeof sortRaw === 'string' ? sortRaw : typeof sortRaw }
+      }
+      sort = sortRaw
+    }
+
+    const placeIdsRaw: unknown[] =
+      query?.placeIds !== undefined
+        ? (typeof query.placeIds === 'string' ? query.placeIds.split(',') : Array.isArray(query.placeIds) ? (query.placeIds as unknown[]) : [query.placeIds])
+        : query?.placeId !== undefined
+          ? [query.placeId]
+          : []
+    const placeIds: string[] = []
+    for (const raw of placeIdsRaw) {
+      const v = typeof raw === 'string' ? raw.trim() : ''
+      if (!v) continue
+      if (!/^[0-9a-f-]{36}$/i.test(v)) {
+        reply.code(400)
+        return { error: 'bad_place_id', got: v }
+      }
+      if (!placeIds.includes(v)) placeIds.push(v)
+    }
+
+    /*
+      外层包一个子查询，是为了直接对聚合出来的三个文本列做算术（`q.like_count::int`），
+      不必在 ORDER BY 里重复写三遍 `(select count(*) ...)` 子查询。
+    */
+    const orderBy =
+      sort === 'hot'
+        ? `(q.like_count::int * 2 + q.comment_count::int * 3 + q.favorite_count::int
+            - greatest(0, extract(epoch from (now() - q.created_at)) / 3600 - 24)) desc,
+           q.created_at desc, q.id desc`
+        : 'q.created_at desc, q.id desc'
+
     try {
       const r = await db.pool.query<
         PostRow & {
@@ -909,7 +971,8 @@ export function buildServer(deps: ServerDeps) {
           favorited_by_me: boolean
         }
       >(
-        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
+        `select * from (
+        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
                 -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
                 -- 为什么需要：地图页的标记按经纬度渲染（默认 provider=tencent 用
                 -- projectToContainer(LatLng)；RealMap 用 L.marker([lat,lng])），
@@ -958,9 +1021,12 @@ export function buildServer(deps: ServerDeps) {
           where ($3::uuid is null or p.author_id = $3::uuid)
             -- F07/US-08：下架/删除的帖子同步退出所有公开面
             and p.status = 'published'
-          order by p.created_at desc, p.id desc
-          limit $1`,
-        [LIST_LIMIT, meId, authorId],
+            -- CAMP-003：空数组 = 不过滤（"全部地标"）
+            and (cardinality($4::uuid[]) = 0 or p.place_id = any($4::uuid[]))
+        ) q
+        order by ${orderBy}
+        limit $1`,
+        [LIST_LIMIT, meId, authorId, placeIds],
       )
       return {
         items: r.rows.map((row) => ({

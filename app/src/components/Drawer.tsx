@@ -4,7 +4,14 @@ import './drawer.css'
 
 const ITEMS: Array<{ label: string; to: string; demoOnly?: boolean }> = [
   { label: '账号与安全', to: 'account' },
-  { label: '编辑资料', to: 'edit-profile' },
+  /*
+    ⚠️ 这里原来是 `to: 'edit-profile'` —— 那条路由**早已被删除**（M5 WO#13 清理了
+       interests/tags/bio/school/edit-profile 五个假页面）。于是点「编辑资料」会
+       进入一个**不存在的 hash 路由 → 整页空白**（QA 全盘测试实测：白屏、零报错）。
+       真实存在的资料编辑页是 `profile-edit`（App.tsx 里唯一注册的编辑页，
+       也是「我的」页「编辑资料」按钮指向的目标）。⇒ 指向它。
+  */
+  { label: '编辑资料', to: 'profile-edit' },
   { label: '校园认证', to: 'verify' },
   { label: '隐私设置', to: 'privacy' },
   { label: '黑名单', to: 'blacklist' },

@@ -264,49 +264,50 @@
   color: var(--c-primary-fg);
 }
 
+/* PLACE-002（已确认）：帖子区是**双列**少量帖子。
+   改前这里是 `display:flex; flex-direction:column` 的单列横向行 —— 与需求不符。
+   用 column-count 而不是 grid：卡片高度不一致时瀑布流更接近校园页的观感，
+   也和 `.campus__grid` 的实现保持一致（同一产品里不要有两种"双列"）。
+   ⚠️ 列子项必须 `break-inside: avoid`，否则卡片会被从中间切到两列里。 */
 .pd__postList {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  column-count: 2;
+  column-gap: 8px;
+}
+
+.pd__postList > li {
+  break-inside: avoid;
+  margin: 0 0 8px;
 }
 
 .pd__post {
+  display: block;
   width: 100%;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px;
+  padding: 0 0 8px;
   border: none;
   border-radius: var(--r-md);
   background: var(--c-surface);
   box-shadow: var(--shadow-card);
   text-align: left;
+  overflow: hidden;
 }
 
 .pd__postImg {
-  flex: none;
-  width: 68px;
-  height: 68px;
-  border-radius: var(--r-sm);
+  display: block;
+  width: 100%;
+  height: 96px;
   object-fit: cover;
   background: var(--c-surface-sunken);
 }
 
-.pd__postImg--ph {
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-}
-
 .pd__postMain {
-  flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 3px;
+  padding: 7px 9px 0;
+  min-width: 0;
 }
 
 .pd__postAuthor {
@@ -331,11 +332,10 @@
 }
 
 .pd__postStats {
-  flex: none;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  align-items: center;
+  gap: 10px;
+  padding-top: 2px;
 }
 
 .pd__postStat {
@@ -387,4 +387,24 @@
   font-size: var(--f-meta);
   color: var(--c-text-3);
   text-align: center;
+}
+
+/* PLACE-002 / PLACE-003：「查看全部」入口。
+   位置规则：帖子区的"查看全部"跟在排序/筛选 chips 后面（同一行），
+   活动区没有 chips，所以单独用一个 sectionHead 包住标题与按钮。 */
+.pd__sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pd__more {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border: 1px solid var(--c-divider);
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font-size: var(--f-tiny);
 }

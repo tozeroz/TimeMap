@@ -314,7 +314,8 @@ export async function uploadMedia(
     })
     const text = await res.text()
     if (!res.ok) {
-      return { ok: false, reason: `HTTP ${res.status}: ${text.slice(0, 200)}`, status: res.status }
+      const reason = `HTTP ${res.status}: ${text.slice(0, 200)}`
+      return { ok: false, reason, human: humanizeFailure(reason, res.status), status: res.status }
     }
     try {
       const v = JSON.parse(text) as {
@@ -336,13 +337,14 @@ export async function uploadMedia(
         },
       }
     } catch {
-      return { ok: false, reason: '上传响应不是合法 JSON' }
+      const reason = '上传响应不是合法 JSON'
+      return { ok: false, reason, human: humanizeFailure(reason) }
     }
   } catch (err) {
     const e = err as Error
     const reason =
       e.name === 'AbortError' ? `上传超时（${UPLOAD_TIMEOUT_MS}ms）` : `${e.name}: ${e.message}`
-    return { ok: false, reason }
+    return { ok: false, reason, human: humanizeFailure(reason) }
   } finally {
     clearTimeout(timer)
   }
@@ -522,7 +524,49 @@ export async function postBoardNote(
 
 export type ApiResult<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: string; status?: number }
+  | {
+      ok: false
+      /**
+       * 原始技术原因（`HTTP 400: {"error":"bad_body"}` / `TypeError: Failed to fetch`）。
+       * **只供日志与排查**：界面上不得直接渲染它（那是把实现细节丢给用户）。
+       * 用户可见文案一律用 `human`。
+       */
+      reason: string
+      /** 面向用户的一句话（见 humanizeFailure）。界面用 `failText(r)` 取它 */
+      human?: string
+      status?: number
+    }
+
+/**
+ * 把请求失败的技术原因翻译成**用户能理解、且能做点什么**的一句话（§12 异常处理）。
+ *
+ * 为什么必须做：QA 实测界面直出 `Failed to fetch`、`HTTP 400: {"error":"bad_place_id"}`
+ * 这类串。它们对用户零信息量，还会让人以为"应用坏了"。
+ *
+ * 为什么保留 `reason`：排查时需要知道到底是超时、401 还是 500。二者分工是
+ * "reason 进日志、human 上界面"，不是二选一。
+ */
+export function humanizeFailure(reason: string, status?: number): string {
+  if (status === 401) return '登录状态已失效，请重新登录'
+  if (status === 403) return '没有权限执行这个操作'
+  if (status === 404) return '内容不存在或已被删除'
+  if (status === 429) return '操作太频繁，请稍后再试'
+  if (status === 503) return '服务暂时不可用，请稍后重试'
+  if (status !== undefined && status >= 500) return '服务器出了点问题，请稍后重试'
+  // 4xx 里能给出的最具体信息来自服务端的机器码，映射不到就给通用提示
+  if (reason.includes('bad_place') ) return '地点不存在，请刷新后重试'
+  if (status === 400 || status === 422) return '请求未能完成，请检查填写内容后重试'
+  if (reason.includes('AbortError') || reason.includes('超时')) return '请求超时，请稍后重试'
+  if (reason.includes('Failed to fetch') || reason.includes('TypeError'))
+    return '网络连接失败，请检查网络后重试'
+  if (reason.includes('不是合法 JSON')) return '服务器返回了异常内容，请稍后重试'
+  return '操作失败，请稍后重试'
+}
+
+/** 取失败结果里**该显示给用户**的那句话（包装一下，避免各处重复 `r.human ?? r.reason`） */
+export function failText(r: { reason: string; human?: string; status?: number }): string {
+  return r.human ?? humanizeFailure(r.reason, r.status)
+}
 
 async function request<T>(
   path: string,
@@ -546,7 +590,8 @@ async function request<T>(
     const text = await res.text()
     if (!res.ok) {
       // 401 单独标出来：上层可以据此提示"需要登录"，而不是当成网络故障
-      return { ok: false, reason: `HTTP ${res.status}: ${text.slice(0, 200)}`, status: res.status }
+      const reason = `HTTP ${res.status}: ${text.slice(0, 200)}`
+      return { ok: false, reason, human: humanizeFailure(reason, res.status), status: res.status }
     }
     if (!text) {
       // 204（logout）没有响应体
@@ -555,20 +600,46 @@ async function request<T>(
     try {
       return { ok: true, value: JSON.parse(text) as T }
     } catch {
-      return { ok: false, reason: '响应不是合法 JSON' }
+      const reason = '响应不是合法 JSON'
+      return { ok: false, reason, human: humanizeFailure(reason) }
     }
   } catch (err) {
     // AbortError = 超时；TypeError = 网络不可达 / CORS / 混合内容被拦
     const e = err as Error
     const reason = e.name === 'AbortError' ? `请求超时（${TIMEOUT_MS}ms）` : `${e.name}: ${e.message}`
-    return { ok: false, reason }
+    return { ok: false, reason, human: humanizeFailure(reason) }
   } finally {
     clearTimeout(timer)
   }
 }
 
-/** 取帖子列表（最新的在最前）；匿名可读 */
-export function listPosts(authorId?: string): Promise<ApiResult<ApiPost[]>> {
+/**
+ * 帖子列表的可选查询参数（都交给**服务端**执行，客户端不做二次过滤/排序）。
+ */
+export interface ListPostsOptions {
+  /** 只看某个作者（"我的发布"/他人主页）。服务端校验 uuid，非法 → 400 */
+  authorId?: string
+  /**
+   * CAMP-002 / PLACE-002：排序。
+   * - `latest`（默认）：发布时间倒序
+   * - `hot`：点赞×2 + 有效评论×3 + 收藏×1 − max(0, 距发布小时数 − 24)
+   * ⚠️ 必须服务端排序：`LIST_LIMIT` 之外的帖子客户端根本拿不到，
+   * 本地重排只能得到"这一页里最热的"，不是"最热的"。
+   */
+  sort?: 'latest' | 'hot'
+  /** CAMP-003：地标过滤。多个 = "属于任意一个所选地标"。空数组/省略 = 全部地标 */
+  placeIds?: string[]
+}
+
+/**
+ * 取帖子列表（默认最新在最前）；匿名可读。
+ *
+ * 历史签名是 `listPosts(authorId?: string)`，为了不破坏既有调用点，
+ * 这里同时接受"字符串（= authorId）"与"选项对象"两种写法。
+ */
+export function listPosts(
+  opts?: string | ListPostsOptions,
+): Promise<ApiResult<ApiPost[]>> {
   /*
     M5 WO#12：可选的 `authorId` → **服务端**过滤（不是客户端 filter）。
     为什么必须服务端过滤（审核记录 53）：客户端 `items.filter(...)` 只有在
@@ -576,8 +647,15 @@ export function listPosts(authorId?: string): Promise<ApiResult<ApiPost[]>> {
     它会**静默变成**"不完整但看起来完整"，而用户无法察觉。
     服务端过滤没有这个隐患，因此这里把过滤条件交给服务端。
   */
-  const q = authorId ? `?authorId=${encodeURIComponent(authorId)}` : ''
-  return request<{ items: ApiPost[] }>(`/api/posts${q}`).then((r) =>
+  const o: ListPostsOptions = typeof opts === 'string' ? { authorId: opts } : (opts ?? {})
+  const qs = new URLSearchParams()
+  if (o.authorId) qs.set('authorId', o.authorId)
+  if (o.sort) qs.set('sort', o.sort)
+  // 空数组 = 全部地标：不发参数（服务端把空数组也当"不过滤"，这里少一次编解码）
+  const placeIds = (o.placeIds ?? []).filter(Boolean)
+  if (placeIds.length) qs.set('placeIds', placeIds.join(','))
+  const q = qs.toString()
+  return request<{ items: ApiPost[] }>(`/api/posts${q ? `?${q}` : ''}`).then((r) =>
     r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
   )
 }
@@ -859,11 +937,36 @@ export interface ApiPlaceActivity {
  *   · 缺省    近期活动 = 未结束的 + 刚结束（7 天内）的 + 近期取消的
  * ⇒ 所以"已结束超 7 天"的活动**按设计不出现在默认列表里**，这不是漏数据。
  */
+/** 活动列表的可选查询参数（ACT-001/ACT-002，全部服务端生效） */
+export interface ListActivitiesOptions {
+  /** 时间窗口：今天 / 本周 */
+  window?: 'today' | 'week'
+  /**
+   * ACT-001：状态筛选。
+   * - 省略/`''`：默认视图 = 即将开始 + 进行中，按开始时间从近到远
+   * - `ended` / `cancelled`：**不套时间窗口**，历史活动可以筛出来
+   * - `all`：全部（含历史）
+   */
+  status?: '' | 'upcoming' | 'ongoing' | 'ended' | 'cancelled' | 'all'
+  /** ACT-002 / PLACE-003：地标过滤（活动必有地点，等值匹配） */
+  placeId?: string
+}
+
+/**
+ * 活动列表（US-04）。匿名可读。
+ *
+ * 历史签名是 `listActivities(window?)`；同时接受选项对象，便于逐步迁移。
+ */
 export function listActivities(
-  window?: 'today' | 'week',
+  opts?: 'today' | 'week' | ListActivitiesOptions,
 ): Promise<ApiResult<ApiActivity[]>> {
-  const q = window ? `?window=${window}` : ''
-  return request<{ items: ApiActivity[] }>(`/api/activities${q}`).then((r) =>
+  const o: ListActivitiesOptions = typeof opts === 'string' ? { window: opts } : (opts ?? {})
+  const qs = new URLSearchParams()
+  if (o.window) qs.set('window', o.window)
+  if (o.status) qs.set('status', o.status)
+  if (o.placeId) qs.set('placeId', o.placeId)
+  const q = qs.toString()
+  return request<{ items: ApiActivity[] }>(`/api/activities${q ? `?${q}` : ''}`).then((r) =>
     r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
   )
 }

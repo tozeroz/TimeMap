@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Screen, TopBar } from '../components/Shell'
-import { IconClose, IconMore } from '../components/icons'
-import { getPost, mediaUrl } from '../api/client'
-import { goBack } from '../router'
+import { IconClose } from '../components/icons'
+import { getPost, humanizeFailure, mediaUrl } from '../api/client'
+import { navigate } from '../router'
 import './media.css'
 
 /**
@@ -62,7 +62,7 @@ export function MediaPreviewScreen({ postId, startIndex }: { postId?: string; st
       if (!r.ok) {
         /* ⭐ 不回落、不显示任何别的动态的图片 —— 这正是被修的缺陷 */
         setGallery([])
-        setErrorText(r.reason)
+        setErrorText(humanizeFailure(r.reason, r.status))
         setState(r.status === 404 ? 'not_found' : 'error')
         return
       }
@@ -77,6 +77,19 @@ export function MediaPreviewScreen({ postId, startIndex }: { postId?: string; st
       alive = false
     }
   }, [postId, startIndex])
+
+  /**
+   * ⭐ 关闭预览。
+   *
+   * 改前是 `goBack('campus')`，而 `goBack` 在有历史时执行 `history.back()` ——
+   * 从 `#/media?post=...` 直接打开（或历史恰好停在第一条）时会退回**没有 hash 的地址**，
+   * 页面变成白屏（QA 报告 P2：`#/media?post=` 点关闭 → hash 空 + 白屏）。
+   * ⇒ 不用历史栈，**显式**回到来源：有 postId 就回帖子详情，否则回校园流。
+   */
+  function closePreview() {
+    if (postId) navigate('feed', { id: postId })
+    else navigate('campus')
+  }
 
   if (state === 'loading') {
     return (
@@ -122,13 +135,8 @@ export function MediaPreviewScreen({ postId, startIndex }: { postId?: string; st
           <TopBar
             variant="plain"
             left={
-              <button className="iconbtn media__btn" onClick={() => goBack('campus')} aria-label="关闭">
+              <button className="iconbtn media__btn" data-media-close onClick={closePreview} aria-label="关闭">
                 <IconClose size={22} />
-              </button>
-            }
-            right={
-              <button className="iconbtn media__btn" aria-label="更多">
-                <IconMore size={20} />
               </button>
             }
           />

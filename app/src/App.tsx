@@ -29,6 +29,7 @@ import { ActivitiesScreen } from './screens/ActivitiesScreen'
 import { ActivityDetailScreen } from './screens/ActivityDetailScreen'
 import { AdminScreen } from './screens/AdminScreen'
 import { FavoritesScreen } from './screens/FavoritesScreen'
+import { MyPostsScreen } from './screens/MyPostsScreen'
 import {
   AboutScreen,
   AccountScreen,
@@ -171,6 +172,8 @@ export default function App() {
       {root === 'activity' && <ActivityDetailScreen id={route.query.id ?? param ?? ''} />}
       {root === 'admin' && <AdminScreen />}
       {root === 'favorites' && <FavoritesScreen />}
+      {/* ⭐ ME-001/ME-002：我的发布（「我的」→ 我的发布）。双列瀑布流，数据是 /api/posts?authorId=我 */}
+      {root === 'myposts' && <MyPostsScreen />}
       {/*
         M5 WO#9A：群聊走**同一个 ChatScreen**，只是换一个头部变体。
 

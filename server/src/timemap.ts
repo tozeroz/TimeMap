@@ -443,20 +443,68 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
   }
 
   app.get('/api/activities', async (req, reply) => {
-    const window = (req.query as { window?: string }).window ?? ''
-    let windowCond = ''
+    const query = req.query as { window?: string; status?: string; placeId?: string }
+
+    /*
+      ---- ACT-001 / ACT-002：状态筛选与地标筛选 ----
+
+      ACT-001（已确认）：默认只展示"即将开始"和"进行中"，按开始时间从近到远；
+      已结束和已取消**通过筛选**查看。
+
+      ⚠️ 改前这里只有一个"近 7 天"窗口（`ends_at > now() - 7 day`），把最近结束的活动
+         混进了默认列表，而前端又用 `effectiveStatus` 二次过滤 —— 结果是
+         "已结束"筛选恒为空（窗口先把它们剔除，前端再筛一次自然一条不剩）。
+
+      现在：`status` 在**服务端**生效，`ended` / `cancelled` / `all` **不套时间窗口**
+      （历史活动是长期存在的事实，不是"近期列表"的一部分）。前端不再二次过滤。
+
+      `placeId`（ACT-002 / PLACE-003）：活动**必须**有地点（activities.place_id NOT NULL），
+      所以这里是等值过滤，不是 left join 的可空判断。非法 uuid → 400。
+    */
+    const status = query.status ?? ''
+    const ALLOWED = ['', 'upcoming', 'ongoing', 'ended', 'cancelled', 'all']
+    if (!ALLOWED.includes(status)) {
+      reply.code(400)
+      return { error: 'bad_status', got: status, allowed: ALLOWED }
+    }
+    const placeIdRaw = query.placeId ?? ''
+    if (placeIdRaw && !UUID_RE.test(placeIdRaw)) {
+      reply.code(400)
+      return { error: 'bad_place_id', got: placeIdRaw }
+    }
+
+    const window = query.window ?? ''
+    const conds: string[] = []
+    if (status === '') {
+      // 默认：近期 = 即将开始 + 进行中
+      conds.push(`(${ACTIVITY_EFF_STATUS_SQL}) in ('upcoming','ongoing')`)
+    } else if (status !== 'all') {
+      // 白名单已校验，直接内插安全；'all' = 不按状态过滤
+      conds.push(`(${ACTIVITY_EFF_STATUS_SQL}) = '${status}'`)
+    }
     if (window === 'week') {
       // 一周内开始（或正在进行）的活动
-      windowCond = `where (${ACTIVITY_EFF_STATUS_SQL}) in ('upcoming','ongoing')
-                     and a.starts_at < now() + interval '7 day'`
+      conds.push(`a.starts_at < now() + interval '7 day'`)
     } else if (window === 'today') {
-      windowCond = `where (${ACTIVITY_EFF_STATUS_SQL}) in ('upcoming','ongoing')
-                     and a.starts_at < now() + interval '1 day'`
-    } else {
-      // 默认：近期活动 = 尚未结束的 + 刚结束（7 天内）的 + 近期取消（醒目标注）的；
-      // 更早的历史活动自动退出近期列表
-      windowCond = `where coalesce(a.ends_at, a.starts_at + interval '2 hours') > now() - interval '7 day'`
+      conds.push(`a.starts_at < now() + interval '1 day'`)
     }
+    const params: unknown[] = []
+    if (placeIdRaw) {
+      // ⚠️ $1 被 ACTIVITY_SELECT 的 favoritedByMe 占用，所以地标是 $2
+      conds.push(`a.place_id = $2::uuid`)
+      params.push(placeIdRaw)
+    }
+    const whereCond = conds.length ? `where ${conds.join(' and ')}` : ''
+
+    /*
+      排序：默认/即将开始/进行中 = 开始时间从近到远（升序，进行中天然在前）；
+      已结束/已取消/全部 = 从近到远地看历史，用降序（不然几百条历史活动要翻到底）。
+    */
+    const orderCond =
+      status === 'ended' || status === 'cancelled' || status === 'all'
+        ? `order by a.starts_at desc, a.id desc`
+        : `order by a.starts_at, a.id`
+
     // 可选会话：活动**不需要**登录即可浏览，登录只用来推导 favoritedByMe
     // （与 index.ts:1749 的地点详情同一写法：未登录 ⇒ meId = null ⇒ favoritedByMe 恒 false）
     const sess = await resolveSession(req.headers.authorization)
@@ -465,13 +513,10 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
     try {
       const r = await db.pool.query<ActivityRow>(
         `${ACTIVITY_SELECT}
-          ${windowCond}
-         order by case (${ACTIVITY_EFF_STATUS_SQL})
-                    when 'ongoing' then 0 when 'upcoming' then 1
-                    when 'ended' then 2 else 3 end,
-                  a.starts_at
+          ${whereCond}
+         ${orderCond}
          limit ${LIST_LIMIT}`,
-        [meId],
+        [meId, ...params],
       )
       return { items: r.rows.map(activityToJson) }
     } catch (err) {

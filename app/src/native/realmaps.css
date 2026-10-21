@@ -37,6 +37,13 @@
   left: 0;
   top: 0;
   will-change: transform;
+  /*
+   * 腾讯 GL 会在容器里插一层铺满的覆盖 div（`leaflet-clickable`，z-index:1000），
+   * 它负责地图手势，但也会把下面的一切点击吃掉。自绘标记必须抬到它之上，
+   * 否则点标记没有反应（视觉上标记可见，只是 hit-test 命中了覆盖层）。
+   * 抬高一档即可，别高于页面自己的悬浮控件（那些在 .realmaps 之外）。
+   */
+  z-index: 1001;
 }
 
 .rm__wrap--tmap .rm {
@@ -135,6 +142,7 @@
 @keyframes new-post-pulse { 50% { filter: drop-shadow(0 0 12px #ffad25); } }
 .rm--text .rm__card { border-radius: 18px; transform: translateY(-8px); animation: place-text-float 4s ease-in-out infinite; }
 .rm--text .rm__img--text { width: 120px; height: auto; min-height: 32px; border-radius: 14px; background: transparent; }
-.map--hide-text .rm--text .rm__card { display: none; }
+/* 原 `.map--hide-text` 规则随「文字弹幕」开关一起移除（那个开关只是隐藏这些卡片，
+   并不是需求 MAP-005 要求的弹幕；见 docs/zjx/地图模块缺口登记-2026-10-19.md）。 */
 @keyframes place-text-float { 50% { transform: translate(5px, -12px); } }
 @media (prefers-reduced-motion: reduce) { .rm--text .rm__card, .rm--highlight { animation: none; } }

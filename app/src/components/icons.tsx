@@ -304,3 +304,16 @@ export function IconCheck({ size = 18, strokeWidth = 2.4 }: IconProps) {
     </svg>
   )
 }
+
+/**
+ * 齿轮（账号设置）。原版「我的」页没有这个入口的图标基线，这里是按同一线性风格
+ * 自绘的通用齿轮：中心圆 + 8 条径向齿 —— 只承载"设置"这个通用语义，不复制任何资产。
+ */
+export function IconSettings({ size = 20, strokeWidth = 1.8 }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth}>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 3.2v2.1M12 18.7v2.1M3.2 12h2.1M18.7 12h2.1M5.8 5.8l1.5 1.5M16.7 16.7l1.5 1.5M18.2 5.8l-1.5 1.5M7.3 16.7l-1.5 1.5" />
+    </svg>
+  )
+}

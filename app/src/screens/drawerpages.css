@@ -24,6 +24,33 @@
   color: var(--c-text-3);
 }
 
+/* 行尾的说明小字（如「暂未开放（需服务端支持）」）。
+   为什么放在 value 左边、并允许换行：它是**能力状态说明**，不是值；
+   置灰行的 value 位可能是空的，说明文字必须能被读到，不能被 ellipsis 吞掉。 */
+.dprow__note {
+  margin-left: auto;
+  padding-right: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--c-text-3);
+  text-align: right;
+}
+
+/* 置灰行：可聚焦但不可点（disabled 已阻止点击），视觉上必须与可点行区分开，
+   否则用户会反复点它。 */
+.dprow[disabled],
+.dprow[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 页面级提示（如「已退出登录」） */
+.dpnote {
+  margin: 14px var(--pad-page) 0;
+  font-size: 13px;
+  color: var(--c-text-3);
+}
+
 .dprow svg {
   color: var(--c-text-3);
   flex: 0 0 auto;

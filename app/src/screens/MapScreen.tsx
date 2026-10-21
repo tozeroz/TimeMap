@@ -3,9 +3,10 @@ import { Screen } from '../components/Shell'
 import {
   IconChatBubble,
   IconChevronDown,
-  IconCompass,
+  IconClose,
   IconLocation,
   IconPlus,
+  IconSearch,
 } from '../components/icons'
 import { listPlaces, listPosts, listSchools, mediaUrl, type ApiPlaceListItem, type ApiPost, type ApiSchool } from '../api/client'
 import type { MapMarker } from '../native/mapApi'
@@ -104,6 +105,73 @@ export function markersFromPlaces(
 
 const MIN_SCALE = 0.6
 const MAX_SCALE = 3
+
+/* ============================================================================
+   PLACE-005：从地点详情等页面返回地图时，保留打开前的位置与缩放
+   ============================================================================
+   ## 为什么要持久化，而不是"把状态留在组件里"
+     路由切换会**卸载** `MapScreen`（`App.tsx` 按路由 switch 渲染），
+     所以 `view` 与地图实例里的 center/zoom 在离开那一刻就没了。
+     需求 5.4（PLACE-005）明确要求：从地点面板返回地图时保留打开前的位置与缩放。
+
+   ## 存在哪、活多久
+     · 地图视图 → `sessionStorage`：本次会话内有效。关掉 App 再进来会回到
+       默认主校区视角 —— 这是 MAP-001「进入地图默认展示主校区」的要求，
+       不是"忘记保存"。
+     · 解析失败/隐私模式禁用存储 → 静默忽略（地图退化为默认视角，不影响使用）。**
+
+   ## 为什么在线底图要**每秒采样**，而不是在卸载时读句柄
+     `MapHandle` 只有 `getCenter()/getZoom()`，没有事件订阅；而且卸载时的 cleanup
+     顺序不受我们控制（地图组件会先把句柄置 null）。所以按秒把当前视图采样进 ref，
+     离开时直接用最后一次采样值，**不依赖卸载那一刻句柄是否还活着**。
+     采样只在底图就绪后进行，开销是一次 getCenter/getZoom。
+*/
+const MAP_VIEW_KEY = 'campus.demo.mapView.v1'
+
+interface SavedOfflineView {
+  offline: true
+  x: number
+  y: number
+  scale: number
+}
+
+interface SavedOnlineView {
+  offline: false
+  lat: number
+  lng: number
+  zoom: number
+}
+
+function readSavedMapView(): SavedOfflineView | SavedOnlineView | null {
+  try {
+    const raw = sessionStorage.getItem(MAP_VIEW_KEY)
+    if (!raw) return null
+    // 刻意按"未知结构"解析再逐字段校验：sessionStorage 里的东西可能被旧版本/手工改过
+    const v = JSON.parse(raw) as Record<string, unknown>
+    if (v.offline === true) {
+      const { x, y, scale } = v
+      if (typeof x === 'number' && typeof y === 'number' && typeof scale === 'number') {
+        return { offline: true, x, y, scale }
+      }
+      return null
+    }
+    const { lat, lng, zoom } = v
+    if (typeof lat === 'number' && typeof lng === 'number' && typeof zoom === 'number') {
+      return { offline: false, lat, lng, zoom }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+function writeSavedMapView(v: SavedOfflineView | SavedOnlineView): void {
+  try {
+    sessionStorage.setItem(MAP_VIEW_KEY, JSON.stringify(v))
+  } catch {
+    /* 隐私模式/配额满：忽略，地图退化为默认视角 */
+  }
+}
 
 /**
  * 离线自绘地图 —— **降级方案**。
@@ -250,7 +318,11 @@ export function MapScreen() {
   // #/map?ask=1 → 强制弹出定位授权说明（验收真实触摸用；正常只在未授权时弹）
   const forceAsk = route.query.ask === '1'
 
-  const [view, setView] = useState<ViewState>({ x: -260, y: -700, scale: 1 })
+  const [view, setView] = useState<ViewState>(() => {
+    // PLACE-005：离线自绘底图的视图状态同样要保留（在线底图由句柄采样保存）
+    const saved = readSavedMapView()
+    return saved?.offline ? { x: saved.x, y: saved.y, scale: saved.scale } : { x: -260, y: -700, scale: 1 }
+  })
   const [tipOpen, setTipOpen] = useState(false)
   const [tileFailed, setTileFailed] = useState(false)
   const [tilesOk, setTilesOk] = useState<boolean | null>(null)
@@ -296,9 +368,37 @@ export function MapScreen() {
   const [showPublished, setShowPublished] = useState(Boolean(route.query.newPostId))
   const [selectedPlace, setSelectedPlace] = useState(route.query.placeId ?? '')
   const [markerPhase, setMarkerPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  /**
+   * 重试计数器：`/api/places` 或 `/api/posts` 读失败时，用户可以**主动重试**。
+   * 改前失败态只有一行「标记不可用（读取失败或未登录）」——**没有任何动作**，
+   * 用户只能靠刷新整页（§12 要求"加载失败给明确反馈**并可重试**"）。
+   */
+  const [markerReload, setMarkerReload] = useState(0)
+  /**
+   * 帖子列表单独失败标记：地点能读到、帖子读不到时，改前是**静默降级**
+   * （`const posts = po.ok ? po.value : []`），地图上看起来"这些地点都没有内容"。
+   * 那是把"读不到"伪装成"没有"——必须显式说出来。
+   */
+  const [postsFailed, setPostsFailed] = useState(false)
   /** 分类筛选（需求 4.1：`[全部] [地标] [食堂]`） */
   const [category, setCategory] = useState<CategoryFilter>('全部')
-  const [showText, setShowText] = useState(true)
+  /*
+    MAP-002 / MAP-003：地图内的「搜索地标」工具。
+
+    ## 数据来源
+      `GET /api/places?q=`（服务端子串匹配 name/address），只返回**团队维护的预设地点**
+      ⇒ 天然满足 MAP-003「只允许搜索和选择预设地标」。
+    ## 选中之后
+      MAP-003 要求"地图移动并放大到该地标，同时打开该地点底部面板"。
+      地点底部面板（PLACE-001）的形态要等地标详情那边一起定（见
+      `docs/zjx/地图模块缺口登记-2026-10-19.md`），所以本轮先落到
+      **飞到该地标 + 打开现有地点详情页**，并把目标视图存进会话，
+      返回地图时人就停在这个地标上（PLACE-005）。
+  */
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [keyword, setKeyword] = useState('')
+  const [searchResults, setSearchResults] = useState<ApiPlaceListItem[]>([])
+  const [searchPhase, setSearchPhase] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
 
   /*
     ⭐ P0：标记来源改为**地点**（按地点聚合），代表帖信息来自帖子列表。
@@ -320,10 +420,12 @@ export function MapScreen() {
       if (!alive) return
       if (!pr.ok) {
         setMarkers([])
+        setPostsFailed(false)
         setMarkerPhase('unavailable')
         return
       }
       const posts = po.ok ? po.value : []
+      setPostsFailed(!po.ok)
       const fresh = posts.find(p => p.id === route.query.newPostId)
       setPublished(fresh ?? null)
       setMarkers(markersFromPlaces(pr.value, fresh ? [fresh, ...posts.filter(p => p.id !== fresh.id)] : posts).map(m => ({ ...m, highlight: Boolean(fresh && m.postId === fresh.id) })))
@@ -332,7 +434,7 @@ export function MapScreen() {
     return () => {
       alive = false
     }
-  }, [category, route.query.newPostId])
+  }, [category, route.query.newPostId, markerReload])
   // ---- 真实定位 ----
   const [fix, setFix] = useState<GeoFix | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
@@ -360,6 +462,130 @@ export function MapScreen() {
     const target = markers.find(m => m.placeId === route.query.placeId)
     if (target) mapHandleRef.current?.flyTo(target.lat, target.lng, 18)
   }, [markers, route.query.placeId])
+
+  // ---- PLACE-005：视图采样 + 离开前保存（见文件头 MAP_VIEW_KEY 处的说明） ----
+  const offlineRef = useRef(offline)
+  const viewRef = useRef(view)
+  /*
+    ⚠️ 不在 render 期间写 ref（React 规则：ref 只在事件处理器/副作用里读写）⇒ 用 effect 同步。
+    这两个 ref 只服务于 persistView（在事件处理器与定时器里读）。
+  */
+  useEffect(() => {
+    offlineRef.current = offline
+  }, [offline])
+  useEffect(() => {
+    viewRef.current = view
+  }, [view])
+  const lastOnlineViewRef = useRef<{ lat: number; lng: number; zoom: number } | null>(null)
+  /** 底图实例创建时刻 —— persistView 用它区分"刚建图（位置还是默认值）"与"用户真的看过这里" */
+  const mapCreatedAtRef = useRef(0)
+  /** 仅用于验收钩子：本次进入地图是否恢复了上次的视图 */
+  const [viewRestored, setViewRestored] = useState<'none' | 'offline' | 'online'>('none')
+
+  /** 把"当前地图视图"写进会话存储。离开地图去别处之前调用一次。 */
+  const persistView = useCallback(() => {
+    if (offlineRef.current) {
+      const v = viewRef.current
+      writeSavedMapView({ offline: true, x: v.x, y: v.y, scale: v.scale })
+      return
+    }
+    /*
+      ## 为什么要有 1.5s 的"刚建图"窗口
+        底图实例刚创建时它的 center 是**默认校园中心**，而我们的恢复（flyTo）还在飞。
+        dev 的 StrictMode 会 double-invoke effect（挂载→立即清理→再挂载），
+        清理时若直接读句柄，就会把"默认中心"当成用户视图写进存储 ——
+        实测表现：从详情返回地图后被立刻重置回默认位置（2026-10-19 浏览器实测）。
+      ⇒ 窗口内一律用"上一次采样/恢复值"，窗口外才用活的句柄（这样拖动后的精确位置也不会丢）。
+    */
+    const handle = mapHandleRef.current
+    const last = lastOnlineViewRef.current
+    const justCreated = Date.now() - mapCreatedAtRef.current < 1500
+    const liveCenter = justCreated ? null : handle?.getCenter()
+    const liveZoom = justCreated ? null : handle?.getZoom()
+    const center = liveCenter ?? (last ? { lat: last.lat, lng: last.lng } : null)
+    const zoom = typeof liveZoom === 'number' ? liveZoom : last?.zoom
+    if (center && typeof zoom === 'number') {
+      writeSavedMapView({ offline: false, lat: center.lat, lng: center.lng, zoom })
+    }
+  }, [])
+
+  /*
+    在线底图：每秒采样一次当前中心/缩放（理由见文件头：卸载时句柄可能已被置 null）。
+    ⚠️ 条件只有 `!offline` —— 不能等"标记 ready"：标记读不到（未登录/后端不可用）时
+       地图照样可以拖动缩放，而那时恰恰更需要采样兜住卸载瞬间的视图。
+  */
+  useEffect(() => {
+    if (offline) return
+    const timer = window.setInterval(() => {
+      const h = mapHandleRef.current
+      const center = h?.getCenter()
+      const zoom = h?.getZoom()
+      if (center && typeof zoom === 'number') lastOnlineViewRef.current = { lat: center.lat, lng: center.lng, zoom }
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [offline])
+
+  // 离线底图：初始 view 已在 useState 初始化时恢复；这里只登记验收状态
+  useEffect(() => {
+    const saved = readSavedMapView()
+    if (offline && saved?.offline) setViewRestored('offline')
+  }, [offline])
+
+  /*
+    切换底部 tab（不经过本页任何按钮）或关闭页面时也要保存一次视图。
+    这条不依赖句柄是否还活着：persistView 用的是每秒采样的 lastOnlineViewRef。
+  */
+  useEffect(() => {
+    const onHide = () => persistView()
+    window.addEventListener('pagehide', onHide)
+    return () => {
+      window.removeEventListener('pagehide', onHide)
+      persistView()
+    }
+  }, [persistView])
+
+  // MAP-003：搜索走服务端（与地点列表同一纪律：不在客户端 filter）
+  useEffect(() => {
+    if (!searchOpen) return
+    let alive = true
+    setSearchPhase('loading')
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const r = await listPlaces(keyword || undefined)
+        if (!alive) return
+        if (!r.ok) {
+          setSearchResults([])
+          setSearchPhase('unavailable')
+          return
+        }
+        setSearchResults(r.value)
+        setSearchPhase('ready')
+      })()
+    }, 250)
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+    }
+  }, [searchOpen, keyword])
+
+  /**
+   * 选中一个预设地标：飞过去 + 打开地点详情，并把**目标视图**记为"上次视图"，
+   * 这样从详情返回时人就停在这个地标上（PLACE-005）。
+   */
+  const pickPlace = useCallback((p: ApiPlaceListItem) => {
+    setSearchOpen(false)
+    setKeyword('')
+    setSearchResults([])
+    setSearchPhase('idle')
+    setSelectedPlace(p.id)
+    if (typeof p.latitude === 'number' && typeof p.longitude === 'number') {
+      mapHandleRef.current?.flyTo(p.latitude, p.longitude, 18)
+      const target = { lat: p.latitude, lng: p.longitude, zoom: 18 }
+      lastOnlineViewRef.current = target
+      writeSavedMapView({ offline: false, ...target })
+    }
+    navigate('poidetail', { id: p.id })
+  }, [])
 
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s))
 
@@ -525,19 +751,6 @@ export function MapScreen() {
     setView({ x: -260, y: -700, scale: 1 })
   }, [offline, fix])
 
-  const backToCampus = useCallback(() => {
-    mapHandleRef.current?.flyTo(CAMPUS_CENTER[0], CAMPUS_CENTER[1], 16)
-  }, [])
-
-  const zoomIn = useCallback(() => {
-    const handle = mapHandleRef.current
-    if (!offline && handle) {
-      handle.zoomIn()
-      return
-    }
-    setView((v) => ({ ...v, scale: clampScale(v.scale * 1.25) }))
-  }, [offline])
-
   const handleTilesFailed = useCallback(() => {
     setTilesOk(false)
     setTileFailed(true)
@@ -562,17 +775,42 @@ export function MapScreen() {
       理由见 markersFromPlaces 的说明：地图的组织单位是地点（需求 4.1/4.2）。
       ⚠️ 不回落到 postId —— 两者的语义不同，混用会让"点进哪个地点"变得不可预测。
     */
+    // PLACE-005：离开地图前先把当前视图记下来，返回时停在同一处
+    persistView()
     if (postId) { navigate('feed', { id: postId }); return }
     setSelectedPlace(placeId)
     navigate('poidetail', { id: placeId })
-  }, [])
+  }, [persistView])
 
   const handleMapRef = useCallback((handle: MapHandle | null) => {
     mapHandleRef.current = handle
-    if (handle) {
-      setTilesOk(true)
-      const target = markers.find(m => m.placeId === route.query.placeId)
-      if (target) handle.flyTo(target.lat, target.lng, 18)
+    if (!handle) return
+    mapCreatedAtRef.current = Date.now()
+    setTilesOk(true)
+    // ① URL 指定了地点（深链 / 发布后回到地图）→ 优先飞到该地点
+    const target = markers.find(m => m.placeId === route.query.placeId)
+    if (target) {
+      handle.flyTo(target.lat, target.lng, 18)
+      lastOnlineViewRef.current = { lat: target.lat, lng: target.lng, zoom: 18 }
+      return
+    }
+    /*
+      ② 恢复视图（PLACE-005）。
+      ⚠️ 这里**每次地图实例重建**都要恢复，不能"只恢复一次"：三个底图组件的建图 effect
+         把 `markers` 放在依赖里，标记刷新会导致**地图实例重建**、回到默认中心。
+         实测踩到：恢复成功后标记一刷新，人又被拽回校园中心（2026-10-19 浏览器实测）。
+      ⇒ 优先级：本实例内累计的最新视图（lastOnlineViewRef，含用户刚拖到的地方）
+               > 会话里存的离开前视图。
+    */
+    const live = lastOnlineViewRef.current
+    const saved = live ?? (() => {
+      const v = readSavedMapView()
+      return v && !v.offline ? { lat: v.lat, lng: v.lng, zoom: v.zoom } : null
+    })()
+    if (saved) {
+      lastOnlineViewRef.current = saved
+      handle.flyTo(saved.lat, saved.lng, saved.zoom)
+      setViewRestored('online')
     }
   }, [markers, route.query.placeId])
 
@@ -585,7 +823,10 @@ export function MapScreen() {
             <button
               className="map__region"
               data-region-phase={schoolPhase}
-              onClick={() => navigate('poi')}
+              onClick={() => {
+                persistView()
+                navigate('poi')
+              }}
             >
               {/* 权威学校名（GET /api/schools）；读不到时**不显示**编造文案 */}
               <span data-region-school>
@@ -594,7 +835,14 @@ export function MapScreen() {
               <IconChevronDown size={13} />
             </button>
           </div>
-          <button className="iconbtn map__msg" onClick={() => navigate('message')} aria-label="消息">
+          <button
+            className="iconbtn map__msg"
+            onClick={() => {
+              persistView()
+              navigate('message')
+            }}
+            aria-label="消息"
+          >
             <IconChatBubble size={22} />
           </button>
         </header>
@@ -618,10 +866,19 @@ export function MapScreen() {
             {c}
           </button>
         ))}
-        <button className={`map__cat ${showText ? 'is-active' : ''}`} aria-pressed={showText} onClick={() => setShowText(v => !v)}>文字弹幕</button>
       </div>
+      {/*
+        ⚠️ 这里**没有**「文字弹幕」开关（原来有一个，但它只是给根节点加 `.map--hide-text`
+        隐藏栅格底图上的文字卡片，并不是需求 MAP-005 要求的弹幕滚动）。
+        纯文字弹幕是 F13（P1 / 迭代一，见 `需求分析与产品设计文档` §3.3），
+        需要"只播当前可见区域内、关联有效地点、公开可见的纯文字帖"的候选接口，
+        在迭代一实现时连同真实开关一起加回来。
+        与其留一个点了没反应、看起来像有功能的开关，不如先撤掉 —— 见
+        `docs/zjx/地图模块缺口登记-2026-10-19.md`。
+      */}
       <div
-        className={`map ${showText ? '' : 'map--hide-text'}`}
+        className="map"
+        data-map-view-restored={viewRestored}
         ref={stageRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -635,7 +892,14 @@ export function MapScreen() {
           <strong>发布成功{published?.place ? ` · ${published.place}` : ''}</strong>
           {published?.images?.[0] && <img src={mediaUrl(published.mapMediaId || published.images[0].id)} alt="刚发布的内容" />}
           {published?.body && <p>{published.body.slice(0, 60)}</p>}
-          <button onClick={() => navigate('feed', { id: route.query.newPostId })}>查看帖子</button>
+          <button
+            onClick={() => {
+              persistView()
+              navigate('feed', { id: route.query.newPostId })
+            }}
+          >
+            查看帖子
+          </button>
           <button aria-label="关闭发布提示" onClick={() => setShowPublished(false)}>关闭</button>
         </div>}
         {offline ? (
@@ -685,8 +949,24 @@ export function MapScreen() {
             离线底图不支持标记显示
           </span>
         ) : markerPhase !== 'ready' ? (
-          <span className="map__markerBadge" data-marker-phase={markerPhase}>
-            {markerPhase === 'loading' ? '标记加载中…' : '标记不可用（读取失败或未登录）'}
+          <span
+            className={`map__markerBadge ${markerPhase === 'unavailable' ? 'map__markerBadge--action' : ''}`}
+            data-marker-phase={markerPhase}
+          >
+            {markerPhase === 'loading' ? (
+              '标记加载中…'
+            ) : (
+              <>
+                标记读取失败
+                <button
+                  className="map__markerRetry"
+                  data-marker-retry
+                  onClick={() => setMarkerReload((n) => n + 1)}
+                >
+                  重试
+                </button>
+              </>
+            )}
           </span>
         ) : markers.length === 0 ? (
           <span className="map__markerBadge" data-marker-phase="empty">
@@ -713,12 +993,25 @@ export function MapScreen() {
             {markers.length} 个标记
           </span>
         )}
+        {/* 帖子读取失败时的**显式降级说明**（不把"读不到"说成"没有内容"） */}
+        {!offline && markerPhase === 'ready' && postsFailed && (
+          <span className="map__postsFailed" data-marker-posts-failed>
+            帖子内容读取失败，标记未显示照片与点赞
+            <button
+              className="map__markerRetry"
+              data-marker-posts-retry
+              onClick={() => setMarkerReload((n) => n + 1)}
+            >
+              重试
+            </button>
+          </span>
+        )}
+
         {offline && (
           <span className="map__offlineBadge">
             {forceOffline ? '离线自绘底图（演示模式）' : '离线自绘底图（在线瓦片不可用）'}
           </span>
-        )}
-        {tilesOk === true && !offline && (
+        )}        {tilesOk === true && !offline && (
           <span className="map__onlineBadge" data-provider={provider}>
             {provider === 'tencent' ? '腾讯地图' : provider === 'amap' ? '高德地图' : '在线地图'}
           </span>
@@ -736,24 +1029,106 @@ export function MapScreen() {
         />
 
         {showFar && (
-          <div className="map__geoFar">
+          /*
+            MAP-002：地图工具只有「搜索地标」与「定位当前位置」，
+            **不提供**单独的"回到校园全景"工具 ⇒ 这里移除原来的「回校园」按钮，
+            只保留距离提示（告诉用户蓝点为什么不在画面里，但不给回校园的入口）。
+          */
+          <div className="map__geoFar" data-map-far="1">
             <span>当前位置距校园 {formatDistance(farFromCampus)}</span>
-            <button className="map__geoFarBtn" onClick={backToCampus}>
-              回校园
-            </button>
           </div>
         )}
 
-        <div className="map__controls">
-          <button className="map__ctrl" onClick={recenter} aria-label="回到定位">
-            <IconLocation size={20} />
+        {/*
+          MAP-002 / MAP-003：地图工具 = 搜索地标 + 定位当前位置（顺序与需求一致）。
+          ⚠️ 原来的「放大」控件已移除：需求把工具清单限定为这两项，缩放手势由底图自己负责
+          （Leaflet 滚轮/双指，SDK 底图同理）。
+        */}
+        <div className="map__controls" data-map-tools="search,locate">
+          <button
+            className="map__ctrl"
+            data-map-tool="search"
+            onClick={() => {
+              setKeyword('')
+              setSearchPhase('idle')
+              setSearchOpen(true)
+            }}
+            aria-label="搜索地标"
+          >
+            <IconSearch size={20} />
           </button>
-          <button className="map__ctrl" onClick={zoomIn} aria-label="放大">
-            <IconCompass size={20} />
+          <button className="map__ctrl" data-map-tool="locate" onClick={recenter} aria-label="定位当前位置">
+            <IconLocation size={20} />
           </button>
         </div>
 
-        <button className="map__fab" onClick={() => navigate('publish', selectedPlace ? { placeId: selectedPlace } : undefined)} aria-label="发布">
+        {/* MAP-003：搜索面板（只列团队维护的预设地标；选中后飞到该地标并打开地点详情） */}
+        {searchOpen && (
+          <div
+            className="map__search"
+            data-map-search-open="1"
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
+            <div className="map__searchHead">
+              <IconSearch size={18} />
+              <input
+                className="map__searchInput"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder="搜索地标"
+                aria-label="搜索地标关键词"
+                autoFocus
+              />
+              <button
+                className="iconbtn"
+                onClick={() => {
+                  setSearchOpen(false)
+                  setKeyword('')
+                }}
+                aria-label="关闭搜索"
+              >
+                <IconClose size={20} />
+              </button>
+            </div>
+            <div
+              className="map__searchBody"
+              data-map-search-state={searchPhase}
+              data-map-search-count={String(searchResults.length)}
+            >
+              {searchPhase === 'loading' && <p className="map__searchEmpty">搜索中…</p>}
+              {searchPhase === 'unavailable' && (
+                <p className="map__searchEmpty" data-map-search-empty="unavailable">
+                  地标读取失败，请重试
+                </p>
+              )}
+              {searchPhase === 'ready' && searchResults.length === 0 && (
+                <p className="map__searchEmpty" data-map-search-empty="no-match">
+                  {keyword.trim() ? `没有找到「${keyword.trim()}」相关的地标` : '暂无已启用的地标'}
+                </p>
+              )}
+              <ul className="map__searchList" data-map-search-results>
+                {searchResults.map((p) => (
+                  <li key={p.id}>
+                    <button className="map__searchRow" data-map-search-result={p.id} onClick={() => pickPlace(p)}>
+                      <span className="map__searchName">{p.name}</span>
+                      <span className="map__searchAddr">{p.address ?? ''}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
+        <button
+          className="map__fab"
+          onClick={() => {
+            persistView()
+            navigate('publish', selectedPlace ? { placeId: selectedPlace } : undefined)
+          }}
+          aria-label="发布"
+        >
           <IconPlus size={22} />
         </button>
 
