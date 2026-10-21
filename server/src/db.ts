@@ -23,6 +23,7 @@ import imageTextMapSql from './migrations/020_image_text_map_media.sql'
 import activityFavoritesSql from './migrations/021_activity_favorites.sql'
 import activityFieldsSql from './migrations/022_activity_fields.sql'
 import seedActivityFieldsSql from './migrations/023_seed_activity_fields.sql'
+import release13Sql from './migrations/024_release_1_3.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -123,6 +124,10 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   //      ⚠️ 不含封面：迁移造不出二进制文件，指向不存在的文件会渲染出坏图。
   //      用 coalesce 保证**不覆盖**管理员已填过的值。
   { version: '023_seed_activity_fields', sql: seedActivityFieldsSql },
+
+  // 024：发布 App 1.3（自更新清单指向我们自己构建并托管的 campus-demo-1.3.apk）。
+  //      与 app/src/version.ts、android versionName 三处一致，由门禁机械校验。
+  { version: '024_release_1_3', sql: release13Sql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */
