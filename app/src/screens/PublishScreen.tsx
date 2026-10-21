@@ -8,14 +8,21 @@ import { renderSticker } from '../native/sticker'
 import { defaultImageText, renderImageText, type ImageText } from '../native/imageText'
 import { ImageTextControls, ImageTextPreview } from '../components/ImageTextControls'
 import { deleteDraft, listDrafts, saveDraft, type PublishDraft } from '../data/publishDrafts'
+import { takeRepublish } from '../data/store'
 import { navigate, registerNavigationGuard, useRoute } from '../router'
 import './publish.css'
 
 export function PublishScreen() {
   const route = useRoute()
+  /**
+   * 「重新发布」交接（见 `store.ts` 的 `stashRepublish`）：只读一次并立刻消费掉。
+   * 放在 useState 初始化里而不是 effect 里 —— effect 里 setState 会多跑一轮渲染，
+   * 也会让「预填」这种纯初始化逻辑看起来像副作用。
+   */
+  const [republish] = useState(() => takeRepublish())
   const [owner] = useState(() => getSession()?.user.id ?? 'guest')
   const [placeId, setPlaceId] = useState(route.query.placeId ?? '')
-  const [text, setText] = useState('')
+  const [text, setText] = useState(republish?.text ?? '')
   const [original, setOriginal] = useState('')
   const [rawSticker, setRawSticker] = useState('')
   const [stickerResult, setStickerResult] = useState<{ source: string; outline: boolean; dataUrl: string } | null>(null)
@@ -75,9 +82,20 @@ export function PublishScreen() {
   const loadPlaces = useCallback(async () => {
     setPlacesPhase('loading')
     const r = await listPlaces()
-    if (r.ok) { setPlaces(r.value); setPlacesPhase('ready') }
-    else setPlacesPhase('error')
-  }, [])
+    if (r.ok) {
+      setPlaces(r.value)
+      setPlacesPhase('ready')
+      /*
+        重新发布时旧记录只存了**地标名**（没有 id）：等列表回来后按名字回填 id。
+        找不到同名地标就保持"未选" —— 宁可让用户自己选，也不要随便挑一个。
+      */
+      const want = republish?.placeName ?? ''
+      if (want) {
+        const hit = r.value.find((p) => p.name === want)
+        if (hit) setPlaceId(hit.id)
+      }
+    } else setPlacesPhase('error')
+  }, [republish?.placeName])
   useEffect(() => { void loadPlaces() }, [loadPlaces])
   useEffect(() => {
     void listDrafts().then(items => {

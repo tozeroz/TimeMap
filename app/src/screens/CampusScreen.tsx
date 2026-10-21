@@ -26,7 +26,7 @@ import {
 // 注意：这里**不再** import mock 的 `posts` —— 校园页已迁移到真实 API，
 // 在线时 API 是权威数据源（审核记录 07 的降级边界：已迁移页面不得混入 synthetic mock）。
 import type { FeedPost } from '../data/types'
-import { feedAuthoritative, setServerPosts, subscribeMyPosts } from '../data/store'
+import { feedAuthoritative, isLocalPostId, removeMyPost, setServerPosts, stashRepublish, subscribeMyPosts } from '../data/store'
 import { navigate, useRoute } from '../router'
 import '../styles/switcher.css'
 import './campus.css'
@@ -42,12 +42,26 @@ export function PostCard({
   post,
   liked: likedProp,
   onLike,
+  local,
+  onRemove,
+  onRepublish,
 }: {
   post: FeedPost
   /** 是否已点赞（M3 Slice 2 起由服务端的 likedByMe 决定） */
   liked?: boolean
   /** 点赞/取消点赞；由外层调真实接口，卡片自己不做本地假切换 */
   onLike?: () => void
+  /**
+   * 这条是**仅存在本机**的旧记录（`mine-…`，见 `store.ts` 的 `isLocalPostId`）。
+   *
+   * 为什么要标出来：它们没有服务器身份，点进去永远取不到 —— 改前用户只会看到
+   * 「网络错误」，既不知道原因，也没有任何自救路径。标出来之后才有"重发 / 删除"。
+   */
+  local?: boolean
+  /** 删掉这条本机记录（只有 local 时有意义） */
+  onRemove?: () => void
+  /** 带着文字与地标去发布页重发（只有 local 时有意义） */
+  onRepublish?: () => void
 }) {
   const liked = likedProp ?? post.liked
   /**
@@ -69,9 +83,41 @@ export function PostCard({
     navigate('user', { id: post.author.id })
   }
 
+  /** 本机遗留帖的角标 + 两条自救动作（重发 / 删除）。 */
+  const localChip = local ? (
+    <span className="pcard__localTag" data-feed-local-tag>
+      仅本机
+    </span>
+  ) : null
+
+  const localActions = local ? (
+    <div className="pcard__localActions" data-feed-local-actions>
+      <button
+        className="pcard__localBtn"
+        data-feed-local-republish
+        onClick={(e) => {
+          e.stopPropagation()
+          onRepublish?.()
+        }}
+      >
+        重新发布
+      </button>
+      <button
+        className="pcard__localBtn pcard__localBtn--danger"
+        data-feed-local-remove
+        onClick={(e) => {
+          e.stopPropagation()
+          onRemove?.()
+        }}
+      >
+        删除
+      </button>
+    </div>
+  ) : null
+
   return (
     <article
-      className={`pcard ${hasImage ? 'pcard--media' : 'pcard--text'}`}
+      className={`pcard ${hasImage ? 'pcard--media' : 'pcard--text'} ${local ? 'pcard--local' : ''}`}
       /*
         稳定业务身份的测试钩子（M5 WO#11 加）：
         卡片的 id 此前只存在于 onClick 里，DOM 上无迹可寻 ——
@@ -90,6 +136,7 @@ export function PostCard({
             <span className="pcard__author-name">{post.author.name}</span>
           </button>
           <div className="pcard__mediaWrap">
+            {localChip}
             <img
               className="pcard__cover"
               src={post.images[0]}
@@ -111,6 +158,7 @@ export function PostCard({
         </>
       ) : (
         <div className="pcard__body">
+          {localChip}
           <p className="pcard__text">{post.text}</p>
           {post.topic && <span className="pcard__topic">{post.topic}</span>}
           <div className="pcard__foot">
@@ -129,8 +177,10 @@ export function PostCard({
               </span>
             </span>
           </div>
+          {localActions}
         </div>
       )}
+      {hasImage && localActions}
     </article>
   )
 }
@@ -650,9 +700,27 @@ export function CampusScreen() {
         )}
 
         <div className="campus__grid">
-          {feed.map((p) => (
-            <PostCard key={p.id} post={p} liked={p.liked} onLike={() => void onToggleLike(p)} />
-          ))}
+          {feed.map((p) => {
+            const local = isLocalPostId(p.id)
+            return (
+              <PostCard
+                key={p.id}
+                post={p}
+                liked={p.liked}
+                onLike={() => void onToggleLike(p)}
+                local={local}
+                onRemove={local ? () => removeMyPost(p.id) : undefined}
+                onRepublish={
+                  local
+                    ? () => {
+                        stashRepublish({ text: p.text, placeName: p.location })
+                        navigate('publish')
+                      }
+                    : undefined
+                }
+              />
+            )
+          })}
           {phase === 'ready' && feed.length > 0 && (
             <p className="campus__end">
               已加载全部 · {feed.length} 条动态

@@ -471,3 +471,63 @@
 
 
 .feed__mediaImg--sticker { object-fit: contain; background: transparent; max-height: 400px; }
+
+/* ---------------------------------------------------------------------------
+   本机遗留帖详情（旧版本只写本地、从未同步 —— 见 data/store.ts 的 isLocalPostId）
+   --------------------------------------------------------------------------- */
+.feed__local {
+  padding: 12px var(--pad-page) 28px;
+}
+.feed__localNote {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-card, 12px);
+  background: rgba(12, 35, 58, 0.06);
+  color: var(--c-text-2, #43566d);
+  font-size: var(--f-meta, 12.5px);
+  line-height: 1.55;
+}
+.feed__localCard {
+  padding: 14px;
+  border-radius: var(--r-card, 12px);
+  background: var(--c-surface, #fff);
+  border: 1px dashed var(--c-text-3, #9aa4b2);
+}
+.feed__localAuthor {
+  margin: 0 0 8px;
+  font-size: var(--f-meta, 12.5px);
+  color: var(--c-text-3, #9aa4b2);
+}
+.feed__localImg {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+.feed__localMeta {
+  margin: 10px 0 0;
+  font-size: var(--f-meta, 12.5px);
+  color: var(--c-text-3, #9aa4b2);
+}
+.feed__localActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.feed__localPrimary,
+.feed__localDanger {
+  flex: 1;
+  padding: 11px 0;
+  border: 0;
+  border-radius: var(--r-pill, 999px);
+  font-size: var(--f-body, 14px);
+}
+.feed__localPrimary {
+  background: var(--c-primary, #0c233a);
+  color: var(--c-primary-fg, #fff);
+}
+.feed__localDanger {
+  background: var(--c-fill, #eef1f4);
+  color: #c0392b;
+}

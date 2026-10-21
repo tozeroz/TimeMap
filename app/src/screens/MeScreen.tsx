@@ -14,6 +14,7 @@ import {
   IconStar,
 } from '../components/icons'
 import { navigate } from '../router'
+import { clearLocalCaches } from '../data/store'
 import './me.css'
 
 /** 个人页：对齐原版 —— 纯白底、无多余模块，中部只有「拍下眼前的风景」+ 提示气泡 */
@@ -43,6 +44,15 @@ export function MeScreen() {
   */
   const [identity, setIdentity] = useState<SessionUser | null>(null)
   const [phase, setPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  /**
+   * 「清除本机缓存」确认层。
+   *
+   * 为什么需要这个入口：旧版本把发帖记录只写在 localStorage（`mine-…`），这些记录
+   * 会一直混在信息流里、点开只能报错，而全仓此前**没有任何清理入口** ——
+   * 用户只能去清整站数据（顺带把登录态一起清掉）。这里给一个只清缓存、不动登录的出口。
+   */
+  const [cacheOpen, setCacheOpen] = useState(false)
+  const [cacheMsg, setCacheMsg] = useState('')
 
   useEffect(() => {
     let alive = true
@@ -165,6 +175,18 @@ export function MeScreen() {
           <span>账号设置</span>
           <IconChevronRight size={15} />
         </button>
+        <button
+          className="me__entryBtn"
+          data-me-entry="clear-cache"
+          onClick={() => {
+            setCacheMsg('')
+            setCacheOpen(true)
+          }}
+        >
+          <IconEdit size={18} />
+          <span>清除本机缓存</span>
+          <IconChevronRight size={15} />
+        </button>
         {isAdmin() ? (
           <button className="me__entryBtn" data-me-entry="admin" onClick={() => navigate('admin')}>
             <IconMenu size={18} />
@@ -260,6 +282,38 @@ export function MeScreen() {
 
       {/* 左上角三横线打开的抽屉菜单（原版实测有 8 项） */}
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+
+      {cacheOpen && (
+        <div className="me__sheetMask" data-cache-sheet onClick={() => setCacheOpen(false)}>
+          <div className="me__sheet" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <p className="me__sheetTitle">清除本机缓存？</p>
+            <p className="me__sheetBody">
+              会清掉只存在这台设备上的旧动态与已缓存的页面数据。
+              <b>登录状态与地图视图不受影响</b>，清完刷新一下就是服务器上的真实数据。
+            </p>
+            {cacheMsg && (
+              <p className="me__sheetMsg" data-cache-result>
+                {cacheMsg}
+              </p>
+            )}
+            <div className="me__sheetBtns">
+              <button className="me__sheetBtn" data-cache-cancel onClick={() => setCacheOpen(false)}>
+                取消
+              </button>
+              <button
+                className="me__sheetBtn me__sheetBtn--danger"
+                data-cache-confirm
+                onClick={() => {
+                  const r = clearLocalCaches()
+                  setCacheMsg(`已清除：本机旧动态 ${r.posts} 条、页面缓存 ${r.snapshots} 份`)
+                }}
+              >
+                清除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Screen>
   )
 }

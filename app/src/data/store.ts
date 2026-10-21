@@ -238,3 +238,92 @@ export function isMyPost(id: string): boolean {
   const fromServer = serverPosts.find((p) => p.id === id)
   return fromServer ? fromServer.author.id === `u:${s.user.id}` : false
 }
+
+// ---------------------------------------------------------------------------
+// 本地遗留帖（旧版本的"仅本机"记录）
+// ---------------------------------------------------------------------------
+
+/**
+ * 旧版本发帖生成的本机 id 前缀（`app/src/data/store.ts` 的 `addMyPost`）。
+ *
+ * ⚠️ 为什么现在还要认它：这些记录**没有**服务器身份，但一直留在用户的
+ *    localStorage 里，并被 `feedAuthoritative()` 拼进信息流最前面。
+ *    点开时详情页拿 `mine-…` 去请求 `/api/posts/<id>`，服务端回 400 invalid_id
+ *    （它不是 UUID）⇒ 用户看到「网络错误」。所以必须能识别出来单独处理。
+ */
+export const LOCAL_POST_PREFIX = 'mine-'
+
+export function isLocalPostId(id: string | undefined | null): boolean {
+  return typeof id === 'string' && id.startsWith(LOCAL_POST_PREFIX)
+}
+
+/** 按 id 在**本地库**里找（只查本机记录，不碰服务器缓存）。 */
+export function findLocalPost(id: string): FeedPost | undefined {
+  if (!isLocalPostId(id)) return undefined
+  return read().find((p) => p.id === id)
+}
+
+/** 「重新发布」的交接键：详情页/卡片把文字与地标名交给发布页（URL 放不下长文本）。 */
+const REPUBLISH_KEY = 'campus.demo.republish.v1'
+
+export function stashRepublish(input: { text: string; placeName?: string }) {
+  try {
+    localStorage.setItem(
+      REPUBLISH_KEY,
+      JSON.stringify({ text: input.text, placeName: input.placeName ?? '', at: Date.now() }),
+    )
+  } catch {
+    // 存不进去只影响"预填"，用户可以手打；不当作失败弹窗
+  }
+}
+
+export function takeRepublish(): { text: string; placeName: string } | null {
+  try {
+    const raw = localStorage.getItem(REPUBLISH_KEY)
+    if (!raw) return null
+    localStorage.removeItem(REPUBLISH_KEY)
+    const parsed = JSON.parse(raw) as { text?: string; placeName?: string }
+    return { text: typeof parsed.text === 'string' ? parsed.text : '', placeName: parsed.placeName ?? '' }
+  } catch {
+    return null
+  }
+}
+
+/** 快照键前缀（`app/src/api/client.ts` 的 `SNAPSHOT_PREFIX`，这里只按前缀清理） */
+const SNAPSHOT_PREFIX = 'campus.demo.snapshot.v1'
+
+export interface CacheClearResult {
+  /** 清掉的本机遗留帖条数 */
+  posts: number
+  /** 清掉的接口快照条数 */
+  snapshots: number
+}
+
+/**
+ * 清除"本机缓存"：遗留帖 + 帖子同步关联 + 全部接口快照。
+ *
+ * ⚠️ 刻意**不清**会话（`campus.demo.session.v1`）与地图视图（`campus.demo.mapView.v1`）：
+ *    前者会导致用户意外掉线，后者是用户的浏览偏好，都不属于"缓存"。
+ */
+export function clearLocalCaches(): CacheClearResult {
+  const posts = read().length
+  let snapshots = 0
+  try {
+    const doomed: string[] = [KEY, LINK_KEY, REPUBLISH_KEY]
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k && k.startsWith(SNAPSHOT_PREFIX)) doomed.push(k)
+    }
+    for (const k of new Set(doomed)) {
+      if (k.startsWith(SNAPSHOT_PREFIX) && localStorage.getItem(k) !== null) snapshots++
+      localStorage.removeItem(k)
+    }
+  } catch {
+    // 存储不可用时就当作没有缓存可清
+  }
+  cache = []
+  links = {}
+  serverPosts = []
+  notify()
+  return { posts, snapshots }
+}
