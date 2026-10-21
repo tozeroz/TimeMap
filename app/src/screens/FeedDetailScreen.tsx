@@ -18,6 +18,8 @@ import {
   failText,
 } from '../api/client'
 import { resolvePostAndComments } from '../data/postIdentity'
+import { findLocalPost, removeMyPost, stashRepublish } from '../data/store'
+import type { FeedPost } from '../data/types'
 import { getSession, isLoggedIn } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack, IconComment, IconHeart, IconShare, IconStar } from '../components/icons'
@@ -53,10 +55,20 @@ export function FeedDetailScreen({ id }: { id: string }) {
   const [comments, setComments] = useState<ApiCommentNode[]>([])
   const [total, setTotal] = useState(0)
   const [state, setState] = useState<
-    'loading' | 'ready' | 'offline' | 'gone' | 'not_found' | 'error'
+    'loading' | 'ready' | 'offline' | 'gone' | 'not_found' | 'error' | 'local'
   >('loading')
   const [fromSnapshot, setFromSnapshot] = useState(false)
   const [errorText, setErrorText] = useState('')
+  /**
+   * ⭐ 本机遗留帖（`mine-…`）。
+   *
+   * 这些记录是旧版本"发帖只写本地"留下的，服务端从来没有过它们：
+   *   · 改前：照样请求 `/api/posts/mine-…` → 服务端 400 invalid_id → 界面「网络错误」。
+   *     用户既不知道原因，也没有任何出口（刷新一百次都是同一个错）。
+   *   · 现在：命中本地库就直接渲染本地内容，并**如实说明**它只在这台设备上，
+   *     同时给出「重新发布 / 删除」两条自救路径。
+   */
+  const [localPost, setLocalPost] = useState<FeedPost | null>(null)
 
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -106,6 +118,19 @@ export function FeedDetailScreen({ id }: { id: string }) {
       setTotal(0)
       setErrorText('没有指定要查看哪一条动态')
       setState('not_found')
+      return
+    }
+    /*
+      本机遗留帖优先：它**不是**服务器实体（`mine-…` 不是 UUID，服务端会回 400），
+      请求必然失败。直接渲染本地那份，并把"仅在这台设备上"说清楚。
+    */
+    const local = findLocalPost(id)
+    if (local) {
+      setLocalPost(local)
+      setPost(null)
+      setComments([])
+      setTotal(0)
+      setState('local')
       return
     }
     const r = await resolvePostAndComments(id)
@@ -377,6 +402,55 @@ export function FeedDetailScreen({ id }: { id: string }) {
     ⚠️ 这里刻意与"网络错误"分开：410 是服务端的明确回答，
       说成网络故障会让用户一直点重试（重试永远不会成功）。
   */
+  /*
+    ⭐ 本机遗留帖（旧版本只写本地、从未同步）。
+    与普通详情页刻意不同：没有点赞/评论/收藏/举报 —— 那些动作都需要服务器实体，
+    在这里摆出来只会再骗用户一次。只给「重新发布 / 删除」两条真实可执行的出口。
+  */
+  if (state === 'local' && localPost) {
+    return (
+      <Screen header={<TopBar left={<BackBtn />} />}>
+        <div className="feed__local" data-feed-local-post={localPost.id}>
+          <p className="feed__localNote" data-feed-local-note>
+            这条动态只保存在这台设备上，从来没有同步到服务器（旧版本发帖留下的记录）。
+            所以别人看不到它，也没有评论和点赞。想让它真正公开，可以点「重新发布」。
+          </p>
+          <div className="feed__localCard">
+            <p className="feed__localAuthor">{localPost.author.name}</p>
+            {localPost.text && <p className="feed__text">{localPost.text}</p>}
+            {localPost.images.slice(0, 1).map((src, i) => (
+              <img key={i} className="feed__localImg" src={src} alt="" />
+            ))}
+            {localPost.location && <p className="feed__localMeta">地标：{localPost.location}</p>}
+          </div>
+          <div className="feed__localActions">
+            <button
+              className="feed__localPrimary"
+              data-feed-local-republish
+              onClick={() => {
+                // 长文本放不进 URL，用 sessionStorage 交接（store.ts 的 stashRepublish）
+                stashRepublish({ text: localPost.text, placeName: localPost.location })
+                navigate('publish')
+              }}
+            >
+              重新发布
+            </button>
+            <button
+              className="feed__localDanger"
+              data-feed-local-remove
+              onClick={() => {
+                removeMyPost(localPost.id)
+                goBack('campus')
+              }}
+            >
+              删除这条记录
+            </button>
+          </div>
+        </div>
+      </Screen>
+    )
+  }
+
   if (state === 'gone') {
     return (
       <Screen header={<TopBar left={<BackBtn />} />}>

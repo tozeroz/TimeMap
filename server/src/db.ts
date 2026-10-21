@@ -24,6 +24,7 @@ import activityFavoritesSql from './migrations/021_activity_favorites.sql'
 import activityFieldsSql from './migrations/022_activity_fields.sql'
 import seedActivityFieldsSql from './migrations/023_seed_activity_fields.sql'
 import release13Sql from './migrations/024_release_1_3.sql'
+import release131Sql from './migrations/025_release_1_3_1.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -128,6 +129,10 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   // 024：发布 App 1.3（自更新清单指向我们自己构建并托管的 campus-demo-1.3.apk）。
   //      与 app/src/version.ts、android versionName 三处一致，由门禁机械校验。
   { version: '024_release_1_3', sql: release13Sql },
+
+  // 025：发布 App 1.3.1（修复旧版本本机遗留帖点开必报「网络错误」+「清除本机缓存」入口）。
+  //      同样三处一致：APP_VERSION / versionName / 本迁移的 latest_version。
+  { version: '025_release_1_3_1', sql: release131Sql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

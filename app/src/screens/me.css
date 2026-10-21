@@ -233,3 +233,58 @@
   background: var(--c-surface-sunken);
   user-select: none;
 }
+
+/* ---------------------------------------------------------------------------
+   「清除本机缓存」确认层（见 MeScreen 的 cacheOpen）
+   --------------------------------------------------------------------------- */
+.me__sheetMask {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(12, 35, 58, 0.42);
+}
+.me__sheet {
+  width: 100%;
+  padding: 18px var(--pad-page) calc(18px + env(safe-area-inset-bottom, 0px));
+  border-radius: 16px 16px 0 0;
+  background: var(--c-surface, #fff);
+}
+.me__sheetTitle {
+  margin: 0 0 8px;
+  font-size: var(--f-title, 16px);
+  font-weight: 600;
+}
+.me__sheetBody {
+  margin: 0;
+  color: var(--c-text-2, #43566d);
+  font-size: var(--f-meta, 12.5px);
+  line-height: 1.6;
+}
+.me__sheetMsg {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(12, 35, 58, 0.06);
+  color: var(--c-text-2, #43566d);
+  font-size: var(--f-meta, 12.5px);
+}
+.me__sheetBtns {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.me__sheetBtn {
+  flex: 1;
+  padding: 11px 0;
+  border: 0;
+  border-radius: var(--r-pill, 999px);
+  background: var(--c-fill, #eef1f4);
+  color: var(--c-text, #16202b);
+  font-size: var(--f-body, 14px);
+}
+.me__sheetBtn--danger {
+  background: var(--c-primary, #0c233a);
+  color: var(--c-primary-fg, #fff);
+}
