@@ -5,9 +5,11 @@ import { Screen, TopBar } from '../components/Shell'
 import { Drawer } from '../components/Drawer'
 import {
   IconChatBubble,
+  IconChevronRight,
   IconEdit,
   IconImage,
   IconMenu,
+  IconSettings,
   IconShare,
   IconStar,
 } from '../components/icons'
@@ -94,27 +96,6 @@ export function MeScreen() {
       scroll
     >
       <section className="me__profile">
-        <div className="me__side me__side--left">
-          {/*
-            ⚠️ M5 WO#13 + 审核记录 54：这四个入口**原本全部 navigate('profile-edit')**，
-               也就是把「我的兴趣 / 我的标签 / 介绍一下自己～ / 我的学校」都当成"改昵称页面"——
-               这是**没有证据支持**的（审核 54：你只证明了 Me 里五个条目存在、「编辑资料」→资料编辑页）。
-               冻结的处置：
-                 · 条目本身**保留**（trident-me/baseline.json:38 逐字记了这五个文案与位置 → 有基线）
-                 · 但**不得**再进入 ProfileEditScreen；也**不得**接到 App.tsx 里那五个旧 mock 路由
-                 · 当前目的地显式记为 NOT_EVALUATED / DEFERRED，**不能再假装"我的兴趣 = 改昵称"**
-               因此这里渲染为**不可点**的行，并明确标注"待核对"，而不是留一个通向错误页面的可点入口。
-          */}
-          <div className="me__entry me__entry--deferred" data-me-entry="interests">
-            <span>我的兴趣</span>
-            <span className="me__deferredTag">待核对</span>
-          </div>
-          <div className="me__entry me__entry--deferred" data-me-entry="tags">
-            <span>我的标签</span>
-            <span className="me__deferredTag">待核对</span>
-          </div>
-        </div>
-
         <div className="me__center">
           {/*
             头像：**首字占位**（users 表没有 avatar 列）。
@@ -144,17 +125,53 @@ export function MeScreen() {
             <span>编辑资料</span>
           </button>
         </div>
+      </section>
 
-        <div className="me__side me__side--right">
-          <div className="me__entry me__entry--deferred" data-me-entry="bio">
-            <span>介绍一下自己～</span>
-            <span className="me__deferredTag">待核对</span>
-          </div>
-          <div className="me__entry me__entry--deferred" data-me-entry="school">
-            <span>我的学校</span>
-            <span className="me__deferredTag">待核对</span>
-          </div>
-        </div>
+      {/*
+        ⚠️ 这里原来有四行不可点的「我的兴趣 / 我的标签 / 介绍一下自己～ / 我的学校」，
+           每行挂一个「待核对」标签 —— 那是**把内部核对状态渲染给用户看**的占位物
+           （QA 全盘测试把它记为硬缺陷：界面上出现"待核对"字样，用户无法理解）。
+           需求文档 ME-001 定义的「我的」内容是：**个人资料 / 我的发布 / 我的收藏 /
+           我的活动 / 账号设置** —— 这四行都不在其中。
+           ⇒ 处置：删掉占位行，换成 ME-001 的真实入口（下方 me__entries）。
+             · 我的活动：ACT-005（用户提交活动的"我的活动"）在需求里仍未定版本、
+               服务端也没有投稿/审核链路 ⇒ **本轮不做入口**（做一个点了就空的页面比没有更糟）。
+      */}
+      <section className="me__entries">
+        <button
+          className="me__entryBtn"
+          data-me-entry="myposts"
+          onClick={() => navigate('myposts')}
+        >
+          <IconImage size={18} />
+          <span>我的发布</span>
+          <IconChevronRight size={15} />
+        </button>
+        <button
+          className="me__entryBtn"
+          data-me-entry="favorites"
+          onClick={() => navigate('favorites')}
+        >
+          <IconStar size={18} />
+          <span>我的收藏</span>
+          <IconChevronRight size={15} />
+        </button>
+        <button
+          className="me__entryBtn"
+          data-me-entry="account"
+          onClick={() => navigate('account')}
+        >
+          <IconSettings size={18} />
+          <span>账号设置</span>
+          <IconChevronRight size={15} />
+        </button>
+        {isAdmin() ? (
+          <button className="me__entryBtn" data-me-entry="admin" onClick={() => navigate('admin')}>
+            <IconMenu size={18} />
+            <span>管理端</span>
+            <span className="me__adminTag">管理员</span>
+          </button>
+        ) : null}
       </section>
 
       {/*
@@ -232,30 +249,14 @@ export function MeScreen() {
 
       {/*
         ⭐ TimeMap P0：**我的收藏**（US-03：收藏内容可在个人中心查看）与
-        **管理端**（F07；仅 role=admin 显示）。
+        **管理端**（F07；仅 role=admin 显示）已在上方 me__entries 里渲染
+        （ME-001 的入口统一成一组，不再分散在 profile 区）。
         ⚠️ 管理端入口按角色隐藏只是**界面便利** —— 服务端对每个 /api/admin/* 都独立校验，
            普通学生即使手工敲 `#/admin` 也只会看到"无权限"并且拿不到任何管理数据。
            **绝不能**把"藏起入口"当成权限控制。
         ⚠️ `isAdmin()` 读的是本地会话；MeScreen 挂载时会调 `GET /api/auth/me`，
            而 `me()` 会把服务端的 role 写回缓存 ⇒ 刷新后入口不会莫名消失。
       */}
-      <section className="me__entries">
-        <button
-          className="me__entryBtn"
-          data-me-entry="favorites"
-          onClick={() => navigate('favorites')}
-        >
-          <IconStar size={17} />
-          <span>我的收藏</span>
-        </button>
-        {isAdmin() && (
-          <button className="me__entryBtn" data-me-entry="admin" onClick={() => navigate('admin')}>
-            <IconMenu size={17} />
-            <span>管理端</span>
-            <span className="me__adminTag">管理员</span>
-          </button>
-        )}
-      </section>
 
       {/* 左上角三横线打开的抽屉菜单（原版实测有 8 项） */}
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />

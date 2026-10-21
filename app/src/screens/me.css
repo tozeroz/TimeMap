@@ -1,19 +1,22 @@
-/* 个人页：原版是纯白底 + 大留白，不要卡片化容器 */
+/* 个人页：原版是纯白底 + 大留白，不要卡片化容器。
+   ⚠️ 这里原来是 `grid-template-columns: 1fr auto 1fr` 的三列布局，
+      左右两列放的是四个「待核对」占位行。那些占位已删除（QA 硬缺陷：
+      界面不该把内部核对状态显示给用户），所以改成单列居中 —— 不要再把列加回来。 */
 .me__profile {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
+  justify-content: center;
   align-items: start;
-  gap: 6px;
   padding: 12px var(--pad-page) 6px;
   background: var(--c-surface);
 }
 
 /* ===========================================================================
-   ⭐ TimeMap P0：功能入口区（我的收藏 / 管理端）
+   ⭐ TimeMap P0 / ME-001：功能入口区（我的发布 / 我的收藏 / 账号设置 / 管理端）
    =========================================================================== */
 /* 为什么单开一段而不是塞进 .me__side：
-   .me__side 那两列是**复刻页的四个"待核对"条目**（不可点、且目的地未评估），
-   而这两个入口是**可点的真实功能**。混在一起会让"能点的"和"不能点的"看起来一样。 */
+   .me__side 那两列放的是**复刻页的四个"待核对"条目**（不可点、且目的地未评估），
+   而这里的入口是**可点的真实功能**。混在一起会让"能点的"和"不能点的"看起来一样。
+   ⇒ 占位条目已随 ME-001 落地一并删除，本段现在是「我的」唯一的功能入口列表。 */
 .me__entries {
   display: flex;
   flex-direction: column;
@@ -49,30 +52,9 @@
   font-size: var(--f-tiny);
 }
 
-.me__side {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding-top: 18px;
-}
-
-.me__side--left {
-  align-items: flex-end;
-}
-
-.me__side--right {
-  align-items: flex-start;
-}
-
-.me__entry {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--c-text);
-  white-space: nowrap;
-}
+/* ⚠️ `.me__side` / `.me__entry` / `.me__deferredTag` 三组规则已随
+   「待核对」占位行一起删除（ME-001 落地后无用例）。留着的死 CSS 会让人
+   误以为界面上还有左/右两列条目。 */
 
 .me__center {
   display: flex;
@@ -230,25 +212,8 @@
   color: #fff;
 }
 
-/* M5 WO#13：MeScreen 里四个"目的地未知"的条目（审核记录 54 的处置）。
-   ⚠️ 它们**刻意不是 <button>**：原实现把「我的兴趣/我的标签/介绍一下自己～/我的学校」
-      全部 navigate('profile-edit')，等于假装"我的兴趣 = 改昵称页面"——没有证据支持。
-   条目本身保留（trident-me/baseline.json:38 逐字记了这五个文案与位置），
-   但目的地记为 NOT_EVALUATED / DEFERRED，并在界面上**如实标注**，而不是留一个通向错误页面的可点入口。 */
-.me__entry--deferred {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.me__deferredTag {
-  margin-left: 4px;
-  padding: 1px 6px;
-  border-radius: var(--r-pill);
-  background: var(--c-surface-sunken);
-  color: var(--c-text-3);
-  font-size: 10.5px;
-  line-height: 1.5;
-}
+/* ⚠️ 原 `.me__entry--deferred` / `.me__deferredTag` 两条规则已删除：
+   它们服务的四个「待核对」占位行已按 ME-001 换成真实入口（我的发布/收藏/账号设置）。 */
 
 /* ===========================================================================
    M5 WO#14：个人页的**权威自身身份**相关样式

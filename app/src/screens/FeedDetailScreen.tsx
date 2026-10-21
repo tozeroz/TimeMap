@@ -12,8 +12,10 @@ import {
   unfavoritePost,
   unlikePost,
   avatarFor,
+  humanizeFailure,
   type ApiCommentNode,
   type ApiPostDetail,
+  failText,
 } from '../api/client'
 import { resolvePostAndComments } from '../data/postIdentity'
 import { getSession, isLoggedIn } from '../api/session'
@@ -93,6 +95,19 @@ export function FeedDetailScreen({ id }: { id: string }) {
       ⚠️ **绝不**在取不到时显示**另一条**动态 —— 那是身份篡改。
     */
     setState('loading')
+    /*
+      缺 id（例如直接打开 `#/feed`）：改前照样发一次请求，拿到的失败被统一说成
+      「网络错误」—— 用户看到的是"网络故障"，实际问题在链接里，刷新多少次都没用。
+      ⇒ 显式区分"没指定看哪条"，不伪装成网络问题（QA 报告 §12 / P2）。
+    */
+    if (!id) {
+      setPost(null)
+      setComments([])
+      setTotal(0)
+      setErrorText('没有指定要查看哪一条动态')
+      setState('not_found')
+      return
+    }
     const r = await resolvePostAndComments(id)
     switch (r.state) {
       case 'ready':
@@ -122,10 +137,44 @@ export function FeedDetailScreen({ id }: { id: string }) {
         setPost(null)
         setComments([])
         setTotal(0)
-        setErrorText(r.reason)
+        setErrorText(humanizeFailure(r.reason))
         setState('error')
     }
   }, [id])
+
+  /**
+   * ⭐ POST-006「分享」。
+   *
+   * 改前是**死按钮**：`ShareBtn` 只有图标、没有 onClick（QA 报告 P1 第 2 条——
+   * 点击无请求、无弹层、无提示、剪贴板未写、navigator.share 未调用）。
+   *
+   * 策略（移动端优先，与需求"App/浏览器分享方式"一致）：
+   *   ① 有系统分享面板（`navigator.share`，手机浏览器 / 原生壳都支持）→ 用它；
+   *      用户主动取消（AbortError）不算失败，静默返回。
+   *   ② 没系统分享（桌面 Chrome 部分版本）→ 复制可分享链接到剪贴板，并明确提示。
+   *   ③ 剪贴板也不可用（非 HTTPS 等）→ 如实说失败，**不假装成功**。
+   * 链接用 `location.href`：hash 路由里已含帖子 id，别人打开就是这条内容。
+   */
+  const sharePost = useCallback(async () => {
+    const url = window.location.href
+    const title = (post?.body ?? '').trim().slice(0, 40) || 'TimeMap 校园动态'
+    const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> }
+    if (typeof nav.share === 'function') {
+      try {
+        await nav.share({ title, text: title, url })
+        return
+      } catch (e) {
+        // 用户点"取消"是正常路径，不要弹"分享失败"
+        if ((e as Error)?.name === 'AbortError') return
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      setNotice('链接已复制，可以粘贴给同学了')
+    } catch {
+      setNotice('分享失败：当前浏览器不允许访问剪贴板')
+    }
+  }, [post?.body])
 
   useEffect(() => {
     void load()
@@ -152,7 +201,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
     try {
       const r = post.likedByMe ? await unlikePost(post.id) : await likePost(post.id)
       if (!r.ok) {
-        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${r.reason}`)
+        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${failText(r)}`)
         return
       }
       // 用服务端返回的权威计数覆盖本地，而不是自己加减
@@ -182,7 +231,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
       const r = await createComment(id, body)
       if (!r.ok) {
         // 写操作失败**绝不**本地假成功（M1 冻结原则）
-        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `评论失败：${r.reason}`)
+        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `评论失败：${failText(r)}`)
         return
       }
       setDraft('')
@@ -200,7 +249,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
     try {
       const r = await createComment(id, body, replyTo.commentId)
       if (!r.ok) {
-        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `回复失败：${r.reason}`)
+        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `回复失败：${failText(r)}`)
         return
       }
       setReplyTo(null)
@@ -231,7 +280,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
     try {
       const r = post.favoritedByMe ? await unfavoritePost(post.id) : await favoritePost(post.id)
       if (!r.ok) {
-        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${r.reason}`)
+        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${failText(r)}`)
         return
       }
       setPost({ ...post, favoriteCount: r.value.favoriteCount, favoritedByMe: r.value.favorited })
@@ -265,7 +314,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
         ...(reportDetail.trim() ? { detail: reportDetail.trim() } : {}),
       })
       if (!r.ok) {
-        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `举报失败：${r.reason}`)
+        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `举报失败：${failText(r)}`)
         return
       }
       setReportOpen(false)
@@ -284,7 +333,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
     try {
       const r = await deleteMyComment(commentId)
       if (!r.ok) {
-        setNotice(r.status === 403 ? '只能删除自己的评论' : `删除失败：${r.reason}`)
+        setNotice(r.status === 403 ? '只能删除自己的评论' : `删除失败：${failText(r)}`)
         return
       }
       // 删除会改变有效评论量 ⇒ 必须重新拉取（不能只本地过滤掉那一行）
@@ -302,7 +351,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
     try {
       const r = await deleteMyPost(post.id)
       if (!r.ok) {
-        setNotice(r.status === 403 ? '只有作者能删除这条内容' : `删除失败：${r.reason}`)
+        setNotice(r.status === 403 ? '只有作者能删除这条内容' : `删除失败：${failText(r)}`)
         return
       }
       setConfirmDelete(false)
@@ -317,7 +366,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
 
   if (state === 'loading') {
     return (
-      <Screen header={<TopBar left={<BackBtn />} right={<ShareBtn />} />}>
+      <Screen header={<TopBar left={<BackBtn />} />}>
         <p className="feed__state">加载中…</p>
       </Screen>
     )
@@ -330,7 +379,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
   */
   if (state === 'gone') {
     return (
-      <Screen header={<TopBar left={<BackBtn />} right={<ShareBtn />} />}>
+      <Screen header={<TopBar left={<BackBtn />} />}>
         <div className="feed__state" data-feed-state="gone">
           <p>内容不存在或已下架</p>
           <p className="feed__state-sub">{errorText}</p>
@@ -344,13 +393,22 @@ export function FeedDetailScreen({ id }: { id: string }) {
 
   if (state === 'error' || state === 'not_found' || !post) {
     return (
-      <Screen header={<TopBar left={<BackBtn />} right={<ShareBtn />} />}>
-        <div className="feed__state" data-feed-state={state}>
-          <p>网络错误</p>
+      <Screen header={<TopBar left={<BackBtn />} />}>
+        <div className="feed__state" data-feed-state={state} data-feed-missing-id={!id ? '' : undefined}>
+          <p>{state === 'not_found' ? '内容不存在' : '网络错误'}</p>
           <p className="feed__state-sub">{errorText}</p>
-          <button className="feed__retry" onClick={() => void load()}>
-            刷新
-          </button>
+          {/*
+            没指定 id 时"刷新"必然还是这个结果 ⇒ 不给假动作，只给返回。
+          */}
+          {id ? (
+            <button className="feed__retry" onClick={() => void load()}>
+              刷新
+            </button>
+          ) : (
+            <button className="feed__retry" onClick={() => goBack('campus')}>
+              返回
+            </button>
+          )}
         </div>
       </Screen>
     )
@@ -389,7 +447,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
               举报
             </button>
           )}
-          <ShareBtn />
+          <ShareBtn onShare={() => void sharePost()} />
         </div>
       }
     />
@@ -689,9 +747,9 @@ function BackBtn() {
   )
 }
 
-function ShareBtn() {
+function ShareBtn({ onShare }: { onShare: () => void }) {
   return (
-    <button className="iconbtn" aria-label="分享">
+    <button className="iconbtn" data-feed-share aria-label="分享" onClick={onShare}>
       <IconShare size={20} />
     </button>
   )

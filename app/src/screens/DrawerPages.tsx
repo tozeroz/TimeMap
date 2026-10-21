@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { DrawerPage } from '../components/Drawer'
 import { IconChevronRight } from '../components/icons'
-import { listSchoolColleges, listSchools } from '../api/client'
+import { listSchoolColleges, listSchools, logout, me as fetchMe } from '../api/client'
+import type { SessionUser } from '../api/session'
 import { APP_VERSION } from '../version'
 import { goBack, navigate } from '../router'
 import './drawerpages.css'
@@ -20,7 +21,17 @@ import './drawerpages.css'
 function Rows({
   items,
 }: {
-  items: Array<{ label: string; value?: string; to?: string; onClick?: () => void; hook?: string }>
+  items: Array<{
+    label: string
+    value?: string
+    to?: string
+    onClick?: () => void
+    hook?: string
+    /** 说明性小字（例如"暂未开放"）—— 不参与点击 */
+    note?: string
+    /** 置灰且不可点：用于"有入口但能力还不存在"的行（不假装能用） */
+    disabled?: boolean
+  }>
 }) {
   return (
     <div className="dprows">
@@ -29,12 +40,17 @@ function Rows({
           key={it.label}
           className="dprow"
           {...(it.hook ? { [it.hook]: '' } : {})}
+          {...(it.disabled
+            ? { disabled: true, 'aria-disabled': true, 'data-dprow-disabled': '' }
+            : {})}
           onClick={() => {
+            if (it.disabled) return
             if (it.onClick) return it.onClick()
             if (it.to) navigate(it.to)
           }}
         >
           <span className="dprow__label">{it.label}</span>
+          {it.note ? <span className="dprow__note">{it.note}</span> : null}
           <span className="dprow__value">{it.value ?? ''}</span>
           <IconChevronRight size={15} />
         </button>
@@ -43,18 +59,95 @@ function Rows({
   )
 }
 
+/**
+ * 账号与安全 / 账号设置（ME-001 的「账号设置」入口指向本页）。
+ *
+ * ## 改前（QA 全盘测试判定的硬缺陷）
+ * ```
+ *   手机号    132****2969      ← 硬编码的假号码，**未登录时也照显**
+ *   微信      已绑定           ← 编造（根本没有微信绑定能力）
+ *   QQ        未绑定           ← 编造
+ *   修改密码  → 跳「隐私设置」  ← 错跳（本项目用验证码登录，没有密码，也没有改密接口）
+ *   注销账号  （点了没反应）    ← 死按钮
+ * ```
+ *
+ * ## 现在的口径（**只显示有权威来源的东西**）
+ *   · 昵称 / 手机号：来自 `GET /api/auth/me`（与「我的」页同一权威来源）
+ *   · 退出登录：真实调用 `POST /api/auth/logout` 并清本地会话（`logout()`）
+ *   · 注销账号：**服务端没有这个接口**（需求 §11 也只是"建议待评审"）⇒
+ *     保留入口但**置灰 + 明确写"暂未开放"**，而不是留一个点了没反应的死按钮，
+ *     更不是假装注销成功（§12：不得用失败/未实现冒充成功）。
+ *   · 微信 / QQ / 修改密码：**删除**（无任何权威来源，属编造信息）。
+ */
 export function AccountScreen() {
+  const [identity, setIdentity] = useState<SessionUser | null>(null)
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const u = await fetchMe()
+      if (!alive) return
+      if (!u) {
+        setIdentity(null)
+        setPhase('unavailable')
+        return
+      }
+      setIdentity(u)
+      setPhase('ready')
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
   return (
     <DrawerPage title="账号与安全" onBack={() => goBack('me')}>
       <Rows
         items={[
-          { label: '手机号', value: '132****2969' },
-          { label: '微信', value: '已绑定' },
-          { label: 'QQ', value: '未绑定' },
-          { label: '修改密码', to: 'privacy' },
-          { label: '注销账号' },
+          {
+            label: '昵称',
+            value: phase === 'loading' ? '读取中…' : (identity?.displayName ?? '未登录'),
+          },
+          {
+            label: '手机号',
+            // 未登录/无号码时**留空并说明**，绝不回落到任何硬编码号码
+            value:
+              phase === 'loading' ? '读取中…' : identity?.phone || (identity ? '未绑定' : '未登录'),
+          },
         ]}
       />
+
+      <div className="dprows" style={{ marginTop: 10 }}>
+        <button
+          className="dprow"
+          data-account-logout
+          onClick={async () => {
+            await logout()
+            setIdentity(null)
+            setPhase('unavailable')
+            setNotice('已退出登录')
+          }}
+        >
+          <span className="dprow__label">退出登录</span>
+          <span className="dprow__value">当前设备</span>
+          <IconChevronRight size={15} />
+        </button>
+        <button className="dprow" disabled aria-disabled data-account-deactivate>
+          <span className="dprow__label">注销账号</span>
+          <span className="dprow__note" data-account-deactivate-note>
+            暂未开放（需服务端支持）
+          </span>
+          <IconChevronRight size={15} />
+        </button>
+      </div>
+
+      {notice ? (
+        <p className="dpnote" data-account-notice>
+          {notice}
+        </p>
+      ) : null}
     </DrawerPage>
   )
 }

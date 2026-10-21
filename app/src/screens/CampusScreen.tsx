@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  failText,
   likePost,
+  listPlaces,
   listPosts,
   listSchoolCampuses,
   listSchools,
@@ -8,16 +10,25 @@ import {
   toFeedPost,
   unlikePost,
   type ApiCampus,
+  type ApiPlaceListItem,
   type ApiSchool,
 } from '../api/client'
 import { isLoggedIn } from '../api/session'
 import { BigTitle, Screen } from '../components/Shell'
-import { IconChatBubble, IconComment, IconHeart } from '../components/icons'
+import {
+  IconChatBubble,
+  IconCheck,
+  IconChevronDown,
+  IconComment,
+  IconHeart,
+  IconSearch,
+} from '../components/icons'
 // 注意：这里**不再** import mock 的 `posts` —— 校园页已迁移到真实 API，
 // 在线时 API 是权威数据源（审核记录 07 的降级边界：已迁移页面不得混入 synthetic mock）。
 import type { FeedPost } from '../data/types'
 import { feedAuthoritative, setServerPosts, subscribeMyPosts } from '../data/store'
-import { navigate } from '../router'
+import { navigate, useRoute } from '../router'
+import '../styles/switcher.css'
 import './campus.css'
 
 /**
@@ -185,7 +196,7 @@ function CampusPickerPanel({ onClose }: { onClose: () => void }) {
       setState('loading')
       const sr = await listSchools()
       if (!sr.ok) {
-        setErr(sr.reason)
+        setErr(failText(sr))
         setState('error')
         return
       }
@@ -198,7 +209,7 @@ function CampusPickerPanel({ onClose }: { onClose: () => void }) {
       }
       const cr = await listSchoolCampuses(first.id)
       if (!cr.ok) {
-        setErr(cr.reason)
+        setErr(failText(cr))
         setState('error')
         return
       }
@@ -262,7 +273,116 @@ function CampusPickerPanel({ onClose }: { onClose: () => void }) {
   )
 }
 
+/**
+ * 地标筛选面板（CAMP-003）。
+ *
+ * ## 需求口径（已确认项，逐字来自《详细功能设计文档》CAMP-003）
+ *   · 入口在校园页**右上角**，支持**单选、多选、全部地标**，以及**地标名称搜索**
+ *   · 从地点面板「查看全部」进入时**自动选中该地标**
+ *   · 可以**清除筛选**恢复全部
+ *   · 多选的语义（建议待评审，本实现采用）：「属于**任意一个**所选地标」，
+ *     并与排序（热门/最新）**同时生效** —— 由服务端 `placeIds` + `sort` 一起做，
+ *     不在客户端二次过滤（否则一旦有 limit，客户端筛会静默变成"不完整列表"）。
+ *
+ * ## 为什么"全部地标"是**清空选择**而不是"选中全部 10 个"
+ *   两者最终结果相同，但清空选择才能让 URL 里不带 placeId、让服务端少传 10 个 UUID，
+ *   更重要的是：将来新增地标时，它自动落在"全部"里，不会因为快照里漏了 id 而被过滤掉。
+ */
+function PlaceFilterPanel({
+  places,
+  selected,
+  onApply,
+  onClose,
+}: {
+  places: ApiPlaceListItem[]
+  selected: string[]
+  onApply: (ids: string[]) => void
+  onClose: () => void
+}) {
+  const [q, setQ] = useState('')
+  const [draft, setDraft] = useState<string[]>(selected)
+  const keyword = q.trim()
+  const list = keyword ? places.filter((p) => p.name.includes(keyword)) : places
+
+  function toggle(id: string) {
+    setDraft((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  return (
+    <div className="switcher" data-campus-place-panel>
+      <div className="switcher__mask" onClick={onClose} />
+      <div className="switcher__panel">
+        <p className="switcher__title">按地标筛选</p>
+        <div className="switcher__search">
+          <IconSearch size={17} />
+          <input
+            className="switcher__input"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="搜索地标名称"
+            data-campus-place-search
+          />
+        </div>
+        <ul className="switcher__list no-scrollbar">
+          <li>
+            <button
+              className={`switcher__item pf__item ${draft.length === 0 ? 'is-current' : ''}`}
+              data-campus-place-all
+              aria-pressed={draft.length === 0}
+              onClick={() => setDraft([])}
+            >
+              <span className="switcher__name">全部地标</span>
+              <span className="switcher__meta">不筛选地标，显示所有地点的帖子</span>
+            </button>
+          </li>
+          {list.map((p) => {
+            const on = draft.includes(p.id)
+            return (
+              <li key={p.id}>
+                <button
+                  className={`switcher__item pf__item ${on ? 'is-current' : ''}`}
+                  data-campus-place-option={p.id}
+                  aria-pressed={on}
+                  onClick={() => toggle(p.id)}
+                >
+                  <span className="switcher__name">{p.name}</span>
+                  <span className="switcher__meta">{p.category}</span>
+                  {on && <IconCheck size={16} />}
+                </button>
+              </li>
+            )
+          })}
+          {list.length === 0 && (
+            <li className="switcher__empty" data-campus-place-empty>
+              没有匹配「{keyword}」的地标
+            </li>
+          )}
+        </ul>
+        <div className="pf__foot">
+          {draft.length > 0 && (
+            <button className="pf__clear" data-campus-place-reset onClick={() => setDraft([])}>
+              清除
+            </button>
+          )}
+          <button className="pf__done" data-campus-place-done onClick={() => onApply(draft)}>
+            完成{draft.length > 0 ? `（已选 ${draft.length}）` : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const CAMPUS_SUBTITLE = '校园广场'
+
+/** URL 里的 placeId 允许逗号分隔（`#/campus?placeId=a,b`） */
+function parsePlaceIds(raw: string | undefined | null): string[] {
+  if (!raw) return []
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
 
 export function CampusScreen() {
   /*
@@ -271,46 +391,124 @@ export function CampusScreen() {
       · 按基线（trident-campus/baseline.json interactions[1]）副标题应是「**校园广场** ▼」，
         那是**固定标签**，不是学校名 —— 显示 mock 学校名本身即偏差；
       · 而 mock 学校数据按审核 60 一律**不得**再用于界面。
-    ⇒ 删掉该 state；副标题改用基线逐字支持的常量（见下方 CAMPUS_SUBTITLE）。
+    ⇒ 删掉该 state；副标题改用基线逐字支持的常量（见上方 CAMPUS_SUBTITLE）。
   */
+  const route = useRoute()
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [filterOpen, setFilterOpen] = useState(false)
+
+  /**
+   * CAMP-002：排序切换。**首次默认「热门」**（需求原文：首次进入默认按热门排序）。
+   * ⚠️ 服务端默认仍是 `latest`（其它调用方按"时间线"语义用它），
+   *    所以这里必须**显式**传 `sort: 'hot'`，不能依赖默认值。
+   */
+  const [sort, setSort] = useState<'hot' | 'latest'>('hot')
+
+  /**
+   * CAMP-003：地标筛选（多选）。**空数组 = 全部地标**（不向服务端传过滤参数）。
+   * 初值来自 URL：`#/campus?placeId=xxx`（地点面板「查看全部」会带这个参数），
+   * 因此从地点面板进来时筛选是**已经生效**的，界面上也有可识别的当前地标。
+   */
+  const [placeIds, setPlaceIds] = useState<string[]>(() => parsePlaceIds(route.query.placeId))
+
+  /** 筛选面板的候选地标：直接取权威地点列表（一次拉全，不在客户端猜有哪些地标） */
+  const [places, setPlaces] = useState<ApiPlaceListItem[]>([])
+
   /**
    * 信息流状态（M3 Slice 1 收紧）：
    *   在线 → **API 是权威数据源**（不再混入 mock，避免"双真源"）
    *   离线 → 只降级到**最后一次成功的 API 快照**，并明确标注
    *   既无网络也无快照 → 显示「网络错误 + 刷新」（原版在这点上的行为就是这个）
    */
-  const [feed, setFeed] = useState<FeedPost[]>(() => readSnapshot<FeedPost[]>('feed')?.value ?? [])
-  const [phase, setPhase] = useState<'loading' | 'ready' | 'offline' | 'error'>(() =>
-    readSnapshot<FeedPost[]>('feed') ? 'offline' : 'loading',
+  const [feed, setFeed] = useState<FeedPost[]>(() =>
+    parsePlaceIds(route.query.placeId).length === 0
+      ? (readSnapshot<FeedPost[]>('feed')?.value ?? [])
+      : [],
   )
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'offline' | 'error'>(() =>
+    parsePlaceIds(route.query.placeId).length === 0 && readSnapshot<FeedPost[]>('feed')
+      ? 'offline'
+      : 'loading',
+  )
+  /** 失败原因的人类可读文案（§12：不得把 `TypeError: Failed to fetch` 这类技术串直接给用户） */
+  const [errText, setErrText] = useState('')
 
-  useEffect(() => subscribeMyPosts(() => setFeed(feedAuthoritative())), [])
+  /**
+   * 默认视图 = 热门 + 全部地标。
+   *
+   * 为什么只有默认视图才读写快照（localStorage）：
+   *   快照的用途是"断网时还能看到上次的列表"，它是一份**没有筛选维度**的裸列表。
+   *   若把筛选后的结果也写进快照，下次默认进入时就会把"某个地标的前 20 条"当成全站列表；
+   *   反过来，若筛选失败时回落到全站快照，用户会看到**不符合当前筛选**的帖子 —— 那是假数据。
+   *   ⇒ 非默认视图失败就如实报错，不回落快照。
+   */
+  const isDefaultView = sort === 'hot' && placeIds.length === 0
+  const defaultViewRef = useRef(isDefaultView)
+  useEffect(() => {
+    defaultViewRef.current = isDefaultView
+  }, [isDefaultView])
 
+  /**
+   * 拉列表。`sort` + `placeIds` 都交给服务端（不在客户端二次过滤：
+   * 服务端有 limit，客户端筛会静默变成"不完整列表"）。
+   */
+  const loadFeed = useCallback(async () => {
+    setPhase((prev) => (prev === 'ready' ? 'ready' : 'loading'))
+    const result = await listPosts({ sort, placeIds })
+    if (result.ok) {
+      const postsFromServer = result.value.map(toFeedPost)
+      setServerPosts(postsFromServer)
+      // 只在**成功**时写快照 —— 快照永远是"曾经真实成功过的响应"
+      if (isDefaultView) writeFeedSnapshot(postsFromServer)
+      setFeed(isDefaultView ? feedAuthoritative() : postsFromServer)
+      setErrText('')
+      setPhase('ready')
+    } else {
+      // 失败时**不塞 mock**：默认视图有快照就显示快照，否则如实报错
+      const snap = isDefaultView ? readSnapshot<FeedPost[]>('feed') : null
+      setFeed(snap?.value ?? [])
+      setErrText(failText(result))
+      setPhase(snap ? 'offline' : 'error')
+      console.warn('[campus] 拉取帖子失败：', result.reason)
+    }
+  }, [sort, placeIds, isDefaultView])
+
+  useEffect(() => {
+    void loadFeed()
+  }, [loadFeed])
+
+  /** 候选地标（筛选面板用）。失败不影响主列表，只在面板里显示"地标列表加载失败" */
   useEffect(() => {
     let alive = true
     void (async () => {
-      const result = await listPosts()
-      if (!alive) return
-      if (result.ok) {
-        const postsFromServer = result.value.map(toFeedPost)
-        setServerPosts(postsFromServer)
-        // 只在**成功**时写快照 —— 快照永远是"曾经真实成功过的响应"
-        writeFeedSnapshot(feedAuthoritative())
-        setFeed(feedAuthoritative())
-        setPhase('ready')
-      } else {
-        // 失败时**不塞 mock**：有快照就显示快照，没有就如实报错
-        const snap = readSnapshot<FeedPost[]>('feed')
-        setFeed(snap?.value ?? [])
-        setPhase(snap ? 'offline' : 'error')
-        console.warn('[campus] 拉取帖子失败：', result.reason)
-      }
+      const r = await listPlaces()
+      if (!alive || !r.ok) return
+      setPlaces(r.value)
     })()
     return () => {
       alive = false
     }
   }, [])
+
+  /** 本地新发的帖子（store）只在默认视图下并入列表；筛选视图要按筛选条件重新拉 */
+  useEffect(
+    () =>
+      subscribeMyPosts(() => {
+        if (defaultViewRef.current) setFeed(feedAuthoritative())
+      }),
+    [],
+  )
+
+  /**
+   * URL 里的 placeId 变化 → 同步筛选。
+   * 场景：已经在校园页，又从地点面板点了「查看全部」（同一个 hash 路径、不同 query），
+   * 这时组件**不会重新挂载**，只能靠这个 effect 把筛选更新上去。
+   */
+  const placeIdParam = route.query.placeId ?? ''
+  useEffect(() => {
+    const next = parsePlaceIds(placeIdParam)
+    setPlaceIds((prev) => (prev.join(',') === next.join(',') ? prev : next))
+  }, [placeIdParam])
 
   /**
    * 点赞（M3 Slice 2）：调真实接口，用**服务端返回的权威计数**覆盖本地。
@@ -333,6 +531,17 @@ export function CampusScreen() {
     )
   }
 
+  /** 当前筛选的可读标签（面板按钮与筛选条都用它，保证两处永远一致） */
+  const selectedNames = placeIds
+    .map((id) => places.find((p) => p.id === id)?.name)
+    .filter((n): n is string => Boolean(n))
+  const filterLabel =
+    placeIds.length === 0
+      ? '全部地标'
+      : placeIds.length === 1
+        ? (selectedNames[0] ?? '已选 1 个地标')
+        : `已选 ${placeIds.length} 个地标`
+
   return (
     <Screen
       header={
@@ -346,49 +555,124 @@ export function CampusScreen() {
       }
       scroll
     >
-      {phase === 'offline' && (
-        <p className="campus__offline">
-          离线：显示的是最后一次成功获取的服务器数据（非本地假数据），可能不是最新
-        </p>
-      )}
-
-      {phase === 'error' && (
-        <div className="campus__error">
-          <p>网络错误</p>
+      <div
+        className="campus__view"
+        data-campus-phase={phase}
+        data-campus-sort={sort}
+        data-campus-place-ids={placeIds.join(',')}
+        data-campus-count={feed.length}
+      >
+        {/* CAMP-002 / CAMP-003 工具条：排序 + 地标筛选（需求要求筛选入口在右上角） */}
+        <div className="campus__bar">
+          <div className="campus__sorts" role="tablist" aria-label="排序">
+            {(['hot', 'latest'] as const).map((key) => (
+              <button
+                key={key}
+                className={`campus__sort ${sort === key ? 'is-active' : ''}`}
+                role="tab"
+                aria-selected={sort === key}
+                data-campus-sort-option={key}
+                onClick={() => setSort(key)}
+              >
+                {key === 'hot' ? '热门' : '最新'}
+              </button>
+            ))}
+          </div>
           <button
-            className="campus__retry"
-            onClick={() => {
-              setPhase('loading')
-              void (async () => {
-                const r = await listPosts()
-                if (r.ok) {
-                  setServerPosts(r.value.map(toFeedPost))
-                  writeFeedSnapshot(feedAuthoritative())
-                  setFeed(feedAuthoritative())
-                  setPhase('ready')
-                } else {
-                  setPhase('error')
-                }
-              })()
-            }}
+            className={`campus__filterBtn ${placeIds.length > 0 ? 'is-active' : ''}`}
+            data-campus-filter-open
+            onClick={() => setFilterOpen(true)}
           >
-            刷新
+            {filterLabel}
+            <IconChevronDown size={14} />
           </button>
         </div>
-      )}
 
-      <div className="campus__grid">
-        {feed.map((p) => (
-          <PostCard key={p.id} post={p} liked={p.liked} onLike={() => void onToggleLike(p)} />
-        ))}
-        {phase === 'ready' && (
-          <p className="campus__end">
-            已加载全部 · {feed.length} 条动态
+        {placeIds.length > 0 && (
+          <div className="campus__activeFilter" data-campus-filter-active>
+            <span className="campus__activeFilterText">地标筛选：{filterLabel}</span>
+            <button
+              className="campus__filterClear"
+              data-campus-filter-clear
+              onClick={() => setPlaceIds([])}
+            >
+              清除筛选
+            </button>
+          </div>
+        )}
+
+        {phase === 'offline' && (
+          <p className="campus__offline">
+            离线：显示的是最后一次成功获取的服务器数据（非本地假数据），可能不是最新
           </p>
         )}
+
+        {phase === 'error' && (
+          <div className="campus__error">
+            <p className="campus__errorText" data-campus-error>
+              网络错误：{errText || '请检查网络后重试'}
+            </p>
+            <button
+              className="campus__retry"
+              onClick={() => {
+                setPhase('loading')
+                void loadFeed()
+              }}
+            >
+              刷新
+            </button>
+          </div>
+        )}
+
+        {phase === 'loading' && feed.length === 0 && (
+          <p className="campus__loading" data-campus-loading>
+            加载中…
+          </p>
+        )}
+
+        {phase === 'ready' && feed.length === 0 && (
+          <div className="campus__empty" data-campus-empty>
+            <p>
+              {placeIds.length > 0
+                ? `「${filterLabel}」下还没有帖子`
+                : '还没有人发过帖子，来发第一条吧'}
+            </p>
+            {placeIds.length > 0 ? (
+              <button className="campus__filterClear" onClick={() => setPlaceIds([])}>
+                清除筛选
+              </button>
+            ) : (
+              <button className="campus__retry" onClick={() => navigate('publish')}>
+                去发布
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="campus__grid">
+          {feed.map((p) => (
+            <PostCard key={p.id} post={p} liked={p.liked} onLike={() => void onToggleLike(p)} />
+          ))}
+          {phase === 'ready' && feed.length > 0 && (
+            <p className="campus__end">
+              已加载全部 · {feed.length} 条动态
+            </p>
+          )}
+        </div>
       </div>
 
       {pickerOpen && <CampusPickerPanel onClose={() => setPickerOpen(false)} />}
+      {filterOpen && (
+        <PlaceFilterPanel
+          places={places}
+          selected={placeIds}
+          onClose={() => setFilterOpen(false)}
+          onApply={(ids) => {
+            setPlaceIds(ids)
+            setFilterOpen(false)
+          }}
+        />
+      )}
     </Screen>
   )
 }

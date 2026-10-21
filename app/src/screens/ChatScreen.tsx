@@ -9,6 +9,7 @@ import {
   relativeTime,
   uploadMedia,
   type ApiMessage,
+  failText,
 } from '../api/client'
 import { getSession } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
@@ -359,7 +360,7 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
       setState('ready')
     } else {
       // 404 同时覆盖"不存在"、"不是成员"、"未登录"三种情况 —— 前端不区分（服务端刻意不区分）
-      setErr(r.status === 404 ? '这个会话不存在，或你没有权限查看' : `加载失败：${r.reason}`)
+      setErr(r.status === 404 ? '这个会话不存在，或你没有权限查看' : `加载失败：${failText(r)}`)
       setState('error')
     }
   }, [id])
@@ -392,13 +393,13 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
     try {
       const up = await uploadMedia(file, 'chat')
       if (!up.ok) {
-        setSendErr(`发送失败：图片上传未成功（${up.reason}）`)
+        setSendErr(`发送失败：图片上传未成功（${failText(up)}）`)
         return
       }
       setBusy('posting')
       const sent = await postThreadImageMessage(id, up.value.id)
       if (!sent.ok) {
-        setSendErr(`发送失败：消息未发出（${sent.reason}）`)
+        setSendErr(`发送失败：消息未发出（${failText(sent)}）`)
         return
       }
       await loadMessages()
@@ -447,7 +448,7 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
           而界面上看不出任何区别。这正是审核记录 48/49 要求
           MENTIONS_ALL_FAILURE_PRESERVES_SELECTION 的原因。
         */
-        setSendErr(`发送失败：消息未发出（${sent.reason}）`)
+        setSendErr(`发送失败：消息未发出（${failText(sent)}）`)
         return
       }
       // 只有成功才清空输入框与选中状态
@@ -548,13 +549,13 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
       // ★ 时长随上传一起持久化（服务端对 audio 强制要求它，缺了就 400）
       const up = await uploadMedia(rec.blob, 'chat', rec.durationMs)
       if (!up.ok) {
-        setSendErr(`发送失败：语音上传未成功（${up.reason}）`)
+        setSendErr(`发送失败：语音上传未成功（${failText(up)}）`)
         return
       }
       setBusy('posting')
       const sent = await postThreadVoiceMessage(id, up.value.id)
       if (!sent.ok) {
-        setSendErr(`发送失败：消息未发出（${sent.reason}）`)
+        setSendErr(`发送失败：消息未发出（${failText(sent)}）`)
         return
       }
       await loadMessages()

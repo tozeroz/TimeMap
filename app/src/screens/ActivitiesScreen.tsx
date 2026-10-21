@@ -1,15 +1,27 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  failText,
   favoriteActivity,
   listActivities,
+  listPlaces,
   unfavoriteActivity,
   type ActivityEffectiveStatus,
   type ApiActivity,
+  type ApiPlaceListItem,
 } from '../api/client'
 import { isLoggedIn } from '../api/session'
 import { Screen } from '../components/Shell'
-import { IconChevronRight, IconLocation, IconRefresh, IconStar } from '../components/icons'
+import {
+  IconCheck,
+  IconChevronDown,
+  IconChevronRight,
+  IconLocation,
+  IconRefresh,
+  IconSearch,
+  IconStar,
+} from '../components/icons'
 import { useRoute, navigate } from '../router'
+import '../styles/switcher.css'
 import './activities.css'
 
 /**
@@ -29,57 +41,88 @@ import './activities.css'
  *   · 默认只展示"即将开始"和"进行中"的活动，由前端过滤实现。
  *   · 地点筛选：支持从地点详情页跳转时自动筛选该地点的活动。
  */
+/** 活动状态筛选的取值：'' = 需求默认（即将开始 + 进行中），其余交给服务端 */
+type StatusKey = '' | 'upcoming' | 'ongoing' | 'ended' | 'cancelled'
+
+/**
+ * 状态筛选项。顺序按需求 §9「默认展示即将开始和进行中；已结束和已取消可通过筛选查看」。
+ * ⚠️ 「默认」不是一个状态，而是**服务端默认口径**（upcoming+ongoing）——
+ *    文案不能写成"全部"，否则用户会以为点了能看到已结束的活动。
+ */
+const STATUS_OPTIONS: Array<{ key: StatusKey; label: string }> = [
+  { key: '', label: '默认' },
+  { key: 'upcoming', label: '即将开始' },
+  { key: 'ongoing', label: '进行中' },
+  { key: 'ended', label: '已结束' },
+  { key: 'cancelled', label: '已取消' },
+]
+
 export function ActivitiesScreen() {
   const route = useRoute()
-  const placeId = route.query.placeId ?? route.path.split('/')[1] ?? '' // 接收placeId参数
+  /** 从地点面板「查看全部」进来时带的 placeId（`#/activities?placeId=`） */
+  const [placeId, setPlaceId] = useState(() => route.query.placeId ?? route.path.split('/')[1] ?? '')
+  /**
+   * 列表数据。改前是 items + items 两份状态：items 由前端 effect
+   * 从 items 二次过滤派生（这正是「已结束」恒为 0 的根因）。筛选搬到服务端后
+   * 前端不再过滤 —— 只留**一份**状态，收藏状态更新也就不会漏掉列表。
+   */
   const [items, setItems] = useState<ApiActivity[]>([])
-  const [displayItems, setDisplayItems] = useState<ApiActivity[]>([])
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
   const [errText, setErrText] = useState('')
   const [win, setWin] = useState<'' | 'today' | 'week'>('')
-  const [statusFilter, setStatusFilter] = useState<ActivityEffectiveStatus[]>([])
+  /**
+   * ⚠️ 状态筛选**必须交给服务端**（改前是前端二次过滤，导致「已结束」恒为 0）：
+   *   服务端的默认查询有"近 7 天"窗口，会把更早结束的活动先剔除掉；
+   *   前端再怎么 filter 也变不回来。所以「已结束/已取消」要由服务端解除窗口后再查。
+   */
+  const [status, setStatus] = useState<StatusKey>('')
+  /** 地标筛选面板与候选地标（权威列表） */
+  const [placeOpen, setPlaceOpen] = useState(false)
+  const [places, setPlaces] = useState<ApiPlaceListItem[]>([])
   // 收藏：busy 防止连点；favMsg 用于如实提示失败（不本地假成功）
   const [favBusy, setFavBusy] = useState(false)
   const [favMsg, setFavMsg] = useState('')
 
   const load = useCallback(async () => {
     setPhase('loading')
-    const r = await listActivities(win === '' ? undefined : win)
+    const r = await listActivities({
+      ...(win ? { window: win } : {}),
+      ...(status ? { status } : {}),
+      ...(placeId ? { placeId } : {}),
+    })
     if (r.ok) {
       setItems(r.value)
       setPhase('ready')
       setErrText('')
     } else {
       setItems([])
-      setErrText(r.reason)
+      setErrText(failText(r))
       setPhase('error')
     }
-  }, [win])
-
-  // 筛选逻辑
-  useEffect(() => {
-    let filtered = items
-
-    // 地点筛选：如果从地点详情跳转而来，只显示该地点的活动
-    if (placeId) {
-      filtered = filtered.filter((a) => a.place.id === placeId)
-    }
-
-    // 状态筛选
-    if (statusFilter.length === 0) {
-      // "全部"状态：默认只显示即将开始和进行中的活动
-      filtered = filtered.filter((a) => a.effectiveStatus === 'upcoming' || a.effectiveStatus === 'ongoing')
-    } else {
-      // 选择了特定状态
-      filtered = filtered.filter((a) => statusFilter.includes(a.effectiveStatus))
-    }
-
-    setDisplayItems(filtered)
-  }, [items, statusFilter, placeId])
+  }, [win, status, placeId])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  /** 候选地标：失败不影响列表，只是筛选面板里没得选（不编造地标名） */
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const r = await listPlaces()
+      if (!alive || !r.ok) return
+      setPlaces(r.value)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  /** 已在活动页时又从地点面板点了「查看全部」：组件不重挂，只能靠 route 同步 */
+  const placeIdParam = route.query.placeId ?? ''
+  useEffect(() => {
+    setPlaceId((prev) => (prev === placeIdParam ? prev : placeIdParam))
+  }, [placeIdParam])
 
   /**
    * 收藏 / 取消收藏（US-04）。三条纪律与帖子收藏一致（见 FeedDetailScreen.toggleFavorite）：
@@ -98,10 +141,10 @@ export function ActivitiesScreen() {
     try {
       const r = a.favoritedByMe ? await unfavoriteActivity(a.id) : await favoriteActivity(a.id)
       if (!r.ok) {
-        setFavMsg(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${r.reason}`)
+        setFavMsg(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${failText(r)}`)
         return
       }
-      // displayItems 由 useEffect 从 items 派生，所以改 items 就够了
+      // 列表只有一份状态 ⇒ 直接更新即可（收藏心形立刻反映，不用重拉）
       setItems((prev) =>
         prev.map((x) => (x.id === a.id ? { ...x, favoritedByMe: r.value.favorited } : x)),
       )
@@ -110,6 +153,9 @@ export function ActivitiesScreen() {
       setFavBusy(false)
     }
   }
+
+  /** 当前地标筛选的可读名称（面板按钮上要能让用户**认出**筛的是哪个地标） */
+  const placeName = placeId ? (places.find((p) => p.id === placeId)?.name ?? '已选地标') : ''
 
   return (
     <Screen
@@ -146,44 +192,39 @@ export function ActivitiesScreen() {
         ))}
       </div>
 
-      {/* 第二行：状态筛选 */}
+      {/* 第二行：状态筛选（服务端过滤；「已结束」「已取消」不再恒为空） */}
       <div className="acts__filters" role="tablist">
         <span className="acts__filterLabel">状态</span>
+        {STATUS_OPTIONS.map((f) => (
+          <button
+            key={f.key || 'default'}
+            className={`acts__chip ${status === f.key ? 'is-active' : ''}`}
+            data-act-status-filter={f.key || 'all'}
+            role="tab"
+            aria-selected={status === f.key}
+            onClick={() => setStatus(f.key)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 第三行：地标筛选（ACT-002；从地点面板进来时已生效，可清除） */}
+      <div className="acts__filters">
+        <span className="acts__filterLabel">地标</span>
         <button
-          className={`acts__chip ${statusFilter.length === 0 ? 'is-active' : ''}`}
-          data-act-status-filter="all"
-          onClick={() => setStatusFilter([])}
+          className={`acts__chip ${placeId ? 'is-active' : ''}`}
+          data-act-place-open
+          onClick={() => setPlaceOpen(true)}
         >
-          默认
+          {placeName || '全部地标'}
+          <IconChevronDown size={13} />
         </button>
-        <button
-          className={`acts__chip ${statusFilter.includes('upcoming') && statusFilter.length === 1 ? 'is-active' : ''}`}
-          data-act-status-filter="upcoming"
-          onClick={() => setStatusFilter(['upcoming'])}
-        >
-          即将开始
-        </button>
-        <button
-          className={`acts__chip ${statusFilter.includes('ongoing') && statusFilter.length === 1 ? 'is-active' : ''}`}
-          data-act-status-filter="ongoing"
-          onClick={() => setStatusFilter(['ongoing'])}
-        >
-          进行中
-        </button>
-        <button
-          className={`acts__chip ${statusFilter.includes('ended') && statusFilter.length === 1 ? 'is-active' : ''}`}
-          data-act-status-filter="ended"
-          onClick={() => setStatusFilter(['ended'])}
-        >
-          已结束
-        </button>
-        <button
-          className={`acts__chip ${statusFilter.includes('cancelled') && statusFilter.length === 1 ? 'is-active' : ''}`}
-          data-act-status-filter="cancelled"
-          onClick={() => setStatusFilter(['cancelled'])}
-        >
-          已取消
-        </button>
+        {placeId && (
+          <button className="acts__chip" data-act-place-clear onClick={() => setPlaceId('')}>
+            清除
+          </button>
+        )}
       </div>
 
       {phase === 'loading' && <p className="acts__state">加载中…</p>}
@@ -203,13 +244,15 @@ export function ActivitiesScreen() {
         ⚠️ 文案要说明**默认窗口的口径**（未结束的 + 7 天内结束的 + 近期取消的），
            否则用户会以为"学校没有活动"，而事实可能是"更早的活动按设计不在这里"。
       */}
-      {phase === 'ready' && displayItems.length === 0 && (
+      {phase === 'ready' && items.length === 0 && (
         <p className="acts__state" data-act-phase="empty">
-          {win === '' && statusFilter.length === 0
-            ? '近期没有活动（更早的活动已退出近期列表）'
-            : win === ''
-            ? '没有符合条件的活动'
-            : '这个时间段没有活动'}
+          {placeId
+            ? '这个地标暂无符合条件的活动，可清除地标筛选看全部'
+            : win !== ''
+              ? '这个时间段没有活动'
+              : status === ''
+                ? '近期没有活动（更早的活动可用「已结束」查看）'
+                : '没有符合条件的活动'}
         </p>
       )}
 
@@ -220,9 +263,9 @@ export function ActivitiesScreen() {
         </p>
       )}
 
-      {phase === 'ready' && displayItems.length > 0 && (
-        <ul className="acts__list" data-act-phase="ready" data-act-count={String(displayItems.length)}>
-          {displayItems.map((a) => (
+      {phase === 'ready' && items.length > 0 && (
+        <ul className="acts__list" data-act-phase="ready" data-act-count={String(items.length)}>
+          {items.map((a) => (
             <li key={a.id} className="acts__row">
               <button
                 className="acts__item"
@@ -276,7 +319,91 @@ export function ActivitiesScreen() {
           ))}
         </ul>
       )}
+
+      {placeOpen && (
+        <ActivityPlacePanel
+          places={places}
+          selected={placeId}
+          onPick={(id) => {
+            setPlaceId(id)
+            setPlaceOpen(false)
+          }}
+          onClose={() => setPlaceOpen(false)}
+        />
+      )}
     </Screen>
+  )
+}
+
+/**
+ * 活动页的地标筛选面板（ACT-002：**单选** + 「全部地标」+ 名称搜索）。
+ *
+ * ## 为什么是单选而不是像校园流那样多选
+ *   ACT-002 的原文只要求"支持地标筛选"，并说"从地点面板进入时自动筛选该地标，允许清除"；
+ *   帖子那边（CAMP-003）才明确写了单选/多选两种都要。多选活动没有需求依据，
+ *   而且"同时看两个地标的近期活动"在活动这种强时间序列的列表里意义不大。
+ *   ⚠️ 这是**实现选择**，不是需求结论；若产品后续要改成多选，改这里即可。
+ */
+function ActivityPlacePanel({
+  places,
+  selected,
+  onPick,
+  onClose,
+}: {
+  places: ApiPlaceListItem[]
+  selected: string
+  onPick: (id: string) => void
+  onClose: () => void
+}) {
+  const [q, setQ] = useState('')
+  const keyword = q.trim()
+  const list = keyword ? places.filter((p) => p.name.includes(keyword)) : places
+  return (
+    <div className="switcher" data-act-place-panel>
+      <div className="switcher__mask" onClick={onClose} />
+      <div className="switcher__panel">
+        <p className="switcher__title">按地标筛选活动</p>
+        <div className="switcher__search">
+          <IconSearch size={17} />
+          <input
+            className="switcher__input"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="搜索地标名称"
+            data-act-place-search
+          />
+        </div>
+        <ul className="switcher__list no-scrollbar">
+          <li>
+            <button
+              className={`switcher__item ${selected === '' ? 'is-current' : ''}`}
+              data-act-place-option=""
+              onClick={() => onPick('')}
+            >
+              <span className="switcher__name">全部地标</span>
+            </button>
+          </li>
+          {list.map((p) => (
+            <li key={p.id}>
+              <button
+                className={`switcher__item ${selected === p.id ? 'is-current' : ''}`}
+                data-act-place-option={p.id}
+                onClick={() => onPick(p.id)}
+              >
+                <span className="switcher__name">{p.name}</span>
+                <span className="switcher__meta">{p.category}</span>
+                {selected === p.id && <IconCheck size={16} />}
+              </button>
+            </li>
+          ))}
+          {list.length === 0 && (
+            <li className="switcher__empty" data-act-place-empty>
+              没有匹配「{keyword}」的地标
+            </li>
+          )}
+        </ul>
+      </div>
+    </div>
   )
 }
 

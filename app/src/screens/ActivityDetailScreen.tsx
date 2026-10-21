@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  failText,
   favoriteActivity,
   getActivity,
   mediaUrl,
@@ -61,7 +62,7 @@ export function ActivityDetailScreen({ id }: { id: string }) {
         setPhase('not_found')
         return
       }
-      setErrText(r.reason)
+      setErrText(failText(r))
       setPhase('error')
     })()
     return () => {
@@ -86,7 +87,7 @@ export function ActivityDetailScreen({ id }: { id: string }) {
     try {
       const r = act.favoritedByMe ? await unfavoriteActivity(act.id) : await favoriteActivity(act.id)
       if (!r.ok) {
-        setFavMsg(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${r.reason}`)
+        setFavMsg(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${failText(r)}`)
         return
       }
       setAct({ ...act, favoritedByMe: r.value.favorited })
@@ -144,14 +145,22 @@ export function ActivityDetailScreen({ id }: { id: string }) {
   return (
     <Screen header={header} scroll>
       <section className="actd" data-act-id={act.id} data-act-status={act.effectiveStatus}>
-        {/* ACT-003：封面图。没有封面时不渲染占位图 —— 不拿假图冒充 */}
-        {act.coverImageId && (
+        {/*
+          ACT-003：活动详情要含**封面**。
+          没有封面时改前直接不渲染 ⇒ 详情页顶部空一块，字段看起来"缺了"。
+          这里给一个**如实的占位**（纯色底 + 图标 + 文字），不塞任何假图。
+        */}
+        {act.coverImageId ? (
           <img
             className="actd__cover"
             data-act-cover={act.coverImageId}
             src={mediaUrl(act.coverImageId)}
             alt={`${act.title} 封面`}
           />
+        ) : (
+          <div className="actd__cover actd__cover--empty" data-act-cover="none">
+            <span className="actd__coverEmptyText">暂无封面</span>
+          </div>
         )}
         <div className="actd__titleRow">
           <h2 className="actd__title">{act.title}</h2>

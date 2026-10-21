@@ -7,6 +7,7 @@ import {
   relativeTime,
   type ApiActivity,
   type ApiPost,
+  failText,
 } from '../api/client'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack, IconHeart, IconStar } from '../components/icons'
@@ -52,7 +53,7 @@ export function FavoritesScreen() {
       setPosts([])
       setActs([])
       const status = !pr.ok ? pr.status : !ar.ok ? ar.status : undefined
-      const reason = !pr.ok ? pr.reason : !ar.ok ? ar.reason : ''
+      const reason = !pr.ok ? failText(pr) : !ar.ok ? failText(ar) : ''
       setErrText(status === 401 ? '请先登录后查看收藏' : reason)
       setPhase('error')
       return
