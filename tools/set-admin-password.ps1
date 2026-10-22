@@ -120,10 +120,10 @@ fi
 # Take the node binary from the running service instead of assuming a path.
 NODE="$(systemctl cat campus-backend.service 2>/dev/null | sed -n 's/^ExecStart=\([^ ]*\).*/\1/p' | head -1)"
 if [ ! -x "$NODE" ]; then
-  NODE=/opt/node-v24.21.0-linux-x64/bin/node
+  NODE=/opt/node-v24.22.1-linux-x64/bin/node
 fi
 if [ ! -x "$NODE" ]; then
-  echo "  ! node binary not found (tried the unit's ExecStart and /opt/node-v24.21.0-linux-x64/bin/node)"
+  echo "  ! node binary not found (tried the unit's ExecStart and /opt/node-v24.22.1-linux-x64/bin/node)"
   exit 1
 fi
 echo "  node: $NODE"

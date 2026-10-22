@@ -2,7 +2,7 @@
 # 修复被乱码脚本破坏的两步：Node 安装 + Nginx /health 配置；并核对 PG 冻结参数是否生效
 set -euo pipefail
 
-NODE_VERSION="v24.21.0"
+NODE_VERSION="v24.22.1"
 NODE_DIR="/opt/node-${NODE_VERSION}-linux-x64"
 PUBLIC_IP="8.148.156.146"
 
