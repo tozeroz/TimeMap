@@ -2,9 +2,9 @@
 # 现状核查：Node / PostgreSQL / Nginx / systemd 到底装到哪一步了
 echo "=== Node ==="
 ls -la /opt/ 2>/dev/null | grep -E 'node' || echo "  /opt 下没有 node"
-test -x /opt/node-v24.21.0-linux-x64/bin/node && echo "  node 二进制存在: $(/opt/node-v24.21.0-linux-x64/bin/node --version)" || echo "  node 二进制缺失"
+test -x /opt/node-v24.22.1-linux-x64/bin/node && echo "  node 二进制存在: $(/opt/node-v24.22.1-linux-x64/bin/node --version)" || echo "  node 二进制缺失"
 command -v node >/dev/null && echo "  PATH 里的 node: $(node --version)" || echo "  PATH 里没有 node"
-test -f /opt/node-v24.21.0.sha256 && echo "  校验和文件: $(cat /opt/node-v24.21.0.sha256)" || echo "  校验和文件缺失"
+test -f /opt/node-v24.22.1.sha256 && echo "  校验和文件: $(cat /opt/node-v24.22.1.sha256)" || echo "  校验和文件缺失"
 
 echo "=== PostgreSQL ==="
 systemctl is-active postgresql; systemctl is-enabled postgresql

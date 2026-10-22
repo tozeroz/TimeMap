@@ -9,7 +9,9 @@ Wants=postgresql.service
 
 [Service]
 Type=simple
-ExecStart=/opt/node-v24.21.0-linux-x64/bin/node /srv/campus/server/dist/index.mjs
+# Node 24.22.1 = 2026-10-21 的安全补丁版（24.21.0 的内置根库仍信任被泄露的 eMudhra 中间 CA；
+# 24.22.1 更新到 NSS 3.131.1 并拒绝含被封锁公钥的证书链）。升级记录见 docs/zjx/安全更新-2026-10-22.md
+ExecStart=/opt/node-v24.22.1-linux-x64/bin/node /srv/campus/server/dist/index.mjs
 WorkingDirectory=/srv/campus/server
 User=campus
 Group=campus
