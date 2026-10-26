@@ -28,7 +28,7 @@ echo "@@@BUSINESS_TABLES@@@"
 sudo -u postgres psql -Atc "select count(*) from pg_database where datname not in ('postgres','template0','template1');"
 
 echo "@@@NODE_SHA@@@"
-cat /opt/node-v24.21.0.sha256
+cat /opt/node-v24.22.1.sha256
 
 echo "@@@HEALTH@@@"
 curl -s -m 5 http://127.0.0.1/health; echo

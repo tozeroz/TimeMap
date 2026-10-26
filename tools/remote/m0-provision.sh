@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # M0 服务器 provision（幂等）
-# 范围：apt 基础包 → Node 24.21.0 官方二进制 → PostgreSQL 调参（仅 localhost）
+# 范围：apt 基础包 → Node 24.22.1 官方二进制 → PostgreSQL 调参（仅 localhost）
 #       → Nginx 骨架（/health + /api 反代）→ systemd unit（disabled/inactive）
 # 明确不做：任何业务表、任何业务 API、任何 Node 常驻服务
 set -euo pipefail
 
-NODE_VERSION="v24.21.0"
+NODE_VERSION="v24.22.1"
 NODE_DIR="/opt/node-${NODE_VERSION}-linux-x64"
 NODE_SHA256_FILE="/opt/node-${NODE_VERSION}.sha256"
 PUBLIC_IP="8.148.156.146"
@@ -108,7 +108,7 @@ Wants=postgresql.service
 [Service]
 Type=simple
 # M1 会替换为真实实现；此处不留假进程
-ExecStart=/opt/node-v24.21.0-linux-x64/bin/node /srv/campus/server/dist/index.js
+ExecStart=/opt/node-v24.22.1-linux-x64/bin/node /srv/campus/server/dist/index.js
 WorkingDirectory=/srv/campus/server
 User=campus
 Group=campus
