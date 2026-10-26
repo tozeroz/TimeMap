@@ -42,7 +42,8 @@
 param(
   [switch]$SkipBuild,
   [string]$Key = '',
-  [string]$Target = 'root@8.148.156.146'
+  [string]$Target = 'root@8.148.156.146',
+  [string]$RemoteBuildEnv = '/srv/campus/web-build.env'
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -81,6 +82,32 @@ if (-not $PSBoundParameters.ContainsKey('Key') -or -not $Key) {
 $SSH_OPTS = @('-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=20', '-o', 'BatchMode=yes')
 $web  = '/srv/campus/web'
 $remoteScript = Join-Path $root 'tools\remote\web-deploy-remote.sh'
+
+# Production Vite variables live on the server so every authorized publisher uses the
+# same map credentials. Values are captured in memory and never printed. A release must
+# fail before building or uploading if the required AMap configuration is unavailable.
+Write-Host '=== 0) Load protected frontend configuration ===' -ForegroundColor Cyan
+$remoteEnvOutput = & ssh -i $Key @SSH_OPTS $Target "test -r '$RemoteBuildEnv' && cat '$RemoteBuildEnv'" 2>&1
+$remoteEnvCode = $LASTEXITCODE
+if ($remoteEnvCode -ne 0) {
+  throw "cannot read protected frontend configuration: $RemoteBuildEnv (ssh exit $remoteEnvCode)"
+}
+$allowedBuildVars = @('VITE_API_ORIGIN', 'VITE_TENCENT_MAP_KEY', 'VITE_AMAP_JS_KEY', 'VITE_AMAP_SECURITY_CODE')
+foreach ($lineObject in @($remoteEnvOutput)) {
+  $line = "$lineObject".Trim()
+  if (-not $line -or $line.StartsWith('#') -or -not $line.Contains('=')) { continue }
+  $parts = $line -split '=', 2
+  $name = $parts[0].Trim()
+  if ($allowedBuildVars -notcontains $name) { continue }
+  [Environment]::SetEnvironmentVariable($name, $parts[1].Trim(), 'Process')
+}
+foreach ($requiredName in @('VITE_AMAP_JS_KEY', 'VITE_AMAP_SECURITY_CODE')) {
+  $requiredValue = [Environment]::GetEnvironmentVariable($requiredName, 'Process')
+  if ([string]::IsNullOrWhiteSpace($requiredValue) -or $requiredValue.StartsWith('YOUR_')) {
+    throw "required production map setting is missing: $requiredName"
+  }
+}
+Write-Host '  protected AMap settings loaded (values hidden)'
 
 Write-Host '=== 1) Build frontend ===' -ForegroundColor Cyan
 if (-not $SkipBuild) {
@@ -130,6 +157,22 @@ $dist = Join-Path $root 'app\dist'
 if (-not (Test-Path (Join-Path $dist 'index.html'))) { throw "Build output missing: $dist\index.html" }
 $jsCount = (Get-ChildItem (Join-Path $dist 'assets') -Filter '*.js' -ErrorAction SilentlyContinue).Count
 
+# Verify the actual bundle, not merely the parent shell environment. This also protects
+# -SkipBuild from uploading an older artifact that was compiled without the map settings.
+$builtScripts = @(Get-ChildItem (Join-Path $dist 'assets') -Filter '*.js' -File -ErrorAction SilentlyContinue)
+$amapKey = [Environment]::GetEnvironmentVariable('VITE_AMAP_JS_KEY', 'Process')
+$amapSecurityCode = [Environment]::GetEnvironmentVariable('VITE_AMAP_SECURITY_CODE', 'Process')
+$bundleHasAmapConfig = $false
+foreach ($builtScript in $builtScripts) {
+  $scriptText = [IO.File]::ReadAllText($builtScript.FullName)
+  if ($scriptText.Contains($amapKey) -and $scriptText.Contains($amapSecurityCode)) {
+    $bundleHasAmapConfig = $true
+    break
+  }
+}
+if (-not $bundleHasAmapConfig) { throw 'built frontend does not contain the protected AMap configuration' }
+Write-Host '  bundle check: protected AMap settings present (values hidden)'
+
 Write-Host '=== 2) Upload to a timestamped staging dir ===' -ForegroundColor Cyan
 # Build-id sentinel: lets the verifier PROVE a deploy actually happened
 # (see the "vacuous probe" pitfall above).
@@ -139,7 +182,7 @@ Set-Content -Path (Join-Path $dist 'build-id.txt') -Value $buildId -Encoding asc
 Write-Host "  build-id: $buildId"
 
 $stamp = Get-Date -Format 'yyyyMMddHHmmss'
-$stage = "$web.new.$stamp"
+$stage = "${web}.new.$stamp"
 $slot  = "/tmp/web-upload-$stamp"
 
 & ssh -i $Key @SSH_OPTS $Target "mkdir -p '$stage' && echo staging-ready"
@@ -150,15 +193,29 @@ if ($LASTEXITCODE -ne 0) { throw "cannot create upload slot $slot (exit $LASTEXI
 
 # Transfer the directory itself (no glob). scp -r <localdir> <remote>/ creates
 # <remote>/<basename>, hence reading from $slot/dist below.
-& scp -i $Key @SSH_OPTS -r $dist "${Target}:$slot/"
-if ($LASTEXITCODE -ne 0) { throw "upload failed (scp exit $LASTEXITCODE) - aborted, live site untouched" }
+$previousScpPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  & scp -q -i $Key @SSH_OPTS -r $dist "${Target}:$slot/"
+  $distScpExit = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $previousScpPreference
+}
+if ($distScpExit -ne 0) { throw "upload failed (scp exit $distScpExit) - aborted, live site untouched" }
 
 & ssh -i $Key @SSH_OPTS $Target "cp -a '$slot/dist/.' '$stage/' && echo staged && find '$stage' -type f | wc -l"
 if ($LASTEXITCODE -ne 0) { throw "staging copy failed (exit $LASTEXITCODE)" }
 
 Write-Host '=== 3) Upload remote helper ===' -ForegroundColor Cyan
-& scp -i $Key @SSH_OPTS $remoteScript "${Target}:/tmp/web-deploy-remote.sh"
-if ($LASTEXITCODE -ne 0) { throw "uploading remote helper failed (exit $LASTEXITCODE)" }
+$previousScpPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  & scp -q -i $Key @SSH_OPTS $remoteScript "${Target}:/tmp/web-deploy-remote.sh"
+  $helperScpExit = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $previousScpPreference
+}
+if ($helperScpExit -ne 0) { throw "uploading remote helper failed (exit $helperScpExit)" }
 
 Write-Host '=== 4) Atomic swap + fix permissions ===' -ForegroundColor Cyan
 # swap validates $stage/index.html before touching the live dir.
