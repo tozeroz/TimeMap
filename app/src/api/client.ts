@@ -1397,7 +1397,7 @@ export function toFeedPost(p: ApiPost): FeedPost {
 // ===========================================================================
 // M3 Slice 1：帖子详情 / 评论 / 回复
 //
-// 1:1 依据（原版实测，见 docs/pending/m3/MODEL-VALIDATION.md §2.7）：
+// 1:1 依据（原版实测，见 docs/archive/legacy-development/m3/MODEL-VALIDATION.md §2.7）：
 //   - 评论区**内联**在动态详情里；顶层评论各自带一层「回复列表」（嵌套渲染）
 //   - 回复行渲染为「<作者> 回复 <目标> · <时间>」+ 正文
 //   - 「评论 N」的计数**把回复也算进去**

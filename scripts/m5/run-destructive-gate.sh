@@ -8,7 +8,7 @@
 #       systemctl restart campus-backend.service  +  清空 uploads/.tmp
 #   而本机重启后**可能要约 176 秒才 `/api/ready == 200`**
 #   （free/swap/loadavg 压力下 `[migrate] retryable: database unreachable` 反复重试；
-#    机制见 docs/pending/review-log/55 §二）。
+#    机制见 docs/archive/legacy-development/review-log/55 §二）。
 #
 #   审核 55 的建议原话意译：
 #     「把 TMP_SELFHEAL / restart test 从普通无副作用 regression 路径拆出为

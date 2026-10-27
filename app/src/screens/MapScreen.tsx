@@ -88,6 +88,7 @@ export function markersFromPlaces(
         // ⭐ 跳转目标是地点（P0 的核心改动）
         placeId: p.id,
         place: p.name,
+        category: p.category,
         // ⚠️ 单一确定色：原版配色规则 NOT_EVALUATED（见函数头注释）
         color: '#f5453b',
         userId: rep?.authorId ?? '',

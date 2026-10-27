@@ -8,7 +8,7 @@ import './login.css'
 /**
  * 手机号登录页（原版 `com.kairuotu.account.login.activity.CampusSnsLoginActivity`）。
  *
- * 1:1 依据（M3 Slice 0A 实测，见 docs/pending/m3/SLICE0-LOGIN-SEMANTICS.md）：
+ * 1:1 依据（M3 Slice 0A 实测，见 docs/archive/legacy-development/m3/SLICE0-LOGIN-SEMANTICS.md）：
  *   - 标题「输入手机号」、固定国家码「+86」、手机号输入框（原版 id: phone_number）
  *   - 主按钮「获取验证码」（原版 id: next_step）、左上返回（原版 id: btnBack）
  *   - 原版**没有密码**、**没有第三方登录入口**

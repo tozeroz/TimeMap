@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # M0 Exit Gate —— 服务器侧断言（在服务器上执行）
 #
-# 设计原则（据 docs/pending/review-log/02）：
+# 设计原则（据 docs/archive/legacy-development/review-log/02）：
 #   不要一个「大脚本返回 PASS」，而是明确的 assertion 集合；任一 mandatory 失败 → 退出码非 0。
 # 用法：
 #   bash verify-m0-server.sh                 # 常规断言

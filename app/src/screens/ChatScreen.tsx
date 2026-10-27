@@ -825,7 +825,7 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
             /*
               自己发的消息靠右、对方的靠左。
               依据：原版会话页里**自己发的那条**气泡落在右半（x=[625,975]，屏宽 1080）、
-              头像贴最右（x=[989,1052]）—— 见 docs/pending/m5/CHAT-SENDER-PRESENTATION-CONFIRMED.md。
+              头像贴最右（x=[989,1052]）—— 见 docs/archive/legacy-development/m5/CHAT-SENDER-PRESENTATION-CONFIRMED.md。
               此前这里硬编码 `--peer`，把「我发的」也画在左边，是真实偏差。
 
               ⚠ `meId` 为 null（未登录 / 读不到会话）时 `mine` 恒为 false → 降级成 `--peer`（原行为）。

@@ -15,7 +15,7 @@
   "_evidence_status": {
     "ORIGINAL_MAP_PIN_PLACE_OBSERVED": "阳光操场 —— 见 docs/test/original-interaction-map.md:38（原版实测**红色图钉**）",
     "其余 5 条": "**无出处**：只出现在本数组与 MapScreen 自身（自引用）；且 **6 条在 places 表里全部 0 行**",
-    "MOCK_PIN_PALETTE_SUPPORTED_BY_BASELINE": "NO（至少绿色无支撑）—— 依机械像素分析，见 docs/pending/m5/WO15-VISUAL-EVIDENCE-mechanical-pixel-analysis.md"
+    "MOCK_PIN_PALETTE_SUPPORTED_BY_BASELINE": "NO（至少绿色无支撑）—— 依机械像素分析，见 docs/archive/legacy-development/m5/WO15-VISUAL-EVIDENCE-mechanical-pixel-analysis.md"
   },
   "_coordinate_systems": {
     "x_y": "SVG 像素空间（与 MapScreen 里 OfflineMap 的 viewBox 1400×2000 同一坐标系）",

@@ -1,5 +1,5 @@
 ﻿<#
-  M2 Gate（对应 docs/pending/m2/SPEC.md 第八节）。
+  M2 Gate（对应 docs/archive/legacy-development/m2/SPEC.md 第八节）。
 
   结构按审核记录 04 §10.3 收束：本里程碑的验收放在 scripts/gates/m2/，
   历史的 M0/M1 入口保持原样（scripts/m0/verify-m0.ps1、scripts/m1/verify-m1.ps1）。
@@ -10,7 +10,7 @@
   用法：
     & '.\scripts\gates\m2\milestone.ps1'                 # 全量
     & '.\scripts\gates\m2\milestone.ps1' -SkipDevice     # 没开模拟器时
-  证据：docs/pending/m2/evidence/gate-<时间戳>.txt
+  证据：docs/archive/legacy-development/m2/evidence/gate-<时间戳>.txt
 #>
 param(
   [switch]$SkipM0,
@@ -20,7 +20,7 @@ param(
 
 $ErrorActionPreference = 'Continue'
 $repo = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
-$evidenceDir = Join-Path $repo 'docs\pending\m2\evidence'
+$evidenceDir = Join-Path $repo 'docs\archive\legacy-development\m2\evidence'
 New-Item -ItemType Directory -Force -Path $evidenceDir | Out-Null
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $evidencePath = Join-Path $evidenceDir "gate-$stamp.txt"
@@ -131,7 +131,7 @@ if (-not $SkipServer) {
   # verify-auth.sh 测的是 M2 冻结的 handle+password 契约。当前产品已退休那条路径
   # （POST /api/auth/login → 410），所以：
   #   - 这份脚本必须保留：它是 M2 阶段的审计产物，删掉就等于抹掉历史 Gate 的可复现性
-  #   - 但它只能对 **M2 修订** 运行（复现步骤见 docs/pending/m3/CLOSEOUT-SLICE0B.md）
+  #   - 但它只能对 **M2 修订** 运行（复现步骤见 docs/archive/legacy-development/m3/CLOSEOUT-SLICE0B.md）
   #   - 拿它跑当前部署会（正确地）失败 —— 那说明产品已前进，不是缺陷
   # 当前产品的认证断言在 M3 的 Gate 里（scripts/gates/m3/slice0b.ps1 → verify-auth-otp.sh）。
   # ===========================================================================
@@ -161,7 +161,7 @@ if (-not $SkipServer) {
 # ---------------------------------------------------------------------------
 # 数据模型追溯性（审核 scope gate 的证据必须存在）
 Head 'TRACEABILITY) 每张表都能追溯到已观察实体'
-$dm = Join-Path $repo 'docs\pending\m2\DATA-MODEL.md'
+$dm = Join-Path $repo 'docs\archive\legacy-development\m2\DATA-MODEL.md'
 if (Test-Path -LiteralPath $dm) {
   $dmText = [IO.File]::ReadAllText($dm, [Text.Encoding]::UTF8)
   $missing = @()
@@ -172,7 +172,7 @@ if (Test-Path -LiteralPath $dm) {
   }
   if ($missing.Count -eq 0) { Ok 'DATA-MODEL.md 覆盖全部 16 张业务表（含 M3 新增的 schools/campuses/login_challenges）' }
   else { Bad "DATA-MODEL.md 缺少追溯: $($missing -join ', ')" }
-} else { Bad '缺少 docs/pending/m2/DATA-MODEL.md（scope gate 的证据）' }
+} else { Bad '缺少 docs/archive/legacy-development/m2/DATA-MODEL.md（scope gate 的证据）' }
 
 # ---------------------------------------------------------------------------
 if ($SkipDevice) {

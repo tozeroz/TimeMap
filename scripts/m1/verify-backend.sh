@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M1 后端侧验证（对应 docs/pending/m1/SPEC.md 第六节 Gate 的第 1/2/3/5/6/7 组）
+# M1 后端侧验证（对应 docs/archive/legacy-development/m1/SPEC.md 第六节 Gate 的第 1/2/3/5/6/7 组）
 # 不用 set -e：每步独立报告，失败继续，最后汇总退出码。
 #
 # 用法: verify-backend.sh [M1|M2]      ← 注意是 $1：脚本经 stdin 交给 bash 时，

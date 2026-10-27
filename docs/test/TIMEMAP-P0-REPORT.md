@@ -3,7 +3,7 @@
 > 交付物：① 修复实现与需求不符之处 ② 完成 P0（F01–F07）③ 本文档（工作与改动汇总、验证证据、备份恢复指引、已知限制）
 > 需求依据：《BJTU TimeMap需求分析与产品设计文档》（权威）+ 《北交大校园记忆地图项目需求分析初稿 (1).docx》（V0.4）
 > 日期：2026-09-26（初版）／2026-10-09（增量：APK 1.2、管理员密码登录、仓库可重建性修复，见 §十一）　目标环境：root@8.148.156.146（阿里云，396MB 内存，PG18 + nginx + campus-backend.service）
-> 逐日工作记录与踩坑详见 [TIMEMAP-P0-WORKLOG.md](../pending/TIMEMAP-P0-WORKLOG.md)
+> 逐日工作记录与踩坑详见 [TIMEMAP-P0-WORKLOG.md](../archive/legacy-development/TIMEMAP-P0-WORKLOG.md)
 
 ---
 

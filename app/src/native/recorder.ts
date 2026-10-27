@@ -6,7 +6,7 @@
  * ---------------------------------------------------------------------------
  * 为什么时长必须在这里用**单调时钟**测，而不是从音频文件里读
  * ---------------------------------------------------------------------------
- * WO#5 第二轮探针实测（docs/pending/m5/PROBE2-recording-capture.md）：
+ * WO#5 第二轮探针实测（docs/archive/legacy-development/m5/PROBE2-recording-capture.md）：
  *   `<audio>` 能成功 loadedmetadata，但 **`audio.duration === null`**。
  * 原因：MediaRecorder 产出的是"live/流式" WebM，**文件头不含 duration**，
  *       不 seek 时读到 null/Infinity（WebM 已知特性）。

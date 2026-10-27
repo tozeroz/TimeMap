@@ -175,7 +175,7 @@ if [ "$ALL_OK" = "1" ]; then
   #    它证明的是"现有门禁全绿 + 正序逆序一致 + 当前 regression 无明显顺序依赖"，
   #    **没有**证明"M5 产品已经 complete"。
   echo "M5_GLOBAL_REGRESSION_AUDIT: PASS（两轮逐门禁结论一致且全绿 ⇒ 按审核 61/62 停止局部收敛）"
-  echo "M5_COMPLETION_STATUS: BLOCKED（产品完成度 = 受阻；剩余项见 docs/pending/m5/M5-GLOBAL-COMPLETION-AUDIT.md §三 A 类）"
+  echo "M5_COMPLETION_STATUS: BLOCKED（产品完成度 = 受阻；剩余项见 docs/archive/legacy-development/m5/M5-GLOBAL-COMPLETION-AUDIT.md §三 A 类）"
   echo "M5_CLOSEOUT_PHASE: ACTIVE（审核 62 第 3 条：已进入关账执行阶段，但 FINAL CLOSE = BLOCKED）"
 else
   if [ -n "$ORDER_SENSITIVE" ]; then

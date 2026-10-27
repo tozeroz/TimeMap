@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # M5 工作单 #2 —— 后端：发消息携带**单数** mediaId（审核记录 21 修订 1）
 #
-# 依据：docs/pending/m5/WORKORDER-2.md（修订 1：单数 mediaId，不接受数组）
+# 依据：docs/archive/legacy-development/m5/WORKORDER-2.md（修订 1：单数 mediaId，不接受数组）
 #
 # 本脚本覆盖的断言（与 WORKORDER-2 §三 的 Gate 清单对应）：
 #   A1 带 mediaId 发图片消息 → 201；message_media 有行且 media_scope='private'

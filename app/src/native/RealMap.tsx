@@ -1,3 +1,4 @@
+import { buildMarkerElement } from './placeMarker'
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -7,9 +8,6 @@ import type { MapHandle } from './mapApi'
 import { activeTileConfig, CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
-}
 
 /**
  * 栅格瓦片地图（Leaflet + 可配置瓦片源）—— 官方 SDK 不可用时的兜底。
@@ -17,7 +15,7 @@ function escapeHtml(value: string): string {
  * 为什么保留它：不需要 key、不依赖任何厂商 SDK 域名，只要瓦片能下就能出图；
  * 瓦片连续加载失败时回调 onTilesFailed，让上层退回离线自绘地图。
  *
- * 标记沿用原版形态：照片卡片 + 彩色图钉 + 地点名（用 divIcon 自绘）。
+ * 标记使用分类 PNG 与透明地点名；代表帖卡片独立显示（用 divIcon 自绘）。
  * 蓝点用真实定位坐标（here），拿不到时退回校园中心，绝不留空白。
  */
 export function RealMap({
@@ -66,26 +64,15 @@ export function RealMap({
     })
     layer.addTo(map)
 
-    // 标记：照片卡片 + 图钉 + 地点名
+    // Shared place symbol and independent representative-post control.
     for (const m of markers) {
-            const cover = m.coverUrl
-      const body = cover
-        ? `<img class="rm__img" src="${escapeHtml(cover)}" alt="" />`
-        : `<span class="rm__img rm__img--text">${escapeHtml((m.excerpt ?? '').slice(0, 10))}</span>`
-      const html = `
-        <div class="rm ${m.imageMode === 'sticker' ? 'rm--sticker' : ''} ${m.highlight ? 'rm--highlight' : ''} ${!cover && m.postId ? 'rm--text' : ''}">
-          <div class="rm__card">${body}${cover && m.imageMode !== 'sticker' ? `<span class="rm__likes">♥ ${m.likeCount ?? 0}</span>` : ''}<span class="rm__name">${escapeHtml(m.place)}</span></div>
-          <span class="rm__pin" style="color:${m.color}">
-            <svg width="18" height="24" viewBox="0 0 20 26"><path d="M10 25.5S19 15.6 19 9.6A9 9 0 0 0 1 9.6c0 6 9 15.9 9 15.9Z" fill="currentColor"/><circle cx="10" cy="9.6" r="3.4" fill="#fff"/></svg>
-          </span>
-        </div>`
       const icon = L.divIcon({
-        html,
+        html: buildMarkerElement(m),
         className: 'rm__wrap',
-        iconSize: [76, 100],
-        iconAnchor: [38, 100],
+        iconSize: [104, 80],
+        iconAnchor: [52, 80],
       })
-      const marker = L.marker([m.lat, m.lng], { icon })
+      const marker = L.marker([m.lat, m.lng], { icon, keyboard: false })
       marker.on('click', (e) => onMarkerClick(m.placeId, (e.originalEvent.target as Element)?.closest('.rm__card') ? m.postId || undefined : undefined))
       marker.addTo(map)
     }

@@ -34,7 +34,7 @@ import './board.css'
  *    而这里把 emoji **字符**当文字直接渲染（`{e}`）。
  *    → 已按审核记录 30 收口：`C4_EMOJI_RENDERING_KIND: CONFIRMED — image-based`；
  *      结构层修复**已解冻**并另立 WO#4
- *      （`docs/pending/m5/WO4-PLAN-emoji-rendering-structure.md`）。
+ *      （`docs/archive/legacy-development/m5/WO4-PLAN-emoji-rendering-structure.md`）。
  *      **具体用哪 6 张图仍未捕获**（`C4_EXACT_6_ASSETS: NOT_CAPTURED`），不得凭印象选。
  */
 export function BoardScreen({ peerId }: { peerId: string }) {

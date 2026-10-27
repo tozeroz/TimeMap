@@ -170,7 +170,7 @@
 /*
   为什么是「图标 + 时长」这一种形态（而不是波形条）：
   原版语音气泡的结构是 `voiceContainerView → voice_msg_ll → 播放控件 + TextView(voice_msg_text)`
-  （见 docs/pending/m5/WO5-PLAN-voice-message.md §2.2，来自 APK 布局 dump），
+  （见 docs/archive/legacy-development/m5/WO5-PLAN-voice-message.md §2.2，来自 APK 布局 dump），
   即"一个播放控件 + 一段文字"。**时长就是那段文字**。
   波形的具体形态（宽度是否随时长变化、动画样式）**目前没有行为证据**，
   所以这里只做**已被证据支持的部分**，不凭惯例发明（同理于"上滑取消"被明确排除在 Phase 1 之外）。
