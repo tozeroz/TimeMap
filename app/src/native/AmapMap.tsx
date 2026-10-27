@@ -98,6 +98,7 @@ export function AmapMap({
   onMarkerClick,
   onSdkFailed,
   mapRef,
+  mapStyle,
 }: {
   markers: MapMarker[]
   here?: GeoFix | null
@@ -105,6 +106,7 @@ export function AmapMap({
   onMarkerClick: (placeId: string, postId?: string) => void
   onSdkFailed: () => void
   mapRef?: (handle: MapHandle | null) => void
+  mapStyle?: string
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const mapObjRef = useRef<AMapMapInstance | null>(null)
@@ -130,6 +132,11 @@ export function AmapMap({
         center: [CAMPUS_CENTER[1], CAMPUS_CENTER[0]],
         resizeEnable: true,
         viewMode: '2D',
+        // Keep the provider's building/POI names for orientation; the theme
+        // supplies the quieter palette without removing useful campus labels.
+        mapStyle: mapStyle || import.meta.env.VITE_AMAP_MAP_STYLE?.trim() || 'amap://styles/macaron',
+        features: ['bg', 'point', 'road', 'building'],
+        isHotspot: false,
       })
       mapObjRef.current = map
 
@@ -184,7 +191,7 @@ export function AmapMap({
       if (map && overlays.length) map.remove(overlays)
       map?.destroy()
     }
-  }, [markers, onMarkerClick, onSdkFailed, mapRef])
+  }, [markers, onMarkerClick, onSdkFailed, mapRef, mapStyle])
 
   // ---- 蓝点跟随真实定位 ----
   useEffect(() => {

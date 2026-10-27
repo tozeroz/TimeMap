@@ -916,6 +916,7 @@ export function MapScreen() {
         ) : provider === 'amap' ? (
           <AmapMap
             markers={markers}
+            mapStyle={route.query.theme === 'macaron' ? 'amap://styles/macaron' : undefined}
             here={fix}
             onMarkerClick={handleMarkerClick}
             onSdkFailed={handleAmapFailed}

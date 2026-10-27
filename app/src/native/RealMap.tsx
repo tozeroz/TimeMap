@@ -102,6 +102,9 @@ export function RealMap({
     sync()
 
     return () => {
+      // remove() can finish a pending pan/resize after its panes are gone.
+      // Detach our observer before teardown so a marker click can safely navigate.
+      map.off('move zoom moveend zoomend', sync)
       mapObjRef.current = null
       hereLayerRef.current = null
       mapRef?.(null)
