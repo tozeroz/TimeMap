@@ -36,7 +36,7 @@ Write-Output ""
 $branch = (git branch --show-current).Trim()
 Expect GIT "current branch == fullstack" $branch 'fullstack'
 
-$baseFile = 'docs/pending/m0/base-commit.txt'
+$baseFile = 'docs/archive/legacy-development/m0/base-commit.txt'
 Chk GIT "base-commit recorded" { Test-Path -LiteralPath $baseFile }
 $base = if (Test-Path -LiteralPath $baseFile) { (Get-Content -LiteralPath $baseFile -Raw).Trim() } else { '' }
 if ($base) {

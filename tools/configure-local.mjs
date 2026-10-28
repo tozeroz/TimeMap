@@ -30,5 +30,5 @@ update(envFile, {
   CORS_ORIGINS: 'http://127.0.0.1:5180,http://localhost:5180,http://127.0.0.1:5174,http://localhost:5174',
   ...(!/^LOGIN_CODE_HMAC_KEY=.+/m.test(current) ? { LOGIN_CODE_HMAC_KEY: crypto.randomBytes(32).toString('hex') } : {}),
 })
-update(path.join(root, 'app/.env.local'), { VITE_API_ORIGIN: 'http://127.0.0.1:3002' })
+update(path.join(root, 'app/.env.local'), { VITE_API_ORIGIN: 'http://127.0.0.1:3002', VITE_READ_ONLY_PREVIEW: '0' })
 console.log('Local settings ready. Existing cutout credentials preserved.')

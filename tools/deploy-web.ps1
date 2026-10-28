@@ -11,7 +11,7 @@
 # (That cost a full debugging round. I had written this very rule in the header
 #  and then violated it by adding Chinese comments.)
 # => Chinese rationale lives in tools/remote/web-deploy-remote.sh (bash reads
-#    UTF-8 correctly) and in docs/public/WEB-FRONTEND.md. Keep this file ASCII.
+#    UTF-8 correctly) and in docs/public/archive/WEB-FRONTEND.md. Keep this file ASCII.
 #
 # WHY AN ATOMIC DEPLOY (not "delete then upload"):
 #   The first version did `rm -rf $web && mkdir` then uploaded, which leaves the
@@ -92,7 +92,7 @@ $remoteEnvCode = $LASTEXITCODE
 if ($remoteEnvCode -ne 0) {
   throw "cannot read protected frontend configuration: $RemoteBuildEnv (ssh exit $remoteEnvCode)"
 }
-$allowedBuildVars = @('VITE_API_ORIGIN', 'VITE_TENCENT_MAP_KEY', 'VITE_AMAP_JS_KEY', 'VITE_AMAP_SECURITY_CODE')
+$allowedBuildVars = @('VITE_API_ORIGIN', 'VITE_TENCENT_MAP_KEY', 'VITE_AMAP_JS_KEY', 'VITE_AMAP_SECURITY_CODE', 'VITE_AMAP_MAP_STYLE')
 foreach ($lineObject in @($remoteEnvOutput)) {
   $line = "$lineObject".Trim()
   if (-not $line -or $line.StartsWith('#') -or -not $line.Contains('=')) { continue }

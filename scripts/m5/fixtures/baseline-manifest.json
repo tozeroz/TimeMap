@@ -9,7 +9,7 @@
   "_status_vocabulary": {
     "MATCH": "当前实现与原版该 claim 一致（须能被 Gate 验证）",
     "DEVIATION": "与 manifest 冻结的原版契约不一致。分两类：",
-    "DEVIATION_DELIBERATE": "有意的功能后撤，附 deviation_id 与批准记录（见 docs/pending/m5/KNOWN-DEVIATIONS.md）",
+    "DEVIATION_DELIBERATE": "有意的功能后撤，附 deviation_id 与批准记录（见 docs/archive/legacy-development/m5/KNOWN-DEVIATIONS.md）",
     "DEVIATION_PENDING_FIX": "确认为偏差、待修（附所属工作单）",
     "NOT_EVALUATED": "原版证据不足，不做任何一致性主张",
     "UNCHANGED": "原版证据不足，但我们**有意保持现状不动**（既不修也不删）"

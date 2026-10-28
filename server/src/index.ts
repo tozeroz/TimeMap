@@ -22,6 +22,7 @@ import { fakeVerify, verifyPassword } from './password.ts'
 import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts'
 import { registerCutoutRoutes } from './cutout.ts'
 import { registerTimemapRoutes } from './timemap.ts'
+import { registerMapRoutes } from './mapRoutes.ts'
 
 /**
  * Campus 后端（M3 Slice 0B）。
@@ -1317,7 +1318,7 @@ export function buildServer(deps: ServerDeps) {
   // -------------------------------------------------------------------------
   // 帖子详情 / 评论 / 回复（M3 Slice 1）
   //
-  // 1:1 依据（原版实测，见 docs/pending/m3/MODEL-VALIDATION.md §2.7 与 supplements/comment-detail.json）：
+  // 1:1 依据（原版实测，见 docs/archive/legacy-development/m3/MODEL-VALIDATION.md §2.7 与 supplements/comment-detail.json）：
   //   - 评论区**内联**在动态详情里，顶层评论各自带一个"回复列表"（嵌套渲染，EXPANDED）
   //   - 每条评论都有独立的「回复」入口；回复编辑器标题是「回复 @某人」
   //   - 回复行渲染为：「<作者> 回复 <目标> · <时间>」+ 正文
@@ -3330,6 +3331,7 @@ export function buildServer(deps: ServerDeps) {
     return session.kind === 'none' ? null : session.user.userId
   })
 
+  registerMapRoutes(app, db)
   registerTimemapRoutes({
     app,
     db,

@@ -11,7 +11,7 @@
 | M0 | Nginx `/health` 网关证据 | PASS | 公开可达 `http://8.148.156.146/health` |
 | M1 | `BACKEND_RESULT` | PASS | 垂直切片：经 Nginx 写 → 读回 → 直查 PG |
 | M1 | `SEED_RESULT` | PASS | seed 幂等 + canonical + 收敛性 |
-| M2 | `AUTH_RESULT`（历史） | PASS | 见 `docs/pending/m2/`；M2 历史可复现性已收口 |
+| M2 | `AUTH_RESULT`（历史） | PASS | 见 `docs/archive/legacy-development/m2/`；M2 历史可复现性已收口 |
 | M2 | `BACKUP_DRILL_RESULT` | PASS | **仅 DB**；从 M4 起不代表完整业务数据恢复 |
 | M2 | `TLS_SERVER_RESULT` | PASS | SAN/链/错误 CA/地址不匹配/TLS 版本/日志不泄漏 token |
 | M3 | `M3_FINAL_GATE_RESULT` | PASS | 三层全 PASS（当前 HEAD 重跑） |
@@ -300,8 +300,8 @@ com.kairuotu.campus:id/tv_user_tag_name            ← 标签里的用户名
 | 项 | 三节原状态 | **现状态** | 依据 |
 |---|---|---|---|
 | `board_notes` | 建模完成、未做前端 | ✅ **已实现（前端 + 服务端）** | `app/src/screens/BoardScreen.tsx`（`getBoardNotes`/`postBoardNote`）+ `server/src/index.ts:1694`「M5 Slice 1：留言板」；M5 WO#1 已 CLOSED |
-| `MEDIA_UPLOAD_AND_SEND_TRANSITION` | BLOCKED_BY_POLICY | ⚠️ **部分解除**：产品链路已用**自动化驱动真实系统 picker** 验证通过（`NATIVE_FILE_PICKER_PRODUCT_PATH` / `SYSTEM_PICKER_SELECTION` / `WEBVIEW_FILE_DELIVERY` 均 PASS） | `docs/pending/m5/G3-NATIVE-PICKER-E2E-RESULT.md`；**但** `ANDROID_INPUTDISPATCHER_ENTRY_TOUCH: NOT_EVALUATED`（用 CDP 注入触摸，非物理输入） |
-| 底部 tab 数量（附里的登记） | DEVIATION（原版 4 / 我们 3） | ✅ **RETRACTED** | `docs/pending/m5/TAB-DEVIATION-WITHDRAWN.md`、本文件附四（误数：把顶部栏目当成底部 tab） |
+| `MEDIA_UPLOAD_AND_SEND_TRANSITION` | BLOCKED_BY_POLICY | ⚠️ **部分解除**：产品链路已用**自动化驱动真实系统 picker** 验证通过（`NATIVE_FILE_PICKER_PRODUCT_PATH` / `SYSTEM_PICKER_SELECTION` / `WEBVIEW_FILE_DELIVERY` 均 PASS） | `docs/archive/legacy-development/m5/G3-NATIVE-PICKER-E2E-RESULT.md`；**但** `ANDROID_INPUTDISPATCHER_ENTRY_TOUCH: NOT_EVALUATED`（用 CDP 注入触摸，非物理输入） |
+| 底部 tab 数量（附里的登记） | DEVIATION（原版 4 / 我们 3） | ✅ **RETRACTED** | `docs/archive/legacy-development/m5/TAB-DEVIATION-WITHDRAWN.md`、本文件附四（误数：把顶部栏目当成底部 tab） |
 | 消息发送者呈现 | 未登记 | ✅ **已登记并修复** | `CHAT_MESSAGE_SENDER_PRESENTATION: FIXED/VERIFIED`（审核记录 27/29） |
 
 ### 5.2 仍未改变的条目（现状核实，逐条给依据）
@@ -463,11 +463,11 @@ REAL_DEVICE_GEOLOCATION_CONFORMANCE: **需重新评估**
 
 | 项 | 核实事实 | 备注 |
 |---|---|---|
-| **会话页文字消息发送路径** | ⚠️ **确认缺失**：`draft` 只用于 value/onChange，从未被发送；composer 无发送控件、无回车发送 → **发不出文字消息** | 原版证据：静态布局 `layout/im_input_box` **声明了 `sendBtn`**（56×36dp/`ic_send_msg_btn`，默认 GONE）。**已提案 WO#7**（`docs/pending/m5/WO7-PROPOSAL-composer-text-send.md`，待审核批准） |
+| **会话页文字消息发送路径** | ⚠️ **确认缺失**：`draft` 只用于 value/onChange，从未被发送；composer 无发送控件、无回车发送 → **发不出文字消息** | 原版证据：静态布局 `layout/im_input_box` **声明了 `sendBtn`**（56×36dp/`ic_send_msg_btn`，默认 GONE）。**已提案 WO#7**（`docs/archive/legacy-development/m5/WO7-PROPOSAL-composer-text-send.md`，待审核批准） |
 | **图片像素尺寸上限** | 我方**只有体积上限** `MEDIA_MAX_BYTES=5MB`；**无尺寸上限** | ✅ **规则与阈值都有证据**：`string/im_image_size_exceed` = **"图片尺寸超过限制（8000px）"** —— 文案**自带阈值 8000px**（属 chat 模块的 `im_*` 字符串，非发布模块 `capa_*`）。⚠ 仍待确认：是"任一边 >8000px"还是"总像素"，以及是否应在**客户端**先拦 |
 | **语音消息** | ✅ **已完成（M5 WO#5）**：录/传/发/气泡播放 + 持久化时长 + 生命周期 3 组断言 | 已从本格**移出**（审核记录 35/37/38） |
 | **per-user 配额** | **确认未做**（无 quota 相关代码）；静态扫描「配额」类**未命中** | ⚠ 未命中**不等于**没有 → 记为 `EVIDENCE_NOT_OBTAINABLE_BY_CURRENT_METHODS`，见 §7.5 |
-| **@所有人** | ⚠️ **确认缺失**（我方 AT 面板无"所有人"项）—— 本条已于 2026-09-22 **从「设计决定」移回本格** | 原版证据（静态 APK，可采信）：`string/at_all`=**「所有人」**、独立布局 `item_at_panel_at_all`（行高 88dp / 图标 56dp / 标签 16sp）、面板标题「选择提醒的人」。详见 `docs/pending/m5/EVIDENCE-at-panel-structure.md`。⚠ 服务端**如何表示"提到全体"原版未知**（只读不可得）→ 属**我方设计决定**，须标 `AT_ALL_SERVICE_REPRESENTATION: OUR_DESIGN_CHOICE` |
+| **@所有人** | ⚠️ **确认缺失**（我方 AT 面板无"所有人"项）—— 本条已于 2026-09-22 **从「设计决定」移回本格** | 原版证据（静态 APK，可采信）：`string/at_all`=**「所有人」**、独立布局 `item_at_panel_at_all`（行高 88dp / 图标 56dp / 标签 16sp）、面板标题「选择提醒的人」。详见 `docs/archive/legacy-development/m5/EVIDENCE-at-panel-structure.md`。⚠ 服务端**如何表示"提到全体"原版未知**（只读不可得）→ 属**我方设计决定**，须标 `AT_ALL_SERVICE_REPRESENTATION: OUR_DESIGN_CHOICE` |
 | **视频消息**（播放/暂停/进度） | **完全没有** | 原版有 `im_chat_media_pause/_resume/_seek/_progress` 等文案 → 属**新媒体类型**，大件，需单独立单 |
 | **保存媒体到相册** | **无** | 原版有 `im_chat_media_saving/_save_success/_save_failed/_save` |
 
@@ -475,7 +475,7 @@ REAL_DEVICE_GEOLOCATION_CONFORMANCE: **需重新评估**
 > ⚠️ **本格的一次自我纠错（2026-09-22，见 §7.5）**：
 > 原表把"**图片压缩/重编码**"放在 (B)，但 (B) 的定义是"**有**原版证据 + 我方未实现"，
 > 而它自己的备注就写着"是否'原版会压缩'**仍需证据**"—— **自相矛盾**。
-> 经只读取证（`docs/pending/m5/EVIDENCE-image-compression-scan.txt`）后确认：
+> 经只读取证（`docs/archive/legacy-development/m5/EVIDENCE-image-compression-scan.txt`）后确认：
 > **该前提证据用现有方法取不到** → 已移入 **(D)**。
 
 
@@ -510,7 +510,7 @@ REAL_DEVICE_GEOLOCATION_CONFORMANCE: **需重新评估**
 **取证尝试（图片压缩，只读、可复现）**：
 脚本 `tools/tmp/scan-apk-compression.mjs`，扫描原版 APK 的 5 个 dex（合计 44.4MB）中
 "上传前压缩"相关的类名/方法名特征。原版 APK sha256 已核验与基线一致
-（`3373B6B2…D6C294`），故证据可采信。结果见 `docs/pending/m5/EVIDENCE-image-compression-scan.txt`：
+（`3373B6B2…D6C294`），故证据可采信。结果见 `docs/archive/legacy-development/m5/EVIDENCE-image-compression-scan.txt`：
 
 ```
 第三方压缩库（Luban / zibin.luban / id.zelory:compressor / BitmapCompress / ImageResizer / resizeImage）:
@@ -537,7 +537,7 @@ REAL_DEVICE_GEOLOCATION_CONFORMANCE: **需重新评估**
 
 | 项 | 决定 | 依据 |
 |---|---|---|
-| ~~**@所有人**~~ | ⚠️ **本条已于 2026-09-22 撤回**：它**不是**设计决定，而是 **(B) 类真实实现缺口** | 原先"不做"的理由是"**我方缺证据**"；本轮静态取证发现原版**确有** `at_all` 项（`string/at_all`=「所有人」、独立布局 `item_at_panel_at_all`、面板标题「选择提醒的人」）→ 依据不复成立。详见 `docs/pending/m5/EVIDENCE-at-panel-structure.md` 与 §7.3 (B) 表 |
+| ~~**@所有人**~~ | ⚠️ **本条已于 2026-09-22 撤回**：它**不是**设计决定，而是 **(B) 类真实实现缺口** | 原先"不做"的理由是"**我方缺证据**"；本轮静态取证发现原版**确有** `at_all` 项（`string/at_all`=「所有人」、独立布局 `item_at_panel_at_all`、面板标题「选择提醒的人」）→ 依据不复成立。详见 `docs/archive/legacy-development/m5/EVIDENCE-at-panel-structure.md` 与 §7.3 (B) 表 |
 | **语音转文字** | **不做**（`NOT_IMPLEMENTED`，不冒充） | 依赖对方 ASR 服务；原版等价服务/语义在当前范围内不可获得或无证据。**不得**用假文本冒充 |
 | **Phase 2 录音浮层/上滑取消** | **暂不做** | "上滑取消"**无行为证据**，不凭惯例实现（审核记录 35 裁决）；且核心用户路径已存在 |
 

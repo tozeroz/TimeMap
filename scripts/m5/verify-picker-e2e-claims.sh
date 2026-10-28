@@ -9,15 +9,15 @@
 # 核验四项：
 #   a) picker 是否真的出现：证据里应能找到 PickActivity / documentsui
 #   b) 是否真的在 picker 里点了图（**运行时**无 setFileInputFiles 痕迹）
-#   c) 清理是否回到基线（对着 docs/pending/m5/evidence/db-counts-before-picker-e2e.txt 比）
+#   c) 清理是否回到基线（对着 docs/archive/legacy-development/m5/evidence/db-counts-before-picker-e2e.txt 比）
 #   d) 0 字节的 dump 是否被解释（不能只有产物没有说明）
 #
 # 用法（服务器上，脚本与仓库副本都在 /tmp）：
 #   bash /tmp/verify-picker-e2e-claims.sh <E2E证据目录> <E2E报告文件>
 # 例：
-#   bash /tmp/verify-picker-e2e-claims.sh /tmp/m5repo/docs/pending/m5/evidence /tmp/m5repo/docs/pending/m5/PICKER-E2E-RESULT.md
+#   bash /tmp/verify-picker-e2e-claims.sh /tmp/m5repo/docs/archive/legacy-development/m5/evidence /tmp/m5repo/docs/archive/legacy-development/m5/PICKER-E2E-RESULT.md
 set -u
-EVID="${1:-/tmp/m5repo/docs/pending/m5/evidence}"
+EVID="${1:-/tmp/m5repo/docs/archive/legacy-development/m5/evidence}"
 REPORT="${2:-}"
 
 PSQL() { PGPASSWORD="$(cat /srv/campus/.db_password)" psql -h 127.0.0.1 -U campus -d campus -Atc "$1" 2>&1; }

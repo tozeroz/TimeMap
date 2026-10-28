@@ -891,6 +891,10 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
         history: string | null
         sort_order: number
         post_count: string
+        display_level: 'school' | 'area' | 'place'
+        min_display_zoom: number | null
+        display_priority: number
+        parent_place_id: string | null
       }>(
         `select pl.*, (select count(*) from posts p where p.place_id = pl.id and p.status='published')::text as post_count
            from places pl order by pl.sort_order, pl.name`,
@@ -908,6 +912,10 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
           history: row.history,
           sortOrder: row.sort_order,
           postCount: Number(row.post_count),
+          displayLevel: row.display_level,
+          minDisplayZoom: row.min_display_zoom,
+          displayPriority: row.display_priority,
+          parentPlaceId: row.parent_place_id,
         })),
       }
     } catch (err) {
@@ -981,7 +989,8 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       return { error: 'invalid_id' }
     }
     const payload = (req.body ?? {}) as Record<string, unknown>
-    const allowed = ['name', 'category', 'address', 'latitude', 'longitude', 'description', 'history', 'enabled', 'sortOrder']
+    const allowed = ['name', 'category', 'address', 'latitude', 'longitude', 'description', 'history', 'enabled', 'sortOrder',
+      'displayLevel', 'minDisplayZoom', 'displayPriority', 'parentPlaceId']
     const extra = Object.keys(payload).filter((k) => !allowed.includes(k))
     if (extra.length) {
       reply.code(400)
@@ -1021,6 +1030,17 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       push('enabled', payload.enabled)
     }
     if (payload.sortOrder !== undefined) push('sort_order', typeof payload.sortOrder === 'number' ? payload.sortOrder : 100)
+    const mapFields: [string, string, (value: unknown) => boolean][] = [
+      ['displayLevel', 'display_level', v => v === 'school' || v === 'area' || v === 'place'],
+      ['minDisplayZoom', 'min_display_zoom', v => v === null || (typeof v === 'number' && Number.isFinite(v) && v >= 4 && v <= 18)],
+      ['displayPriority', 'display_priority', v => typeof v === 'number' && Number.isInteger(v) && v >= -1000 && v <= 1000],
+      ['parentPlaceId', 'parent_place_id', v => v === null || (typeof v === 'string' && UUID_RE.test(v) && v !== id)],
+    ]
+    for (const [key, column, validate] of mapFields) {
+      if (payload[key] === undefined) continue
+      if (!validate(payload[key])) return reply.code(400).send({ error: 'invalid_payload', details: [`${key} 无效`] })
+      push(column, payload[key])
+    }
     if (!sets.length) {
       reply.code(400)
       return { error: 'invalid_payload', details: ['没有要更新的字段'] }
@@ -1048,6 +1068,9 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       }
       return { id: r.rows[0].id }
     } catch (err) {
+      if (['23514', '23503'].includes((err as { code?: string }).code ?? '')) {
+        return reply.code(400).send({ error: 'invalid_payload', details: ['请检查上级地点，不能引用自身、形成循环或引用不存在的地点'] })
+      }
       if (db.noteFailure(err) === 'transient') return ctx.dbUnavailable(reply, err)
       reply.code(500)
       return { error: 'db_error', message: (err as Error).message }

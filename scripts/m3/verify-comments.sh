@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # M3 Slice 1 验证：帖子详情 / 评论 / 回复（含 comments.parent_id 的层级语义）
 #
-# 1:1 依据（原版实测，docs/pending/m3/MODEL-VALIDATION.md §2.7）：
+# 1:1 依据（原版实测，docs/archive/legacy-development/m3/MODEL-VALIDATION.md §2.7）：
 #   - 评论区是「顶层评论 + 嵌套回复」（EXPANDED），回复行带「回复 <目标>」
 #   - 「评论 N」的计数**把回复也算进去**
 #   - 回复可以再被回复 → parent_id 可指向任意一条评论

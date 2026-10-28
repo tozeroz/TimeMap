@@ -1,6 +1,0 @@
-﻿=== A. 联合备份（同一个 backup generation）===
-=== A0. 造演练 fixture（走真实上传接口）===
-  fixture 账号=13863183510，上传的 media: 072992ea-c48d-4040-aec0-a1d72326605b edd3809e-a138-4edb-a67b-61c8c71149ba
-PASS 已通过真实接口造出演练 fixture
-bash: line 73: syntax error near unexpected token `)'
-bash: line 73: `f2)"'
