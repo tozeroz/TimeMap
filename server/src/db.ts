@@ -25,6 +25,8 @@ import activityFieldsSql from './migrations/022_activity_fields.sql'
 import seedActivityFieldsSql from './migrations/023_seed_activity_fields.sql'
 import release13Sql from './migrations/024_release_1_3.sql'
 import release131Sql from './migrations/025_release_1_3_1.sql'
+import mapDisplaySql from './migrations/026_map_display.sql'
+import bjtuParentPlaceSql from './migrations/027_bjtu_parent_place.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -133,6 +135,8 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   // 025：发布 App 1.3.1（修复旧版本本机遗留帖点开必报「网络错误」+「清除本机缓存」入口）。
   //      同样三处一致：APP_VERSION / versionName / 本迁移的 latest_version。
   { version: '025_release_1_3_1', sql: release131Sql },
+  { version: '026_map_display', sql: mapDisplaySql },
+  { version: '027_bjtu_parent_place', sql: bjtuParentPlaceSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

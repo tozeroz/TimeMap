@@ -10,7 +10,7 @@
    ⚠️ 原版此处还有「北京交通大学 ▼」学校切换 —— 因**无权威来源**按审核 52 HIDE/DEFER 隐藏。
    （schools/campuses 两表存在但数据为空、三个用户 school_campus_id 全为 NULL）
    因此这里只居中显示标题；等学校数据有来源后再补回切换控件。
-   已登记：docs/archive/legacy-development/m5/KNOWN-DEVIATIONS.md */
+   已登记：docs/pending/m5/KNOWN-DEVIATIONS.md */
 .fl__title {
   font-size: 17px;
   font-weight: 600;

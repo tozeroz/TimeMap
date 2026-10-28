@@ -129,7 +129,7 @@
 
     当时的推理是「原版墨迹约 23 CSS px ÷ 某个 em 比例 ⇒ 字号应 24px」——
     这**预设了"原版用字体渲染"**。而 C4 已确证原版表情是
-    `android.widget.ImageView` + 随包 webp 图片（见 docs/archive/legacy-development/m5/C4-FORENSICS-RESULT.md），
+    `android.widget.ImageView` + 随包 webp 图片（见 docs/pending/m5/C4-FORENSICS-RESULT.md），
     **根本不存在字号**。因此"字号 24px"这个参数在当前实现里只是
     **让我方文字字形的墨迹大小接近原版图片的显示尺寸**，而不是"复原了原版的字号"。
 

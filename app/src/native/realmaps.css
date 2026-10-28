@@ -54,86 +54,28 @@
   transform: translate(-50%, -50%);
 }
 
-/* Fixed landmark footprint keeps the coordinate anchor independent of posts. */
 .rm {
-  --place-icon-size: 32px;
-  --place-label-color: #17191c;
-  position: relative;
-  width: 104px;
-  height: 80px;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.rm__place,
-.rm__card {
-  appearance: none;
-  box-sizing: border-box;
-  margin: 0;
-  font: inherit;
-  cursor: pointer;
-  pointer-events: auto;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.rm__place {
-  position: absolute;
-  inset: auto 0 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  min-height: 48px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--place-label-color);
-}
-
-.rm__name {
-  display: block;
-  max-width: 104px;
-  margin-bottom: 1px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
-  text-align: center;
-  overflow-wrap: anywhere;
-  color: var(--place-label-color);
-  background: transparent;
-  /* A small text halo preserves legibility across map road/park colors. */
-  text-shadow: 0 1px 2px #fff, 1px 0 2px #fff, -1px 0 2px #fff;
-}
-
-.rm__placeIcon {
-  display: block;
-  width: var(--place-icon-size);
-  height: var(--place-icon-size);
-  object-fit: contain;
-  filter: none;
-  user-select: none;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.22));
 }
 
 .rm__card {
-  position: absolute;
-  left: 84px;
-  bottom: 24px;
-  width: max-content;
   display: flex;
-  padding: 3px;
-  border: 1px solid #fff;
-  border-radius: 8px;
+  flex-direction: column;
+  gap: 3px;
+  padding: 3px 3px 5px;
+  border-radius: 10px;
   background: #fff;
-  box-shadow: 0 2px 6px #2033471f;
 }
 
 .rm__img {
-  display: block;
-  flex-shrink: 0;
-  width: 52px;
-  height: 52px;
-  border-radius: 5px;
+  width: 66px;
+  height: 66px;
+  border-radius: 7px;
   object-fit: cover;
+  display: block;
 }
 
 .rm__img--text {
@@ -141,28 +83,27 @@
   align-items: center;
   justify-content: center;
   padding: 4px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #30343b;
-  text-align: left;
-  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.2;
+  color: #4a4a4a;
+  background: #f2f3f5;
+  text-align: center;
 }
 
-.rm__place:focus-visible,
-.rm__card:focus-visible {
-  outline: 2px solid #245c94;
-  outline-offset: 3px;
-  border-radius: 8px;
+.rm__name {
+  max-width: 78px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: #4a4a4a;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-@media (hover: hover) {
-  .rm__place:hover .rm__name { text-decoration: underline; text-underline-offset: 3px; }
-  .rm__card:hover { box-shadow: 0 4px 14px #20334740; }
-}
-
-.rm__place:active .rm__placeIcon,
-.rm__card:active {
-  opacity: 0.7;
+.rm__pin {
+  display: block;
+  margin-top: -3px;
 }
 
 /* 当前位置：蓝点 + 方向扇形 */
@@ -192,11 +133,16 @@
   border: 3px solid #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
-.rm__likes { position: absolute; right: 6px; bottom: 6px; padding: 2px 4px; border-radius: 5px; background: #000a; color: #fff; font-size: 10px; line-height: 1.3; }
-.rm--sticker .rm__card { background: transparent; border: 0; box-shadow: none; padding: 0; filter: drop-shadow(0 2px 3px #20334725); }
-.rm--sticker .rm__img { width: 56px; height: 56px; object-fit: contain; border-radius: 0; }
-.rm--highlight .rm__card { animation: new-post-pulse 1s ease-in-out 6; }
+.rm__card { position: relative; }
+.rm__likes { position: absolute; right: 5px; top: 51px; padding: 2px 4px; border-radius: 6px; background: #0008; color: white; font-size: 10px; }
+.rm--sticker .rm__card { background: transparent; }
+.rm--sticker .rm__img { object-fit: contain; border-radius: 0; }
+.rm--sticker .rm__name { background: #fffe; border-radius: 4px; padding: 2px; }
+.rm--highlight { animation: new-post-pulse 1s ease-in-out 6; }
 @keyframes new-post-pulse { 50% { filter: drop-shadow(0 0 12px #ffad25); } }
-.rm--text .rm__card { border-radius: 12px 12px 12px 3px; }
-.rm--text .rm__img--text { box-sizing: border-box; width: 100px; height: auto; min-height: 40px; border-radius: 0; }
-@media (prefers-reduced-motion: reduce) { .rm--highlight .rm__card { animation: none; } }
+.rm--text .rm__card { border-radius: 18px; transform: translateY(-8px); animation: place-text-float 4s ease-in-out infinite; }
+.rm--text .rm__img--text { width: 120px; height: auto; min-height: 32px; border-radius: 14px; background: transparent; }
+/* 原 `.map--hide-text` 规则随「文字弹幕」开关一起移除（那个开关只是隐藏这些卡片，
+   并不是需求 MAP-005 要求的弹幕；见 docs/zjx/地图模块缺口登记-2026-10-19.md）。 */
+@keyframes place-text-float { 50% { transform: translate(5px, -12px); } }
+@media (prefers-reduced-motion: reduce) { .rm--text .rm__card, .rm--highlight { animation: none; } }

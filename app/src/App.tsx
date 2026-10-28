@@ -238,7 +238,7 @@ export default function App() {
               ORIGINAL_TAG_DESTINATION:      NOT_EVALUATED
               ORIGINAL_BIO_DESTINATION:      NOT_EVALUATED
               ORIGINAL_SCHOOL_DESTINATION:   NOT_EVALUATED
-            （见 docs/archive/legacy-development/m5/WO13-PLAN-profile-edit-field-inventory.md）
+            （见 docs/pending/m5/WO13-PLAN-profile-edit-field-inventory.md）
           · 注意：本次**不是**"仓库里任何地方都不能出现字符串 12,486"——
             审核 54 提醒应检查**可执行/可呈现的 surface**，而不是全仓字符串绝迹
             （mock.ts 里可能仍有未被治理页面的数据）。

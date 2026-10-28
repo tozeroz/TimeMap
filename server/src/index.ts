@@ -22,6 +22,7 @@ import { fakeVerify, verifyPassword } from './password.ts'
 import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts'
 import { registerCutoutRoutes } from './cutout.ts'
 import { registerTimemapRoutes } from './timemap.ts'
+import { registerMapRoutes } from './mapRoutes.ts'
 
 /**
  * Campus 后端（M3 Slice 0B）。
@@ -3330,6 +3331,7 @@ export function buildServer(deps: ServerDeps) {
     return session.kind === 'none' ? null : session.user.userId
   })
 
+  registerMapRoutes(app, db)
   registerTimemapRoutes({
     app,
     db,

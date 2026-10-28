@@ -29,7 +29,7 @@ import './feed.css'
 /**
  * 动态详情（原版 `FeedDetailActivity` + TimeMap P0 的 F05 互动 / F07 举报 / 作者删除）。
  *
- * 结构按 M3 Slice 1 实测（docs/archive/legacy-development/m3/MODEL-VALIDATION.md §2.7 + supplements/comment-detail.json）：
+ * 结构按 M3 Slice 1 实测（docs/pending/m3/MODEL-VALIDATION.md §2.7 + supplements/comment-detail.json）：
  *   - 顶部：返回 + 分享
  *   - 作者行：头像 + 昵称 +「地点 · 时间」
  *   - 正文 + 配图

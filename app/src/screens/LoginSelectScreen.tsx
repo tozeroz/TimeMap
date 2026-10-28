@@ -6,7 +6,7 @@ import './login.css'
 /**
  * 登录入口（原版 CampusLoginActivity / campusx://login/select）。
  *
- * 1:1 依据（M3 Slice 0A 实测，见 docs/archive/legacy-development/m3/SLICE0-LOGIN-SEMANTICS.md）：
+ * 1:1 依据（M3 Slice 0A 实测，见 docs/pending/m3/SLICE0-LOGIN-SEMANTICS.md）：
  *   - 整页是品牌拼贴 + 居中「Campus」标识 + 底部黑色胶囊按钮「登录 Campus」
  *     （原版 id: cl_phone_login，内含手机图标 iv_phone + 文本 tv_phone）
  *   - 按钮下方是**未勾选的协议复选框**（原版 id: cb_agreement）
