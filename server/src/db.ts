@@ -27,6 +27,7 @@ import release13Sql from './migrations/024_release_1_3.sql'
 import release131Sql from './migrations/025_release_1_3_1.sql'
 import mapDisplaySql from './migrations/026_map_display.sql'
 import bjtuParentPlaceSql from './migrations/027_bjtu_parent_place.sql'
+import activityExternalLinksSql from './migrations/028_activity_external_links.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -137,6 +138,11 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '025_release_1_3_1', sql: release131Sql },
   { version: '026_map_display', sql: mapDisplaySql },
   { version: '027_bjtu_parent_place', sql: bjtuParentPlaceSql },
+
+  // 028：录入 2026 年 10–11 月的 7 条校园活动（外部链接写进**既有**的 external_link），
+  //      并修正一次重复造轮子：把误占用的 place id ...011 腾给学校父地点、
+  //      删掉我多加的 activities.link_url。详见该文件头部（含事故记录）。
+  { version: '028_activity_external_links', sql: activityExternalLinksSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */
