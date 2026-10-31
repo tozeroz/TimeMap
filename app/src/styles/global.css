@@ -18,7 +18,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC',
     'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
   font-size: var(--f-body);
-  line-height: 1.45;
+  line-height: var(--line-body);
   overscroll-behavior: none;
 }
 
@@ -38,6 +38,25 @@ textarea {
   outline: none;
   background: none;
   color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--c-placeholder);
+  opacity: 1;
+}
+
+/* 放在 reset 之后，恢复被 outline: none 清掉的键盘焦点。 */
+:focus-visible {
+  outline: 2px solid var(--c-text);
+  outline-offset: 3px;
 }
 
 a {
@@ -64,4 +83,14 @@ ol {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }

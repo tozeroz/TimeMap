@@ -1,30 +1,41 @@
 /*
- * 设计令牌 —— 取自目标 app 的实测截图采样。
- * 采样方式：对 .mumu-capture 里的原版截图逐区域取色（1080x1920 基准）。
- * 改这里的值就等于全局调色。
+ * TimeMap 全局设计令牌。使用约定见 docs/public/UI设计规范.md。
+ * 现有页面逐步迁移，新增样式优先引用这里的语义变量。
  */
 :root {
   /* 基础色 */
-  --c-bg: #f7f8fa;
+  --c-bg: #faf8f3;
   --c-surface: #ffffff;
-  --c-surface-sunken: #f2f3f5;
-  --c-text: #101010;
-  --c-text-2: #4a4a4a;
-  --c-text-3: #949499;
-  --c-divider: #ececee;
+  --c-surface-sunken: #f0eee8;
+  --c-text: #192d42;
+  --c-text-2: #606d7b;
+  --c-text-3: #606d7b;
+  --c-placeholder: #606d7b;
+  --c-divider: #e5e3de;
+  --c-input-border: #82909b;
 
-  /* 主色（黑）与强调 */
-  --c-primary: #111111;
+  /* 品牌橙用于装饰；操作橙加深以承载白色小字。 */
+  --c-brand: #ed6536;
+  --c-primary: #c44b22;
   --c-primary-fg: #ffffff;
-  --c-accent: #3b6ef5; /* 蓝色气泡 / 链接 */
+  --c-primary-hover: #ad401c;
+  --c-primary-soft: #fff0e8;
+  --c-sage: #829579;
+  --c-accent: #3b6ef5; /* 保留现有蓝色气泡 / 链接的语义 */
   --c-accent-soft: #e8effe;
-  --c-danger: #f5453b;
+  --c-danger: #c43d3d;
+  --c-danger-soft: #fdeceb;
+  --c-disabled: #e8e7e4;
+  --c-disabled-fg: #777e87;
 
   /* 圆角与阴影 */
   --r-sm: 8px;
   --r-md: 12px;
   --r-lg: 16px;
   --r-xl: 22px;
+  --r-button: 12px;
+  --r-image: 16px;
+  --r-panel: 24px;
   --r-pill: 999px;
   --shadow-card: 0 2px 10px rgba(16, 16, 16, 0.06);
   --shadow-float: 0 6px 20px rgba(16, 16, 16, 0.18);
@@ -33,13 +44,26 @@
   --h-statusbar: 28px;
   --h-header: 52px;
   --h-tabbar: 58px;
-  --pad-page: 16px;
+  --pad-page: 20px;
   --gap-card: 8px;
+  --h-button: 44px;
+  --h-button-compact: 36px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
 
   /* 字号 */
-  --f-title: 26px;
+  --f-title: 24px;
+  --f-nav: 17px;
   --f-sub: 15px;
-  --f-body: 15px;
+  --f-body: 16px;
   --f-meta: 13px;
   --f-tiny: 11px;
+  --line-body: 1.6;
+  --duration-fast: 150ms;
+  --duration-normal: 220ms;
+  --ease-ui: cubic-bezier(0.2, 0, 0, 1);
 }

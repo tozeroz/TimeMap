@@ -1,4 +1,5 @@
 import { useRef, useState, type PointerEvent } from 'react'
+import { Button } from './Button'
 import { IMAGE_TEXT_COLORS, type ImageText } from '../native/imageText'
 
 export function ImageTextPreview({ source, caption, disabled, sticker, onChange }: {
@@ -46,7 +47,7 @@ export function ImageTextControls({ value, disabled, onChange, onDelete }: {
       <label>字号 <select aria-label="图片文字字号" disabled={disabled} value={value.size} onChange={e => onChange({ ...value, size: e.target.value as ImageText['size'] })}>
         <option value="small">小</option><option value="medium">中</option><option value="large">大</option>
       </select></label>
-      <button type="button" disabled={disabled} onClick={onDelete}>删除图片文字</button>
+      <Button variant="danger" disabled={disabled} onClick={onDelete}>删除图片文字</Button>
     </div>
     <p className="pub__hint">在预览图上拖动可调整文字位置。文字只显示在帖子图片中。</p>
   </div>
