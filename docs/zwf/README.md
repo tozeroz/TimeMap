@@ -15,6 +15,7 @@
 
 ## 当前入口
 
+- [2026-10-31 发布页参考图 UI 复刻说明](2026-10-31-发布页参考图UI复刻说明.md)
 - [开发、Git 协作与发布](../public/development-and-deployment.md)
 - [项目文档入口](../README.md)
 - [需求与产品设计](../public/BJTUTimeMap需求分析与产品设计文档.md)
