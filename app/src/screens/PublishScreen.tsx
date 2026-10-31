@@ -3,6 +3,7 @@ import { createPost, generateCutout, listPlaces, uploadMedia, type ApiPlaceListI
 import { getSession } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { Button } from '../components/Button'
+import { PublishIcon, CampusTrail } from '../components/PublishArtwork'
 import { IconClose } from '../components/icons'
 import { pickPhoto, takePhoto } from '../native/camera'
 import { renderSticker } from '../native/sticker'
@@ -39,7 +40,7 @@ export function PublishScreen() {
   const [pendingSubmission, setPendingSubmission] = useState<PublishDraft['pendingSubmission']>()
   const [err, setErr] = useState('')
   const [notice, setNotice] = useState('')
-  const [sheet, setSheet] = useState<'image' | 'exit' | 'drafts' | null>('drafts')
+  const [sheet, setSheet] = useState<'image' | 'exit' | 'drafts' | 'image-options' | null>('drafts')
   const [drafts, setDrafts] = useState<PublishDraft[]>([])
   const [draftReady, setDraftReady] = useState(false)
   const [places, setPlaces] = useState<ApiPlaceListItem[]>([])
@@ -66,7 +67,7 @@ export function PublishScreen() {
   const imageTextCount = Array.from(imageText.text).length
   const hasImageText = Boolean(imageText.text.trim())
   const readyTextImage = textImage?.source === baseDisplay && textImage.key === imageTextKey ? textImage.dataUrl : ''
-  const display = hasImageText ? readyTextImage || baseDisplay : baseDisplay
+  const selectedPlace = places.find(p => p.id === placeId)
   const canPublish = Boolean(text.trim() || original) && count <= 500 && places.some(p => p.id === placeId)
     && !publishing && !processing && !rendering && !busy && !sheet && (!rawSticker || (adopted && Boolean(sticker)))
     && imageTextCount <= 50 && (!hasImageText || Boolean(readyTextImage))
@@ -248,47 +249,63 @@ export function PublishScreen() {
     finally { submitting.current = false; setPublishing(false) }
   }
 
-  return <Screen className="pub" header={<TopBar variant="plain"
-    left={<button className="iconbtn pub__close" disabled={publishing} aria-label="关闭" onClick={() => dirty.current ? setSheet('exit') : leave()}><IconClose size={22} /></button>}
-    center={<span className="pub__topTitle">记录校园这一刻</span>}
+  return <Screen className={`pub ${original ? 'pub--has-image' : 'pub--empty'}`} header={<TopBar variant="plain"
+    left={<button className="iconbtn pub__close" disabled={publishing} aria-label="关闭" onClick={() => dirty.current ? setSheet('exit') : leave()}><IconClose size={24} /></button>}
+    center={<span className="pub__topTitle">写一段回忆</span>}
     right={<div className="pub__publishTarget"><Button size="compact" className="pub__publish" disabled={!canPublish} loading={publishing} data-publishing={publishing ? '1' : '0'} onClick={() => void publish()}>发布</Button></div>} />}>
     <div className="pub__body">
-      <section className="pub__field" data-pub-place-field>
-        <label className="pub__label" htmlFor="pub-place">关联地标 · 必选</label>
-        {placesPhase === 'loading' && <p className="pub__hint">地标加载中…</p>}
-        {placesPhase === 'error' && <Button variant="secondary" onClick={() => void loadPlaces()}>地标加载失败，点击重试</Button>}
-        {placesPhase === 'ready' && <select id="pub-place" className="pub__select" disabled={locked} value={placeId} data-pub-place={placeId} onChange={e => setPlaceId(e.target.value)}><option value="">选择一个校园地标</option>{places.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
+      <div className="pub__hero"><h1>把这一刻，<br />留在校园里。</h1><span aria-hidden="true" /></div>
+      <section className="pub__location" data-pub-place-field>
+        <div className={`pub__place ${selectedPlace ? 'pub__place--selected' : ''}`}>
+          <PublishIcon name="pin" size={26} />
+          <label htmlFor="pub-place">{selectedPlace ? '关联地点' : '选择校园地点'}</label>
+          {selectedPlace ? <strong>{selectedPlace.name}</strong> : <span className="pub__required">必选</span>}
+          <span className="pub__placeArrow" aria-hidden="true">›</span>
+          {placesPhase === 'ready' && <select id="pub-place" className="pub__select" aria-label="选择校园地点" disabled={locked} value={placeId} data-pub-place={placeId} onChange={e => setPlaceId(e.target.value)}><option value="">选择一个校园地点</option>{places.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
+        </div>
+        {placesPhase === 'loading' && <p className="pub__hint" role="status">地标加载中…</p>}
+        {placesPhase === 'ready' && !places.length && <p className="pub__hint">暂无可选地点，请稍后再试。</p>}
+        {placesPhase === 'error' && <Button variant="text" onClick={() => void loadPlaces()}>地标加载失败，点击重试</Button>}
       </section>
-      <section className="pub__field">
-        <label className="pub__label" htmlFor="pub-text">正文</label>
-        <textarea id="pub-text" className="pub__textarea" data-pub-text aria-describedby="pub-text-count" aria-invalid={count > 500 || undefined} disabled={locked} value={text} onChange={e => { dirty.current = Boolean(e.target.value.trim() || original); setText(e.target.value) }} placeholder="记录这里发生的事，也可以只发一张照片…" />
-        <p id="pub-text-count" className={`pub__hint ${count > 500 ? 'pub__hint--err' : ''}`}>{count} / 500 字</p>
+      <section className="pub__writing">
+        <label className="ui-sr-only" htmlFor="pub-text">回忆正文</label>
+        <textarea id="pub-text" className="pub__textarea" data-pub-text aria-describedby="pub-text-count" aria-invalid={count > 500 || undefined} disabled={locked} value={text} rows={original ? 2 : 5} onChange={e => { dirty.current = Boolean(e.target.value.trim() || original); setText(e.target.value) }} placeholder="这里发生了什么，想和大家分享？" />
+        <p id="pub-text-count" className={`pub__counter ${count > 500 ? 'pub__hint--err' : ''}`}>{count} / 500<span className="ui-sr-only"> 字</span></p>
       </section>
-      <section className="pub__field">
-        <span className="pub__label">一张照片，一个故事</span>
+      <section className="pub__media" aria-label="照片与图片编辑">
         {original ? <>
-          <ImageTextPreview source={display} caption={imageText} disabled={locked} sticker={Boolean(rawSticker)} onChange={setImageText} />
-          <div className="pub__actions">
-            <Button variant="secondary" disabled={locked || busy} onClick={() => setSheet('image')}>更换</Button>
-            <Button variant="danger" disabled={locked} onClick={() => { clearEffect(); setOriginal(''); stickerRequested.current = false; setImageText(defaultImageText()); setTextEditorOpen(false) }}>删除</Button>
-            <Button variant="text" disabled={locked} onClick={() => setTextEditorOpen(true)}>{hasImageText ? '编辑图片文字' : '添加文字'}</Button>
-            <Button variant="secondary" disabled={locked || busy} loading={processing} onClick={() => void cutout()}>{rawSticker ? '重新生成' : '生成贴纸'}</Button>
-            {(processing || rawSticker || stickerRequested.current) && <Button variant="secondary" disabled={locked} onClick={clearEffect}>恢复原图 / 取消处理</Button>}
+          <div className="pub__photo">
+            <ImageTextPreview source={baseDisplay} caption={imageText} editing={textEditorOpen} disabled={locked} sticker={Boolean(rawSticker)} onChange={setImageText} />
+            <button className="pub__photoBadge" disabled={locked} onClick={() => setTextEditorOpen(v => !v)} aria-expanded={textEditorOpen}>图片编辑</button>
+            <button className="pub__photoMore" disabled={locked} aria-label="图片更多操作" onClick={() => setSheet('image-options')}><span><PublishIcon name="more" size={18} /></span></button>
           </div>
-          {textEditorOpen && <ImageTextControls value={imageText} disabled={locked} onChange={setImageText} onDelete={() => { setImageText(defaultImageText()); setTextEditorOpen(false) }} />}
-          {processing && <p className="pub__hint" role="status">正在识别主体，你可以继续编辑正文和地标。</p>}
-          {rawSticker && <div className="pub__actions"><label><input type="checkbox" checked={outline} disabled={locked || rendering} onChange={e => setOutline(e.target.checked)} />白色描边</label><Button variant="secondary" disabled={locked || processing || rendering || !sticker} onClick={() => setAdopted(true)}>{rendering ? '预览处理中…' : adopted ? '已采用贴纸' : '确认采用贴纸'}</Button></div>}
+          <div className="pub__tools" aria-label="图片工具">
+            <button className={`pub__tool ${textEditorOpen ? 'is-active' : ''}`} disabled={locked} aria-expanded={textEditorOpen} aria-controls="pub-image-editor" onClick={() => setTextEditorOpen(v => !v)}><PublishIcon name="text" /><span>添加文字</span></button>
+            <button className="pub__tool" disabled={locked || processing || busy || rendering} aria-busy={processing} onClick={() => void cutout()}><PublishIcon name="sparkles" /><span>{processing ? '生成中…' : '生成贴纸'}</span></button>
+            <button className="pub__tool pub__tool--muted" disabled={locked || busy} onClick={() => setSheet('image')}><PublishIcon name="replace" /><span>更换</span></button>
+            <button className="pub__tool pub__tool--muted" disabled={locked} onClick={() => { clearEffect(); setOriginal(''); stickerRequested.current = false; setImageText(defaultImageText()); setTextEditorOpen(false) }}><PublishIcon name="trash" /><span>删除</span></button>
+          </div>
+          {textEditorOpen && <ImageTextControls value={imageText} disabled={locked} onChange={setImageText} onDone={() => setTextEditorOpen(false)} onDelete={() => setImageText(defaultImageText())} />}
+          {processing && <p className="pub__hint" role="status">正在识别主体，你可以继续编辑正文和地点。</p>}
+          {rawSticker && <div className="pub__stickerActions"><label><input type="checkbox" checked={outline} disabled={locked || rendering} onChange={e => setOutline(e.target.checked)} />白色描边</label><Button variant="secondary" disabled={locked || processing || rendering || !sticker} onClick={() => setAdopted(true)}>{rendering ? '预览处理中…' : adopted ? '已采用贴纸' : '确认采用贴纸'}</Button></div>}
+          {(processing || rawSticker || stickerRequested.current) && <Button variant="text" disabled={locked} onClick={clearEffect}>恢复原图 / 取消处理</Button>}
           {rawSticker && !adopted && <p className="pub__hint">预览满意后确认采用，或恢复原图后发布。</p>}
-        </> : <Button variant="secondary" className="pub__add" data-pub-add-image disabled={locked || busy} onClick={() => setSheet('image')}>{busy ? '读取图片中…' : '＋ 添加图片'}</Button>}
-        <p className="pub__hint">可发纯文字、单图或图文。照片默认保留原图。</p>
+        </> : <>
+          <button className="pub__add" data-pub-add-image disabled={locked || busy} onClick={() => setSheet('image')}>
+            <PublishIcon name="photo" size={48} /><strong>{busy ? '读取图片中…' : '添加一张照片'}</strong><span>也可以只用文字，记录这一刻。</span>
+          </button>
+          <div className="pub__imageHint"><PublishIcon name="text" size={23} /><span aria-hidden="true">|</span><PublishIcon name="sparkles" size={20} /><p>上传后，可添加文字或生成主体贴纸。</p></div>
+        </>}
       </section>
       {notice && <p className="pub__hint" role="status">{notice}</p>}
       {err && <p className="pub__err" data-publish-err role="alert">{err}</p>}
-      {!placeId && <p className="pub__blocked" data-pub-blocked="no-place">请选择一个校园地标。</p>}
-      {!text.trim() && !original && <p className="pub__blocked" data-pub-blocked="empty">写一点正文或添加一张图片即可发布。</p>}
+      <footer className="pub__footer">
+        {original ? <p><PublishIcon name="pin" size={20} /><span>{selectedPlace ? `发布后，这段回忆会出现在${selectedPlace.name}的地图上。` : '选择校园地点，让这段回忆有一个坐标。'}</span></p> : <><p data-pub-blocked={!placeId ? 'no-place' : !text.trim() ? 'empty' : undefined}>选择地点，写点文字或添加照片即可发布。</p><CampusTrail /></>}
+      </footer>
     </div>
-    {sheet && <div className="pub__overlay"><div ref={sheetRef} tabIndex={-1} className="pub__sheet" role="dialog" aria-modal="true" aria-label={sheet === 'image' ? '添加图片' : sheet === 'exit' ? '退出编辑' : '本地草稿'}>
+    {sheet && <div className="pub__overlay"><div ref={sheetRef} tabIndex={-1} className="pub__sheet" role="dialog" aria-modal="true" aria-label={sheet === 'image' ? '添加图片' : sheet === 'image-options' ? '图片操作' : sheet === 'exit' ? '退出编辑' : '本地草稿'}>
       {sheet === 'image' && <><h2>添加图片</h2><Button variant="secondary" onClick={() => void chooseImage(true)}>拍照</Button><Button variant="secondary" onClick={() => void chooseImage(false)}>从相册选择</Button><Button variant="secondary" onClick={() => setSheet(null)}>取消</Button></>}
+      {sheet === 'image-options' && <><h2>图片操作</h2><Button variant="secondary" onClick={() => { setTextEditorOpen(true); setSheet(null) }}>编辑图片文字</Button><Button variant="secondary" onClick={() => setSheet('image')}>更换图片</Button><Button variant="secondary" onClick={() => setSheet(null)}>取消</Button></>}
       {sheet === 'exit' && <><h2>保存这次记录？</h2><p>草稿保存在当前设备，贴纸恢复时需重新生成。</p><Button onClick={() => void exit(true)}>保存草稿并退出</Button><Button variant="danger" onClick={() => void exit(false)}>放弃编辑</Button><Button variant="secondary" onClick={() => { pendingRoute.current = null; setSheet(null) }}>继续编辑</Button></>}
       {sheet === 'drafts' && <><h2>继续上次的记录</h2>{!draftReady && <p>读取草稿中…</p>}{drafts.map(d => <Button variant="secondary" key={d.id} onClick={() => restore(d)}>{d.text.slice(0, 30) || '图片草稿'} · {new Date(d.updatedAt).toLocaleDateString()}</Button>)}<Button variant="secondary" disabled={!draftReady} onClick={() => setSheet(null)}>新建帖子（保留已有草稿）</Button></>}
       {err && <p className="pub__err" role="alert">{err}</p>}
