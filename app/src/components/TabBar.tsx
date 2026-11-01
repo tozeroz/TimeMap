@@ -12,7 +12,7 @@ const tabs = [
 ] as const
 
 export function TabBar({ active }: { active: TabKey }) {
-  return <nav className={`tabbar ${active === 'activities' ? 'tabbar--activities' : ''}`} aria-label="主导航">
+  return <nav className={`tabbar ${active === 'activities' ? 'tabbar--activities' : active === 'feed' ? 'tabbar--campus' : ''}`} aria-label="主导航">
     {tabs.map(({ key, route, label, Icon }) => <button key={key}
       className={`tabbar__item ${active === key ? 'is-active' : ''}`} data-tab={key}
       aria-current={active === key ? 'page' : undefined} onClick={() => navigate(route)}>

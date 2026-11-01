@@ -1396,6 +1396,9 @@ export function toFeedPost(p: ApiPost): FeedPost {
     // 所以列表卡片从来没显示过图（后端当时也没返回）。现在统一走 mediaUrl(id)：
     // 公图 302 → Nginx 静态，私图 X-Accel，客户端不关心区别。
     images: (p.images ?? []).map((m) => mediaUrl(m.id)),
+    imageMode: p.imageMode,
+    ratio: p.images?.[0]?.width && p.images[0].height
+      ? String(Math.max(0.75, Math.min(1.8, p.images[0].width / p.images[0].height))) : undefined,
     // M3 Slice 2：列表也用服务端计数（原版卡片上就有赞数/评论数）
     likes: p.likeCount ?? 0,
     comments: p.commentCount ?? 0,
