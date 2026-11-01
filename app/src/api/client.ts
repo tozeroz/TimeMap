@@ -1546,6 +1546,19 @@ export interface ApiPlacePhoto {
   /** 来源（必须可追溯；演示素材如实标注） */
   source: string
   imageUrl: string | null
+  /** 029：照片字节走媒体管线时的 id（优先于 imageUrl）；旧服务端不返回 */
+  mediaId?: string | null
+  /** 029：现照取自哪条帖子（可点回去看原帖） */
+  postId?: string | null
+  /** 029：同一机位分组键；对比只在同组内进行，不跨组拼 */
+  viewKey?: string | null
+  /** 029：排序用年份；null = 年代不详（不参与「过去 vs 现在」的配对） */
+  yearSort?: number | null
+}
+
+/** 地点照片的显示地址：有 mediaId 用媒体管线，否则退回 imageUrl。 */
+export function placePhotoSrc(ph: ApiPlacePhoto): string | null {
+  return ph.mediaId ? mediaUrl(ph.mediaId) : ph.imageUrl
 }
 
 /**

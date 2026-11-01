@@ -408,3 +408,406 @@
   color: var(--c-text-2);
   font-size: var(--f-tiny);
 }
+
+/* ---- 时光机（029）：同一机位的过去 vs 现在 ---- */
+.tm {
+  padding: 0 var(--pad-page);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tm__empty {
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--r-sm);
+  background: var(--c-surface-sunken);
+  font-size: var(--f-meta);
+  line-height: 1.6;
+  color: var(--c-text-2);
+}
+
+.tm__views {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.tm__viewChip {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid var(--c-divider);
+  border-radius: 999px;
+  background: var(--c-surface);
+  font-size: var(--f-meta);
+  color: var(--c-text-2);
+}
+
+.tm__viewChip.is-on {
+  border-color: var(--c-primary);
+  background: var(--c-primary-soft);
+  color: var(--c-primary);
+}
+
+.tm__stage {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--r-sm);
+  background: #111;
+  --tm-pos: 50%;
+  /* 竖向留给页面滚动，横向拖动归时光机 */
+  touch-action: pan-y;
+  cursor: ew-resize;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+
+.tm__stage:focus-visible {
+  box-shadow: 0 0 0 3px var(--c-primary);
+}
+
+.tm__stage.is-playing {
+  cursor: default;
+}
+
+.tm__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* 滑动：老照片只露出分割线左侧 */
+.tm__stage[data-tm-mode='slide'] .tm__img--past {
+  clip-path: inset(0 calc(100% - var(--tm-pos)) 0 0);
+}
+
+/* 点角标「只看这一年」时平滑过渡；手指拖动时去掉过渡，跟手不拖沓 */
+.tm__stage .tm__img--past {
+  transition: opacity 0.25s ease, clip-path 0.25s ease;
+}
+
+.tm__stage.is-dragging .tm__img--past {
+  transition: none;
+}
+
+.tm__stage:not(.is-dragging) .tm__divider {
+  transition: left 0.25s ease;
+}
+
+.tm__divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--tm-pos);
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+/* 分割线中间的圆形把手：一看就知道能拖 */
+.tm__handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 38px;
+  height: 38px;
+  margin: -19px 0 0 -19px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 50%;
+  background: #fff;
+  color: #222;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  transition: transform 0.12s ease;
+}
+
+.tm__stage.is-dragging .tm__handle {
+  transform: scale(1.15);
+}
+
+.tm__chev {
+  margin-top: -2px;
+}
+
+.tm__hint {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: var(--f-meta);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: tm-hint 2.4s ease-in-out infinite;
+}
+
+@keyframes tm-hint {
+  0%,
+  100% {
+    transform: translateX(-50%);
+  }
+  25% {
+    transform: translateX(calc(-50% - 6px));
+  }
+  75% {
+    transform: translateX(calc(-50% + 6px));
+  }
+}
+
+/* 年份角标兼作按钮：点一下 = 只看这一年 */
+.tm__tag {
+  position: absolute;
+  top: 8px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: var(--f-meta);
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 2;
+}
+
+/* 播放层：盖在对比画面上，按年代逐张交叉淡入 */
+.tm__play {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: #111;
+}
+
+.tm__playImg {
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+
+.tm__playImg.is-on {
+  opacity: 1;
+}
+
+.tm__playYear {
+  position: absolute;
+  left: 12px;
+  bottom: 22px;
+  padding: 4px 12px;
+  border-radius: var(--r-sm);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  animation: tm-year-in 0.5s ease;
+}
+
+@keyframes tm-year-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tm__playDots {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  display: flex;
+  gap: 4px;
+}
+
+.tm__playDots span {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.35);
+  transition: background 0.3s;
+}
+
+.tm__playDots span.is-done {
+  background: #fff;
+}
+
+.tm__play-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border: 1px solid var(--c-primary);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-primary);
+  font-size: var(--f-meta);
+  font-weight: 600;
+}
+
+.tm__play-btn:disabled {
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm__hint,
+  .tm__playYear {
+    animation: none;
+  }
+  .tm__playImg {
+    transition: none;
+  }
+}
+
+.tm__tag--past {
+  left: 8px;
+}
+
+.tm__tag--present {
+  right: 8px;
+}
+
+.tm__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tm__range {
+  flex: 1;
+  accent-color: var(--c-primary);
+}
+
+.tm__modes {
+  display: flex;
+  border: 1px solid var(--c-divider);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.tm__modes button {
+  padding: 4px 10px;
+  border: 0;
+  background: var(--c-surface);
+  font-size: var(--f-meta);
+  color: var(--c-text-2);
+}
+
+.tm__modes button.is-on {
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+}
+
+.tm__caption {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--c-text-3);
+}
+
+.tm__postLink {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-accent);
+  font-size: inherit;
+}
+
+/* 胶片带 */
+.tm__strip {
+  list-style: none;
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 8px;
+  overflow-x: auto;
+  border-radius: var(--r-sm);
+  background: #1d1d1f;
+}
+
+.tm__frame {
+  flex: none;
+  width: 104px;
+}
+
+.tm__frameBtn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  color: #eee;
+}
+
+.tm__frame.is-on .tm__frameBtn {
+  border-color: var(--c-brand);
+}
+
+.tm__frameBtn:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.tm__frameImg {
+  width: 100%;
+  height: 70px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #333;
+}
+
+.tm__frameDecade {
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tm__frameYear,
+.tm__frameNow {
+  padding: 0 4px 4px;
+  font-size: 10px;
+  color: #aaa;
+}
+
+.tm__frameNow {
+  color: var(--c-brand);
+}
+
+.tm__frame--empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-height: 104px;
+  border: 1px dashed #555;
+  border-radius: 6px;
+  color: #bbb;
+  text-align: center;
+}
+
+.tm__frameNone {
+  padding: 0 6px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #999;
+}
