@@ -932,10 +932,9 @@ export interface ApiPlaceActivity {
  * 活动列表（US-04）。
  *
  * `window` 的口径由**服务端**定义（前端不自己筛）：
- *   · `today` 今天开始/进行中的
- *   · `week`  一周内开始/进行中的
- *   · 缺省    近期活动 = 未结束的 + 刚结束（7 天内）的 + 近期取消的
- * ⇒ 所以"已结束超 7 天"的活动**按设计不出现在默认列表里**，这不是漏数据。
+ *   · `today` 与北京时间今天相交的活动
+ *   · `week` 与北京时间本周（周一至下周一）相交的活动
+ *   · 缺省不限制时间；状态缺省仍为即将开始/进行中，all 包含历史。
  */
 /** 活动列表的可选查询参数（ACT-001/ACT-002，全部服务端生效） */
 export interface ListActivitiesOptions {
@@ -944,7 +943,7 @@ export interface ListActivitiesOptions {
   /**
    * ACT-001：状态筛选。
    * - 省略/`''`：默认视图 = 即将开始 + 进行中，按开始时间从近到远
-   * - `ended` / `cancelled`：**不套时间窗口**，历史活动可以筛出来
+   * - `ended` / `cancelled`：不选择时间时可查看历史；选择时间时取交集
    * - `all`：全部（含历史）
    */
   status?: '' | 'upcoming' | 'ongoing' | 'ended' | 'cancelled' | 'all'
@@ -957,18 +956,31 @@ export interface ListActivitiesOptions {
  *
  * 历史签名是 `listActivities(window?)`；同时接受选项对象，便于逐步迁移。
  */
-export function listActivities(
+export interface ApiActivityPage {
+  items: ApiActivity[]
+  /** null keeps older servers honest: only the loaded count is known. */
+  total: number | null
+}
+
+export function listActivityPage(
   opts?: 'today' | 'week' | ListActivitiesOptions,
-): Promise<ApiResult<ApiActivity[]>> {
+): Promise<ApiResult<ApiActivityPage>> {
   const o: ListActivitiesOptions = typeof opts === 'string' ? { window: opts } : (opts ?? {})
   const qs = new URLSearchParams()
   if (o.window) qs.set('window', o.window)
   if (o.status) qs.set('status', o.status)
   if (o.placeId) qs.set('placeId', o.placeId)
   const q = qs.toString()
-  return request<{ items: ApiActivity[] }>(`/api/activities${q ? `?${q}` : ''}`).then((r) =>
-    r.ok ? { ok: true as const, value: r.value.items ?? [] } : r,
+  return request<{ items: ApiActivity[]; total?: number }>(`/api/activities${q ? `?${q}` : ''}`).then((r) =>
+    r.ok ? { ok: true as const, value: { items: r.value.items ?? [], total: typeof r.value.total === 'number' ? r.value.total : null } } : r,
   )
+}
+
+/** Preserve the array response used by existing screens. */
+export function listActivities(
+  opts?: 'today' | 'week' | ListActivitiesOptions,
+): Promise<ApiResult<ApiActivity[]>> {
+  return listActivityPage(opts).then(r => r.ok ? { ok: true as const, value: r.value.items } : r)
 }
 
 /** 活动详情（US-04：标题/时间/地点/来源/状态必须与列表一致） */

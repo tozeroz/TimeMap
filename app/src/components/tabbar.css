@@ -101,3 +101,7 @@
 .tabbar__fab:active {
   transform: translateY(-50%) scale(0.94);
 }
+
+/* Activity catalogue keeps the reference's quiet, orange-selected navigation. */
+.tabbar--activities { background: var(--c-bg); }
+.tabbar--activities .tabbar__item.is-active { background: transparent; color: var(--c-primary); }
