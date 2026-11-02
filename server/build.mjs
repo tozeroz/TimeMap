@@ -13,7 +13,7 @@
  *   4. 打包后跑一次 `node dist/index.mjs` 冒烟验证，别只看构建成功。
  */
 import { build } from 'esbuild'
-import { rmSync, statSync } from 'node:fs'
+import { readFileSync, rmSync, statSync } from 'node:fs'
 
 rmSync('dist', { recursive: true, force: true })
 
@@ -29,6 +29,17 @@ const COMMON = {
   minify: false, // 保留可读性，便于线上排障（396MB 机器也不缺这点磁盘）
   legalComments: 'none',
   loader: { '.sql': 'text' },
+  // Windows checkouts may contain CRLF. Production migrations were recorded with LF;
+  // normalize only line endings at the loader boundary, retaining checksum enforcement.
+  plugins: [{
+    name: 'canonical-sql-line-endings',
+    setup(builder) {
+      builder.onLoad({ filter: /\.sql$/ }, ({ path }) => ({
+        contents: readFileSync(path, 'utf8').replace(/\r\n/g, '\n'),
+        loader: 'text',
+      }))
+    },
+  }],
   banner: {
     js: [
       "import { createRequire as __campusCreateRequire } from 'node:module';",

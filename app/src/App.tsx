@@ -4,6 +4,8 @@ import { TabBar, type TabKey } from './components/TabBar'
 import { navigate, useRoute } from './router'
 import { CampusScreen } from './screens/CampusScreen'
 import { SchoolSearchScreen } from './screens/SchoolSearchScreen'
+import { ActivitySubmitScreen } from './screens/ActivitySubmitScreen'
+import { ActivitySubmissionDetail } from './screens/MyActivitySubmissions'
 import { MeScreen } from './screens/MeScreen'
 import { MapScreen } from './screens/MapScreen'
 import { FeedDetailScreen } from './screens/FeedDetailScreen'
@@ -82,7 +84,7 @@ export default function App() {
       {tab === 'map' && <MapScreen />}
       {tab === 'feed' && <CampusScreen />}
       {tab === 'activities' && <ActivitiesScreen />}
-      {tab === 'me' && <MeScreen />}
+      {tab === 'me' && <MeScreen requestedTab={route.query.tab} />}
 
       {/*
         详情页的 id 取法（M3 Slice 1 修正的真实 bug）：
@@ -169,6 +171,8 @@ export default function App() {
           这类重复在只看接口时完全看不见 —— 接口只被调用一次就"看起来正常"，
           而页面结构已经错了。⇒ 一条路由只渲染一次，判据由测试的 DOM 计数守着。
       */}
+      {root === 'activity-submit' && <ActivitySubmitScreen key={route.query.submissionId || 'new'} submissionId={route.query.submissionId} />}
+      {root === 'activity-submission' && <ActivitySubmissionDetail id={route.query.id || ''} />}
       {root === 'activity' && <ActivityDetailScreen id={route.query.id ?? param ?? ''} />}
       {root === 'admin' && <AdminScreen />}
       {root === 'favorites' && <FavoritesScreen />}
@@ -245,6 +249,7 @@ export default function App() {
       */}
 
       {tab && <TabBar active={tab} />}
+      {root === 'activities' && <button className="app__publish app__publish--campus" aria-label="提交活动" onClick={() => navigate('activity-submit')}>＋</button>}
       {tab && root !== 'map' && root !== 'activities' && root !== 'me' && <button className={`app__publish ${root === 'campus' ? 'app__publish--campus' : ''}`} aria-label="发布" onClick={() => navigate('publish')}>＋</button>}
     </Shell>
   )
