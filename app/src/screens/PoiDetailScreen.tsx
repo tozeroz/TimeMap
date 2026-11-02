@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   getPlace,
   mediaUrl,
+  placePhotoSrc,
   relativeTime,
   type ApiPlaceActivity,
   type ApiPlaceDetail,
@@ -10,6 +11,7 @@ import {
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack, IconComment, IconHeart, IconStar } from '../components/icons'
 import { goBack, navigate } from '../router'
+import { TimeMachine } from './TimeMachine'
 import './poidetail.css'
 
 /**
@@ -131,7 +133,8 @@ export function PoiDetailScreen({ id }: { id: string }) {
     )
   }
 
-  const cover = place.photos[0]?.imageUrl ?? null
+  // 封面仍取第一张老照片（position 最小）；有 mediaId 的走媒体管线
+  const cover = place.photos[0] ? placePhotoSrc(place.photos[0]) : null
   const visiblePosts = filter === 'image' ? place.posts.filter((p) => (p.images ?? []).length > 0) : place.posts
 
   return (
@@ -174,7 +177,9 @@ export function PoiDetailScreen({ id }: { id: string }) {
             <ul className="pd__photos no-scrollbar">
               {place.photos.map((ph) => (
                 <li key={ph.id} className="pd__photo" data-photo-year={ph.yearLabel}>
-                  {ph.imageUrl && <img className="pd__photoImg" src={ph.imageUrl} alt={ph.title} loading="lazy" />}
+                  {placePhotoSrc(ph) && (
+                    <img className="pd__photoImg" src={placePhotoSrc(ph)!} alt={ph.title} loading="lazy" />
+                  )}
                   <span className="pd__photoTitle">{ph.title}</span>
                   {/* 年代与来源**都必须显示**（验收项②） */}
                   <span className="pd__photoYear">{ph.yearLabel}</span>
@@ -186,6 +191,9 @@ export function PoiDetailScreen({ id }: { id: string }) {
             </ul>
           )}
         </section>
+
+        {/* 时光机：同一机位的过去 vs 现在（029）。没有同机位新旧照时显示解释文案，不凑图 */}
+        <TimeMachine photos={place.photos} />
 
         {/* 「在这里发布」：带 placeId 预选（US-02：地点必填，但用户仍可在发布页改） */}
         <section className="pd__actions">

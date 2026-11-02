@@ -28,6 +28,7 @@ import release131Sql from './migrations/025_release_1_3_1.sql'
 import mapDisplaySql from './migrations/026_map_display.sql'
 import bjtuParentPlaceSql from './migrations/027_bjtu_parent_place.sql'
 import activityExternalLinksSql from './migrations/028_activity_external_links.sql'
+import placePhotoTimemachineSql from './migrations/029_place_photo_timemachine.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -143,6 +144,8 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   //      并修正一次重复造轮子：把误占用的 place id ...011 腾给学校父地点、
   //      删掉我多加的 activities.link_url。详见该文件头部（含事故记录）。
   { version: '028_activity_external_links', sql: activityExternalLinksSql },
+  // 029：地点「时光机」——place_photos 增加 media_id / post_id / view_key / year_sort。
+  { version: '029_place_photo_timemachine', sql: placePhotoTimemachineSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */
