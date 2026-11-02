@@ -26,6 +26,7 @@ export interface FeedPost {
   images: string[]
   /** 配图宽高比（瀑布流错落感的来源；原版是不同尺寸的真实照片，这里按比例还原） */
   ratio?: string
+  imageMode?: 'photo' | 'sticker'
   likes: number
   comments: number
   liked: boolean

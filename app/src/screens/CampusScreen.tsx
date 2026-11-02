@@ -15,12 +15,15 @@ import {
 } from '../api/client'
 import { isLoggedIn } from '../api/session'
 import { BigTitle, Screen } from '../components/Shell'
+import { CampusPostCard } from '../components/CampusPostCard'
+import './campus-reference.css'
 import {
   IconChatBubble,
   IconCheck,
   IconChevronDown,
   IconComment,
   IconHeart,
+  IconLocation,
   IconSearch,
 } from '../components/icons'
 // 注意：这里**不再** import mock 的 `posts` —— 校园页已迁移到真实 API，
@@ -423,7 +426,7 @@ function PlaceFilterPanel({
   )
 }
 
-const CAMPUS_SUBTITLE = '校园广场'
+const CAMPUS_SUBTITLE = '学校与校区'
 
 /** URL 里的 placeId 允许逗号分隔（`#/campus?placeId=a,b`） */
 function parsePlaceIds(raw: string | undefined | null): string[] {
@@ -435,14 +438,6 @@ function parsePlaceIds(raw: string | undefined | null): string[] {
 }
 
 export function CampusScreen() {
-  /*
-    ⭐ WO#16 层 A（审核 60）：这里原先有一个 `school` state，初值取自 **mock** 的
-    `campusInfo.name`（"北京交通大学"），并把它显示为顶部副标题。
-      · 按基线（trident-campus/baseline.json interactions[1]）副标题应是「**校园广场** ▼」，
-        那是**固定标签**，不是学校名 —— 显示 mock 学校名本身即偏差；
-      · 而 mock 学校数据按审核 60 一律**不得**再用于界面。
-    ⇒ 删掉该 state；副标题改用基线逐字支持的常量（见上方 CAMPUS_SUBTITLE）。
-  */
   const route = useRoute()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
@@ -482,6 +477,13 @@ export function CampusScreen() {
   )
   /** 失败原因的人类可读文案（§12：不得把 `TypeError: Failed to fetch` 这类技术串直接给用户） */
   const [errText, setErrText] = useState('')
+  const requestVersion = useRef(0)
+  const likeLocks = useRef(new Set<string>())
+  const [pendingLikes, setPendingLikes] = useState<Set<string>>(new Set())
+  const [likeError, setLikeError] = useState('')
+  const likeSequence = useRef(0)
+  const likeUpdates = useRef(new Map<string, { sequence: number; likes: number; liked: boolean }>())
+  useEffect(() => () => { requestVersion.current++ }, [])
 
   /**
    * 默认视图 = 热门 + 全部地标。
@@ -503,10 +505,16 @@ export function CampusScreen() {
    * 服务端有 limit，客户端筛会静默变成"不完整列表"）。
    */
   const loadFeed = useCallback(async () => {
-    setPhase((prev) => (prev === 'ready' ? 'ready' : 'loading'))
+    const version = ++requestVersion.current
+    const sequence = likeSequence.current
+    setPhase('loading')
     const result = await listPosts({ sort, placeIds })
+    if (version !== requestVersion.current) return
     if (result.ok) {
-      const postsFromServer = result.value.map(toFeedPost)
+      const postsFromServer = result.value.map(toFeedPost).map(post => {
+        const update = likeUpdates.current.get(post.id)
+        return update && update.sequence > sequence ? { ...post, likes: update.likes, liked: update.liked } : post
+      })
       setServerPosts(postsFromServer)
       // 只在**成功**时写快照 —— 快照永远是"曾经真实成功过的响应"
       if (isDefaultView) writeFeedSnapshot(postsFromServer)
@@ -525,6 +533,7 @@ export function CampusScreen() {
 
   useEffect(() => {
     void loadFeed()
+    return () => { requestVersion.current++ }
   }, [loadFeed])
 
   /** 候选地标（筛选面板用）。失败不影响主列表，只在面板里显示"地标列表加载失败" */
@@ -569,16 +578,17 @@ export function CampusScreen() {
       navigate('loginselect')
       return
     }
-    const r = post.liked ? await unlikePost(post.id) : await likePost(post.id)
-    if (!r.ok) {
-      console.warn('[campus] 点赞失败：', r.reason)
-      return
+    if (likeLocks.current.has(post.id)) return
+    likeLocks.current.add(post.id); setPendingLikes(new Set(likeLocks.current)); setLikeError('')
+    try {
+      const r = post.liked ? await unlikePost(post.id) : await likePost(post.id)
+      if (!r.ok) { setLikeError('点赞未成功，请稍后重试。'); return }
+      const update = { sequence: ++likeSequence.current, likes: r.value.likeCount, liked: r.value.likedByMe }
+      likeUpdates.current.set(post.id, update)
+      setFeed(prev => prev.map(p => p.id === post.id ? { ...p, likes: update.likes, liked: update.liked } : p))
+    } finally {
+      likeLocks.current.delete(post.id); setPendingLikes(new Set(likeLocks.current))
     }
-    setFeed((prev) =>
-      prev.map((p) =>
-        p.id === post.id ? { ...p, likes: r.value.likeCount, liked: r.value.likedByMe } : p,
-      ),
-    )
   }
 
   /** 当前筛选的可读标签（面板按钮与筛选条都用它，保证两处永远一致） */
@@ -587,17 +597,17 @@ export function CampusScreen() {
     .filter((n): n is string => Boolean(n))
   const filterLabel =
     placeIds.length === 0
-      ? '全部地标'
+      ? '全部地点'
       : placeIds.length === 1
         ? (selectedNames[0] ?? '已选 1 个地标')
         : `已选 ${placeIds.length} 个地标`
 
   return (
     <Screen
+      className="campus-reference"
       header={
         <header className="campus__head">
-          {/* 副标题**逐字**用基线的「校园广场」；▼ 由 BigTitle 自己附加（它渲染一个 chevron） */}
-          <BigTitle title="Campus" sub={CAMPUS_SUBTITLE} onSubClick={() => setPickerOpen(true)} />
+          <BigTitle title="校园广场" sub={CAMPUS_SUBTITLE} onSubClick={() => setPickerOpen(true)} />
           <button className="iconbtn campus__msg" onClick={() => navigate('message')} aria-label="消息">
             <IconChatBubble size={22} />
           </button>
@@ -633,7 +643,7 @@ export function CampusScreen() {
             data-campus-filter-open
             onClick={() => setFilterOpen(true)}
           >
-            {filterLabel}
+            <IconLocation size={18} /><span>{filterLabel}</span>
             <IconChevronDown size={14} />
           </button>
         </div>
@@ -685,8 +695,9 @@ export function CampusScreen() {
             <p>
               {placeIds.length > 0
                 ? `「${filterLabel}」下还没有帖子`
-                : '还没有人发过帖子，来发第一条吧'}
+                : sort === 'hot' ? '近期热门暂时没有内容，去看看最新回忆吧。' : '暂时没有校园回忆，来分享这一刻吧。'}
             </p>
+            {sort === 'hot' && <button className="campus__retry" onClick={() => setSort('latest')}>查看最新</button>}
             {placeIds.length > 0 ? (
               <button className="campus__filterClear" onClick={() => setPlaceIds([])}>
                 清除筛选
@@ -699,34 +710,19 @@ export function CampusScreen() {
           </div>
         )}
 
-        <div className="campus__grid">
-          {feed.map((p) => {
-            const local = isLocalPostId(p.id)
-            return (
-              <PostCard
-                key={p.id}
-                post={p}
-                liked={p.liked}
-                onLike={() => void onToggleLike(p)}
-                local={local}
-                onRemove={local ? () => removeMyPost(p.id) : undefined}
-                onRepublish={
-                  local
-                    ? () => {
-                        stashRepublish({ text: p.text, placeName: p.location })
-                        navigate('publish')
-                      }
-                    : undefined
-                }
-              />
-            )
-          })}
-          {phase === 'ready' && feed.length > 0 && (
-            <p className="campus__end">
-              已加载全部 · {feed.length} 条动态
-            </p>
-          )}
+        {likeError && <p className="campus__likeError" role="alert">{likeError}</p>}
+        {phase === 'loading' && feed.length > 0 && <p className="campus__refreshing" role="status">正在更新回忆…</p>}
+        <div className="campus-square" aria-label="校园回忆" aria-busy={phase === 'loading'}>
+          {[0, 1].map(column => <div className="campus-square__column" key={column}>
+            {feed.filter((_, index) => index % 2 === column).map(p => <CampusPostCard
+              key={p.id} post={p} pending={pendingLikes.has(p.id)} local={isLocalPostId(p.id)}
+              onLike={() => void onToggleLike(p)} onRemove={() => removeMyPost(p.id)}
+              onRepublish={() => { stashRepublish({ text: p.text, placeName: p.location }); navigate('publish') }}
+            />)}
+          </div>)}
         </div>
+        {phase === 'ready' && feed.length > 0 && <p className="campus__end">已加载 {feed.length} 条回忆</p>}
+
       </div>
 
       {pickerOpen && <CampusPickerPanel onClose={() => setPickerOpen(false)} />}

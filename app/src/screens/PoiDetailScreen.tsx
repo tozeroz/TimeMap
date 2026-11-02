@@ -1,350 +1,87 @@
-import { useCallback, useEffect, useState } from 'react'
-import {
-  getPlace,
-  mediaUrl,
-  placePhotoSrc,
-  relativeTime,
-  type ApiPlaceActivity,
-  type ApiPlaceDetail,
-  type ApiPlacePost,
-} from '../api/client'
+import { useEffect, useRef, useState } from 'react'
+import { getPlace, mediaUrl, relativeTime, type ApiPlaceActivity, type ApiPlaceDetail, type ApiPlacePost } from '../api/client'
 import { Screen, TopBar } from '../components/Shell'
-import { IconBack, IconComment, IconHeart, IconStar } from '../components/icons'
+import { IconBack, IconCalendar, IconChevronRight, IconComment, IconEdit, IconHeart, IconLocation, IconStar } from '../components/icons'
 import { goBack, navigate } from '../router'
 import { TimeMachine } from './TimeMachine'
 import './poidetail.css'
 
-/**
- * 地点详情（F03 / US-01；按需求 **4.2 的地点详情草图**重做）。
- *
- * ## 为什么重做（不是"再加几个字段"）
- *   改前这一页是按**原版 poi-detail 的控件树**做的（返回 + 地点名 + 距离/地址 +
- *   左侧一张动态图）。那是**另一个产品**的地点页：它只列动态，没有简介、没有校史、
- *   没有老照片、没有活动，也没有"在这里发布"。
- *   而 TimeMap 的需求 4.2 把它定义成"地点的内容中枢"：
- *     ```
- *     ‹ 返回地图            地点名称
- *     [地点封面]
- *     地点名称｜分类
- *     地点简介与校园背景
- *     [校史与老照片]  [在这里发布]
- *     近期活动｜标题 / 时间 / 状态
- *     [最新] [近期热门] [内容筛选]
- *     作者 / 时间  正文或图片预览  点赞 评论 收藏
- *     ```
- *   ⇒ 因此本页按需求重写，而不是在旧结构上打补丁。
- *
- * ## US-01 验收标准逐条落点
- *   ① 「地图标记与地点详情内容一致」→ 两者都读 `GET /api/places` / `:id`，同一份权威数据
- *   ② 「历史照片显示年代和来源，年代不明时如实说明」
- *      → 每张照片都渲染 `yearLabel` 与 `source`；`yearLabel` 是**文本**，
- *        上游写"年代不详"就原样显示（不编年份）
- *   ③ 「地点没有帖子时仍显示基础资料和发布入口」
- *      → 帖子为空只影响帖子区，简介/校史/老照片/发布入口照常渲染
- *   ④ 「返回地图后保留原浏览区域」→ 返回走 `goBack('map')`（浏览器历史），
- *      地图自身的视图状态由 MapScreen 保留（本页不重置它）
- *   ⑤ 「停用地点不能再关联新帖子」→ 服务端强校验；本页对停用地点**隐藏发布入口**
- *      并明确说明原因（而不是留一个点了必然失败的按钮）
- */
+/** Concrete place detail; school-level map aggregation remains in the map domain. */
 export function PoiDetailScreen({ id }: { id: string }) {
   const [place, setPlace] = useState<ApiPlaceDetail | null>(null)
-  const [state, setState] = useState<'loading' | 'ready' | 'not_found' | 'error'>('loading')
-  const [err, setErr] = useState('')
-  /** 帖子区排序：'latest' 最新 | 'hot' 近期热门（排序**由服务端做**）。
-   *
-   *  ⚠️ 默认值必须是 **'hot'（近期热门）**：需求 PLACE-002 逐字写「少量双列的帖子，
-   *     支持最新/热门切换，**默认热门**」。改前这里是 'latest'，与需求相反 ——
-   *     这是 QA 全盘测试判定的「与需求不符」，不是口味问题。 */
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'error' | 'not_found'>('loading')
+  const [error, setError] = useState('')
+  // PLACE-002 retains the existing default: recent popular posts.
   const [sort, setSort] = useState<'latest' | 'hot'>('hot')
-  /** 内容筛选：全部 | 带图（US-03「地点页面支持最新、近期热门及食堂标签筛选」） */
   const [filter, setFilter] = useState<'all' | 'image'>('all')
-
-  const load = useCallback(
-    async (which: 'latest' | 'hot') => {
-      if (!id) {
-        setErr('未指定地点（缺少 id 参数）')
-        setState('error')
-        return
-      }
-      setState('loading')
-      const r = await getPlace(id, which)
-      if (r.ok) {
-        setPlace(r.value)
-        setState('ready')
-        return
-      }
-      if (r.status === 404) {
-        setState('not_found')
-        return
-      }
-      setErr(r.human ?? r.reason)
-      setState('error')
-    },
-    [id],
-  )
-
+  const [allEmpty, setAllEmpty] = useState<boolean | null>(null)
+  const [retry, setRetry] = useState(0)
+  const generation = useRef(0)
   useEffect(() => {
-    void load(sort)
-  }, [load, sort])
-
-  const header = (
-    <TopBar
-      left={
-        <button className="iconbtn" onClick={() => goBack('map')} aria-label="返回地图">
-          <IconBack size={22} />
-        </button>
+    const version = ++generation.current
+    setPhase('loading'); setAllEmpty(null)
+    if (!id) { setError('未指定地点'); setPhase('error'); return }
+    void (async () => {
+      const result = await getPlace(id, sort)
+      if (version !== generation.current) return
+      if (!result.ok) {
+        setError(result.human ?? result.reason)
+        setPhase(result.status === 404 ? 'not_found' : 'error'); return
       }
-      center={<span className="pd__topTitle">{place?.name ?? '地点'}</span>}
-    />
-  )
+      setPlace(result.value); setPhase('ready')
+      // Production's legacy postCount is the returned window size, not an all-time count.
+      // Probe latest only for an empty hot window; a failed probe must not claim no content.
+      if (sort === 'hot' && result.value.posts.length === 0) {
+        const latest = await getPlace(id, 'latest')
+        if (version === generation.current && latest.ok) setAllEmpty(latest.value.posts.length === 0)
+      } else setAllEmpty(result.value.posts.length === 0)
+    })()
+    return () => { generation.current++ }
+  }, [id, sort, retry])
 
-  if (state === 'loading') {
-    return (
-      <Screen header={header}>
-        <p className="pd__state">加载中…</p>
-      </Screen>
-    )
-  }
-
-  if (state === 'not_found') {
-    return (
-      <Screen header={header}>
-        <div className="pd__state" data-pd-phase="not_found">
-          <p>地点不存在</p>
-          <button className="pd__retry" onClick={() => navigate('map')}>
-            返回地图
-          </button>
-        </div>
-      </Screen>
-    )
-  }
-
-  if (state === 'error' || !place) {
-    return (
-      <Screen header={header}>
-        <div className="pd__state" data-pd-phase="error">
-          <p>地点加载失败</p>
-          <p className="pd__stateSub">{err}</p>
-          <button className="pd__retry" onClick={() => void load(sort)}>
-            重试
-          </button>
-        </div>
-      </Screen>
-    )
-  }
-
-  // 封面仍取第一张老照片（position 最小）；有 mediaId 的走媒体管线
-  const cover = place.photos[0] ? placePhotoSrc(place.photos[0]) : null
-  const visiblePosts = filter === 'image' ? place.posts.filter((p) => (p.images ?? []).length > 0) : place.posts
-
-  return (
-    <Screen header={header} scroll>
-      <section className="pd" data-place-id={place.id} data-place-category={place.category}>
-        {/* 地点封面（第一张老照片；没有照片就不渲染伪封面） */}
-        {cover && <img className="pd__cover" src={cover} alt="" />}
-
-        <div className="pd__head">
-          <h2 className="pd__name" data-place-name>
-            {place.name}
-          </h2>
-          <span className="pd__category" data-place-category-chip>
-            {place.category}
-          </span>
-          {!place.enabled && (
-            /* US-01⑤：停用地点——明确说明为什么不能在这里发布（而不是留个必然失败的按钮） */
-            <span className="pd__disabledTag" data-place-disabled>
-              已停用
-            </span>
-          )}
-        </div>
-        {place.address && <p className="pd__addr">{place.address}</p>}
-
-        {/* 地点简介与校园背景 */}
+  const header = <TopBar variant="plain" left={<button className="iconbtn" onClick={() => goBack('map')} aria-label="返回地图"><IconBack size={24} /></button>} center={<span className="pd__topTitle">地点详情</span>} />
+  if (phase !== 'ready' || !place) return <Screen className="pd-page" header={header}><div className="pd__state" role="status" data-pd-phase={phase}>
+    <p>{phase === 'loading' ? '正在寻找这处校园记忆…' : phase === 'not_found' ? '地点不存在' : '地点加载失败'}</p>
+    {phase === 'error' && <p className="pd__stateSub">{error}</p>}
+    {phase === 'error' && <button className="pd__retry" onClick={() => setRetry(n => n + 1)}>重试</button>}
+    {phase === 'not_found' && <button className="pd__retry" onClick={() => navigate('map')}>返回地图</button>}
+  </div></Screen>
+  const visible = filter === 'image' ? place.posts.filter(p => p.images?.length) : place.posts
+  const filtered = filter === 'image' && place.posts.length > 0
+  const emptyTitle = filtered ? '还没有符合筛选的回忆' : allEmpty === true ? '这里还没有人留下回忆' : '近期还没有新的回忆'
+  const emptyText = filtered ? '试试查看全部内容，发现更多校园故事。' : allEmpty === true ? '分享一段文字或一张照片，成为第一位记录者。' : '近期热门统计近 7 天的内容，切换「最新」查看过往回忆。'
+  return <Screen className="pd-page" header={header} footer={<div className="pd__actions">{place.enabled ? <button className="pd__publishBtn" data-pd-publish={place.id} onClick={() => navigate('publish', { placeId: place.id })}><IconEdit size={25} />在这里发布</button> : <p className="pd__publishHint" data-pd-publish-disabled>该地点已停用，暂时无法在这里发布。</p>}</div>}>
+    <article className="pd" data-place-id={place.id} data-place-category={place.category} data-pd-phase="ready">
+      <section className="pd__intro">
+        <GateArtwork />
+        <div className="pd__category" data-place-category-chip><IconLocation size={19} />{place.category}{!place.enabled && <span className="pd__disabledTag">已停用</span>}</div>
+        <h1 className="pd__name" data-place-name>{place.name}</h1>
+        {place.address && <p className="pd__addr"><IconLocation size={18} />{place.address}</p>}
         {place.description && <p className="pd__desc" data-place-desc>{place.description}</p>}
-
-        {/*
-          校史 + 老照片。
-          ⚠️ history 为 null 时**如实说明"暂无校史资料"**，不编造内容（US-01②）。
-        */}
-        <section className="pd__history" data-place-history={place.history ? 'present' : 'absent'}>
-          <h3 className="pd__sectionTitle">校史与老照片</h3>
-          {place.history ? (
-            <p className="pd__historyText">{place.history}</p>
-          ) : (
-            <p className="pd__historyEmpty">暂无校史资料</p>
-          )}
-          {place.photos.length > 0 && (
-            <ul className="pd__photos no-scrollbar">
-              {place.photos.map((ph) => (
-                <li key={ph.id} className="pd__photo" data-photo-year={ph.yearLabel}>
-                  {placePhotoSrc(ph) && (
-                    <img className="pd__photoImg" src={placePhotoSrc(ph)!} alt={ph.title} loading="lazy" />
-                  )}
-                  <span className="pd__photoTitle">{ph.title}</span>
-                  {/* 年代与来源**都必须显示**（验收项②） */}
-                  <span className="pd__photoYear">{ph.yearLabel}</span>
-                  <span className="pd__photoSource" data-photo-source>
-                    来源：{ph.source}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* 时光机：同一机位的过去 vs 现在（029）。没有同机位新旧照时显示解释文案，不凑图 */}
-        <TimeMachine photos={place.photos} />
-
-        {/* 「在这里发布」：带 placeId 预选（US-02：地点必填，但用户仍可在发布页改） */}
-        <section className="pd__actions">
-          {place.enabled ? (
-            <button
-              className="pd__publishBtn"
-              data-pd-publish={place.id}
-              onClick={() => navigate('publish', { placeId: place.id })}
-            >
-              在这里发布
-            </button>
-          ) : (
-            <p className="pd__publishHint" data-pd-publish-disabled>
-              该地点已停用，不能再关联新帖子（已有帖子仍在下方）。
-            </p>
-          )}
-        </section>
-
-        {/* 近期活动：标题 / 时间 / 状态（草图的中间一段） */}
-        <section className="pd__activities" data-place-activities={String(place.activities.length)}>
-          <div className="pd__sectionHead">
-            <h3 className="pd__sectionTitle">近期活动</h3>
-            {/*
-              PLACE-003（已确认）：「少量近期活动 + **查看全部** → 活动一级入口并自动筛选该地点」。
-              改前这里没有「查看全部」——地点页是活动的终点站，用户想看更多只能自己回活动页再筛。
-              ⇒ 带上 placeId 跳到活动一级入口，活动页读 `?placeId=` 自动生效筛选。
-            */}
-            <button
-              className="pd__more"
-              data-pd-act-all={place.id}
-              onClick={() => navigate('activities', { placeId: place.id })}
-            >
-              查看全部
-            </button>
-          </div>
-          {place.activities.length === 0 ? (
-            <p className="pd__empty">近期没有在此地点举办的活动</p>
-          ) : (
-            <ul className="pd__actList">
-              {place.activities.map((a) => (
-                <li key={a.id}>
-                  <button
-                    className="pd__act"
-                    data-place-activity={a.id}
-                    data-activity-status={a.status}
-                    onClick={() => navigate('activity', { id: a.id, placeId: place.id })}
-                  >
-                    <span className="pd__actTitle">{a.title}</span>
-                    <span className="pd__actMeta">{formatWhen(a)}</span>
-                    <span className={`pd__actBadge pd__actBadge--${a.status}`}>{statusLabel(a.status)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* 帖子：最新 / 近期热门 + 内容筛选 */}
-        <section className="pd__feed">
-          <div className="pd__feedHead">
-            <h3 className="pd__sectionTitle">地点内容</h3>
-            <div className="pd__sorts">
-              {(
-                [
-                  { key: 'latest', label: '最新' },
-                  { key: 'hot', label: '近期热门' },
-                ] as const
-              ).map((s) => (
-                <button
-                  key={s.key}
-                  className={`pd__sort ${sort === s.key ? 'is-active' : ''}`}
-                  data-pd-sort={s.key}
-                  onClick={() => setSort(s.key)}
-                >
-                  {s.label}
-                </button>
-              ))}
-              <button
-                className={`pd__sort ${filter === 'image' ? 'is-active' : ''}`}
-                data-pd-filter={filter === 'image' ? 'image' : 'all'}
-                onClick={() => setFilter((f) => (f === 'all' ? 'image' : 'all'))}
-              >
-                {filter === 'image' ? '仅看图文' : '内容筛选'}
-              </button>
-              {/*
-                PLACE-002（已确认）：「少量双列帖子 + **查看全部** → 校园一级入口并自动筛选该地点全部用户帖子」。
-                改前没有这个入口，地点页只展示「少量」却没有任何通往全量的路径。
-              */}
-              <button
-                className="pd__more"
-                data-pd-all={place.id}
-                onClick={() => navigate('campus', { placeId: place.id })}
-              >
-                查看全部
-              </button>
-            </div>
-          </div>
-
-          {/*
-            US-01③：**没有帖子时仍显示基础资料和发布入口** ——
-            所以这里只是一条空态文案，上面的简介/校史/发布按钮都照常存在。
-
-            ⚠️ 空态文案必须**区分三种原因**（2026-10-09 用户实际提问"点近期热门怎么没东西"）：
-              ① 这个地点从来没有内容            → 邀请发布
-              ② 有内容，但都在 7 天窗口之外      → **说明"近期"的口径**，否则用户会以为坏了
-              ③ 有内容，但被「仅看图文」筛掉     → 说明是筛选的锅
-            改前只有「没有符合当前筛选的内容」一句 → 用户看到"近期热门"是空的，
-            而"最新"里明明有帖子，却没有任何解释。**界面没解释自己的口径 = 看起来像故障。**
-          */}
-          {visiblePosts.length === 0 ? (
-            <p className="pd__empty" data-pd-posts="empty" data-pd-empty-reason={
-              place.posts.length === 0 ? 'no-content' : sort === 'hot' ? 'out-of-hot-window' : 'filtered'
-            }>
-              {place.posts.length === 0
-                ? '这个地点还没有内容，来发第一条吧'
-                : sort === 'hot'
-                  ? `近期热门只统计近 7 天发布的内容，这个地点近 7 天没有新帖（下方「最新」里能看到更早的 ${place.posts.length} 条）。`
-                  : '没有符合当前筛选的内容'}
-            </p>
-          ) : (
-            <ul className="pd__postList" data-pd-posts={String(visiblePosts.length)}>
-              {visiblePosts.map((p) => (
-                <PostRow key={p.id} post={p} />
-              ))}
-            </ul>
-          )}
-
-          {/*
-            口径说明：**空态时更要显示**（那正是用户需要解释的时候），
-            所以它放在空态/列表之外，与 visiblePosts.length 无关。
-          */}
-          {sort === 'hot' && (
-            <p className="pd__hotNote" data-pd-hot-note>
-              近期热门 = 近 7 天内发布的内容，按 点赞×2 + 有效评论×3 + 收藏×1 − 发布超 24 小时的衰减 排序。
-              {visiblePosts.length === 0 && place.posts.length > 0 && ' 想看过往内容请切到「最新」。'}
-            </p>
-          )}
-        </section>
+        <button className="pd__mapLink" onClick={() => navigate('map', { placeId: place.id })}>在地图中查看 <span aria-hidden="true">→</span></button>
       </section>
-    </Screen>
-  )
+      <TimeMachine photos={place.photos} history={place.history} />
+      <section className="pd__activities" data-place-activities={place.activities.length}>
+        <div className="pd__sectionHead"><h2 className="pd__sectionTitle">近期活动</h2><button className="pd__more" data-pd-act-all={place.id} onClick={() => navigate('activities', { placeId: place.id })}>查看全部<IconChevronRight /></button></div>
+        {!place.activities.length ? <p className="pd__activityEmpty"><IconCalendar size={26} />近期暂无活动</p> : <ul className="pd__actList">{place.activities.map(a => <li key={a.id}><button className="pd__act" data-place-activity={a.id} onClick={() => navigate('activity', { id: a.id, placeId: place.id })}><span className="pd__actTitle">{a.title}</span><span className="pd__actMeta">{formatWhen(a)}</span><span className={'pd__actBadge pd__actBadge--' + a.status}>{statusLabel(a.status)}</span></button></li>)}</ul>}
+      </section>
+      <section className="pd__feed">
+        <div className="pd__sectionHead"><h2 className="pd__sectionTitle">地点内容</h2><div className="pd__tools"><button className={'pd__more ' + (filter === 'image' ? 'is-active' : '')} aria-pressed={filter === 'image'} data-pd-filter={filter} onClick={() => setFilter(f => f === 'all' ? 'image' : 'all')}><span aria-hidden="true">☷</span>{filter === 'image' ? '仅图文' : '筛选'}</button><span className="pd__separator" /><button className="pd__more" data-pd-all={place.id} onClick={() => navigate('campus', { placeId: place.id })}>查看全部<IconChevronRight /></button></div></div>
+        <div className="pd__sorts" aria-label="内容排序">{(['latest', 'hot'] as const).map(key => <button key={key} className={'pd__sort ' + (sort === key ? 'is-active' : '')} aria-pressed={sort === key} data-pd-sort={key} onClick={() => setSort(key)}>{key === 'latest' ? '最新' : '近期热门'}</button>)}</div>
+        {visible.length ? <ul className="pd__postList" data-pd-posts={visible.length}>{visible.map(post => <PostRow key={post.id} post={post} />)}</ul> : <div className="pd__empty" role="status" data-pd-posts="empty" data-pd-empty-reason={filtered ? 'filtered' : allEmpty === true ? 'no-content' : 'out-of-hot-window'}><MemoryArtwork /><h3>{emptyTitle}</h3><p>{emptyText}</p>{(filtered || allEmpty !== true) && <button className="pd__mapLink" onClick={() => { setFilter('all'); setSort('latest') }}>查看最新内容 →</button>}</div>}
+        <details className="pd__hotNote" data-pd-hot-note><summary><span aria-hidden="true">ⓘ</span>热门如何排序？<span className="pd__disclosure" aria-hidden="true">⌄</span></summary><p>近期热门统计近 7 天发布的内容，按点赞 × 2 + 有效评论 × 3 + 收藏 − 发布超 24 小时后的衰减排序。</p></details>
+      </section>
+    </article>
+  </Screen>
 }
 
-/**
- * 地点页的帖子卡片（PLACE-002：**双列**）。
- *
- * ⚠️ 改前是"一行一条"的横向行（左边小图 + 中间作者/正文 + 右边计数），
- *    靠 `.pd__postList { flex-direction: column }` 排成单列 —— 与需求「少量**双列**帖子」不符。
- *    现在改成与校园流一致的**竖向卡片**（图在上、文字和计数在下），交给 CSS 做两列瀑布流。
- *    没有配图时不再塞一个「作者头像当封面」的假图（那会让纯文字帖看起来像图片帖）。
- */
+function GateArtwork() {
+  return <svg className="pd__gate" viewBox="0 0 200 160" fill="none" aria-hidden="true"><g stroke="currentColor" strokeWidth="2.2"><path d="M7 145h186M40 144V65h18v79M142 144V65h18v79M36 65h26v-7H36zM138 65h26v-7h-26zM58 78h84v12H58zM60 143v-39q40-28 80 0v39M88 78V41h24v37M84 41h32v-6H84zM96 35V22h8v13M47 58V46m105 12V46"/><path d="M19 145v-23m-7 6q-12-24 6-29 17 10 10 29zM180 145v-29m-8 9q-12-26 7-39 19 14 9 39z" fill="currentColor" fillOpacity=".18"/></g></svg>
+}
+function MemoryArtwork() {
+  return <svg className="pd__memoryArt" viewBox="0 0 180 110" fill="none" aria-hidden="true"><path d="M12 95c43-38 48 31 94 1s59-21 57-2c-5 29-59 9-66-20-9-37 49-37 37-3-5 14-21 30-28 32" stroke="#a8b6a0" strokeWidth="1.6" strokeDasharray="6 5"/><circle cx="113" cy="65" r="7" stroke="#a8b6a0" strokeWidth="1.6"/><g stroke="#ed7949" strokeWidth="2"><path d="m48 71 25-48q4-7 11-2l2 2q3 2 0 7L61 78 46 88zM51 75l10 3M48 71l9 5 26-49M73 23l12 7M46 88l3-9"/><path d="m139 31 7-9m1 19 10-4" strokeOpacity=".5"/></g></svg>
+}
+
 function PostRow({ post }: { post: ApiPlacePost }) {
   const img = post.images && post.images.length > 0 ? mediaUrl(post.images[0]!.id) : null
   return (
@@ -389,8 +126,7 @@ function PostRow({ post }: { post: ApiPlacePost }) {
 function formatWhen(a: ApiPlaceActivity): string {
   const s = new Date(a.startsAt)
   if (Number.isNaN(s.getTime())) return '时间未知'
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())} ${pad(s.getHours())}:${pad(s.getMinutes())}`
+  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(s)
 }
 
 function statusLabel(status: ApiPlaceActivity['status']): string {

@@ -1,274 +1,69 @@
-/*
- * 地点详情（F03 / US-01；按需求 4.2 的草图重做）。
- *
- * ⚠️ 本文件在 P0 被**整体重写**：改前的类名来自"按原版 poi-detail 控件树做的页面"
- *    （.pd__imgWrap / .pd__userTag / .pd__distance 等），那个页面结构已经被替换，
- *    留着旧类名只会让下一个维护者以为还有对应结构。
- */
-
-.pd__topTitle {
-  font-size: var(--f-sub);
-  font-weight: 600;
-}
-
-.pd {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding-bottom: 28px;
-}
-
-/* 地点封面（第一张老照片）；没有照片时**整块不渲染**（不画假封面） */
-.pd__cover {
-  width: 100%;
-  height: 190px;
-  object-fit: cover;
-  background: var(--c-surface-sunken);
-}
-
-.pd__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px var(--pad-page) 0;
-}
-
-.pd__name {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.25;
-  color: var(--c-text);
-}
-
-.pd__category {
-  flex: none;
-  padding: 2px 9px;
-  border-radius: 5px;
-  background: var(--c-accent-soft);
-  color: var(--c-accent);
-  font-size: 11px;
-}
-
-.pd__disabledTag {
-  flex: none;
-  padding: 2px 9px;
-  border-radius: 5px;
-  background: #fdeceb;
-  color: var(--c-danger);
-  font-size: 11px;
-}
-
-.pd__addr,
-.pd__desc {
-  margin: 0;
-  padding: 0 var(--pad-page);
-  font-size: var(--f-meta);
-  line-height: 1.6;
-  color: var(--c-text-3);
-}
-
-.pd__desc {
-  font-size: var(--f-body);
-  color: var(--c-text-2);
-}
-
-/* ---- 校史与老照片 ---- */
-.pd__history,
-.pd__activities,
-.pd__feed {
-  padding: 0 var(--pad-page);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.pd__sectionTitle {
-  margin: 0;
-  font-size: var(--f-sub);
-  font-weight: 700;
-  color: var(--c-text);
-}
-
-.pd__historyText {
-  margin: 0;
-  font-size: var(--f-body);
-  line-height: 1.65;
-  color: var(--c-text-2);
-}
-
-.pd__historyEmpty {
-  margin: 0;
-  font-size: var(--f-meta);
-  color: var(--c-text-3);
-}
-
-.pd__photos {
-  list-style: none;
-  display: flex;
-  gap: 10px;
-  margin: 0;
-  padding: 0 0 4px;
-  overflow-x: auto;
-}
-
-.pd__photo {
-  flex: none;
-  width: 160px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.pd__photoImg {
-  width: 160px;
-  height: 106px;
-  object-fit: cover;
-  border-radius: var(--r-sm);
-  background: var(--c-surface-sunken);
-}
-
-.pd__photoTitle {
-  font-size: var(--f-meta);
-  font-weight: 600;
-  color: var(--c-text);
-}
-
-/* 年代与来源**都要可见**（US-01②：年代和来源必须显示，不明时如实说明） */
-.pd__photoYear {
-  font-size: var(--f-tiny);
-  color: var(--c-text-2);
-}
-
-.pd__photoSource {
-  font-size: 10.5px;
-  line-height: 1.4;
-  color: var(--c-text-3);
-}
-
-/* ---- 发布入口 ---- */
-.pd__actions {
-  padding: 0 var(--pad-page);
-}
-
-.pd__publishBtn {
-  width: 100%;
-  height: 42px;
-  border: none;
-  border-radius: var(--r-pill);
-  background: var(--c-primary);
-  color: var(--c-primary-fg);
-  font-size: var(--f-body);
-  font-weight: 600;
-}
-
-.pd__publishHint {
-  margin: 0;
-  font-size: var(--f-meta);
-  color: var(--c-text-3);
-}
-
-/* ---- 近期活动 ---- */
-.pd__actList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.pd__act {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: none;
-  border-radius: var(--r-sm);
-  background: var(--c-surface-sunken);
-  text-align: left;
-}
-
-.pd__actTitle {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--f-meta);
-  font-weight: 600;
-  color: var(--c-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pd__actMeta {
-  flex: none;
-  font-size: var(--f-tiny);
-  color: var(--c-text-3);
-}
-
-.pd__actBadge {
-  flex: none;
-  padding: 2px 8px;
-  border-radius: var(--r-pill);
-  font-size: 10.5px;
-  font-weight: 600;
-}
-
-.pd__actBadge--upcoming {
-  background: var(--c-accent-soft);
-  color: var(--c-accent);
-}
-
-.pd__actBadge--ongoing {
-  background: #e6f7ec;
-  color: #1c8b45;
-}
-
-.pd__actBadge--ended {
-  background: #e9e9ec;
-  color: var(--c-text-3);
-}
-
-.pd__actBadge--cancelled {
-  background: #fdeceb;
-  color: var(--c-danger);
-}
-
-/* ---- 帖子区 ---- */
-.pd__feedHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.pd__sorts {
-  display: flex;
-  gap: 6px;
-}
-
-.pd__sort {
-  padding: 5px 11px;
-  border: 1px solid var(--c-divider);
-  border-radius: var(--r-pill);
-  background: var(--c-surface);
-  color: var(--c-text-2);
-  font-size: var(--f-tiny);
-}
-
-.pd__sort.is-active {
-  background: var(--c-primary);
-  border-color: var(--c-primary);
-  color: var(--c-primary-fg);
-}
-
-/* PLACE-002（已确认）：帖子区是**双列**少量帖子。
-   改前这里是 `display:flex; flex-direction:column` 的单列横向行 —— 与需求不符。
-   用 column-count 而不是 grid：卡片高度不一致时瀑布流更接近校园页的观感，
-   也和 `.campus__grid` 的实现保持一致（同一产品里不要有两种"双列"）。
-   ⚠️ 列子项必须 `break-inside: avoid`，否则卡片会被从中间切到两列里。 */
+/* Reference: 地点详情·空状态. Scoped to the concrete place detail screen. */
+.pd-page { background: var(--c-bg); }
+.pd-page .topbar { background: var(--c-bg); border: 0; height: 64px; }
+.pd-page .topbar .iconbtn { background: transparent; box-shadow: none; }
+.pd__topTitle { font-size: 17px; font-weight: 700; }
+.pd { padding: 0 20px; }
+.pd button { cursor: pointer; }
+.pd__intro { position: relative; isolation: isolate; padding: 24px 0 18px; }
+.pd__gate { position: absolute; z-index: -1; pointer-events: none; right: -8px; top: 48px; width: 155px; height: 145px; color: var(--c-sage); opacity: .24; }
+.pd__category { display: flex; align-items: center; gap: 6px; color: var(--c-primary); font-size: 14px; margin-bottom: 8px; }
+.pd__name { margin: 0 0 8px; font-size: clamp(26px, 7.2vw, 30px); line-height: 1.35; font-weight: 750; overflow-wrap: anywhere; }
+.pd__addr { margin: 0 0 9px; display: flex; align-items: flex-start; gap: 6px; color: var(--c-text-2); font-size: 14px; }
+.pd__addr svg { flex: none; margin-top: 2px; }
+.pd__desc { margin: 0; font-size: 14px; line-height: 1.8; color: var(--c-text-2); overflow-wrap: anywhere; }
+.pd__mapLink { display: inline-flex; align-items: center; gap: 10px; border: 0; background: transparent; min-height: 44px; padding: 8px 0; margin-top: 8px; color: var(--c-primary); font-size: 14px; }
+.pd__mapLink span { font-size: 24px; line-height: 1; }
+.pd__disabledTag { color: var(--c-danger); background: var(--c-danger-soft); padding: 2px 7px; border-radius: 6px; font-size: 12px; }
+.pd__history, .pd__activities, .pd__feed { border-top: 1px solid var(--c-divider); padding: 20px 0; }
+.pd__sectionHead { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.pd__sectionTitle { margin: 0; color: var(--c-text); font-size: 21px; line-height: 1.5; font-weight: 750; }
+.pd__aside { color: var(--c-text-2); font-size: 12px; }
+.pd__historyEmpty { display: flex; align-items: center; gap: 22px; padding: 30px 10px 18px; }
+.pd__historyEmpty > svg { color: #aaa9a4; flex: none; transform: rotate(-7deg); }
+.pd__historyEmpty p { margin: 0 0 3px; font-size: 15px; }
+.pd__historyEmpty span { color: var(--c-text-2); font-size: 13px; }
+.pd__historyText { white-space: pre-line; font-size: 15px; line-height: 1.8; color: var(--c-text-2); }
+.pd__photos { display: flex; gap: 12px; list-style: none; padding: 0 0 8px; overflow-x: auto; }
+.pd__photo { flex: 0 0 160px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-text-2); }
+.pd__photo strong { color: var(--c-text); font-size: 14px; }
+.pd__photoImg { width: 160px; height: 110px; border-radius: 12px; object-fit: cover; }
+.pd__activityEmpty { display: flex; align-items: center; gap: 20px; margin: 22px 8px 10px; color: var(--c-text-2); font-size: 14px; }
+.pd__actList { margin: 12px 0 0; padding: 0; list-style: none; }
+.pd__act { width: 100%; border: 0; border-bottom: 1px solid var(--c-divider); background: transparent; padding: 12px 0; text-align: left; display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; color: var(--c-text); }
+.pd__actTitle { grid-column: 1/-1; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.pd__actMeta { font-size: 12px; color: var(--c-text-2); }
+.pd__actBadge { font-size: 12px; border-radius: 12px; padding: 1px 8px; background: var(--c-surface-sunken); }
+.pd__actBadge--ongoing { color: #376b2e; background: #e8f1df; }
+.pd__actBadge--upcoming { color: var(--c-primary); background: var(--c-primary-soft); }
+.pd__actBadge--cancelled { color: var(--c-danger); }
+.pd__tools { display: flex; align-items: center; gap: 7px; }
+.pd__separator { width: 1px; height: 14px; background: var(--c-divider); }
+.pd__more { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--c-text-2); font-size: 12px; white-space: nowrap; }
+.pd__more.is-active { color: var(--c-primary); }
+.pd__sorts { display: flex; gap: 20px; margin-top: 7px; }
+.pd__sort { min-height: 44px; padding: 7px 6px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--c-text-2); font-size: 14px; }
+.pd__sort.is-active { color: var(--c-primary); border-bottom-color: var(--c-brand); font-weight: 650; }
+.pd__empty { padding: 26px 0 25px; text-align: center; }
+.pd__memoryArt { width: 150px; height: 105px; display: block; margin: 0 auto 14px; }
+.pd__empty h3 { font-size: 16px; font-weight: 500; margin: 0 0 5px; }
+.pd__empty p { font-size: 13px; line-height: 1.8; margin: 0; color: var(--c-text-2); }
+.pd__hotNote { border-top: 1px solid var(--c-divider); margin-top: 18px; color: var(--c-text-2); font-size: 12px; }
+.pd__hotNote summary { display: flex; align-items: center; gap: 9px; cursor: pointer; min-height: 48px; list-style: none; }
+.pd__hotNote summary::-webkit-details-marker { display: none; }
+.pd__hotNote summary > span:first-child { font-size: 20px; }
+.pd__disclosure { margin-left: auto; font-size: 20px; }
+.pd__hotNote[open] .pd__disclosure { transform: rotate(180deg); }
+.pd__hotNote p { margin: 0 0 12px; line-height: 1.8; }
+.pd__actions { flex: none; padding: 10px 13px max(14px, env(safe-area-inset-bottom)); background: var(--c-bg); }
+.pd__publishBtn { width: 100%; min-height: 46px; border: 0; border-radius: 10px; background: var(--c-primary); color: white; display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.pd__publishBtn:active { transform: scale(.99); }
+.pd__publishHint { text-align: center; color: var(--c-text-2); font-size: 13px; margin: 8px; }
+.pd__state { padding: 60px 20px; text-align: center; color: var(--c-text-2); }
+.pd__stateSub { overflow-wrap: anywhere; font-size: 13px; }
+.pd__retry { background: transparent; color: var(--c-text); min-height: 44px; border: 1px solid var(--c-divider); border-radius: 12px; padding: 8px 20px; }
+.pd__postList { margin-top: 16px !important; }
+@media(max-width: 350px) { .pd { padding: 0 16px; } .pd__sectionTitle { font-size: 19px; } .pd__tools { gap: 5px; } .pd__gate { width: 125px; } }
 .pd__postList {
   list-style: none;
   margin: 0;
@@ -350,68 +145,8 @@
   color: #e0a300;
 }
 
-.pd__hotNote {
-  margin: 2px 0 0;
-  font-size: var(--f-tiny);
-  line-height: 1.6;
-  color: var(--c-text-3);
-}
-
-/* ---- 状态页 ---- */
-.pd__state {
-  padding: 48px var(--pad-page);
-  text-align: center;
-  font-size: var(--f-body);
-  color: var(--c-text-3);
-}
-
-.pd__stateSub {
-  margin-top: 8px;
-  font-size: var(--f-meta);
-  word-break: break-all;
-}
-
-.pd__retry {
-  margin-top: 14px;
-  padding: 8px 18px;
-  border: 1px solid var(--c-divider);
-  border-radius: var(--r-pill);
-  background: var(--c-surface);
-  color: var(--c-text);
-  font-size: var(--f-meta);
-}
-
-.pd__empty {
-  margin: 0;
-  padding: 14px 0;
-  font-size: var(--f-meta);
-  color: var(--c-text-3);
-  text-align: center;
-}
-
-/* PLACE-002 / PLACE-003：「查看全部」入口。
-   位置规则：帖子区的"查看全部"跟在排序/筛选 chips 后面（同一行），
-   活动区没有 chips，所以单独用一个 sectionHead 包住标题与按钮。 */
-.pd__sectionHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.pd__more {
-  flex: 0 0 auto;
-  padding: 4px 10px;
-  border: 1px solid var(--c-divider);
-  border-radius: var(--r-pill);
-  background: var(--c-surface);
-  color: var(--c-text-2);
-  font-size: var(--f-tiny);
-}
-
 /* ---- 时光机（029）：同一机位的过去 vs 现在 ---- */
 .tm {
-  padding: 0 var(--pad-page);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -690,26 +425,6 @@
   accent-color: var(--c-primary);
 }
 
-.tm__modes {
-  display: flex;
-  border: 1px solid var(--c-divider);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.tm__modes button {
-  padding: 4px 10px;
-  border: 0;
-  background: var(--c-surface);
-  font-size: var(--f-meta);
-  color: var(--c-text-2);
-}
-
-.tm__modes button.is-on {
-  background: var(--c-primary);
-  color: var(--c-primary-fg);
-}
-
 .tm__caption {
   margin: 0;
   display: flex;
@@ -811,3 +526,26 @@
   line-height: 1.4;
   color: #999;
 }
+/* Campus history: compare first, disclose the full archive on demand. */
+.pd__historyStory { margin: 12px 0 16px; color: var(--c-text-2); font-size: 15px; line-height: 1.8; }
+.pd__historyStory summary { cursor: pointer; overflow-wrap: anywhere; }
+.pd__historyStory .pd__storyExpand, .pd__historyStory .pd__storyCollapse { display: block; color: var(--c-primary); min-height: 44px; padding-top: 6px; }
+.pd__historyStory .pd__storyCollapse { display: none; }
+.pd__historyStory[open] .pd__storyPreview, .pd__historyStory[open] .pd__storyExpand { display: none; }
+.pd__historyStory[open] .pd__storyCollapse { display: block; }
+.pd__archive { margin-top: 14px; border-top: 1px solid var(--c-divider); }
+.pd__archive > summary { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; color: var(--c-primary); font-size: 14px; list-style: none; }
+.pd__archive > summary::-webkit-details-marker { display: none; }
+.pd__archive > summary span { color: var(--c-text-2); font-size: 12px; }
+.pd__archive > summary::after { content: '+'; font-size: 20px; }
+.pd__archive[open] > summary::after { content: '−'; }
+.pd__archiveGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; list-style: none; padding: 0; margin: 12px 0 0; }
+.pd__archivePhoto { min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--c-text-2); overflow-wrap: anywhere; line-height: 1.6; }
+.pd__archivePhoto img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; }
+.pd__archivePhoto strong { color: var(--c-text); font-size: 14px; }
+.pd__archivePhoto .tm__postLink { margin: 0; min-height: 44px; text-align: left; }
+.tm__caption { font-size: 12px; line-height: 1.6; }
+.tm__viewChip, .tm__play-btn, .tm__tag { min-height: 44px; }
+.tm__stage { border-radius: 12px; }
+.pd__archive summary:focus-visible, .pd__historyStory summary:focus-visible, .tm button:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 3px; }
+@media (max-width: 350px) { .pd__archiveGrid { grid-template-columns: 1fr; } }

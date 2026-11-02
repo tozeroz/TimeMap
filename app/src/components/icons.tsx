@@ -297,6 +297,25 @@ export function IconRefresh({ size = 20, strokeWidth = 1.8 }: IconProps) {
   )
 }
 
+export function IconCalendar({ size = 22, strokeWidth = 1.8 }: IconProps) {
+  return <svg {...base(size)} strokeWidth={strokeWidth} aria-hidden="true">
+    <rect x="3.5" y="5" width="17" height="16" rx="2" />
+    <path d="M7.5 3v4M16.5 3v4M3.5 10h17" />
+  </svg>
+}
+
+export function IconUsers({ size = 22, strokeWidth = 1.8 }: IconProps) {
+  return <svg {...base(size)} strokeWidth={strokeWidth} aria-hidden="true">
+    <circle cx="9" cy="7.5" r="3.5" /><path d="M2.5 21v-2.5a6.5 6.5 0 0 1 13 0V21ZM17 4.5a3.5 3.5 0 0 1 0 7M18 14a5 5 0 0 1 3.5 4.5V21H18" />
+  </svg>
+}
+
+export function IconUser({ size = 22, strokeWidth = 1.8 }: IconProps) {
+  return <svg {...base(size)} strokeWidth={strokeWidth} aria-hidden="true">
+    <circle cx="12" cy="7.5" r="3.5" /><path d="M4.5 21v-2a7.5 7.5 0 0 1 15 0v2Z" />
+  </svg>
+}
+
 export function IconCheck({ size = 18, strokeWidth = 2.4 }: IconProps) {
   return (
     <svg {...base(size)} strokeWidth={strokeWidth}>

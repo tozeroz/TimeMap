@@ -372,7 +372,7 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
     select a.id, a.title, a.description, a.starts_at, a.ends_at, a.source, a.status,
            a.activity_type, a.organizer, a.external_link, a.cover_image_id,
            ${ACTIVITY_EFF_STATUS_SQL} as eff_status,
-           a.starts_at, coalesce(a.ends_at, a.starts_at + interval '2 hours') as eff_ends_at,
+           coalesce(a.ends_at, a.starts_at + interval '2 hours') as eff_ends_at,
            pl.id as place_id, pl.name as place_name, pl.latitude as place_lat, pl.longitude as place_lng,
            pl.enabled as place_enabled,
            exists (select 1 from activity_favorites af
@@ -455,8 +455,8 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
          混进了默认列表，而前端又用 `effectiveStatus` 二次过滤 —— 结果是
          "已结束"筛选恒为空（窗口先把它们剔除，前端再筛一次自然一条不剩）。
 
-      现在：`status` 在**服务端**生效，`ended` / `cancelled` / `all` **不套时间窗口**
-      （历史活动是长期存在的事实，不是"近期列表"的一部分）。前端不再二次过滤。
+      状态与显式时间窗口组合查询。未选择时间时可查看完整历史；
+      选择今天/本周时，仅显示与北京时间自然日/周相交的活动。
 
       `placeId`（ACT-002 / PLACE-003）：活动**必须**有地点（activities.place_id NOT NULL），
       所以这里是等值过滤，不是 left join 的可空判断。非法 uuid → 400。
@@ -474,6 +474,10 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
     }
 
     const window = query.window ?? ''
+    if (!['', 'today', 'week'].includes(window)) {
+      reply.code(400)
+      return { error: 'bad_window', allowed: ['', 'today', 'week'] }
+    }
     const conds: string[] = []
     if (status === '') {
       // 默认：近期 = 即将开始 + 进行中
@@ -482,11 +486,13 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       // 白名单已校验，直接内插安全；'all' = 不按状态过滤
       conds.push(`(${ACTIVITY_EFF_STATUS_SQL}) = '${status}'`)
     }
-    if (window === 'week') {
-      // 一周内开始（或正在进行）的活动
-      conds.push(`a.starts_at < now() + interval '7 day'`)
-    } else if (window === 'today') {
-      conds.push(`a.starts_at < now() + interval '1 day'`)
+    if (window) {
+      // Half-open intervals in the campus timezone; missing end follows the existing 2h rule.
+      const unit = window === 'week' ? 'week' : 'day'
+      const duration = window === 'week' ? '7 days' : '1 day'
+      const localStart = `date_trunc('${unit}', now() at time zone 'Asia/Shanghai')`
+      conds.push(`a.starts_at < ((${localStart} + interval '${duration}') at time zone 'Asia/Shanghai')`)
+      conds.push(`coalesce(a.ends_at, a.starts_at + interval '2 hours') > (${localStart} at time zone 'Asia/Shanghai')`)
     }
     const params: unknown[] = []
     if (placeIdRaw) {
@@ -502,8 +508,8 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
     */
     const orderCond =
       status === 'ended' || status === 'cancelled' || status === 'all'
-        ? `order by a.starts_at desc, a.id desc`
-        : `order by a.starts_at, a.id`
+        ? `order by starts_at desc, id desc`
+        : `order by starts_at, id`
 
     // 可选会话：活动**不需要**登录即可浏览，登录只用来推导 favoritedByMe
     // （与 index.ts:1749 的地点详情同一写法：未登录 ⇒ meId = null ⇒ favoritedByMe 恒 false）
@@ -511,14 +517,14 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
     if (sess.kind === 'db_down') return ctx.dbUnavailable(reply, new Error('session lookup failed'))
     const meId = sess.kind === 'ok' ? sess.user.userId : null
     try {
-      const r = await db.pool.query<ActivityRow>(
-        `${ACTIVITY_SELECT}
-          ${whereCond}
+      const r = await db.pool.query<ActivityRow & { result_total: string }>(
+        `with matched as (${ACTIVITY_SELECT} ${whereCond})
+         select matched.*, (count(*) over ())::text as result_total from matched
          ${orderCond}
          limit ${LIST_LIMIT}`,
         [meId, ...params],
       )
-      return { items: r.rows.map(activityToJson) }
+      return { items: r.rows.map(activityToJson), total: Number(r.rows[0]?.result_total ?? 0) }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return ctx.dbUnavailable(reply, err)
       reply.code(500)
