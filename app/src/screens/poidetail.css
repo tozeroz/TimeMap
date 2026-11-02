@@ -147,8 +147,6 @@
 
 /* ---- 时光机（029）：同一机位的过去 vs 现在 ---- */
 .tm {
-  border-top: 1px solid var(--c-divider);
-  padding: 20px 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -427,26 +425,6 @@
   accent-color: var(--c-primary);
 }
 
-.tm__modes {
-  display: flex;
-  border: 1px solid var(--c-divider);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.tm__modes button {
-  padding: 4px 10px;
-  border: 0;
-  background: var(--c-surface);
-  font-size: var(--f-meta);
-  color: var(--c-text-2);
-}
-
-.tm__modes button.is-on {
-  background: var(--c-primary);
-  color: var(--c-primary-fg);
-}
-
 .tm__caption {
   margin: 0;
   display: flex;
@@ -548,3 +526,26 @@
   line-height: 1.4;
   color: #999;
 }
+/* Campus history: compare first, disclose the full archive on demand. */
+.pd__historyStory { margin: 12px 0 16px; color: var(--c-text-2); font-size: 15px; line-height: 1.8; }
+.pd__historyStory summary { cursor: pointer; overflow-wrap: anywhere; }
+.pd__historyStory .pd__storyExpand, .pd__historyStory .pd__storyCollapse { display: block; color: var(--c-primary); min-height: 44px; padding-top: 6px; }
+.pd__historyStory .pd__storyCollapse { display: none; }
+.pd__historyStory[open] .pd__storyPreview, .pd__historyStory[open] .pd__storyExpand { display: none; }
+.pd__historyStory[open] .pd__storyCollapse { display: block; }
+.pd__archive { margin-top: 14px; border-top: 1px solid var(--c-divider); }
+.pd__archive > summary { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; color: var(--c-primary); font-size: 14px; list-style: none; }
+.pd__archive > summary::-webkit-details-marker { display: none; }
+.pd__archive > summary span { color: var(--c-text-2); font-size: 12px; }
+.pd__archive > summary::after { content: '+'; font-size: 20px; }
+.pd__archive[open] > summary::after { content: '−'; }
+.pd__archiveGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; list-style: none; padding: 0; margin: 12px 0 0; }
+.pd__archivePhoto { min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--c-text-2); overflow-wrap: anywhere; line-height: 1.6; }
+.pd__archivePhoto img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; }
+.pd__archivePhoto strong { color: var(--c-text); font-size: 14px; }
+.pd__archivePhoto .tm__postLink { margin: 0; min-height: 44px; text-align: left; }
+.tm__caption { font-size: 12px; line-height: 1.6; }
+.tm__viewChip, .tm__play-btn, .tm__tag { min-height: 44px; }
+.tm__stage { border-radius: 12px; }
+.pd__archive summary:focus-visible, .pd__historyStory summary:focus-visible, .tm button:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 3px; }
+@media (max-width: 350px) { .pd__archiveGrid { grid-template-columns: 1fr; } }

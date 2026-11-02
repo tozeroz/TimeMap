@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { navigate } from '../router'
 import './drawer.css'
 
@@ -25,12 +25,31 @@ const ITEMS: Array<{ label: string; to: string; demoOnly?: boolean }> = [
  * 菜单项按原版实测：账号与安全 / 编辑资料 / 校园认证 / 隐私设置 / 黑名单 / 版本信息 / 联系我们 / 扫一扫。
  * 末尾额外保留一个「更多功能」入口，用于访问 demo 的其余页面（非原版内容，单独标注）。
  */
-export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function Drawer({ open, onClose, actions = [] }: { open: boolean; onClose: () => void; actions?: Array<{ label: string; action: () => void }> }) {
+  const panel = useRef<HTMLElement>(null)
+  const closeRef = useRef(onClose)
+  useEffect(() => { closeRef.current = onClose }, [onClose])
+  useEffect(() => {
+    if (!open) return
+    const previous = document.activeElement as HTMLElement | null
+    panel.current?.querySelector('button')?.focus()
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { closeRef.current(); return }
+      if (event.key !== 'Tab') return
+      const buttons = panel.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')
+      if (!buttons?.length) return
+      const first = buttons[0]!, last = buttons[buttons.length - 1]!
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => { document.removeEventListener('keydown', handleKey); previous?.focus() }
+  }, [open])
   if (!open) return null
   return (
     <div className="drawer">
       <div className="drawer__mask" onClick={onClose} />
-      <nav className="drawer__panel">
+      <nav className="drawer__panel" ref={panel} role="dialog" aria-modal="true" aria-label="个人菜单">
         <header className="drawer__head">
           <span className="drawer__brand">TimeMap</span>
         </header>
@@ -48,6 +67,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
               </button>
             </li>
           ))}
+          {actions.map(item => <li key={item.label}><button className="drawer__item" onClick={() => { onClose(); item.action() }}>{item.label}</button></li>)}
         </ul>
         <div className="drawer__divider" />
         <button

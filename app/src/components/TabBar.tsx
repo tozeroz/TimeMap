@@ -1,5 +1,5 @@
 import { navigate } from '../router'
-import { IconCalendar, IconLocation, IconUser, IconUsers } from './icons'
+import { IconCalendar, IconCompass, IconLocation, IconMapTab, IconUser, IconUsers } from './icons'
 import './tabbar.css'
 
 /** Shared navigation; the visual labels keep their existing route destinations. */
@@ -12,11 +12,11 @@ const tabs = [
 ] as const
 
 export function TabBar({ active }: { active: TabKey }) {
-  return <nav className={`tabbar ${active === 'activities' ? 'tabbar--activities' : active === 'feed' ? 'tabbar--campus' : ''}`} aria-label="主导航">
+  return <nav className={`tabbar ${active === 'activities' ? 'tabbar--activities' : active === 'feed' ? 'tabbar--campus' : active === 'me' ? 'tabbar--me' : ''}`} aria-label="主导航">
     {tabs.map(({ key, route, label, Icon }) => <button key={key}
       className={`tabbar__item ${active === key ? 'is-active' : ''}`} data-tab={key}
       aria-current={active === key ? 'page' : undefined} onClick={() => navigate(route)}>
-      <Icon size={23} /><span className="tabbar__label">{label}</span>
+      {active === 'me' && key === 'map' ? <IconMapTab size={23} /> : active === 'me' && key === 'feed' ? <IconCompass size={23} /> : <Icon size={23} />}<span className="tabbar__label">{label}</span>
     </button>)}
   </nav>
 }

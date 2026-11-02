@@ -1,290 +1,73 @@
-/* 个人页：原版是纯白底 + 大留白，不要卡片化容器。
-   ⚠️ 这里原来是 `grid-template-columns: 1fr auto 1fr` 的三列布局，
-      左右两列放的是四个「待核对」占位行。那些占位已删除（QA 硬缺陷：
-      界面不该把内部核对状态显示给用户），所以改成单列居中 —— 不要再把列加回来。 */
-.me__profile {
-  display: flex;
-  justify-content: center;
-  align-items: start;
-  padding: 12px var(--pad-page) 6px;
-  background: var(--c-surface);
-}
+/* Reference: 校园记忆个人主页. Scope all visual changes to this page. */
+.me-page { --me-peach: #fbddc8; --me-paper: #fcf0e8; --me-ink: #102a43; background: var(--c-bg); color: var(--me-ink); }
+.me-page .topbar { height: 28px; background: transparent; padding: 0 14px; }
+.me-page .topbar__side { gap: 0; }
+.me-page .topbar .iconbtn { width: 38px; min-width: 44px; height: 44px; border: 0; background: transparent; box-shadow: none; color: var(--me-ink); transform: translateY(7px); z-index: 1; }
+.me__content { padding: 0 14px 20px; }
+.me__profile { display: flex; align-items: center; flex-direction: column; position: relative; padding: 0 12px; }
+.me__avatar { width: 78px; height: 78px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--me-peach); color: var(--me-ink); font-size: 42px; font-weight: 800; line-height: 1; flex: none; user-select: none; }
+.me__leaf { position: absolute; width: 29px; height: 40px; top: 48px; left: calc(50% + 58px); color: #8d9c83; transform: rotate(8deg); pointer-events: none; }
+.me__name { font-size: 16px; font-weight: 750; line-height: 1.2; text-align: center; max-width: 100%; overflow-wrap: anywhere; margin: 5px 0 1px; }
+.me__edit { margin-top: -7px; margin-bottom: -9px; position: relative; min-height: 44px; min-width: 90px; display: inline-flex; gap: 6px; align-items: center; justify-content: center; padding: 0 10px; border: 0; background: transparent; color: var(--me-ink); font-size: 12px; z-index: 0; }
+.me__edit::before { content: ''; position: absolute; z-index: -1; inset: 9px 0; border: 1px solid var(--me-ink); border-radius: 99px; }
+.me__tabs { display: flex; border-bottom: 1px solid var(--c-divider); margin: 0 0 11px; }
+.me__tabs button { position: relative; width: 50%; min-height: 44px; padding: 7px 4px 11px; color: var(--c-text-2); background: transparent; font-weight: 650; font-size: 15px; border: 0; }
+.me__tabs button.is-active { color: var(--me-ink); font-weight: 750; }
+.me__tabs button.is-active::after { content: ''; position: absolute; width: 40px; height: 3px; border-radius: 6px 6px 0 0; background: var(--c-brand); bottom: -1px; left: calc(50% - 20px); }
+.me__panel { outline-offset: 4px; }
+.me__grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); grid-auto-rows: 2px; column-gap: 9px; row-gap: 8px; align-items: start; }
+.memory-card { min-width: 0; align-self: start; }
+.memory-card > a { display: block; text-decoration: none; color: inherit; border-radius: 6px; background: var(--c-surface); overflow: hidden; }
+.memory-card__media { position: relative; width: 100%; max-height: 330px; overflow: hidden; background: var(--c-surface-sunken); }
+.memory-card__media img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.memory-card--sticker > a, .memory-card--sticker .memory-card__media { background: transparent; }
+.memory-card--sticker .memory-card__media img { object-fit: contain; }
+.memory-card__overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 18px 8px 6px; display: flex; align-items: center; gap: 4px; font-size: 11px; color: white; background: linear-gradient(transparent,rgba(0,0,0,.55)); }
+.memory-card__overlay svg { color: #ff8b52; flex: none; }
+.memory-card__body { padding: 8px; display: flex; align-items: center; gap: 5px; }
+.memory-card__title { min-width: 0; flex: 1; margin: 0; font-size: 13px; line-height: 1.55; font-weight: 400; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.memory-card__meta { display: flex; align-items: center; justify-content: space-between; gap: 4px; color: var(--c-text-2); font-size: 11px; }
+.memory-card__likes { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; white-space: nowrap; }
+.memory-card__likes svg { flex: none; color: var(--me-ink); }
+.memory-card--tall .memory-card__body { display: block; }
+.memory-card--tall .memory-card__meta { margin-top: 5px; }
+.memory-card__place { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.memory-card__place svg { color: var(--c-brand); flex: none; }
+.memory-card__place > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memory-card--text > a { background: var(--me-paper); }
+.memory-card--text .memory-card__body { display: flex; align-items: stretch; flex-direction: column; padding: 18px 10px 9px; min-height: 105px; }
+.memory-card--text .memory-card__title { flex: none; -webkit-line-clamp: 6; font-size: 12px; line-height: 1.8; }
+.memory-card--text .memory-card__meta { margin-top: auto; padding-top: 20px; width: 100%; }
+.memory-card__meta time { white-space: nowrap; margin-left: auto; }
+.memory-card__broken { height: 100%; min-height: 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-size: 12px; color: var(--c-text-2); }
+.me__activityLink { margin: -4px 0 9px auto; padding: 0 2px; display: flex; align-items: center; gap: 8px; min-height: 44px; color: var(--c-primary); font-size: 13px; background: transparent; border: 0; }
+.me__state { text-align: center; padding: 40px 12px 48px; color: var(--c-text-2); }
+.me__state > svg { color: var(--c-sage); margin: 0 auto 10px; }
+.me__state h2 { color: var(--me-ink); font-size: 16px; font-weight: 600; margin: 8px 0; }
+.me__state p { font-size: 13px; line-height: 1.8; margin: 0 0 15px; overflow-wrap: anywhere; }
+.me__state button { min-height: 44px; border: 1px solid var(--c-divider); border-radius: 99px; background: transparent; padding: 8px 18px; color: var(--c-primary); font-size: 13px; }
+.me__state button.me__textButton { border: 0; display: block; margin: 6px auto 0; }
+.me__skeleton { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.me__skeleton i { height: 185px; background: var(--c-surface-sunken); border-radius: 6px; }
+.me__skeleton i:nth-child(2n) { height: 125px; }
+.me__notice { position: absolute; z-index: 35; bottom: 16px; left: 18px; right: 18px; background: var(--me-ink); color: white; border-radius: 12px; padding: 10px 12px; font-size: 13px; display: flex; align-items: center; }
+.me__notice button { color: inherit; background: transparent; border: 0; min-width: 44px; min-height: 44px; margin-left: auto; font-size: 22px; }
+.me__dialog { max-width: min(360px,calc(100vw - 32px)); padding: 24px; border: 0; border-radius: 16px; background: var(--c-bg); color: var(--c-text); }
+.me__dialog::backdrop { background: rgba(16,42,67,.4); }
+.me__dialog h2 { font-size: 19px; margin: 0 0 10px; }
+.me__dialog p { font-size: 14px; line-height: 1.7; }
+.me__dialog > div { display: flex; gap: 10px; }
+.me__dialog button { flex: 1; min-height: 44px; border: 1px solid var(--c-divider); border-radius: 99px; background: transparent; color: var(--c-text); }
+.me__dialog button:last-child { color: var(--c-primary); }
+.me-page button, .me-page summary, .me-page a { cursor: pointer; }
+.me-page button:focus-visible, .me-page a:focus-visible, .me-page [tabindex]:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 3px; }
+.me-page button:active, .memory-card > a:active { opacity: .75; }
+.shell__viewport:has(.me-page) .statusbar { background: var(--c-bg); }
+.tabbar--me { background: var(--c-bg); }
+.tabbar--me .tabbar__item.is-active { color: var(--c-primary); background: transparent; font-weight: 500; }
+@media (min-width: 400px) { .me__avatar { width: 84px; height: 84px; } .me__profile { padding-top: 1px; padding-bottom: 0; } .memory-card__title { font-size: 14px; } }
+@media (max-width: 350px) { .me__content { padding-left: 10px; padding-right: 10px; } .memory-card--text .memory-card__body { padding: 13px 10px 9px; } .memory-card--text .memory-card__title { font-size: 13px; } .memory-card__meta { flex-wrap: wrap; } }
+@media (prefers-reduced-motion: reduce) { .me-page .drawer__panel { animation: none; } }
 
-/* ===========================================================================
-   ⭐ TimeMap P0 / ME-001：功能入口区（我的发布 / 我的收藏 / 账号设置 / 管理端）
-   =========================================================================== */
-/* 为什么单开一段而不是塞进 .me__side：
-   .me__side 那两列放的是**复刻页的四个"待核对"条目**（不可点、且目的地未评估），
-   而这里的入口是**可点的真实功能**。混在一起会让"能点的"和"不能点的"看起来一样。
-   ⇒ 占位条目已随 ME-001 落地一并删除，本段现在是「我的」唯一的功能入口列表。 */
-.me__entries {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin-top: 10px;
-  background: var(--c-divider);
-}
-
-.me__entryBtn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px var(--pad-page);
-  border: 0;
-  background: var(--c-surface);
-  color: var(--c-text);
-  font-size: var(--f-body);
-  text-align: left;
-}
-
-.me__entryBtn > span:first-of-type {
-  flex: 1;
-}
-
-/* 「管理员」标记：让"这个入口为什么会出现"一眼可读（它不是所有人都有的） */
-.me__adminTag {
-  flex: none;
-  padding: 2px 8px;
-  border-radius: var(--r-pill);
-  background: var(--c-accent-soft);
-  color: var(--c-accent);
-  font-size: var(--f-tiny);
-}
-
-/* ⚠️ `.me__side` / `.me__entry` / `.me__deferredTag` 三组规则已随
-   「待核对」占位行一起删除（ME-001 落地后无用例）。留着的死 CSS 会让人
-   误以为界面上还有左/右两列条目。 */
-
-.me__center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  min-width: 132px;
-}
-
-.me__avatar {
-  width: 96px;
-  height: 96px;
-  border-radius: var(--r-pill);
-  background: var(--c-surface-sunken);
-}
-
-.me__name {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--c-text);
-}
-
-.me__edit {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 13px;
-  border-radius: var(--r-pill);
-  background: var(--c-surface-sunken);
-  font-size: 12.5px;
-  color: var(--c-text-2);
-}
-
-/* 记录入口 */
-.me__prompt {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px var(--pad-page) 26px;
-  background: var(--c-surface);
-}
-
-/* 语音动态条 + 提示气泡（原版位置：头像区下方） */
-.me__voiceRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 20px var(--pad-page) 4px;
-  background: var(--c-surface);
-}
-
-.me__voiceCard {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 16px 9px 14px;
-  border-radius: var(--r-pill);
-  background: #f1f2f4;
-}
-
-.me__voiceBar {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  height: 20px;
-}
-
-.me__voiceBar i {
-  width: 2.5px;
-  border-radius: 2px;
-  background: var(--c-text-2);
-}
-
-.me__voiceLabel {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--c-text);
-  white-space: nowrap;
-}
-
-.me__capture {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 11px 18px;
-  border-radius: var(--r-pill);
-  background: #111;
-  color: #fff;
-  font-size: 14.5px;
-  font-weight: 700;
-}
-
-.me__capture:active {
-  transform: scale(0.97);
-}
-
-.me__hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.me__hint-spark {
-  font-size: 14px;
-  color: #f5b800;
-}
-
-.me__hint-bubble {
-  padding: 6px 13px;
-  border-radius: var(--r-pill);
-  background: #e8effe;
-  color: #3b6ef5;
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-/*
-  登录状态区（M3 Slice 0B）。
-  原版不登录也能浏览，所以这里只是个人页上的一个状态行 + 入口，不做成强制拦截。
-*/
-.me__auth {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 14px 16px 0;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: var(--c-surface-sunken);
-}
-
-.me__authWho {
-  font-size: 13px;
-  color: var(--c-text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.me__authBtn {
-  flex: 0 0 auto;
-  padding: 7px 14px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--c-divider);
-  background: transparent;
-  font-size: 13px;
-  color: var(--c-text-2);
-}
-
-.me__authBtn--primary {
-  border-color: transparent;
-  background: #111;
-  color: #fff;
-}
-
-/* ⚠️ 原 `.me__entry--deferred` / `.me__deferredTag` 两条规则已删除：
-   它们服务的四个「待核对」占位行已按 ME-001 换成真实入口（我的发布/收藏/账号设置）。 */
-
-/* ===========================================================================
-   M5 WO#14：个人页的**权威自身身份**相关样式
-   =========================================================================== */
-
-/* 首字占位头像（users 表没有 avatar 列）。
-   ⚠️ 改前这里用 mock 生成的 SVG（`me.avatar` → data:image/svg+xml）——
-      与"编造的昵称"是同一类问题：看起来像真实资料，其实是我们画的。
-      按 WO#12/#13 的同一冻结改为首字占位，**不新增数据列**。 */
-.me__avatar--ph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--c-text-2);
-  background: var(--c-surface-sunken);
-  user-select: none;
-}
-
-/* ---------------------------------------------------------------------------
-   「清除本机缓存」确认层（见 MeScreen 的 cacheOpen）
-   --------------------------------------------------------------------------- */
-.me__sheetMask {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  align-items: flex-end;
-  background: rgba(12, 35, 58, 0.42);
-}
-.me__sheet {
-  width: 100%;
-  padding: 18px var(--pad-page) calc(18px + env(safe-area-inset-bottom, 0px));
-  border-radius: 16px 16px 0 0;
-  background: var(--c-surface, #fff);
-}
-.me__sheetTitle {
-  margin: 0 0 8px;
-  font-size: var(--f-title, 16px);
-  font-weight: 600;
-}
-.me__sheetBody {
-  margin: 0;
-  color: var(--c-text-2, #43566d);
-  font-size: var(--f-meta, 12.5px);
-  line-height: 1.6;
-}
-.me__sheetMsg {
-  margin: 10px 0 0;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(12, 35, 58, 0.06);
-  color: var(--c-text-2, #43566d);
-  font-size: var(--f-meta, 12.5px);
-}
-.me__sheetBtns {
-  display: flex;
-  gap: 10px;
-  margin-top: 16px;
-}
-.me__sheetBtn {
-  flex: 1;
-  padding: 11px 0;
-  border: 0;
-  border-radius: var(--r-pill, 999px);
-  background: var(--c-fill, #eef1f4);
-  color: var(--c-text, #16202b);
-  font-size: var(--f-body, 14px);
-}
-.me__sheetBtn--danger {
-  background: var(--c-primary, #0c233a);
-  color: var(--c-primary-fg, #fff);
-}
+.me-page button:disabled { cursor: wait; opacity: .6; }
+.tabbar--me .tabbar__item.is-active > svg { color: var(--c-brand); }

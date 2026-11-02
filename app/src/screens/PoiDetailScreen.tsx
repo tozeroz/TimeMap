@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { getPlace, mediaUrl, placePhotoSrc, relativeTime, type ApiPlaceActivity, type ApiPlaceDetail, type ApiPlacePost } from '../api/client'
+import { getPlace, mediaUrl, relativeTime, type ApiPlaceActivity, type ApiPlaceDetail, type ApiPlacePost } from '../api/client'
 import { Screen, TopBar } from '../components/Shell'
-import { IconBack, IconCalendar, IconChevronRight, IconComment, IconEdit, IconHeart, IconImage, IconLocation, IconStar } from '../components/icons'
+import { IconBack, IconCalendar, IconChevronRight, IconComment, IconEdit, IconHeart, IconLocation, IconStar } from '../components/icons'
 import { goBack, navigate } from '../router'
 import { TimeMachine } from './TimeMachine'
 import './poidetail.css'
@@ -60,17 +60,7 @@ export function PoiDetailScreen({ id }: { id: string }) {
         {place.description && <p className="pd__desc" data-place-desc>{place.description}</p>}
         <button className="pd__mapLink" onClick={() => navigate('map', { placeId: place.id })}>在地图中查看 <span aria-hidden="true">→</span></button>
       </section>
-      <section className="pd__history" data-place-history={place.history ? 'present' : 'absent'}>
-        <div className="pd__sectionHead"><h2 className="pd__sectionTitle">校史与老照片</h2><span className="pd__aside">时光里的校园</span></div>
-        {!place.history && !place.photos.length ? <div className="pd__historyEmpty"><IconImage size={48} /><div><p>暂无校史与老照片</p><span>这里的故事，等待慢慢补全。</span></div></div> : <>
-          <p className="pd__historyText">{place.history || '暂无校史资料'}</p>
-          {place.photos.length > 0 && <ul className="pd__photos">{place.photos.map(photo => <li className="pd__photo" key={photo.id} data-photo-year={photo.yearLabel}>
-            {placePhotoSrc(photo) && <img className="pd__photoImg" src={placePhotoSrc(photo)!} alt={photo.title} loading="lazy" onError={e => { e.currentTarget.hidden = true }} />}
-            <strong>{photo.title}</strong><span>{photo.yearLabel || '年代不详'}</span><span data-photo-source>来源：{photo.source || '来源待补充'}</span>
-          </li>)}</ul>}
-        </>}
-      </section>
-      <TimeMachine photos={place.photos} />
+      <TimeMachine photos={place.photos} history={place.history} />
       <section className="pd__activities" data-place-activities={place.activities.length}>
         <div className="pd__sectionHead"><h2 className="pd__sectionTitle">近期活动</h2><button className="pd__more" data-pd-act-all={place.id} onClick={() => navigate('activities', { placeId: place.id })}>查看全部<IconChevronRight /></button></div>
         {!place.activities.length ? <p className="pd__activityEmpty"><IconCalendar size={26} />近期暂无活动</p> : <ul className="pd__actList">{place.activities.map(a => <li key={a.id}><button className="pd__act" data-place-activity={a.id} onClick={() => navigate('activity', { id: a.id, placeId: place.id })}><span className="pd__actTitle">{a.title}</span><span className="pd__actMeta">{formatWhen(a)}</span><span className={'pd__actBadge pd__actBadge--' + a.status}>{statusLabel(a.status)}</span></button></li>)}</ul>}

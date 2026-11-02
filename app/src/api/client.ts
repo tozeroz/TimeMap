@@ -1307,10 +1307,10 @@ export async function adminLogin(phone: string, password: string): Promise<ApiRe
   }
 }
 
-/** 当前用户（未登录时返回 null，不抛异常） */
-export async function me(): Promise<SessionUser | null> {
+/** Authoritative identity with status preserved, so network errors are distinct from 401. */
+export async function getMyIdentity(): Promise<ApiResult<SessionUser>> {
   const r = await request<SessionUser>('/api/auth/me')
-  if (!r.ok) return null
+  if (!r.ok) return r
   /*
     ⭐ TimeMap P0：把服务端的权威字段（含 **role**）写回本地会话缓存。
     为什么必须补这一步：`role` 是 P0 才进 `GET /api/auth/me` 的，
@@ -1326,7 +1326,12 @@ export async function me(): Promise<SessionUser | null> {
     phone: u.phone ?? null,
     ...(u.role ? { role: u.role } : {}),
   })
-  return u
+  return { ok: true, value: u }
+}
+
+export async function me(): Promise<SessionUser | null> {
+  const result = await getMyIdentity()
+  return result.ok ? result.value : null
 }
 
 // ---------------------------------------------------------------------------

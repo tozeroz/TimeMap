@@ -1,319 +1,233 @@
-import { useEffect, useState } from 'react'
-import { logout, me as fetchMe } from '../api/client'
-import { isAdmin, type SessionUser } from '../api/session'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { failText, getMyIdentity, listMyFavorites, listPosts, logout, mediaUrl, type ApiPost } from '../api/client'
+import type { SessionUser } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { Drawer } from '../components/Drawer'
-import {
-  IconChatBubble,
-  IconChevronRight,
-  IconEdit,
-  IconImage,
-  IconMenu,
-  IconSettings,
-  IconShare,
-  IconStar,
-} from '../components/icons'
+import { IconChatBubble, IconEdit, IconHeart, IconImage, IconLocation, IconMenu } from '../components/icons'
 import { navigate } from '../router'
 import { clearLocalCaches } from '../data/store'
 import './me.css'
 
-/** 个人页：对齐原版 —— 纯白底、无多余模块，中部只有「拍下眼前的风景」+ 提示气泡 */
+type Tab = 'posts' | 'favorites'
+type Collection = { phase: 'loading' | 'ready' | 'error'; items: ApiPost[]; error?: string }
+const initialCollection: Collection = { phase: 'loading', items: [] }
+const tabKey = 'timemap.me.tab'
+
+/** Personal memories use authoritative identity and independent private collections. */
 export function MeScreen() {
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  // ⚠️ WO#14：原来这里还有 `const [session, setSession] = useState(() => getSession())`。
-  //    身份改由**权威** `identity`（GET /api/auth/me）提供后，`session` 不再被读取，
-  //    tsc 的 noUnusedLocals 当场报 TS6133 —— 于是删掉（而不是留着当"以后可能有用"）。
-  //    logout 路径仍用 getSession 吗？不再需要：logout() 内部已 clearSession()。
-
-  /*
-    ⭐ M5 WO#14：**身份必须只有一个权威来源**。
-
-    ## 改前（本轮设备实测）
-      · 中心大字：`me.name` = mock 的「自定义名称6」
-      · 下方登录行：`session.user.displayName` = 权威「Lemy」
-      ⇒ **同一屏上同时显示两个身份**（用户抬头看到 A、低头看到 B）。
-    ## 两处**互相独立**的缺陷
-      ① 中心名字/头像走 mock（mock.ts 的 me）
-      ② 登录行读的是**陈旧缓存**：`getSession()` 有模块级 cache，而本组件只挂载时读一次；
-         WO#13 的 PATCH 成功后原先**没有**任何代码把新 displayName 写回缓存
-         （现已在 ProfileEditScreen 成功分支调用 `updateSessionUser`）。
-    ## 现在的做法
-      用 `GET /api/auth/me` 取**权威** displayName，**中心大字与登录行共用同一个值**
-      —— 从结构上消除"同屏两个身份"的可能，而不是让两处各自去读各自的来源。
-      未登录 / 读到失败 → **明确不可用态，不回落 mock**（与 WO#12 冻结的 identity 安全原则同源）。
-  */
   const [identity, setIdentity] = useState<SessionUser | null>(null)
-  const [phase, setPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
-  /**
-   * 「清除本机缓存」确认层。
-   *
-   * 为什么需要这个入口：旧版本把发帖记录只写在 localStorage（`mine-…`），这些记录
-   * 会一直混在信息流里、点开只能报错，而全仓此前**没有任何清理入口** ——
-   * 用户只能去清整站数据（顺带把登录态一起清掉）。这里给一个只清缓存、不动登录的出口。
-   */
-  const [cacheOpen, setCacheOpen] = useState(false)
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'unauth' | 'error'>('loading')
+  const [identityError, setIdentityError] = useState('')
+  const [revision, setRevision] = useState(0)
+  const [tab, setTab] = useState<Tab>(() => sessionStorage.getItem(tabKey) === 'favorites' ? 'favorites' : 'posts')
+  const [collections, setCollections] = useState<Record<Tab, Collection>>({ posts: initialCollection, favorites: initialCollection })
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [notice, setNotice] = useState('')
   const [cacheMsg, setCacheMsg] = useState('')
+  const [loggingOut, setLoggingOut] = useState(false)
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const identityEpoch = useRef(0)
+  const cacheDialog = useRef<HTMLDialogElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const activeTab = useRef(tab)
+  const positions = useRef<Record<Tab, number>>({ posts: 0, favorites: 0 })
 
   useEffect(() => {
     let alive = true
-    void (async () => {
-      const u = await fetchMe()
-      if (!alive) return
-      if (!u) {
+    const epoch = ++identityEpoch.current
+    void getMyIdentity().then(result => {
+      if (!alive || epoch !== identityEpoch.current) return
+      if (!result.ok) {
         setIdentity(null)
-        setPhase('unavailable')
+        setIdentityError(failText(result))
+        setPhase(result.status === 401 ? 'unauth' : 'error')
         return
       }
-      setIdentity(u)
+      setIdentity(result.value)
       setPhase('ready')
-    })()
-    return () => {
-      alive = false
+    })
+    return () => { alive = false }
+  }, [revision])
+
+  useEffect(() => {
+    if (!identity) return
+    let alive = true
+    const load = async (which: Tab) => {
+      const result = which === 'posts' ? await listPosts({ authorId: identity.id, sort: 'latest' }) : await listMyFavorites()
+      if (!alive) return
+      setCollections(current => ({ ...current, [which]: result.ok
+        ? { phase: 'ready', items: result.value }
+        : { phase: 'error', items: [], error: result.status === 401 ? '登录已过期，请重新登录' : failText(result) } }))
     }
-  }, [])
+    void load('posts'); void load('favorites')
+    return () => { alive = false }
+  }, [identity])
 
-  /** 权威显示名（唯一来源）。未就绪时为空串，避免任何地方退回 mock。 */
+  useEffect(() => {
+    const body = contentRef.current?.closest('.screen__body')
+    if (!body || !identity) return
+    const key = `timemap.me.scroll.${identity.id}`
+    try { positions.current = JSON.parse(sessionStorage.getItem(key) || '{"posts":0,"favorites":0}') } catch { /* Invalid view metadata is disposable. */ }
+    const save = () => {
+      positions.current[activeTab.current] = body.scrollTop
+      sessionStorage.setItem(key, JSON.stringify(positions.current))
+    }
+    body.addEventListener('scroll', save, { passive: true })
+    return () => { body.removeEventListener('scroll', save) }
+  }, [identity])
+
+  const collection = collections[tab]
+  useLayoutEffect(() => {
+    if (phase === 'ready' && collection.phase === 'ready') {
+      const body = contentRef.current?.closest('.screen__body')
+      if (body) body.scrollTop = positions.current[tab] || 0
+    }
+  }, [tab, phase, collection.phase])
+
+  function retryCollection() {
+    // Reload identity as well, so a revoked session never reuses cached private content.
+    setCollections({ posts: initialCollection, favorites: initialCollection })
+    setRevision(value => value + 1)
+  }
+
+  function switchTab(next: Tab) {
+    if (next === tab) return
+    const body = contentRef.current?.closest('.screen__body')
+    if (body) positions.current[tab] = body.scrollTop
+    activeTab.current = next
+    sessionStorage.setItem(tabKey, next)
+    setTab(next)
+  }
+
+  async function share() {
+    const url = new URL(import.meta.env.BASE_URL, window.location.href)
+    url.hash = '/map'; url.search = ''
+    try {
+      if (navigator.share) await navigator.share({ title: 'BJTU TimeMap', text: '把校园里的每一刻，存成回忆。', url: url.href })
+      else { await navigator.clipboard.writeText(url.href); setNotice('TimeMap 链接已复制') }
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') setNotice('分享暂时不可用，请复制浏览器中的站点地址')
+    }
+  }
+
   const displayName = identity?.displayName ?? ''
-  /** 头像首字占位：users 表没有 avatar 列（与 WO#12/WO#13 同一冻结） */
-  const avatarInitial = displayName.trim().slice(0, 1) || '?'
+  const initial = Array.from(displayName.trim())[0] || '?'
+  const menuActions = [
+    { label: '我的发布', action: () => switchTab('posts') },
+    { label: '我的收藏', action: () => switchTab('favorites') },
+    { label: '活动收藏', action: () => navigate('favorites') },
+    { label: '清除本机缓存', action: () => { setCacheMsg(''); cacheDialog.current?.showModal() } },
+    ...(identity?.role === 'admin' ? [{ label: '管理端', action: () => navigate('admin') }] : []),
+    { label: loggingOut ? '正在退出…' : identity ? '退出登录' : '登录 TimeMap', action: () => {
+      if (!identity) { navigate('loginselect'); return }
+      if (loggingOut) return
+      setLoggingOut(true)
+      identityEpoch.current++
+      void logout().finally(() => {
+        setIdentity(null); setCollections({ posts: initialCollection, favorites: initialCollection })
+        positions.current = { posts: 0, favorites: 0 }
+        setPhase('unauth'); setLoggingOut(false)
+      })
+    } },
+  ]
 
-  return (
-    <Screen
-      header={
-        <TopBar
-          left={
-            <>
-              <button
-                className="iconbtn"
-                aria-label="菜单"
-                onClick={() => setDrawerOpen(true)}
-              >
-                <IconMenu size={22} strokeWidth={2.2} />
-              </button>
-              <button className="iconbtn" aria-label="分享">
-                <IconShare size={20} strokeWidth={2.2} />
-              </button>
-            </>
-          }
-          right={
-            <button className="iconbtn" onClick={() => navigate('message')} aria-label="消息">
-              <IconChatBubble size={22} strokeWidth={2.2} />
-            </button>
-          }
-          variant="plain"
-        />
-      }
-      scroll
-    >
-      <section className="me__profile">
-        <div className="me__center">
-          {/*
-            头像：**首字占位**（users 表没有 avatar 列）。
-            改前是 `me.avatar`（mock 生成的 SVG data URI）—— 与"编造的昵称"同一类问题：
-            看起来像真实资料，其实是我们画的。
-          */}
-          <div className="me__avatar me__avatar--ph" aria-hidden data-me-avatar-placeholder>
-            {phase === 'loading' ? '' : avatarInitial}
-          </div>
-          {/*
-            昵称：`data-me-name` 是测试钩子；值来自**权威** `GET /api/auth/me`。
-            ⚠️ 这里**刻意不写** `{displayName || '某个兜底名'}`：
-               读不到就显示不可用态，**绝不回落 mock**（WO#14 的核心修复之一）。
-          */}
-          {phase === 'ready' ? (
-            <h2 className="me__name" data-me-name>
-              {displayName}
-            </h2>
-          ) : (
-            <h2 className="me__name" data-me-name data-me-name-unavailable>
-              {phase === 'loading' ? '加载中…' : '未登录'}
-            </h2>
-          )}
-          {/* ⭐ 只有这一个入口指向 ProfileEditScreen（有基线支持：baseline.json:42） */}
-          <button className="me__edit" data-me-entry="edit-profile" onClick={() => navigate('profile-edit')}>
-            <IconEdit size={14} />
-            <span>编辑资料</span>
-          </button>
+  return <Screen className="me-page" header={<TopBar variant="plain" left={<>
+    <button ref={menuButton} className="iconbtn" aria-label="菜单" onClick={() => setDrawerOpen(true)}><IconMenu size={23} /></button>
+    <button className="iconbtn" aria-label="分享 TimeMap" onClick={() => void share()}><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="m8 10 8-5M8 14l8 5"/><circle cx="5" cy="12" r="3"/><circle cx="19" cy="3.5" r="3"/><circle cx="19" cy="20.5" r="3"/></svg></button>
+  </>} right={<button className="iconbtn" aria-label="消息" onClick={() => navigate('message')}><IconChatBubble size={24} /></button>} />}>
+    <div ref={contentRef} className="me__content">
+      <section className="me__profile" aria-label="个人资料">
+        <div className={`me__avatar${phase === 'loading' ? ' is-loading' : ''}`} aria-hidden="true" data-me-avatar-placeholder>{phase === 'loading' ? '' : initial}</div>
+        <LeafArtwork />
+        <h1 className="me__name" data-me-name>{phase === 'ready' ? displayName : phase === 'loading' ? '加载中…' : phase === 'unauth' ? '未登录' : '资料加载失败'}</h1>
+        <button className="me__edit" data-me-entry="edit-profile" disabled={phase === 'loading'} onClick={() => { if (phase === 'error') { setPhase('loading'); setRevision(value => value + 1) } else navigate(identity ? 'profile-edit' : 'loginselect') }}><IconEdit size={16} /><span>{identity ? '编辑资料' : phase === 'loading' ? '读取资料…' : phase === 'error' ? '重新加载' : '登录 TimeMap'}</span></button>
+      </section>
+      <div className="me__tabs" role="tablist" aria-label="我的校园记忆">
+        {([{ key: 'posts', label: '我的发布' }, { key: 'favorites', label: '我的收藏' }] as const).map(item => <button
+          key={item.key} id={`me-tab-${item.key}`} role="tab" aria-selected={tab === item.key} aria-controls="me-memory-panel"
+          tabIndex={tab === item.key ? 0 : -1} className={tab === item.key ? 'is-active' : ''}
+          onClick={() => switchTab(item.key)} onKeyDown={event => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+            event.preventDefault()
+            const next = event.key === 'Home' ? 'posts' : event.key === 'End' ? 'favorites' : tab === 'posts' ? 'favorites' : 'posts'
+            switchTab(next); document.getElementById(`me-tab-${next}`)?.focus()
+          }}>{item.label}</button>)}
+      </div>
+      <section className="me__panel" id="me-memory-panel" role="tabpanel" aria-labelledby={`me-tab-${tab}`} tabIndex={0}>
+        {phase === 'unauth' ? <div className="me__state"><IconImage size={36} /><h2>校园记忆，等你续写</h2><p>登录后查看自己的发布与收藏。</p><button onClick={() => navigate('loginselect')}>登录 TimeMap</button></div>
+          : phase === 'error' ? <div className="me__state" role="status"><h2>暂时无法读取资料</h2><p>{identityError}</p><button onClick={() => { setPhase('loading'); setRevision(value => value + 1) }}>重试</button></div>
+          : <>
+            {tab === 'favorites' && <button className="me__activityLink" onClick={() => navigate('favorites')}>活动收藏 <span aria-hidden="true">→</span></button>}
+            {(phase === 'loading' || collection.phase === 'loading') ? <div className="me__skeleton" aria-label="正在加载校园记忆" role="status"><i /><i /><i /><i /></div>
+              : collection.phase === 'error' ? <div className="me__state" role="status"><h2>记忆暂时没能加载</h2><p>{collection.error}</p><button onClick={() => void retryCollection()}>重新加载</button><button className="me__textButton" onClick={() => navigate('loginselect')}>重新登录</button></div>
+              : collection.items.length ? <MemoryGrid posts={collection.items} />
+              : <div className="me__state"><IconImage size={36} /><h2>{tab === 'posts' ? '还没有留下校园记忆' : '暂无可展示的收藏内容'}</h2><p>{tab === 'posts' ? '一张照片，一段心情，都是校园里的独家记忆。' : '遇见喜欢的校园故事，可以收藏在这里。'}</p><button onClick={() => navigate(tab === 'posts' ? 'publish' : 'campus')}>{tab === 'posts' ? '记录第一段回忆' : '去广场看看'}</button></div>}
+          </>}
+      </section>
+    </div>
+    {notice && <div className="me__notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice('')}>×</button></div>}
+    <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} actions={menuActions} />
+    <dialog ref={cacheDialog} onClose={() => menuButton.current?.focus()} className="me__dialog" aria-labelledby="me-cache-title" onClick={event => { if (event.target === event.currentTarget) cacheDialog.current?.close() }}>
+      <h2 id="me-cache-title">清除本机缓存？</h2><p>会清掉本机旧动态与页面缓存，登录状态和地图视图不受影响。</p>
+      {cacheMsg && <p role="status" data-cache-result>{cacheMsg}</p>}
+      <div><button onClick={() => cacheDialog.current?.close()}>取消</button><button onClick={() => { const result = clearLocalCaches(); setCacheMsg(`已清除：本机旧动态 ${result.posts} 条、页面缓存 ${result.snapshots} 份`) }}>清除</button></div>
+    </dialog>
+  </Screen>
+}
+
+function LeafArtwork() {
+  return <svg className="me__leaf" viewBox="0 0 46 64" fill="none" aria-hidden="true"><g fill="currentColor"><path d="M9 58C17 43 27 28 37 7" stroke="currentColor" strokeWidth="1.2" /><path d="M32 20Q29 8 40 2Q41 14 32 20ZM25 32Q24 20 35 18Q35 28 25 32ZM18 44Q17 33 29 31Q28 40 18 44ZM26 28Q15 25 17 13Q25 17 26 28ZM17 42Q7 39 10 28Q18 32 17 42ZM12 53Q14 43 25 44Q20 52 12 53Z" /></g></svg>
+}
+
+/** Row spans preserve source order while each visual column flows independently. */
+function MemoryGrid({ posts }: { posts: ApiPost[] }) {
+  const grid = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const element = grid.current
+    if (!element) return
+    const resize = () => {
+      const gap = parseFloat(getComputedStyle(element).rowGap) || 10
+      const nextRow = [1, 1]
+      element.querySelectorAll<HTMLElement>('.memory-card').forEach((card, index) => {
+        const content = card.firstElementChild as HTMLElement
+        const column = index % 2
+        const span = Math.ceil((content.getBoundingClientRect().height + gap) / (2 + gap))
+        card.style.gridColumn = String(column + 1)
+        card.style.gridRow = `${nextRow[column]} / span ${span}`
+        nextRow[column]! += span
+      })
+    }
+    const observer = new ResizeObserver(resize)
+    element.querySelectorAll('.memory-card > a').forEach(card => observer.observe(card))
+    observer.observe(element)
+    resize()
+    return () => observer.disconnect()
+  }, [posts])
+  return <div className="me__grid" ref={grid}>{posts.map(post => <MemoryCard key={post.id} post={post} />)}</div>
+}
+
+function MemoryCard({ post }: { post: ApiPost }) {
+  const [broken, setBroken] = useState(false)
+  const photo = post.images?.[0]
+  const sticker = post.imageMode === 'sticker'
+  const date = new Date(post.createdAt)
+  const year = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric' }).format(new Date())
+  const validDate = !Number.isNaN(date.getTime())
+  const shortDate = validDate ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', ...(new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric' }).format(date) !== year ? { year: 'numeric' as const } : {}), month: 'long', day: 'numeric' }).format(date) : ''
+  const tall = !!photo?.width && !!photo?.height && photo.height / photo.width > 1.1
+  return <article className={`memory-card ${photo ? 'memory-card--photo' : 'memory-card--text'}${sticker ? ' memory-card--sticker' : ''}${tall ? ' memory-card--tall' : ''}`}>
+    <a href={`#/feed?id=${encodeURIComponent(post.id)}`} aria-label={`查看记忆：${post.body || post.place || '校园照片'}`}>
+      {photo && <div className="memory-card__media" style={{ aspectRatio: photo.width && photo.height ? `${photo.width} / ${photo.height}` : '1 / 1' }}>
+        {broken ? <span className="memory-card__broken"><IconImage size={26} />照片暂时无法显示</span> : <img src={mediaUrl(photo.id)} alt="" loading="lazy" onError={() => setBroken(true)} />}
+        {!tall && post.place && <span className="memory-card__overlay"><IconLocation size={13} />{post.place}</span>}
+      </div>}
+      <div className="memory-card__body">
+        {post.body && <p className="memory-card__title">{post.body}</p>}
+        <div className="memory-card__meta">
+          {(!photo || tall) && post.place && <span className="memory-card__place"><IconLocation size={13} /><span>{post.place}</span></span>}
+          {photo ? <span className="memory-card__likes"><IconHeart size={17} filled={post.likedByMe} /><span>{post.likeCount ?? 0}</span></span> : <time dateTime={validDate ? post.createdAt : undefined}>{shortDate}</time>}
         </div>
-      </section>
-
-      {/*
-        ⚠️ 这里原来有四行不可点的「我的兴趣 / 我的标签 / 介绍一下自己～ / 我的学校」，
-           每行挂一个「待核对」标签 —— 那是**把内部核对状态渲染给用户看**的占位物
-           （QA 全盘测试把它记为硬缺陷：界面上出现"待核对"字样，用户无法理解）。
-           需求文档 ME-001 定义的「我的」内容是：**个人资料 / 我的发布 / 我的收藏 /
-           我的活动 / 账号设置** —— 这四行都不在其中。
-           ⇒ 处置：删掉占位行，换成 ME-001 的真实入口（下方 me__entries）。
-             · 我的活动：ACT-005（用户提交活动的"我的活动"）在需求里仍未定版本、
-               服务端也没有投稿/审核链路 ⇒ **本轮不做入口**（做一个点了就空的页面比没有更糟）。
-      */}
-      <section className="me__entries">
-        <button
-          className="me__entryBtn"
-          data-me-entry="myposts"
-          onClick={() => navigate('myposts')}
-        >
-          <IconImage size={18} />
-          <span>我的发布</span>
-          <IconChevronRight size={15} />
-        </button>
-        <button
-          className="me__entryBtn"
-          data-me-entry="favorites"
-          onClick={() => navigate('favorites')}
-        >
-          <IconStar size={18} />
-          <span>我的收藏</span>
-          <IconChevronRight size={15} />
-        </button>
-        <button
-          className="me__entryBtn"
-          data-me-entry="account"
-          onClick={() => navigate('account')}
-        >
-          <IconSettings size={18} />
-          <span>账号设置</span>
-          <IconChevronRight size={15} />
-        </button>
-        <button
-          className="me__entryBtn"
-          data-me-entry="clear-cache"
-          onClick={() => {
-            setCacheMsg('')
-            setCacheOpen(true)
-          }}
-        >
-          <IconEdit size={18} />
-          <span>清除本机缓存</span>
-          <IconChevronRight size={15} />
-        </button>
-        {isAdmin() ? (
-          <button className="me__entryBtn" data-me-entry="admin" onClick={() => navigate('admin')}>
-            <IconMenu size={18} />
-            <span>管理端</span>
-            <span className="me__adminTag">管理员</span>
-          </button>
-        ) : null}
-      </section>
-
-      {/*
-        登录状态区（M3 Slice 0B；WO#14 起身份改用**权威**来源）。
-        原版不登录也能浏览（M0 基线里个人页显示的是一个本地默认账号，没有登录提示），
-        所以这里**不强制**跳登录；只在未登录时给一个明确的入口。
-        这个入口同时是设备 E2E 的真实 UI 路径 —— 审核记录 08 要求
-        「冷启动 → 无 session → 登录入口页」必须走真实点击，而不是改 hash 或注入会话。
-
-        ⚠️ WO#14 的关键改动：这里的名字**不再**读 `session.user.displayName`
-           （那是**模块级缓存**，改完昵称不会更新），而是与中心大字**共用**同一个
-           权威值 `displayName`（来自 `GET /api/auth/me`）。
-           ⇒ 从结构上不可能再出现"同屏两个身份"。
-        手机号仍显示（审核 56：APPROVED AS CURRENT PRODUCT BEHAVIOR；
-        这是**自己的**号，与 WO#12 冻结的"他人主页不暴露 phone"不冲突；
-        原版呈现方式：NOT_EVALUATED）。
-      */}
-      <section className="me__auth">
-        {phase === 'ready' && identity ? (
-          <>
-            <span className="me__authWho" data-me-authwho>
-              已登录 {displayName}
-              {identity.phone ? ` · ${identity.phone}` : ''}
-            </span>
-            <button
-              className="me__authBtn"
-              onClick={async () => {
-                await logout()
-                // logout() 内部已 clearSession()（含模块级缓存）；这里只需把本地 UI 态切到"不可用"
-                setIdentity(null)
-                setPhase('unavailable')
-              }}
-            >
-              退出登录
-            </button>
-          </>
-        ) : (
-          <>
-            <span className="me__authWho" data-me-authwho>
-              {phase === 'loading' ? '读取中…' : '未登录'}
-            </span>
-            <button
-              className="me__authBtn me__authBtn--primary"
-              onClick={() => navigate('loginselect')}
-            >
-              登录 TimeMap
-            </button>
-          </>
-        )}
-      </section>
-
-      {/* 语音动态条（原版个人页实测存在「我的第一条语音」卡片） */}
-      <section className="me__voiceRow">
-        <button className="me__voiceCard" onClick={() => navigate('publish')}>
-          <span className="me__voiceBar" aria-hidden>
-            {Array.from({ length: 18 }).map((_, i) => (
-              <i key={i} style={{ height: `${7 + ((i * 23) % 15)}px` }} />
-            ))}
-          </span>
-          <span className="me__voiceLabel">我的第一条语音</span>
-        </button>
-        <div className="me__hint">
-          <span className="me__hint-spark">✦</span>
-          <span className="me__hint-bubble">快来试试吧～</span>
-        </div>
-      </section>
-
-      {/* 记录入口：原版是「拍下眼前的风景」黑色胶囊 */}
-      <section className="me__prompt">
-        <button className="me__capture" onClick={() => navigate('publish')}>
-          <IconImage size={17} />
-          <span>拍下眼前的风景</span>
-        </button>
-      </section>
-
-      {/*
-        ⭐ TimeMap P0：**我的收藏**（US-03：收藏内容可在个人中心查看）与
-        **管理端**（F07；仅 role=admin 显示）已在上方 me__entries 里渲染
-        （ME-001 的入口统一成一组，不再分散在 profile 区）。
-        ⚠️ 管理端入口按角色隐藏只是**界面便利** —— 服务端对每个 /api/admin/* 都独立校验，
-           普通学生即使手工敲 `#/admin` 也只会看到"无权限"并且拿不到任何管理数据。
-           **绝不能**把"藏起入口"当成权限控制。
-        ⚠️ `isAdmin()` 读的是本地会话；MeScreen 挂载时会调 `GET /api/auth/me`，
-           而 `me()` 会把服务端的 role 写回缓存 ⇒ 刷新后入口不会莫名消失。
-      */}
-
-      {/* 左上角三横线打开的抽屉菜单（原版实测有 8 项） */}
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-
-      {cacheOpen && (
-        <div className="me__sheetMask" data-cache-sheet onClick={() => setCacheOpen(false)}>
-          <div className="me__sheet" role="dialog" onClick={(e) => e.stopPropagation()}>
-            <p className="me__sheetTitle">清除本机缓存？</p>
-            <p className="me__sheetBody">
-              会清掉只存在这台设备上的旧动态与已缓存的页面数据。
-              <b>登录状态与地图视图不受影响</b>，清完刷新一下就是服务器上的真实数据。
-            </p>
-            {cacheMsg && (
-              <p className="me__sheetMsg" data-cache-result>
-                {cacheMsg}
-              </p>
-            )}
-            <div className="me__sheetBtns">
-              <button className="me__sheetBtn" data-cache-cancel onClick={() => setCacheOpen(false)}>
-                取消
-              </button>
-              <button
-                className="me__sheetBtn me__sheetBtn--danger"
-                data-cache-confirm
-                onClick={() => {
-                  const r = clearLocalCaches()
-                  setCacheMsg(`已清除：本机旧动态 ${r.posts} 条、页面缓存 ${r.snapshots} 份`)
-                }}
-              >
-                清除
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </Screen>
-  )
+      </div>
+    </a>
+  </article>
 }

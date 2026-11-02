@@ -245,7 +245,7 @@ export default function App() {
       */}
 
       {tab && <TabBar active={tab} />}
-      {tab && root !== 'map' && root !== 'activities' && <button className={`app__publish ${root === 'campus' ? 'app__publish--campus' : ''}`} aria-label="发布" onClick={() => navigate('publish')}>＋</button>}
+      {tab && root !== 'map' && root !== 'activities' && root !== 'me' && <button className={`app__publish ${root === 'campus' ? 'app__publish--campus' : ''}`} aria-label="发布" onClick={() => navigate('publish')}>＋</button>}
     </Shell>
   )
 }
