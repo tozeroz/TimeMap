@@ -1083,6 +1083,119 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
     }
   })
 
+  // ---- 地点照片（029 时光机：老照片 / 现照，按机位 view_key 分组）----
+  //
+  // 规则（与验收判据一一对应）：
+  //   · year_label / year_sort / source 全由录入者给出，服务端**不推断**年份；
+  //     yearSort 为 null = 年代不详，前端会单独归档，不会被拿去和别的年代凑对。
+  //   · 现照「从帖子图里挑」：给 postId + mediaId，服务端核实三件事——
+  //       帖子已发布、帖子就关联在这个地点、这张图确实是该帖子的配图（post_media.purpose='post'）。
+  //   · 只给 mediaId（管理员直接上传 purpose=place 的图）：必须是 public 的图片媒体。
+  app.post('/api/admin/places/:id/photos', async (req, reply) => {
+    const g = await requireAdmin(req)
+    if (!g.ok) return fail(reply, g)
+    const placeId = (req.params as { id?: string }).id ?? ''
+    if (!UUID_RE.test(placeId)) return reply.code(400).send({ error: 'invalid_id' })
+    const p = (req.body ?? {}) as Record<string, unknown>
+    const allowed = ['title', 'yearLabel', 'yearSort', 'source', 'viewKey', 'mediaId', 'postId', 'position']
+    const extra = Object.keys(p).filter((k) => !allowed.includes(k))
+    if (extra.length) return reply.code(400).send({ error: 'invalid_payload', details: [`不支持字段: ${extra.join(', ')}`] })
+
+    const errors: string[] = []
+    const text = (k: string, max: number) => {
+      const v = typeof p[k] === 'string' ? (p[k] as string).trim() : ''
+      if (!v || v.length > max) errors.push(`${k} 必须是非空且不超过 ${max} 字`)
+      return v
+    }
+    const title = text('title', 40)
+    const yearLabel = text('yearLabel', 20)
+    const source = text('source', 200)
+    const yearSort = p.yearSort ?? null
+    if (yearSort !== null && !(typeof yearSort === 'number' && Number.isInteger(yearSort) && yearSort >= 1800 && yearSort <= 2100))
+      errors.push('yearSort 必须是 1800–2100 的整数，或 null（年代不详）')
+    const viewKey = p.viewKey === undefined || p.viewKey === null ? null : typeof p.viewKey === 'string' ? p.viewKey.trim() : ''
+    if (viewKey !== null && (viewKey.length < 1 || viewKey.length > 40)) errors.push('viewKey 必须是 1–40 字，或 null')
+    const mediaId = typeof p.mediaId === 'string' && UUID_RE.test(p.mediaId) ? p.mediaId : null
+    if (!mediaId) errors.push('mediaId 必须是合法媒体 id')
+    const postId = p.postId === undefined || p.postId === null ? null : typeof p.postId === 'string' && UUID_RE.test(p.postId) ? p.postId : ''
+    if (postId === '') errors.push('postId 必须是合法帖子 id 或 null')
+    const position = p.position === undefined ? 0 : p.position
+    if (!(typeof position === 'number' && Number.isInteger(position) && position >= 0 && position <= 10000))
+      errors.push('position 必须是 0–10000 的整数')
+    if (errors.length) return reply.code(400).send({ error: 'invalid_payload', details: errors })
+
+    const client = await db.pool.connect()
+    try {
+      await client.query('begin')
+      const place = await client.query('select 1 from places where id = $1', [placeId])
+      if (!place.rows[0]) {
+        await client.query('rollback')
+        return reply.code(404).send({ error: 'not_found' })
+      }
+      const media = await client.query<{ scope: string; mime: string }>('select scope, mime from media where id = $1', [mediaId])
+      const m = media.rows[0]
+      if (!m || m.scope !== 'public' || !m.mime.startsWith('image/')) {
+        await client.query('rollback')
+        return reply.code(400).send({ error: 'invalid_payload', details: ['mediaId 必须指向已上传的公开图片'] })
+      }
+      if (postId) {
+        const ok = await client.query(
+          `select 1 from posts po join post_media pm on pm.post_id = po.id
+            where po.id = $1 and po.status = 'published' and po.place_id = $2
+              and pm.media_id = $3 and pm.purpose = 'post'`,
+          [postId, placeId, mediaId],
+        )
+        if (!ok.rows[0]) {
+          await client.query('rollback')
+          return reply.code(400).send({
+            error: 'invalid_payload',
+            details: ['postId/mediaId 不匹配：帖子须已发布、关联本地点，且该图是这条帖子的配图'],
+          })
+        }
+      }
+      const id = randomUUID()
+      await client.query(
+        `insert into place_photos (id, place_id, title, year_label, source, media_id, post_id, view_key, year_sort, position)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [id, placeId, title, yearLabel, source, mediaId, postId, viewKey, yearSort, position],
+      )
+      await audit(client, g.user.userId, 'place_photo_create', 'place', placeId, JSON.stringify({ photoId: id, ...p }))
+      await client.query('commit')
+      return reply.code(201).send({ id })
+    } catch (err) {
+      await client.query('rollback').catch(() => undefined)
+      if (db.noteFailure(err) === 'transient') return ctx.dbUnavailable(reply, err)
+      return reply.code(500).send({ error: 'db_error', message: (err as Error).message })
+    } finally {
+      client.release()
+    }
+  })
+
+  app.delete('/api/admin/place-photos/:id', async (req, reply) => {
+    const g = await requireAdmin(req)
+    if (!g.ok) return fail(reply, g)
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' })
+    const client = await db.pool.connect()
+    try {
+      await client.query('begin')
+      const r = await client.query<{ place_id: string }>('delete from place_photos where id = $1 returning place_id', [id])
+      if (!r.rows[0]) {
+        await client.query('rollback')
+        return reply.code(404).send({ error: 'not_found' })
+      }
+      await audit(client, g.user.userId, 'place_photo_delete', 'place', r.rows[0].place_id, JSON.stringify({ photoId: id }))
+      await client.query('commit')
+      return { id }
+    } catch (err) {
+      await client.query('rollback').catch(() => undefined)
+      if (db.noteFailure(err) === 'transient') return ctx.dbUnavailable(reply, err)
+      return reply.code(500).send({ error: 'db_error', message: (err as Error).message })
+    } finally {
+      client.release()
+    }
+  })
+
   // ---- 活动管理（F06：管理员录入/修改；无报名/支付）----
 
   app.get('/api/admin/activities', async (req, reply) => {

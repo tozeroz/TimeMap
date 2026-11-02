@@ -1843,8 +1843,23 @@ export function buildServer(deps: ServerDeps) {
         year_label: string
         source: string
         image_url: string | null
+        media_id: string | null
+        post_id: string | null
+        view_key: string | null
+        year_sort: number | null
       }>(
-        'select id, title, year_label, source, image_url from place_photos where place_id = $1 order by position, created_at',
+        // 029 时光机：多返回 media_id / post_id / view_key / year_sort。
+        //   · 现照取自帖子（post_id 非空）时，帖子不是 published 就不展示——下架的帖子图不能借道这里继续露出。
+        //   · media_id 只认 public 媒体；私有媒体即便被误填也不下发 id。
+        `select pp.id, pp.title, pp.year_label, pp.source, pp.image_url,
+                case when m.scope = 'public' then pp.media_id end as media_id,
+                pp.post_id, pp.view_key, pp.year_sort
+           from place_photos pp
+           left join media m on m.id = pp.media_id
+          where pp.place_id = $1
+            and (pp.post_id is null
+                 or exists (select 1 from posts p where p.id = pp.post_id and p.status = 'published'))
+          order by pp.position, pp.created_at`,
         [id],
       )
       // 近期活动（US-04）：未结束 + 7 天内结束的；取消的醒目返回（前端标红）
@@ -1927,6 +1942,10 @@ export function buildServer(deps: ServerDeps) {
           yearLabel: ph.year_label,
           source: ph.source,
           imageUrl: ph.image_url,
+          mediaId: ph.media_id,
+          postId: ph.post_id,
+          viewKey: ph.view_key,
+          yearSort: ph.year_sort,
         })),
         activities: activities.rows.map((a) => ({
           id: a.id,
@@ -2276,12 +2295,17 @@ export function buildServer(deps: ServerDeps) {
     //   post     → public    帖子配图
     //   activity → public    活动封面（022：ACT-003 的"封面"）
     //   chat     → private   聊天图片/语音
+    //   place    → public    地点照片（029 时光机；由管理员接口挂到 place_photos）
     const purpose = ((data.fields?.purpose as { value?: string } | undefined)?.value ?? 'post').trim()
     const scope =
-      purpose === 'chat' ? 'private' : purpose === 'post' || purpose === 'activity' ? 'public' : null
+      purpose === 'chat'
+        ? 'private'
+        : purpose === 'post' || purpose === 'activity' || purpose === 'place'
+          ? 'public'
+          : null
     if (!scope) {
       reply.code(400)
-      return { error: 'bad_purpose', allowed: ['post', 'chat', 'activity'] }
+      return { error: 'bad_purpose', allowed: ['post', 'chat', 'activity', 'place'] }
     }
 
     /**
