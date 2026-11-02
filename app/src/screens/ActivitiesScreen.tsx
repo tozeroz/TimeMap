@@ -9,9 +9,14 @@ import { useRoute, navigate } from '../router'
 import '../styles/switcher.css'
 import './activities.css'
 
-type StatusKey = 'all' | 'upcoming' | 'ongoing' | 'ended' | 'cancelled'
+/*
+  ACT-001：**默认只看即将开始 + 进行中**（服务端 status 缺省就是这个口径），
+  「已结束」「已取消」通过筛选查看 —— 历史活动是长期事实，不该占满默认列表。
+  '' = 交给服务端默认；'all' 才是「不按状态过滤」。
+*/
+type StatusKey = '' | 'all' | 'upcoming' | 'ongoing' | 'ended' | 'cancelled'
 const STATUS_OPTIONS: Array<{ key: StatusKey; label: string }> = [
-  { key: 'all', label: '全部' }, { key: 'upcoming', label: '即将开始' },
+  { key: '', label: '近期' }, { key: 'all', label: '全部' }, { key: 'upcoming', label: '即将开始' },
   { key: 'ongoing', label: '进行中' }, { key: 'ended', label: '已结束' }, { key: 'cancelled', label: '已取消' },
 ]
 
@@ -24,7 +29,7 @@ export function ActivitiesScreen() {
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
   const [errText, setErrText] = useState('')
   const [win, setWin] = useState<'' | 'today' | 'week'>('')
-  const [status, setStatus] = useState<StatusKey>('all')
+  const [status, setStatus] = useState<StatusKey>('')
   const [placeOpen, setPlaceOpen] = useState(false)
   const [places, setPlaces] = useState<ApiPlaceListItem[]>([])
   const [placePhase, setPlacePhase] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -89,7 +94,7 @@ export function ActivitiesScreen() {
     navigate('activities', id ? { placeId: id } : undefined)
   }
   const placeName = places.find(p => p.id === placeId)?.name ?? '已选地点'
-  const listHeading = status === 'all' || status === 'ended' || status === 'cancelled' ? '活动列表' : '近期活动'
+  const listHeading = status === '' || status === 'upcoming' || status === 'ongoing' ? '近期活动' : '活动列表'
 
   return <Screen className="acts-page" header={<header className="acts__head">
     <div><h1 className="acts__title">校园活动</h1><p className="acts__subtitle">发现校园里的新鲜事</p></div>
