@@ -158,6 +158,14 @@ export function LoginScreen() {
         setError(r.status === 429 ? '尝试次数过多，请稍后再试' : '验证码不正确或已过期')
         return
       }
+      const returnRoute = sessionStorage.getItem('timemap.login.return')
+      sessionStorage.removeItem('timemap.login.return')
+      if (returnRoute) {
+        try {
+          const target = JSON.parse(returnRoute)
+          if (target.path === 'activity-submit') { navigate('activity-submit', target.query); return }
+        } catch { /* Ignore malformed navigation metadata. */ }
+      }
       navigate('campus')
     } finally {
       setBusy(false)
