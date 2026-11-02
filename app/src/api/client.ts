@@ -550,6 +550,7 @@ export function humanizeFailure(reason: string, status?: number): string {
   if (status === 401) return '登录状态已失效，请重新登录'
   if (status === 403) return '没有权限执行这个操作'
   if (status === 404) return '内容不存在或已被删除'
+  if (status === 413) return '文件超过服务器上传大小限制，请压缩文件或选择更小的文件后重试'
   if (status === 429) return '操作太频繁，请稍后再试'
   if (status === 503) return '服务暂时不可用，请稍后重试'
   if (status !== undefined && status >= 500) return '服务器出了点问题，请稍后重试'
