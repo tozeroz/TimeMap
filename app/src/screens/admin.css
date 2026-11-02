@@ -296,3 +296,73 @@
   border-radius: var(--r-sm);
   margin-top: 8px;
 }
+
+/* ---------------------------------------------------------------------------
+   投稿审核面板（ACT-005）
+   与其它面板共用 adm__card / adm__btn / adm__chip；这里只补"详情区"的排版。
+   目标：审核时能一眼看到完整字段、封面、提交人与版本，且窄屏不横向溢出。
+--------------------------------------------------------------------------- */
+.adm__subDetail {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--c-divider);
+  display: grid;
+  gap: 10px;
+}
+
+.adm__subCover {
+  max-width: 180px;
+}
+
+.adm__subFields {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.adm__subFields > div {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.adm__subFields dt {
+  color: var(--c-text-3);
+  font-size: var(--f-meta);
+}
+
+.adm__subFields dd {
+  margin: 0;
+  font-size: var(--f-meta);
+  overflow-wrap: anywhere;
+}
+
+.adm__subFields a {
+  color: var(--c-primary);
+  overflow-wrap: anywhere;
+}
+
+.adm__subHistory ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--c-text-2);
+  font-size: var(--f-meta);
+}
+
+.adm__subReason {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--c-divider);
+  border-radius: var(--r-sm);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+  resize: vertical;
+}
+
+.adm__subActions {
+  display: grid;
+  gap: 8px;
+}
