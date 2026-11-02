@@ -13,10 +13,12 @@ import {
   adminUpdateActivity,
   adminUpdatePlace,
   mediaUrl,
+  PLACE_CATEGORIES,
   relativeTime,
   uploadMedia,
   type ApiActivity,
   type ApiAdminPlace,
+  type PlaceCategory,
   type ApiAdminPost,
   type ApiAuditEntry,
   type ApiReport,
@@ -724,7 +726,7 @@ function PlacesPanel() {
   const { data, phase, err, reload } = useLoader<ApiAdminPlace[]>(() => adminListPlaces())
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
-  const [form, setForm] = useState<{ name: string; category: '地标' | '食堂'; description: string } | null>(null)
+  const [form, setForm] = useState<{ name: string; category: PlaceCategory; description: string } | null>(null)
 
   async function submit() {
     if (!form) return
@@ -822,10 +824,13 @@ function PlacesPanel() {
               className="adm__input"
               data-place-category
               value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value as '地标' | '食堂' })}
+              onChange={(e) => setForm({ ...form, category: e.target.value as PlaceCategory })}
             >
-              <option value="地标">地标</option>
-              <option value="食堂">食堂</option>
+              {PLACE_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
             <textarea
               className="adm__textarea"

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import type { Db } from './db.ts'
+import { isPlaceCategory } from './placeCategories.ts'
 import { randomUUID } from 'node:crypto'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -62,7 +63,7 @@ export function registerMapRoutes(app: FastifyInstance, db: Db, options: { previ
   const snapshots = new Map<string, { placeId: string; asOf: string; ids: string[]; expires: number; truncated: boolean }>()
   app.get('/api/map/places', async (req, reply) => {
     const category = (req.query as { category?: string }).category
-    if (category !== undefined && category !== '地标' && category !== '食堂') return reply.code(400).send({ error: 'bad_category' })
+    if (category !== undefined && !isPlaceCategory(category)) return reply.code(400).send({ error: 'bad_category' })
     const asOf = new Date().toISOString()
     try {
       const result = await db.pool.query<{

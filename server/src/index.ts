@@ -23,6 +23,7 @@ import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts
 import { registerCutoutRoutes } from './cutout.ts'
 import { registerTimemapRoutes } from './timemap.ts'
 import { registerMapRoutes } from './mapRoutes.ts'
+import { isPlaceCategory } from './placeCategories.ts'
 
 /**
  * Campus 后端（M3 Slice 0B）。
@@ -1750,7 +1751,7 @@ export function buildServer(deps: ServerDeps) {
         params.push('%' + q + '%')
         conds.push(`(pl.name ilike $${params.length} or coalesce(pl.address, '') ilike $${params.length})`)
       }
-      if (category === '地标' || category === '食堂') {
+      if (isPlaceCategory(category)) {
         params.push(category)
         conds.push(`pl.category = $${params.length}`)
       }

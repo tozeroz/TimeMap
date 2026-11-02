@@ -8,7 +8,17 @@ import {
   IconPlus,
   IconSearch,
 } from '../components/icons'
-import { listPlaces, listPosts, listSchools, mediaUrl, type ApiPlaceListItem, type ApiPost, type ApiSchool } from '../api/client'
+import {
+  listPlaces,
+  listPosts,
+  listSchools,
+  mediaUrl,
+  PLACE_CATEGORIES,
+  type ApiPlaceListItem,
+  type ApiPost,
+  type ApiSchool,
+  type PlaceCategory,
+} from '../api/client'
 import type { MapMarker } from '../native/mapApi'
 import { AmapMap } from '../native/AmapMap'
 import { RealMap } from '../native/RealMap'
@@ -35,8 +45,9 @@ interface ViewState {
   scale: number
 }
 
-/** 分类筛选：全部 / 地标 / 食堂（需求 4.1 草图顶部的 `[全部] [地标] [食堂]`） */
-type CategoryFilter = '全部' | '地标' | '食堂'
+/** 分类筛选：全部 / 地标 / 教学楼 / 活动场地 / 运动场地 / 食堂（需求 4.1 草图顶部的分类条，030 起扩到 5 类） */
+type CategoryFilter = '全部' | PlaceCategory
+const CATEGORY_FILTERS: CategoryFilter[] = ['全部', ...PLACE_CATEGORIES]
 
 /**
  * 把**权威地点**派生成地图标记（TimeMap P0 / F02 + US-01）。
@@ -380,7 +391,7 @@ export function MapScreen() {
    * 那是把"读不到"伪装成"没有"——必须显式说出来。
    */
   const [postsFailed, setPostsFailed] = useState(false)
-  /** 分类筛选（需求 4.1：`[全部] [地标] [食堂]`） */
+  /** 分类筛选（需求 4.1：`[全部] [地标] [教学楼] [活动场地] [运动场地] [食堂]`） */
   const [category, setCategory] = useState<CategoryFilter>('全部')
   /*
     MAP-002 / MAP-003：地图内的「搜索地标」工具。
@@ -850,13 +861,13 @@ export function MapScreen() {
       scroll={false}
     >
       {/*
-        分类筛选（需求 4.1 草图顶部：[全部] [地标] [食堂]）。
+        分类筛选（需求 4.1 草图顶部：[全部] [地标] [教学楼] [活动场地] [运动场地] [食堂]）。
         ⚠️ 筛选是**服务端**做的（`GET /api/places?category=`）——
           与"客户端 filter"相比，服务端筛在加页/加 limit 之后不会静默变成不完整结果。
         `data-map-category` 是验收钩子：当前生效的分类必须能被机械读到。
       */}
       <div className="map__cats no-scrollbar" data-map-category={category}>
-        {(['全部', '地标', '食堂'] as CategoryFilter[]).map((c) => (
+        {CATEGORY_FILTERS.map((c) => (
           <button
             key={c}
             className={`map__cat ${category === c ? 'is-active' : ''}`}
