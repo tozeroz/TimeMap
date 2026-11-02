@@ -278,7 +278,7 @@ export interface ApiUploadedMedia {
  */
 export async function uploadMedia(
   file: File | Blob,
-  purpose: 'post' | 'chat' | 'activity',
+  purpose: 'post' | 'chat' | 'activity' | 'avatar',
   /**
    * 语音时长（毫秒）。**仅音频需要传**，且服务端会强制：
    * audio/webm 必须带正时长、image/* 禁止带。（审核记录 35）
@@ -703,6 +703,26 @@ export function patchMyDisplayName(displayName: string): Promise<ApiResult<ApiUs
     method: 'PATCH',
     body: { displayName },
   })
+}
+
+export interface ApiProfile {
+  id: string
+  displayName: string
+  bio: string
+  avatarMediaId: string | null
+  campusId: string | null
+  collegeId: string | null
+  enrollmentYear: number | null
+  school: { id: string; name: string }
+  options: { campuses: { id: string; name: string }[]; colleges: { id: string; name: string }[] }
+  collegeListComplete: boolean
+}
+export type ProfileUpdate = Pick<ApiProfile, 'displayName' | 'bio' | 'avatarMediaId' | 'campusId' | 'collegeId' | 'enrollmentYear'>
+export function getMyProfile(): Promise<ApiResult<ApiProfile>> {
+  return request<ApiProfile>('/api/users/me/profile')
+}
+export function patchMyProfile(input: ProfileUpdate): Promise<ApiResult<ApiProfile>> {
+  return request<ApiProfile>('/api/users/me', { method: 'PATCH', body: input })
 }
 
 /**
@@ -1325,6 +1345,8 @@ export async function getMyIdentity(): Promise<ApiResult<SessionUser>> {
     ...(u.handle ? { handle: u.handle } : {}),
     phone: u.phone ?? null,
     ...(u.role ? { role: u.role } : {}),
+    ...(u.avatarMediaId !== undefined ? { avatarMediaId: u.avatarMediaId } : {}),
+    ...(u.bio !== undefined ? { bio: u.bio } : {}),
   })
   return { ok: true, value: u }
 }

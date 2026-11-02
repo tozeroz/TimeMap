@@ -1,270 +1,67 @@
-/* 个人资料（原版 ProfileEdit，实测结构：三张卡片） */
-.pe__card {
-  margin-top: 10px;
-  background: var(--c-surface);
-  padding-bottom: 6px;
+/* Reference: campus personal information editor; local styles only. */
+.profile-reference {
+  --pe-paper: #fbfaf7;
+  --pe-ink: #0c2b46;
+  --pe-muted: #727e8a;
+  --pe-line: #172f461c;
+  --pe-orange: #f56836;
+  color: var(--pe-ink);
+  background: var(--pe-paper);
 }
-
-.pe__card:first-of-type {
-  margin-top: 0;
-  padding-top: 4px;
-}
-
-.pe__avatarRow {
-  display: flex;
-  justify-content: center;
-  padding: 20px 0 12px;
-}
-
-.pe__avatarWrap {
-  position: relative;
-}
-
-.pe__avatar {
-  width: 84px;
-  height: 84px;
-  border-radius: var(--r-pill);
-  background: var(--c-surface-sunken);
-}
-
-.pe__camera {
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--r-pill);
-  background: var(--c-primary);
-  color: var(--c-primary-fg);
-  border: 2px solid var(--c-surface);
-}
-
-.pe__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 15px var(--pad-page);
-  border-top: 1px solid var(--c-divider);
-  text-align: left;
-}
-
-.pe__row:first-of-type {
-  border-top: none;
-}
-
-.pe__label {
-  flex: 0 0 auto;
-  min-width: 48px;
-  font-size: 15px;
-  color: var(--c-text);
-}
-
-.pe__value {
-  margin-left: auto;
-  font-size: 14px;
-  color: var(--c-text-3);
-  max-width: 62%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pe__row svg {
-  flex: 0 0 auto;
-  color: var(--c-text-3);
-}
-
-.pe__tag {
-  flex: 0 0 auto;
-  padding: 1px 7px;
-  border-radius: 5px;
-  background: var(--c-surface-sunken);
-  color: var(--c-text-3);
-  font-size: 11px;
-}
-
-.pe__hint {
-  margin: 0;
-  padding: 0 var(--pad-page) 14px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--c-text-3);
-}
-
-.pe__cardHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 16px var(--pad-page) 12px;
-}
-
-.pe__cardTitle {
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.pe__cardHead svg {
-  color: var(--c-text-3);
-}
-
-.pe__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
-  padding: 0 var(--pad-page) 18px;
-}
-
-.pe__tagChip {
-  padding: 6px 14px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--c-divider);
-  font-size: 13px;
-  color: var(--c-text-2);
-}
-
-.pe__tagChip.is-on {
-  background: var(--c-accent-soft);
-  border-color: transparent;
-  color: var(--c-accent);
-  font-weight: 600;
-}
-
-.pe__tagAdd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--r-pill);
-  border: 1px dashed var(--c-divider);
-  color: var(--c-text-3);
-}
-
-/* 弹窗 */
-.pe__dialog {
-  position: absolute;
-  inset: 0;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.pe__mask {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.32);
-}
-
-.pe__panel {
-  position: relative;
-  width: calc(100% - 56px);
-  max-width: 320px;
-  padding: 20px 18px 16px;
-  border-radius: var(--r-xl);
-  background: var(--c-surface);
-}
-
-.pe__panelTitle {
-  margin: 0 0 14px;
-  font-size: 16px;
-  font-weight: 700;
-  text-align: center;
-}
-
-.pe__input {
-  width: 100%;
-  height: 44px;
-  padding: 0 14px;
-  border-radius: var(--r-md);
-  background: var(--c-surface-sunken);
-  font-size: 15px;
-}
-
-.pe__options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
-  margin-bottom: 12px;
-}
-
-.pe__option {
-  padding: 7px 14px;
-  border-radius: var(--r-pill);
-  background: var(--c-surface-sunken);
-  font-size: 13.5px;
-  color: var(--c-text-2);
-}
-
-.pe__option.is-on {
-  background: var(--c-primary);
-  color: var(--c-primary-fg);
-}
-
-.pe__panelActions {
-  display: flex;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.pe__cancel,
-.pe__save {
-  flex: 1 1 0;
-  height: 40px;
-  border-radius: var(--r-pill);
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.pe__cancel {
-  background: var(--c-surface-sunken);
-  color: var(--c-text-2);
-}
-
-.pe__save {
-  background: var(--c-primary);
-  color: var(--c-primary-fg);
-}
-
-.pe__panel .pe__save {
-  width: 100%;
-  margin-top: 4px;
-}
-
-/* ===========================================================================
-   M5 WO#13：消灭"假写成功"相关样式
-   =========================================================================== */
-
-/* 首字占位头像（users 表没有 avatar 列）。
-   ⚠️ 原来的头像用 mock 生成的 SVG（<img>），并且旁边那个「更换头像」相机按钮
-      **没有 onClick**（inert 控件）。按审核 54 冻结：avatar = initial placeholder、
-      no fake "更换头像" control —— 因此那个按钮已从 JSX 里移除，其 .pe__camera 样式也已不再使用。 */
-.pe__avatar--ph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32px;
-  font-weight: 600;
-  color: var(--c-text-2);
-  background: var(--c-surface-sunken);
-  user-select: none;
-}
-
-/* 加载态 / 不可用态的说明文字 */
-.pe__note {
-  margin: 8px 0 0;
-  font-size: 13px;
-  color: var(--c-text-3);
-}
-
-/* 保存失败时的错误提示。
-   它出现的**同一时刻**界面绝不能同时给出成功表象（见 ProfileEditScreen 的 saveNickname）。 */
-.pe__error {
-  margin: 8px 0 0;
-  font-size: 13px;
-  color: var(--c-danger, #d33);
-}
+.profile-reference .topbar { background: var(--pe-paper); border: 0; min-height: 52px; padding-inline: 12px; }
+.profile-reference .topbar__center { font-size: 20px; font-weight: 750; letter-spacing: 1px; }
+.profile-reference .iconbtn { width: 44px; height: 44px; color: var(--pe-ink); }
+.pe__content { padding: 0 19px; max-width: 100%; }
+.pe__hero { display: flex; flex-direction: column; align-items: center; padding: 8px 0 4px; }
+.pe__avatarWrap { position: relative; margin-bottom: 10px; }
+.pe__avatar { display: flex; align-items: center; justify-content: center; width: 90px; height: 90px; border-radius: 50%; background: #fbe0d2; font-size: 54px; font-weight: 750; line-height: 1; color: var(--pe-ink); user-select: none; }
+.pe__camera { position: absolute; bottom: 0; right: -3px; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 3px solid var(--pe-paper); border-radius: 50%; color: white; background: var(--pe-orange); }
+.pe__sprig { position: absolute; left: -21px; bottom: 13px; width: 28px; height: 45px; color: #a0ab91; transform: rotate(-7deg); }
+.pe__avatarTitle { margin: 0; font-size: 14px; color: #4b5b6a; }
+.pe__avatarHint { margin: 5px 0 0; color: var(--pe-muted); font-size: 13px; }
+.pe__section h2 { display: flex; align-items: baseline; gap: 12px; margin: 0; padding: 0 0 8px; border-bottom: 1px solid var(--pe-line); font-size: 17px; font-weight: 750; line-height: 1.4; letter-spacing: .5px; }
+.pe__section h2 > span { font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--pe-muted); }
+.pe__row { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 44px; padding: 9px 0; border-bottom: 1px solid var(--pe-line); text-align: left; }
+.pe__label { flex: none; font-size: 15px; font-weight: 550; }
+.pe__value { min-width: 0; max-width: 68%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; font-size: 14px; color: var(--pe-muted); }
+.pe__row > svg, .pe__bio > svg { flex: none; color: var(--pe-muted); }
+button.pe__row:active { background: #09275206; }
+.pe__bio { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0 10px; border-bottom: 1px solid var(--pe-line); }
+.pe__bio p { margin: 5px 0 0; color: var(--pe-muted); font-size: 14px; }
+.pe__section--campus { margin-top: 20px; }
+.pe__row--school { align-items: flex-start; min-height: 62px; padding-block: 12px; }
+.pe__schoolValue { min-width: 0; margin-left: auto; text-align: right; color: #4b5b6a; font-size: 14px; }
+.pe__schoolValue > span { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.pe__schoolValue small { display: block; margin-top: 3px; color: var(--pe-muted); font-size: 11px; }
+.pe__availability { margin: 8px 0 0; color: var(--pe-muted); font-size: 11px; }
+.pe__footer { padding: 10px 0 max(16px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+.pe__privacy { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; font-size: 12px; color: var(--pe-muted); }
+.pe__privacy svg { flex: none; }
+.pe__save { display: block; width: calc(100% + 12px); min-height: 44px; margin-inline: -6px; border-radius: 8px; background: var(--pe-orange); color: #fff; font-size: 20px; font-weight: 700; transition: opacity 150ms ease; }
+.pe__save:disabled { opacity: .6; cursor: default; }
+.pe__save:active:not(:disabled) { opacity: .85; }
+.pe__error { margin: 0 0 10px; color: var(--c-danger); font-size: 13px; }
+.pe__success { margin: 0 0 10px; color: #376b4c; font-size: 13px; }
+.pe__unsaved { margin: 0 0 10px; color: #7b542c; font-size: 12px; }
+.pe__state { display: flex; flex-direction: column; align-items: center; padding: 80px 24px; text-align: center; color: var(--pe-muted); font-size: 14px; }
+.pe__state h2 { color: var(--pe-ink); font-size: 18px; }
+.pe__state button { min-height: 44px; padding: 0 24px; margin-top: 12px; border-radius: 10px; color: white; background: var(--c-primary); }
+.pe__dialog { position: fixed; inset: 0; width: min(320px, calc(100% - 40px)); max-height: calc(100% - 40px); overflow-y: auto; padding: 22px; border: 0; border-radius: 18px; color: var(--pe-ink); background: var(--pe-paper); box-shadow: 0 12px 48px #09275229; }
+.pe__dialog::backdrop { background: #09203866; }
+.pe__dialog h2 { margin: 0 0 16px; font-size: 18px; }
+.pe__inputLabel { display: block; margin-bottom: 6px; font-size: 13px; }
+.pe__input { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid #82909b; border-radius: 8px; background: white; font-size: 16px; }
+.pe__dialogHint { margin: 8px 0 16px; font-size: 12px; color: var(--pe-muted); }
+.pe__dialogActions { display: flex; gap: 12px; }
+.pe__dialogActions button { flex: 1; min-height: 44px; border-radius: 8px; background: #eae7e1; font-size: 14px; }
+.pe__dialogActions .pe__done { background: var(--c-primary); color: white; }
+@media (max-width: 350px) { .pe__content { padding-inline: 16px; } .pe__schoolValue small { max-width: 160px; overflow-wrap: anywhere; } }
+@media (prefers-reduced-motion: reduce) { .pe__save { transition: none; } }
+.pe__avatarButton { display: block; border-radius: 50%; }
+.pe__avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.pe__removeAvatar { min-height: 44px; color: var(--c-primary); font-size: 12px; }
+button.pe__bio { width: 100%; text-align: left; }
+.pe__bio > span { min-width: 0; }
+.pe__bioText { display: block; margin-top: 5px; color: var(--pe-muted); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pe__bioText.is-filled { color: var(--pe-ink); }
+.pe__textarea { padding: 10px 12px; min-height: 130px; resize: vertical; }

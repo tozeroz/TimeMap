@@ -8,6 +8,7 @@
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
     "test:shutdown": "node tests/run-shutdown-race.mjs",
+    "test:profile": "node --experimental-strip-types tests/profile.test.ts",
     "dev": "node --experimental-strip-types src/index.ts"
   },
   "dependencies": {

@@ -18,6 +18,7 @@ export function MeScreen() {
   const [identity, setIdentity] = useState<SessionUser | null>(null)
   const [phase, setPhase] = useState<'loading' | 'ready' | 'unauth' | 'error'>('loading')
   const [identityError, setIdentityError] = useState('')
+  const [brokenAvatar, setBrokenAvatar] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   const [tab, setTab] = useState<Tab>(() => sessionStorage.getItem(tabKey) === 'favorites' ? 'favorites' : 'posts')
   const [collections, setCollections] = useState<Record<Tab, Collection>>({ posts: initialCollection, favorites: initialCollection })
@@ -137,9 +138,10 @@ export function MeScreen() {
   </>} right={<button className="iconbtn" aria-label="消息" onClick={() => navigate('message')}><IconChatBubble size={24} /></button>} />}>
     <div ref={contentRef} className="me__content">
       <section className="me__profile" aria-label="个人资料">
-        <div className={`me__avatar${phase === 'loading' ? ' is-loading' : ''}`} aria-hidden="true" data-me-avatar-placeholder>{phase === 'loading' ? '' : initial}</div>
+        <div className={`me__avatar${phase === 'loading' ? ' is-loading' : ''}`} aria-hidden="true" data-me-avatar-placeholder>{phase === 'ready' && identity?.avatarMediaId && brokenAvatar !== identity.avatarMediaId ? <img src={mediaUrl(identity.avatarMediaId)} alt="" onError={() => setBrokenAvatar(identity.avatarMediaId ?? null)} /> : phase === 'loading' ? '' : initial}</div>
         <LeafArtwork />
         <h1 className="me__name" data-me-name>{phase === 'ready' ? displayName : phase === 'loading' ? '加载中…' : phase === 'unauth' ? '未登录' : '资料加载失败'}</h1>
+        {phase === 'ready' && identity?.bio && <p className="me__bio">{identity.bio}</p>}
         <button className="me__edit" data-me-entry="edit-profile" disabled={phase === 'loading'} onClick={() => { if (phase === 'error') { setPhase('loading'); setRevision(value => value + 1) } else navigate(identity ? 'profile-edit' : 'loginselect') }}><IconEdit size={16} /><span>{identity ? '编辑资料' : phase === 'loading' ? '读取资料…' : phase === 'error' ? '重新加载' : '登录 TimeMap'}</span></button>
       </section>
       <div className="me__tabs" role="tablist" aria-label="我的校园记忆">

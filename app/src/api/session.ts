@@ -22,6 +22,8 @@ export interface SessionUser {
   id: string
   handle: string
   displayName: string
+  avatarMediaId?: string | null
+  bio?: string
   /** M3 起身份是手机号（E.164）；M2 的 handle+password 已退休 */
   phone?: string | null
   /**
@@ -108,7 +110,7 @@ export function clearSession(): void {
  *   · 只覆盖显式给出的字段；其余字段（token/expiresAt/handle/phone）原样保留。
  */
 export function updateSessionUser(
-  patch: Partial<Pick<SessionUser, 'displayName' | 'handle' | 'phone' | 'role'>>,
+  patch: Partial<Pick<SessionUser, 'displayName' | 'handle' | 'phone' | 'role' | 'avatarMediaId' | 'bio'>>,
 ): void {
   const s = getSession()
   if (!s) return
