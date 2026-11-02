@@ -45,7 +45,7 @@ interface ViewState {
   scale: number
 }
 
-/** 分类筛选：全部 / 地标 / 教学楼 / 活动场地 / 运动场地 / 食堂（需求 4.1 草图顶部的分类条，030 起扩到 5 类） */
+/** 分类筛选：全部 / 地标 / 教学楼 / 活动场地 / 运动场地 / 食堂（需求 4.1 草图顶部的分类条，031 起扩到 5 类） */
 type CategoryFilter = '全部' | PlaceCategory
 const CATEGORY_FILTERS: CategoryFilter[] = ['全部', ...PLACE_CATEGORIES]
 

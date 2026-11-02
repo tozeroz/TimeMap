@@ -1104,7 +1104,7 @@ export function adminListAuditLog(): Promise<ApiResult<ApiAuditEntry[]>> {
  */
 /**
  * 地点分类（places.category）。
- * ⚠️ 与 server/src/placeCategories.ts 及迁移 030 的 places_category_check 保持一致。
+ * ⚠️ 与 server/src/placeCategories.ts 及迁移 031 的 places_category_check 保持一致。
  */
 export const PLACE_CATEGORIES = ['地标', '教学楼', '活动场地', '运动场地', '食堂'] as const
 export type PlaceCategory = (typeof PLACE_CATEGORIES)[number]
