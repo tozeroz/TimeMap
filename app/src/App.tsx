@@ -245,6 +245,7 @@ export default function App() {
       */}
 
       {tab && <TabBar active={tab} />}
+      {root === 'activities' && <button className="app__publish app__publish--campus" aria-label="提交活动" onClick={() => window.alert('活动提交功能正在接入，暂时无法提交。')}>＋</button>}
       {tab && root !== 'map' && root !== 'activities' && root !== 'me' && <button className={`app__publish ${root === 'campus' ? 'app__publish--campus' : ''}`} aria-label="发布" onClick={() => navigate('publish')}>＋</button>}
     </Shell>
   )
