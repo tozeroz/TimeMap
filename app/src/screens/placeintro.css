@@ -1,0 +1,33 @@
+/* 地点简介页（spec §6.2）：米白底、深蓝字、橙色强调，单列自然滚动 */
+.pi-page { background: #fbfaf7; }
+.pi-page .topbar { background: #fbfaf7; border: 0; height: 52px; }
+.pi-page .topbar .iconbtn { background: transparent; box-shadow: none; }
+.pi__topTitle { font-size: 17px; font-weight: 700; }
+.pi { padding: 8px 20px 32px; color: var(--c-text); overflow-wrap: anywhere; }
+.pi button { cursor: pointer; }
+.pi__eyebrow { margin: 0 0 4px; font-size: 13px; color: var(--c-text-2); }
+.pi__name { margin: 0; font-size: 28px; line-height: 1.3; font-weight: 750; }
+.pi__name::after { content: ''; display: block; width: 32px; height: 3px; margin-top: 10px; border-radius: 2px; background: var(--c-brand); }
+.pi__cover { margin: 18px 0 18px; }
+.pi__coverBtn, .pi__thumb { display: block; width: 100%; padding: 0; border: 0; background: transparent; border-radius: 8px; overflow: hidden; }
+.pi__coverBtn:focus-visible, .pi__thumb:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 2px; }
+.pi__coverImg { display: block; width: 100%; aspect-ratio: 2.8 / 1; object-fit: cover; border-radius: 8px; background: var(--c-surface-sunken); }
+.pi__placeholder { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; color: var(--c-text-3); font-size: 13px; background: var(--c-surface-sunken); }
+.pi__imgRetry { color: var(--c-primary); text-decoration: underline; padding: 4px; }
+.pi__coverMeta { margin-top: 6px; font-size: 12px; line-height: 1.5; color: var(--c-text-2); }
+.pi__h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.4; font-weight: 750; }
+.pi__p { margin: 0 0 10px; font-size: 15px; line-height: 1.75; color: var(--c-text-2); }
+.pi__empty { margin: 0 0 10px; font-size: 14px; color: var(--c-text-3); }
+.pi__addr { display: flex; align-items: flex-start; gap: 5px; margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--c-text-2); }
+.pi__addr svg { flex: none; margin-top: 3px; }
+.pi__divider { border: 0; border-top: 1px solid var(--c-divider); margin: 22px 0; }
+.pi__grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 8px; }
+.pi__grid li { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pi__thumb { border-radius: 6px; }
+.pi__thumbImg { display: block; width: 100%; aspect-ratio: 1.8 / 1; object-fit: cover; border-radius: 6px; background: var(--c-surface-sunken); }
+.pi__cap { font-size: 13px; line-height: 1.4; color: var(--c-text); }
+.pi__meta { font-size: 12px; line-height: 1.5; color: var(--c-text-3); }
+.pi__state { padding: 60px 20px; text-align: center; color: var(--c-text-2); }
+.pi__stateSub { font-size: 13px; overflow-wrap: anywhere; }
+.pi__retry { min-height: 44px; padding: 8px 20px; border: 1px solid var(--c-divider); border-radius: 12px; background: transparent; color: var(--c-text); }
+@media (max-width: 340px) { .pi { padding: 8px 16px 28px; } .pi__grid { grid-template-columns: minmax(0, 1fr); } .pi__name { font-size: 26px; } }

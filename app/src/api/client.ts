@@ -1658,6 +1658,27 @@ export function getPlace(
   return request<ApiPlaceDetail>(`/api/places/${encodeURIComponent(id)}${q}`)
 }
 
+/** 地点层级（公开 `GET /api/map/places`）：只保留简介页标题需要的四个字段。 */
+export interface MapHierarchyItem { id: string; name: string; displayLevel: string; parentPlaceId: string | null }
+let hierarchyCache: Promise<ApiResult<Map<string, MapHierarchyItem>>> | null = null
+export function listMapHierarchy(): Promise<ApiResult<Map<string, MapHierarchyItem>>> {
+  if (hierarchyCache) return hierarchyCache
+  const p = request<{ items?: unknown }>('/api/map/places').then((r): ApiResult<Map<string, MapHierarchyItem>> => {
+    if (!r.ok) return r
+    const map = new Map<string, MapHierarchyItem>()
+    for (const raw of Array.isArray(r.value?.items) ? r.value.items : []) {
+      const v = raw as Record<string, unknown>
+      if (typeof v.id !== 'string' || !v.id || typeof v.name !== 'string' || !v.name || typeof v.displayLevel !== 'string') continue
+      if (v.parentPlaceId !== null && typeof v.parentPlaceId !== 'string') continue
+      map.set(v.id, { id: v.id, name: v.name, displayLevel: v.displayLevel, parentPlaceId: v.parentPlaceId })
+    }
+    return { ok: true, value: map }
+  })
+  hierarchyCache = p
+  void p.then(r => { if (!r.ok && hierarchyCache === p) hierarchyCache = null })
+  return p
+}
+
 // ---------------------------------------------------------------------------
 // 地点列表 / 搜索（M5 WO#18；审核 62 的 A2）
 //

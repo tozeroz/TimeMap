@@ -53,24 +53,27 @@ export function useRoute(): Route {
   return route
 }
 
-export function navigate(path: string, query?: Record<string, string>) {
-  const qs = query
-    ? '?' +
-      Object.entries(query)
-        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-        .join('&')
+/** 生成 hash 地址；navigate 与 replaceState 共用，保证编码一致 */
+export function buildHash(path: string, query?: Record<string, string>): string {
+  const entries = query ? Object.entries(query) : []
+  const qs = entries.length
+    ? '?' + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
     : ''
-  const hash = `#/${path}${qs}`
+  return `#/${path}${qs}`
+}
+
+export function navigate(path: string, query?: Record<string, string>) {
+  const hash = buildHash(path, query)
   if (navigationGuard && !navigationGuard(hash)) return
   window.location.hash = hash
 }
 
-/** 返回上一页；如果没有历史则回到主 tab */
-export function goBack(fallback = 'map') {
+/** 返回上一页；如果没有历史则回到 fallback（可带 query，例如地图上的地点抽屉） */
+export function goBack(fallback = 'map', query?: Record<string, string>) {
   if (window.history.length > 1) {
     window.history.back()
   } else {
-    navigate(fallback)
+    navigate(fallback, query)
   }
 }
 

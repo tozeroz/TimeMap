@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
 import { hasTencentKey, TENCENT_MAP_KEY } from './keys'
-import type { MapHandle } from './mapApi'
+import { measureMarkerExtent, nextMapInstance, type MapHandle } from './mapApi'
 import { CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
@@ -38,6 +38,10 @@ interface TencentMapInstance {
   zoomBy(delta: number): void
   /** 经纬度 → 容器像素坐标 */
   projectToContainer(latLng: TencentLatLng): TencentPoint | null
+  /** 容器像素 → 经纬度（未在本机验证，调用前检查是否存在） */
+  unprojectFromContainer?: (p: TencentPoint) => TencentLatLng | null
+  easeTo?: (view: Record<string, unknown>, opts?: Record<string, unknown>) => void
+  resize?: () => void
   on(event: string, handler: () => void): void
   destroy(): void
 }
@@ -95,6 +99,7 @@ interface PlacedItem {
   wrap: HTMLDivElement
   lat: number
   lng: number
+  placeId?: string
 }
 
 /** 标记的 DOM 结构：照片卡片 + 图钉 + 地点名（与 Leaflet 版同构） */
@@ -103,6 +108,7 @@ function buildMarkerElement(m: MapMarker): HTMLDivElement {
   const el = document.createElement('div')
   el.className = `rm ${m.imageMode === 'sticker' ? 'rm--sticker' : ''} ${m.highlight ? 'rm--highlight' : ''} ${!cover && m.postId ? 'rm--text' : ''}`
   el.dataset.markerId = m.id
+  el.dataset.placeId = m.placeId
 
   const card = document.createElement('div')
   card.className = 'rm__card'
@@ -137,6 +143,13 @@ function buildMarkerElement(m: MapMarker): HTMLDivElement {
   el.appendChild(card)
   el.appendChild(pin)
   return el
+}
+
+/** 墨卡托兜底：腾讯 GL 没有 unprojectFromContainer 时，按 256 像素瓦片基数把屏幕 y 偏移换算成纬度（未实测） */
+function offsetLatMercator(lat: number, zoom: number, dyPx: number): number {
+  const scale = 256 * 2 ** zoom
+  const y = (0.5 - Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) / (2 * Math.PI)) * scale + dyPx
+  return (Math.atan(Math.exp((0.5 - y / scale) * 2 * Math.PI)) * 360) / Math.PI - 90
 }
 
 export function TencentMap({
@@ -207,6 +220,9 @@ export function TencentMap({
         showControl: false,
       })
       mapObjRef.current = map
+      host.dataset.mapInstance = nextMapInstance()
+      let selected: string | null = null
+      const itemOf = (placeId: string) => markerItemsRef.current.find(i => i.placeId === placeId)
 
       // 标记（DOM 自绘 + 自己投影定位）
       for (const m of markers) {
@@ -233,7 +249,7 @@ export function TencentMap({
         })
         wrap.appendChild(el)
         host.appendChild(wrap)
-        const item: PlacedItem = { wrap, lat: m.lat, lng: m.lng }
+        const item: PlacedItem = { wrap, lat: m.lat, lng: m.lng, placeId: m.placeId }
         markerItemsRef.current.push(item)
         placedRef.current.push(item)
       }
@@ -254,6 +270,42 @@ export function TencentMap({
           return c ? { lat: c.getLat(), lng: c.getLng() } : null
         },
         getZoom: () => map?.getZoom() ?? null,
+        project: (lat, lng) => {
+          const p = map?.projectToContainer(new T.LatLng(lat, lng))
+          return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : null
+        },
+        unproject: (x, y) => {
+          if (!map) return null
+          if (typeof map.unprojectFromContainer === 'function') {
+            const c = map.unprojectFromContainer({ x, y })
+            return c ? { lat: c.getLat(), lng: c.getLng() } : null
+          }
+          const c = map.getCenter()
+          const pc = map.projectToContainer(c)
+          if (!pc) return null
+          const z = map.getZoom()
+          return { lat: offsetLatMercator(c.getLat(), z, y - pc.y), lng: c.getLng() + ((x - pc.x) * 360) / (256 * 2 ** z) }
+        },
+        setView: (lat, lng, zoom, animate) => {
+          if (!map) return
+          if (animate && typeof map.easeTo === 'function') map.easeTo({ center: new T.LatLng(lat, lng), zoom }, { duration: 300 })
+          else { map.setCenter(new T.LatLng(lat, lng)); map.setZoom(zoom) }
+          schedule()
+        },
+        getSize: () => (host.clientWidth && host.clientHeight ? { width: host.clientWidth, height: host.clientHeight } : null),
+        resize: () => { map?.resize?.(); schedule() },
+        setSelected: (placeId) => {
+          if (selected) { const it = itemOf(selected); if (it) { it.wrap.style.zIndex = ''; it.wrap.querySelector('.rm')?.classList.remove('rm--selected') } }
+          selected = placeId
+          // 选中层级 1002：必须高于腾讯 GL 的 1000 手势覆盖层（其他标记为 CSS 的 1001）
+          if (placeId) { const it = itemOf(placeId); if (it) { it.wrap.style.zIndex = '1002'; it.wrap.querySelector('.rm')?.classList.add('rm--selected') } }
+        },
+        getMarkerExtent: (placeId) => {
+          const it = itemOf(placeId)
+          if (!it || !map) return null
+          const p = map.projectToContainer(new T.LatLng(it.lat, it.lng))
+          return measureMarkerExtent(it.wrap.querySelector('.rm'), host, p)
+        },
       }
       mapRef?.(handle)
 

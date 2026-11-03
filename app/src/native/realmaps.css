@@ -146,3 +146,6 @@
    并不是需求 MAP-005 要求的弹幕；见 docs/zjx/地图模块缺口登记-2026-10-19.md）。 */
 @keyframes place-text-float { 50% { transform: translate(5px, -12px); } }
 @media (prefers-reduced-motion: reduce) { .rm--text .rm__card, .rm--highlight { animation: none; } }
+/* 地点抽屉的选中标记：只改描边与阴影，不缩放（尺寸变化会让定位偏移失准） */
+.rm--selected { filter: drop-shadow(0 0 6px rgba(237, 121, 73, 0.75)); }
+.rm--selected .rm__card { outline: 3px solid var(--c-brand, #ed7949); outline-offset: 0; }

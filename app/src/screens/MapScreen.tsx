@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Screen } from '../components/Shell'
 import {
   IconChatBubble,
@@ -36,8 +36,36 @@ import {
   type GeoFix,
   type GeoStatus,
 } from '../native/geo'
-import { navigate, useRoute } from '../router'
+import { buildHash, navigate, useRoute } from '../router'
+import type { ApiPlaceDetail } from '../api/client'
+import {
+  clearSheetSnapshot,
+  prefersReducedMotion,
+  readSheetSnapshot,
+  setPlaceSheetOpen,
+  writeSheetSnapshot,
+} from '../data/placeSheetState'
+import { focusInVisibleArea } from '../native/mapFocus'
+import { PlaceDetailSheet } from './PlaceDetailSheet'
+import {
+  computeSnaps,
+  DURATION_MS,
+  MARKER_GAP_PX,
+  parseSheetQuery,
+  visibleHeight,
+  type Detent,
+  type OpenDetent,
+} from './placeSheetModel'
 import './map.css'
+
+/** 地点抽屉状态（design.md §8.1）：placeId 只在 closing 结束时置空 */
+interface SheetState {
+  placeId: string | null
+  detent: Detent
+  phase: 'opening' | 'open' | 'closing'
+  token: number
+}
+const DEBUG_KEYS = ['offline', 'raster', 'amap'] as const
 
 interface ViewState {
   x: number
@@ -376,7 +404,12 @@ export function MapScreen() {
 
   const [markers, setMarkers] = useState<MapMarker[]>([])
   const [published, setPublished] = useState<ApiPost | null>(null)
-  const [showPublished, setShowPublished] = useState(Boolean(route.query.newPostId))
+  /*
+    发布成功落地的新帖 id 在挂载时固定（design §11.1）：打开抽屉会把 newPostId 从地址里去掉，
+    若标记 effect 依赖 route.query.newPostId，就会重新请求、产生新数组并重建地图。
+  */
+  const [publishedPostId] = useState<string | null>(() => route.query.newPostId ?? null)
+  const [showPublished, setShowPublished] = useState(Boolean(publishedPostId))
   const [selectedPlace, setSelectedPlace] = useState(route.query.placeId ?? '')
   const [markerPhase, setMarkerPhase] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   /**
@@ -437,7 +470,7 @@ export function MapScreen() {
       }
       const posts = po.ok ? po.value : []
       setPostsFailed(!po.ok)
-      const fresh = posts.find(p => p.id === route.query.newPostId)
+      const fresh = publishedPostId ? posts.find(p => p.id === publishedPostId) : undefined
       setPublished(fresh ?? null)
       setMarkers(markersFromPlaces(pr.value, fresh ? [fresh, ...posts.filter(p => p.id !== fresh.id)] : posts).map(m => ({ ...m, highlight: Boolean(fresh && m.postId === fresh.id) })))
       setMarkerPhase('ready')
@@ -445,7 +478,7 @@ export function MapScreen() {
     return () => {
       alive = false
     }
-  }, [category, route.query.newPostId, markerReload])
+  }, [category, publishedPostId, markerReload])
   // ---- 真实定位 ----
   const [fix, setFix] = useState<GeoFix | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
@@ -461,18 +494,25 @@ export function MapScreen() {
   const stopWatchRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
-    if (!route.query.newPostId) return
-    setShowPublished(true)
-    const timer = setTimeout(() => {
-      setShowPublished(false)
-      setMarkers(items => items.map(m => ({ ...m, highlight: false })))
-    }, 10000)
+    if (!publishedPostId) return
+    // 只收起提示，不再 setMarkers 清高亮：新数组会让地图重建（高亮是 6 次的 CSS 动画，自行停止）
+    const timer = setTimeout(() => setShowPublished(false), 10000)
     return () => clearTimeout(timer)
-  }, [route.query.newPostId])
+  }, [publishedPostId])
+  const markersRef = useRef(markers)
+  const routeRef = useRef(route)
+  useLayoutEffect(() => { markersRef.current = markers }, [markers])
+  /** 只有 placeId、没有 sheet 的地址（发布后落地 / 「在地图中查看」）：每个 placeId 只飞一次 */
+  const lastFlownRef = useRef<string | null>(null)
   useEffect(() => {
-    const target = markers.find(m => m.placeId === route.query.placeId)
-    if (target) mapHandleRef.current?.flyTo(target.lat, target.lng, 18)
-  }, [markers, route.query.placeId])
+    const pid = route.query.placeId
+    if (!pid || route.query.sheet !== undefined || lastFlownRef.current === pid) return
+    const target = markers.find(m => m.placeId === pid)
+    if (target && mapHandleRef.current) {
+      mapHandleRef.current.flyTo(target.lat, target.lng, 18)
+      lastFlownRef.current = pid
+    }
+  }, [markers, route.query.placeId, route.query.sheet])
 
   // ---- PLACE-005：视图采样 + 离开前保存（见文件头 MAP_VIEW_KEY 处的说明） ----
   const offlineRef = useRef(offline)
@@ -579,24 +619,340 @@ export function MapScreen() {
     }
   }, [searchOpen, keyword])
 
+  /* ==========================================================================
+     地点抽屉（spec 2026-11-02；design.md §7–§11）
+     ==========================================================================
+     · 状态只在这里（SheetState），URL #/map?placeId=&sheet= 只做镜像：
+       打开推入一条带 tmSheet 标记的历史；档位变化、切换地点用 replaceState。
+     · 地图不重建：handleMapRef / handleMarkerClick 是空依赖的稳定回调，经 ref 读最新值。
+     · 选中地点移到露出区域：native/mapFocus.ts，按实测标记高度计算。
+  */
+  const [sheetInit] = useState(() => {
+    const q = parseSheetQuery(route.query)
+    return { q, snap: q ? readSheetSnapshot(q.placeId) : null }
+  })
+  const [sheet, setSheet] = useState<SheetState>(() => sheetInit.q
+    ? { placeId: sheetInit.q.placeId, detent: sheetInit.q.detent, phase: 'opening', token: 1 }
+    : { placeId: null, detent: 'closed', phase: 'open', token: 0 })
+  const sheetRef = useRef(sheet)
+  const commitSheet = useCallback((next: SheetState) => { sheetRef.current = next; setSheet(next) }, [])
+  const preOpenViewRef = useRef(sheetInit.snap?.preOpenView ?? null)
+  const userMovedMapRef = useRef(sheetInit.snap?.userMovedMap ?? false)
+  const userMovedSinceFocusRef = useRef(false)
+  /** 从快照恢复后，用户第一次操作前不做自动定位，避免覆盖恢复的视野 */
+  const suppressAutoFocusRef = useRef(Boolean(sheetInit.snap))
+  /** 深链 / 快照恢复的首次定位要等地图句柄（和坐标）就绪 */
+  const focusPendingRef = useRef<'restore' | 'deeplink' | null>(sheetInit.q ? (sheetInit.snap ? 'restore' : 'deeplink') : null)
+  const contentScrollTopRef = useRef(sheetInit.snap?.scrollTop ?? 0)
+  const [initialScrollTop] = useState(() => sheetInit.snap?.scrollTop ?? 0)
+  const closingRef = useRef(false)
+  const pendingRestoreRef = useRef<{ lat: number; lng: number; zoom: number } | null>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
+  const coordsRef = useRef(new Map<string, { lat: number; lng: number }>())
+  const lastFocusRef = useRef<{ placeId: string | null; detent: Detent; key: string }>({ placeId: sheetInit.q?.placeId ?? null, detent: sheetInit.q?.detent ?? 'closed', key: '' })
+  const tipPendingRef = useRef(false)
+  const sheetHostRef = useRef<HTMLDivElement | null>(null)
+  const [dims, setDims] = useState(() => ({ H: typeof window === 'undefined' ? 800 : window.innerHeight - 58, headH: 108 }))
+  const snaps = useMemo(() => computeSnaps(dims.H, dims.headH), [dims.H, dims.headH])
+  const snapsRef = useRef(snaps)
+  const sheetOpen = sheet.placeId !== null
+  const sheetActive = sheetOpen && sheet.phase !== 'closing'
+  const headerHidden = sheetActive && (sheet.detent === 'expanded' || snaps.single)
+
+  useLayoutEffect(() => { routeRef.current = route }, [route])
+  useLayoutEffect(() => { snapsRef.current = snaps }, [snaps])
+  // App 据此隐藏底部主导航；卸载时不重置（design §7.7）
+  useLayoutEffect(() => { setPlaceSheetOpen(sheetOpen) }, [sheetOpen])
+
+  const debugQuery = useCallback((): Record<string, string> => {
+    const q: Record<string, string> = {}
+    for (const k of DEBUG_KEYS) { const v = routeRef.current.query[k]; if (v !== undefined) q[k] = v }
+    return q
+  }, [])
+  const sheetHash = useCallback((placeId: string, detent: OpenDetent) => buildHash('map', { placeId, sheet: detent, ...debugQuery() }), [debugQuery])
+  /** 推入一条抽屉历史并打标记：后退会关闭抽屉而不是离开应用 */
+  const pushSheetEntry = useCallback((placeId: string, detent: OpenDetent) => {
+    navigate('map', { placeId, sheet: detent, ...debugQuery() })
+    window.history.replaceState({ ...(window.history.state ?? {}), tmSheet: 1 }, '', window.location.hash)
+  }, [debugQuery])
+
+  const coordsOf = useCallback((placeId: string) => {
+    const m = markersRef.current.find(x => x.placeId === placeId)
+    return m ? { lat: m.lat, lng: m.lng } : coordsRef.current.get(placeId) ?? null
+  }, [])
+
+  /** 把选中地点移到抽屉上方露出区域（每次档位稳定、切换地点、尺寸变化时调用） */
+  const runFocus = useCallback((reason: 'select' | 'detent' | 'resize' | 'deeplink') => {
+    const s = sheetRef.current
+    const h = mapHandleRef.current
+    const stage = stageRef.current
+    const host = sheetHostRef.current
+    if (!s.placeId || s.detent === 'closed' || !h || !stage || !host) return
+    h.setSelected(s.placeId)
+    const c = coordsOf(s.placeId)
+    if (!c) return
+    // 用当前 DOM 重算高度：主导航刚隐藏时 state 里的 H 可能还没更新
+    const page = stage.closest('.map-page') as HTMLElement | null
+    const sn = page ? computeSnaps(page.clientHeight, dims.headH) : snapsRef.current
+    const mapRect = stage.getBoundingClientRect()
+    const hostRect = host.getBoundingClientRect()
+    const visibleTop = 8
+    const visibleBottom = Math.round(hostRect.bottom - visibleHeight(s.detent, sn) - mapRect.top - MARKER_GAP_PX)
+    const key = `${s.placeId}|${s.detent}|${visibleBottom}|${Math.round(mapRect.height)}`
+    if (reason === 'resize' && key === lastFocusRef.current.key) return
+    lastFocusRef.current = { ...lastFocusRef.current, key }
+    const animate = (reason === 'select' || reason === 'detent') && !prefersReducedMotion()
+    const r = focusInVisibleArea(h, { ...c, placeId: s.placeId }, { zoom: reason === 'deeplink' ? 18 : h.getZoom() ?? 16, visibleTop, visibleBottom, animate })
+    userMovedSinceFocusRef.current = false
+    stage.dataset.focusTop = String(visibleTop)
+    stage.dataset.focusBottom = String(visibleBottom)
+    stage.dataset.focusAnchor = String(Math.round(r.anchorY))
+    stage.dataset.focusAnimate = String(animate)
+    stage.dataset.focusMode = r.mode
+  }, [coordsOf, dims.headH])
+
+  /** 关闭后恢复打开前的视野（用户在抽屉打开期间没有操作过地图时） */
+  const restorePreOpenView = useCallback(() => {
+    const r = pendingRestoreRef.current
+    const h = mapHandleRef.current
+    if (!r || !h || sheetRef.current.placeId !== null) return
+    pendingRestoreRef.current = null
+    h.resize()
+    h.setView(r.lat, r.lng, r.zoom, !prefersReducedMotion())
+  }, [])
+
+  const startClose = useCallback(() => {
+    const s = sheetRef.current
+    if (!s.placeId || s.phase === 'closing') return
+    mapHandleRef.current?.setSelected(null)
+    pendingRestoreRef.current = !userMovedMapRef.current && preOpenViewRef.current ? preOpenViewRef.current : null
+    preOpenViewRef.current = null
+    userMovedMapRef.current = false
+    userMovedSinceFocusRef.current = false
+    suppressAutoFocusRef.current = false
+    focusPendingRef.current = null
+    clearSheetSnapshot()
+    commitSheet({ ...s, detent: 'closed', phase: 'closing', token: s.token + 1 })
+  }, [commitSheet])
+
+  const beginOpen = useCallback((placeId: string, detent: OpenDetent) => {
+    const s = sheetRef.current
+    const h = mapHandleRef.current
+    const c = h?.getCenter()
+    const z = h?.getZoom()
+    preOpenViewRef.current = c && typeof z === 'number' ? { lat: c.lat, lng: c.lng, zoom: z } : null
+    userMovedMapRef.current = false
+    userMovedSinceFocusRef.current = false
+    suppressAutoFocusRef.current = false
+    focusPendingRef.current = null
+    pendingRestoreRef.current = null
+    contentScrollTopRef.current = 0
+    if (s.phase !== 'closing') returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setSelectedPlace(placeId)
+    commitSheet({ placeId, detent, phase: 'opening', token: s.token + 1 })
+  }, [commitSheet])
+
+  /** 点击标记 / 搜索选中：关闭态打开，打开态切换地点（回到预览），同一地点不变 */
+  const openOrSwitch = useCallback((placeId: string, coords?: { lat: number; lng: number } | null) => {
+    if (coords) coordsRef.current.set(placeId, coords)
+    const s = sheetRef.current
+    if (s.placeId === placeId && s.phase !== 'closing') return
+    if (s.placeId === null || s.phase === 'closing') {
+      pushSheetEntry(placeId, 'preview')
+      beginOpen(placeId, 'preview')
+      return
+    }
+    suppressAutoFocusRef.current = false
+    contentScrollTopRef.current = 0
+    setSelectedPlace(placeId)
+    window.history.replaceState(window.history.state, '', sheetHash(placeId, 'preview'))
+    commitSheet({ ...s, placeId, detent: 'preview' })
+  }, [beginOpen, commitSheet, pushSheetEntry, sheetHash])
+
+  const requestDetent = useCallback((d: OpenDetent) => {
+    const s = sheetRef.current
+    if (!s.placeId || s.phase === 'closing') return
+    suppressAutoFocusRef.current = false
+    if (d === s.detent) return
+    window.history.replaceState(window.history.state, '', sheetHash(s.placeId, d))
+    commitSheet({ ...s, detent: d })
+  }, [commitSheet, sheetHash])
+
+  const requestClose = useCallback(() => {
+    const s = sheetRef.current
+    if (!s.placeId || s.phase === 'closing') return
+    if (window.history.state?.tmSheet === 1) {
+      closingRef.current = true
+      window.history.back()
+      return
+    }
+    window.history.replaceState(null, '', buildHash('map', debugQuery()))
+    startClose()
+  }, [debugQuery, startClose])
+
+  // 地址变化（后退 / 前进 / 深链）：以自身状态为准对比（design §10.3）
+  useEffect(() => {
+    // 正在离开地图（简介页、帖子、发布页…）：不是后退拦截，什么都不做；快照由卸载时写入
+    if (route.path !== 'map') return
+    const target = parseSheetQuery(route.query)
+    const s = sheetRef.current
+    const active = s.placeId !== null && s.phase !== 'closing'
+    if (!target) {
+      if (route.query.sheet !== undefined) window.history.replaceState(null, '', buildHash('map', debugQuery()))
+      if (!active) return
+      if (s.detent === 'expanded' && !closingRef.current) {
+        // 后退顺序：展开 → 预览 → 关闭
+        pushSheetEntry(s.placeId!, 'preview')
+        commitSheet({ ...s, detent: 'preview' })
+      } else {
+        closingRef.current = false
+        startClose()
+      }
+      return
+    }
+    // 没有标记的抽屉地址（深链、从其他页面 navigate 过来）：先把当前条目改成关闭态地图再推入（幂等）
+    if (window.history.state?.tmSheet !== 1) {
+      window.history.replaceState(null, '', buildHash('map', debugQuery()))
+      pushSheetEntry(target.placeId, target.detent)
+    }
+    if (active && s.placeId === target.placeId && s.detent === target.detent) return
+    if (!active) beginOpen(target.placeId, target.detent)
+    else commitSheet({ ...s, placeId: target.placeId, detent: target.detent })
+  }, [route, beginOpen, commitSheet, debugQuery, pushSheetEntry, startClose])
+
+  // 动画阶段：不依赖 transitionend（减少动效下不会触发），由定时器结束
+  useEffect(() => {
+    if (sheet.phase === 'open') return
+    const timer = window.setTimeout(() => {
+      const s = sheetRef.current
+      if (s.phase === 'opening') { commitSheet({ ...s, phase: 'open' }); return }
+      if (s.phase !== 'closing') return
+      commitSheet({ placeId: null, detent: 'closed', phase: 'open', token: s.token })
+      // 打开前的视野在主导航恢复、.map 变矮之后由 ResizeObserver 恢复；尺寸没变时由这里兜底
+      window.setTimeout(restorePreOpenView, 200)
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const el = returnFocusRef.current
+        returnFocusRef.current = null
+        if (el && el.isConnected && el.getClientRects().length > 0) el.focus({ preventScroll: true })
+        else document.querySelector<HTMLElement>('[data-map-tool="search"]')?.focus({ preventScroll: true })
+        if (tipPendingRef.current) { tipPendingRef.current = false; setTipOpen(true) }
+      }))
+    }, prefersReducedMotion() ? 0 : DURATION_MS)
+    return () => window.clearTimeout(timer)
+  }, [sheet.phase, sheet.token, commitSheet, restorePreOpenView])
+
+  // 档位稳定、切换地点、可用高度变化 → 重新定位
+  useEffect(() => {
+    if (!sheet.placeId || sheet.detent === 'closed' || sheet.phase === 'closing') return
+    const last = lastFocusRef.current
+    const reason = last.placeId !== sheet.placeId ? 'select' : last.detent !== sheet.detent ? 'detent' : 'resize'
+    lastFocusRef.current = { ...last, placeId: sheet.placeId, detent: sheet.detent }
+    if (focusPendingRef.current) return
+    if (reason !== 'select' && (userMovedSinceFocusRef.current || suppressAutoFocusRef.current)) return
+    const raf = requestAnimationFrame(() => runFocus(reason))
+    return () => cancelAnimationFrame(raf)
+  }, [sheet.placeId, sheet.detent, sheet.phase, snaps.previewH, snaps.expandedH, headerHidden, runFocus])
+
+  // 可用高度 H（.map-page）与头部高度；.map 尺寸变化时通知地图 SDK
+  useLayoutEffect(() => {
+    const stage = stageRef.current
+    const page = stage?.closest('.map-page') as HTMLElement | null
+    if (!stage || !page) return
+    const measure = () => {
+      const head = page.querySelector<HTMLElement>('.map__head')
+      const cats = page.querySelector<HTMLElement>('.map__cats')
+      setDims(prev => {
+        const H = page.clientHeight || prev.H
+        const headH = head ? head.offsetHeight + (cats?.offsetHeight ?? 0) : prev.headH
+        return H === prev.H && headH === prev.headH ? prev : { H, headH }
+      })
+    }
+    measure()
+    if (typeof ResizeObserver !== 'function') return
+    let raf = 0
+    const ro = new ResizeObserver(entries => {
+      measure()
+      if (entries.some(e => e.target === stage)) {
+        mapHandleRef.current?.resize()
+        restorePreOpenView()
+        cancelAnimationFrame(raf)
+        raf = requestAnimationFrame(() => {
+          const s = sheetRef.current
+          if (!s.placeId || s.phase === 'closing' || userMovedSinceFocusRef.current || suppressAutoFocusRef.current || focusPendingRef.current) return
+          runFocus('resize')
+        })
+      }
+    })
+    ro.observe(page)
+    ro.observe(stage)
+    for (const el of page.querySelectorAll('.map__head, .map__cats')) ro.observe(el)
+    return () => { ro.disconnect(); cancelAnimationFrame(raf) }
+  }, [headerHidden, runFocus, restorePreOpenView])
+
+  // 抽屉打开期间：用户拖动 / 缩放地图（> 8px、双指、滚轮）后关闭时保留其视野
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!sheetActive || !stage) return
+    const downs = new Map<number, { x: number; y: number }>()
+    const mark = () => { userMovedMapRef.current = true; userMovedSinceFocusRef.current = true; suppressAutoFocusRef.current = false }
+    const onDown = (e: PointerEvent) => { downs.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (downs.size > 1) mark() }
+    const onMove = (e: PointerEvent) => { const d = downs.get(e.pointerId); if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) mark() }
+    const onUp = (e: PointerEvent) => { downs.delete(e.pointerId) }
+    stage.addEventListener('pointerdown', onDown, true)
+    stage.addEventListener('pointermove', onMove, true)
+    stage.addEventListener('pointerup', onUp, true)
+    stage.addEventListener('pointercancel', onUp, true)
+    stage.addEventListener('wheel', mark, { capture: true, passive: true })
+    return () => {
+      stage.removeEventListener('pointerdown', onDown, true)
+      stage.removeEventListener('pointermove', onMove, true)
+      stage.removeEventListener('pointerup', onUp, true)
+      stage.removeEventListener('pointercancel', onUp, true)
+      stage.removeEventListener('wheel', mark, { capture: true })
+    }
+  }, [sheetActive])
+
+  // 离开地图时记下抽屉快照（返回时恢复地点、档位、正文滚动）
+  useEffect(() => () => {
+    const s = sheetRef.current
+    if (!s.placeId || s.phase === 'closing' || s.detent === 'closed') return
+    writeSheetSnapshot({ placeId: s.placeId, detent: s.detent, scrollTop: contentScrollTopRef.current, preOpenView: preOpenViewRef.current, userMovedMap: userMovedMapRef.current })
+  }, [])
+
+  /** 抽屉内跳转：先保存地图视野，再进入目标页 */
+  const leaveSheetTo = useCallback((path: string, query: Record<string, string>) => {
+    persistView()
+    navigate(path, query)
+    if (path === 'place-intro') window.history.replaceState({ tmIntroFromSheet: 1 }, '', window.location.hash)
+  }, [persistView])
+
+  const onSheetPlaceLoaded = useCallback((p: ApiPlaceDetail) => {
+    if (typeof p.latitude !== 'number' || typeof p.longitude !== 'number') return
+    const had = coordsOf(p.id) !== null
+    coordsRef.current.set(p.id, { lat: p.latitude, lng: p.longitude })
+    if (had || sheetRef.current.placeId !== p.id) return
+    // 标记列表里没有这个地点（被分类筛掉或尚未加载）：用详情坐标补一次定位
+    if (focusPendingRef.current === 'deeplink' && mapHandleRef.current) {
+      focusPendingRef.current = null
+      requestAnimationFrame(() => runFocus('deeplink'))
+    } else if (!focusPendingRef.current && !suppressAutoFocusRef.current) {
+      requestAnimationFrame(() => runFocus('select'))
+    }
+  }, [coordsOf, runFocus])
+
   /**
-   * 选中一个预设地标：飞过去 + 打开地点详情，并把**目标视图**记为"上次视图"，
-   * 这样从详情返回时人就停在这个地标上（PLACE-005）。
+   * 搜索选中一个预设地标：关闭搜索面板，打开（或切换到）该地点的抽屉。
+   * 坐标优先取标记，其次取搜索结果；分类不切换（design §11.2）。
    */
   const pickPlace = useCallback((p: ApiPlaceListItem) => {
     setSearchOpen(false)
     setKeyword('')
     setSearchResults([])
     setSearchPhase('idle')
-    setSelectedPlace(p.id)
-    if (typeof p.latitude === 'number' && typeof p.longitude === 'number') {
-      mapHandleRef.current?.flyTo(p.latitude, p.longitude, 18)
-      const target = { lat: p.latitude, lng: p.longitude, zoom: 18 }
-      lastOnlineViewRef.current = target
-      writeSavedMapView({ offline: false, ...target })
-    }
-    navigate('poidetail', { id: p.id })
-  }, [])
+    const coords = typeof p.latitude === 'number' && Number.isFinite(p.latitude) && typeof p.longitude === 'number' && Number.isFinite(p.longitude)
+      ? { lat: p.latitude, lng: p.longitude } : null
+    openOrSwitch(p.id, coords)
+  }, [openOrSwitch])
 
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s))
 
@@ -636,7 +992,11 @@ export function MapScreen() {
     void (async () => {
       const granted = await hasLocationPermission()
       if (cancelled) return
-      if (!granted || forceAsk) setTipOpen(true)
+      if (!granted || forceAsk) {
+        // 抽屉开着时不自动弹（会被抽屉盖住），关闭后补弹一次
+        if (sheetRef.current.placeId) tipPendingRef.current = true
+        else setTipOpen(true)
+      }
       if (!granted) return
       const first = await getCurrentFix()
       if (cancelled) return
@@ -786,22 +1146,52 @@ export function MapScreen() {
       理由见 markersFromPlaces 的说明：地图的组织单位是地点（需求 4.1/4.2）。
       ⚠️ 不回落到 postId —— 两者的语义不同，混用会让"点进哪个地点"变得不可预测。
     */
-    // PLACE-005：离开地图前先把当前视图记下来，返回时停在同一处
-    persistView()
-    if (postId) { navigate('feed', { id: postId }); return }
-    setSelectedPlace(placeId)
-    navigate('poidetail', { id: placeId })
-  }, [persistView])
+    // 代表帖卡片仍进帖子详情（离开前保存视图，返回时停在同一处）；地点区域打开地点抽屉
+    if (postId) { persistView(); navigate('feed', { id: postId }); return }
+    openOrSwitch(placeId)
+  }, [persistView, openOrSwitch])
 
+  /*
+    ⚠️ 空依赖的稳定回调：三个地图组件的建图 effect 依赖它，依赖 markers / placeId
+       会让每次打开抽屉、切换地点都销毁重建地图（design §11.1）。最新值经 ref 读取。
+  */
   const handleMapRef = useCallback((handle: MapHandle | null) => {
     mapHandleRef.current = handle
     if (!handle) return
     mapCreatedAtRef.current = Date.now()
     setTilesOk(true)
-    // ① URL 指定了地点（深链 / 发布后回到地图）→ 优先飞到该地点
-    const target = markers.find(m => m.placeId === route.query.placeId)
-    if (target) {
+    const s = sheetRef.current
+    if (s.placeId && s.phase !== 'closing') {
+      const pending = focusPendingRef.current
+      if (pending === 'restore') {
+        // 从简介页等返回：恢复离开前保存的视野，不重新定位
+        const v = readSavedMapView()
+        if (v && !v.offline) {
+          handle.setView(v.lat, v.lng, v.zoom, false)
+          lastOnlineViewRef.current = { lat: v.lat, lng: v.lng, zoom: v.zoom }
+          setViewRestored('online')
+        }
+        focusPendingRef.current = null
+      } else if (pending === 'deeplink') {
+        const c = coordsOf(s.placeId)
+        if (c) {
+          handle.setView(c.lat, c.lng, 18, false)
+          focusPendingRef.current = null
+          requestAnimationFrame(() => runFocus('deeplink'))
+        }
+      } else if (lastOnlineViewRef.current) {
+        const l = lastOnlineViewRef.current
+        handle.setView(l.lat, l.lng, l.zoom, false)
+      }
+      handle.setSelected(s.placeId)
+      return
+    }
+    // ① URL 只指定了地点（发布后回到地图）→ 飞到该地点，每个 placeId 只飞一次
+    const pid = routeRef.current.query.placeId
+    const target = pid ? markersRef.current.find(m => m.placeId === pid) : undefined
+    if (target && lastFlownRef.current !== pid) {
       handle.flyTo(target.lat, target.lng, 18)
+      lastFlownRef.current = pid ?? null
       lastOnlineViewRef.current = { lat: target.lat, lng: target.lng, zoom: 18 }
       return
     }
@@ -823,11 +1213,25 @@ export function MapScreen() {
       handle.flyTo(saved.lat, saved.lng, saved.zoom)
       setViewRestored('online')
     }
-  }, [markers, route.query.placeId])
+  }, [coordsOf, runFocus])
+
+  // Esc：与后退一致（展开 → 预览 → 关闭）；搜索面板或定位授权弹窗打开时不处理
+  useEffect(() => {
+    if (!sheetActive) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || searchOpen || tipOpen) return
+      e.preventDefault()
+      if (sheetRef.current.detent === 'expanded' && !snapsRef.current.single) requestDetent('preview')
+      else requestClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [sheetActive, searchOpen, tipOpen, requestDetent, requestClose])
 
   return (
     <Screen
-      header={
+      className="map-page"
+      header={headerHidden ? undefined :
         <header className="map__head">
           <div className="map__titlewrap">
             <h1 className="map__title">BJTU TimeMap</h1>
@@ -866,7 +1270,7 @@ export function MapScreen() {
           与"客户端 filter"相比，服务端筛在加页/加 limit 之后不会静默变成不完整结果。
         `data-map-category` 是验收钩子：当前生效的分类必须能被机械读到。
       */}
-      <div className="map__cats no-scrollbar" data-map-category={category}>
+      {!headerHidden && <div className="map__cats no-scrollbar" data-map-category={category}>
         {CATEGORY_FILTERS.map((c) => (
           <button
             key={c}
@@ -877,7 +1281,7 @@ export function MapScreen() {
             {c}
           </button>
         ))}
-      </div>
+      </div>}
       {/*
         ⚠️ 这里**没有**「文字弹幕」开关（原来有一个，但它只是给根节点加 `.map--hide-text`
         隐藏栅格底图上的文字卡片，并不是需求 MAP-005 要求的弹幕滚动）。
@@ -899,14 +1303,14 @@ export function MapScreen() {
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
-        {showPublished && route.query.newPostId && <div className="map__published" role="status" onPointerDown={e => e.stopPropagation()}>
+        {showPublished && publishedPostId && <div className="map__published" role="status" onPointerDown={e => e.stopPropagation()}>
           <strong>发布成功{published?.place ? ` · ${published.place}` : ''}</strong>
           {published?.images?.[0] && <img src={mediaUrl(published.mapMediaId || published.images[0].id)} alt="刚发布的内容" />}
           {published?.body && <p>{published.body.slice(0, 60)}</p>}
           <button
             onClick={() => {
               persistView()
-              navigate('feed', { id: route.query.newPostId })
+              navigate('feed', { id: publishedPostId })
             }}
           >
             查看帖子
@@ -955,7 +1359,8 @@ export function MapScreen() {
           如果不说明，用户会以为"这块校园没人发过带地点的动态" ——
           而事实是"**离线底图不支持标记**"。这两件事必须能被区分。
         */}
-        {offline ? (
+        {/* 抽屉打开时，地图底部的状态条、工具和 FAB 会被压住，一律不渲染（design §11.4） */}
+        {sheetOpen ? null : offline ? (
           <span className="map__markerBadge" data-marker-phase="offline-unsupported">
             离线底图不支持标记显示
           </span>
@@ -1005,7 +1410,7 @@ export function MapScreen() {
           </span>
         )}
         {/* 帖子读取失败时的**显式降级说明**（不把"读不到"说成"没有内容"） */}
-        {!offline && markerPhase === 'ready' && postsFailed && (
+        {!sheetOpen && !offline && markerPhase === 'ready' && postsFailed && (
           <span className="map__postsFailed" data-marker-posts-failed>
             帖子内容读取失败，标记未显示照片与点赞
             <button
@@ -1039,7 +1444,7 @@ export function MapScreen() {
           }}
         />
 
-        {showFar && (
+        {showFar && !sheetOpen && (
           /*
             MAP-002：地图工具只有「搜索地标」与「定位当前位置」，
             **不提供**单独的"回到校园全景"工具 ⇒ 这里移除原来的「回校园」按钮，
@@ -1055,7 +1460,7 @@ export function MapScreen() {
           ⚠️ 原来的「放大」控件已移除：需求把工具清单限定为这两项，缩放手势由底图自己负责
           （Leaflet 滚轮/双指，SDK 底图同理）。
         */}
-        <div className="map__controls" data-map-tools="search,locate">
+        {!sheetOpen && <div className="map__controls" data-map-tools="search,locate">
           <button
             className="map__ctrl"
             data-map-tool="search"
@@ -1071,7 +1476,7 @@ export function MapScreen() {
           <button className="map__ctrl" data-map-tool="locate" onClick={recenter} aria-label="定位当前位置">
             <IconLocation size={20} />
           </button>
-        </div>
+        </div>}
 
         {/* MAP-003：搜索面板（只列团队维护的预设地标；选中后飞到该地标并打开地点详情） */}
         {searchOpen && (
@@ -1132,7 +1537,7 @@ export function MapScreen() {
           </div>
         )}
 
-        <button
+        {!sheetOpen && <button
           className="map__fab"
           onClick={() => {
             persistView()
@@ -1141,7 +1546,7 @@ export function MapScreen() {
           aria-label="发布"
         >
           <IconPlus size={22} />
-        </button>
+        </button>}
 
         {tipOpen && (
           /*
@@ -1190,6 +1595,21 @@ export function MapScreen() {
             </div>
           </div>
         )}
+      </div>
+      <div className="ps-host" ref={sheetHostRef} data-sheet-phase={sheetOpen ? sheet.phase : undefined} inert={tipOpen && sheetOpen ? true : undefined}>
+        {sheet.placeId && <PlaceDetailSheet
+          placeId={sheet.placeId}
+          detent={sheet.detent}
+          closing={sheet.phase === 'closing'}
+          snaps={snaps}
+          placeNameHint={markers.find(m => m.placeId === sheet.placeId)?.place ?? null}
+          initialScrollTop={initialScrollTop}
+          onScroll={top => { contentScrollTopRef.current = top }}
+          onRequestDetent={requestDetent}
+          onRequestClose={requestClose}
+          onNavigate={leaveSheetTo}
+          onPlaceLoaded={onSheetPlaceLoaded}
+        />}
       </div>
     </Screen>
   )
