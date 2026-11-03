@@ -8,6 +8,7 @@
 //            yearSort 按迁移 029 的同一规则从标签里原样抽出四位年份（1800–2099），抽不出就传 null（= 年代不详）。
 //            两者都没有默认值：工具不替照片编出处和年份。
 //   --api    API origin，默认 http://127.0.0.1:3002（本地后端）。对生产跑时传生产域名。
+//            除 127.0.0.1/localhost 外必须是 https://，否则直接报错（避免明文发送管理员凭据）。
 //   --dir    照片文件夹，默认 D:\TimeMap-local\地标图片。平铺，文件名 = 地点名（精确匹配），扩展名 .jpg/.jpeg/.png/.webp（大小写均可）。
 //   --phone  管理员手机号，默认 19900000001（本地管理员）。
 //   --dry-run 只登录 + 读取，打印将要做什么，不上传、不挂图、不删除。
@@ -25,6 +26,7 @@
 //   GET /api/admin/places 按名字精确匹配地点（同名多个 → 报错不导入）
 //   → GET /api/places/:id 看是否已有同 title 的照片（title = 地点名），有就跳过（幂等）
 //   → POST /api/media（purpose=place，uploadRequestId 由文件内容 sha256 派生，重跑不会重复建媒体）
+//   → 若返回的 mediaId 已挂在该地点（title 被改过的情况），也跳过
 //   → POST /api/admin/places/:id/photos { title, yearLabel, yearSort, source, mediaId }。
 //
 // 上传限制（以服务端为准，见 server/src/index.ts 的 /api/media 与 server/src/imageProbe.ts）：
@@ -59,6 +61,10 @@ function parseArgs(argv) {
   const y = opts.year.match(/(1[89][0-9][0-9]|20[0-9][0-9])/)
   opts.yearSort = y ? Number(y[1]) : null
   opts.api = opts.api.replace(/\/+$/, '')
+  // 管理员 token / 密码会随请求发出：除本机回环地址外只接受 https。
+  if (!/^https:\/\//.test(opts.api) && !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(opts.api)) {
+    throw new Error(`--api 必须是 https://（本机 127.0.0.1/localhost 除外）：${opts.api}`)
+  }
   return opts
 }
 
@@ -133,7 +139,7 @@ for (const { file, name } of files) {
       tally.skipped++
       console.log(`SKIP   ${name}: 已有同名照片`)
     } else {
-      await importOne(file, name, place)
+      await importOne(file, name, place, photos)
     }
     // 只有在该地点已经有（或本次 dry-run 将会有）文件夹照片时才删演示照片，避免地点被删空。
     if (opts.removeDemoPhotos) await removeDemo(name, photos)
@@ -158,7 +164,7 @@ async function removeDemo(name, photos) {
   }
 }
 
-async function importOne(file, name, place) {
+async function importOne(file, name, place, photos) {
   const buf = fs.readFileSync(path.join(opts.dir, file))
   if (buf.length > MEDIA_MAX_BYTES) throw new Error(`文件 ${buf.length} 字节，超过服务端上限 ${MEDIA_MAX_BYTES}（本工具不缩放）`)
   if (opts.dryRun) {
@@ -171,6 +177,12 @@ async function importOne(file, name, place) {
   form.append('uploadRequestId', requestIdFor(buf))
   form.append('file', new Blob([buf], { type: EXT_MIME[path.extname(file).toLowerCase()] }), file)
   const media = await call('POST', '/api/media', { token, form })
+  // 第二道幂等：照片 title 被管理员改过时，同一文件重放出的 mediaId 已挂在该地点上，也算已导入。
+  if (photos.some((ph) => ph.mediaId === media.id)) {
+    tally.skipped++
+    console.log(`SKIP   ${name}: 这张图（media ${media.id}）已挂在该地点上`)
+    return
+  }
   const photo = await call('POST', `/api/admin/places/${place.id}/photos`, {
     token,
     body: { title: name, yearLabel: opts.year, yearSort: opts.yearSort, source: opts.source, mediaId: media.id },
