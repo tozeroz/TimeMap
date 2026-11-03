@@ -20,6 +20,8 @@ import { OnboardingScreen } from './screens/OnboardingScreen'
 import { AnnounceScreen } from './screens/AnnounceScreen'
 import { FeedListScreen } from './screens/FeedListScreen'
 import { PoiDetailScreen } from './screens/PoiDetailScreen'
+import { PlaceIntroScreen } from './screens/PlaceIntroScreen'
+import { usePlaceSheetOpen } from './data/placeSheetState'
 import { MediaPreviewScreen } from './screens/MediaPreviewScreen'
 import { ScannerScreen } from './screens/ScannerScreen'
 import { LoginSelectScreen } from './screens/LoginSelectScreen'
@@ -60,6 +62,7 @@ const TAB_TITLES: Record<string, string> = {
 
 export default function App() {
   const route = useRoute()
+  const sheetOpen = usePlaceSheetOpen()
   const [root, param] = route.path.split('/')
   /*
     tab 的映射：`#/campus` 在底部 tab 里叫 `feed`（标签文案是「帖子」）。
@@ -155,6 +158,8 @@ export default function App() {
       {root === 'announce' && <AnnounceScreen />}
       {root === 'feedlist' && <FeedListScreen />}
       {root === 'poidetail' && <PoiDetailScreen id={route.query.id ?? param ?? ''} />}
+      {/* 地点简介页（封面 + 简介 + 相关照片）；从地图地点抽屉的「地点背景与校园时光」进入 */}
+      {root === 'place-intro' && <PlaceIntroScreen key={route.query.id ?? ''} id={route.query.id ?? param ?? ''} route={route} />}
       {/*
         ⭐ TimeMap P0 新增的路由：
           · `activity`       活动详情（US-04；id 解析与兄弟路由一致：query → 路径段 → 空串）
@@ -248,7 +253,8 @@ export default function App() {
             （mock.ts 里可能仍有未被治理页面的数据）。
       */}
 
-      {tab && <TabBar active={tab} />}
+      {/* 地点抽屉打开时隐藏底部主导航，关闭后恢复（spec §3.1） */}
+      {tab && !(tab === 'map' && sheetOpen) && <TabBar active={tab} />}
       {root === 'activities' && <button className="app__publish app__publish--campus" aria-label="提交活动" onClick={() => navigate('activity-submit')}>＋</button>}
       {tab && root !== 'map' && root !== 'activities' && root !== 'me' && <button className={`app__publish ${root === 'campus' ? 'app__publish--campus' : ''}`} aria-label="发布" onClick={() => navigate('publish')}>＋</button>}
     </Shell>

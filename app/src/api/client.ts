@@ -1122,6 +1122,13 @@ export function adminListAuditLog(): Promise<ApiResult<ApiAuditEntry[]>> {
  *    公开列表默认只给启用的（学生视角），管理端必须能看到停用的，
  *    否则"停用后无法再启用"（看不到它，也就没有开关可点）。
  */
+/**
+ * 地点分类（places.category）。
+ * ⚠️ 与 server/src/placeCategories.ts 及迁移 031 的 places_category_check 保持一致。
+ */
+export const PLACE_CATEGORIES = ['地标', '教学楼', '活动场地', '运动场地', '食堂'] as const
+export type PlaceCategory = (typeof PLACE_CATEGORIES)[number]
+
 export interface ApiAdminPlace {
   id: string
   name: string
@@ -1146,7 +1153,7 @@ export function adminListPlaces(): Promise<ApiResult<ApiAdminPlace[]>> {
 /** 管理员：新建地点（F02：预设地点由管理员维护，学生不能自建） */
 export function adminCreatePlace(input: {
   name: string
-  category: '地标' | '食堂'
+  category: PlaceCategory
   address?: string
   latitude?: number
   longitude?: number
@@ -1167,7 +1174,7 @@ export function adminUpdatePlace(
   placeId: string,
   patch: Partial<{
     name: string
-    category: '地标' | '食堂'
+    category: PlaceCategory
     address: string | null
     description: string | null
     history: string | null
@@ -1618,7 +1625,7 @@ export interface ApiPlaceDetail {
   address: string | null
   latitude: number | null
   longitude: number | null
-  /** '地标' | '食堂'（F02：地图首页的分类筛选就是这个字段） */
+  /** PlaceCategory：'地标' | '教学楼' | '活动场地' | '运动场地' | '食堂'（F02：地图首页的分类筛选就是这个字段） */
   category: string
   /** 是否启用（停用地点不出现在公开列表，也不能关联新帖） */
   enabled: boolean
@@ -1651,6 +1658,27 @@ export function getPlace(
   return request<ApiPlaceDetail>(`/api/places/${encodeURIComponent(id)}${q}`)
 }
 
+/** 地点层级（公开 `GET /api/map/places`）：只保留简介页标题需要的四个字段。 */
+export interface MapHierarchyItem { id: string; name: string; displayLevel: string; parentPlaceId: string | null }
+let hierarchyCache: Promise<ApiResult<Map<string, MapHierarchyItem>>> | null = null
+export function listMapHierarchy(): Promise<ApiResult<Map<string, MapHierarchyItem>>> {
+  if (hierarchyCache) return hierarchyCache
+  const p = request<{ items?: unknown }>('/api/map/places').then((r): ApiResult<Map<string, MapHierarchyItem>> => {
+    if (!r.ok) return r
+    const map = new Map<string, MapHierarchyItem>()
+    for (const raw of Array.isArray(r.value?.items) ? r.value.items : []) {
+      const v = raw as Record<string, unknown>
+      if (typeof v.id !== 'string' || !v.id || typeof v.name !== 'string' || !v.name || typeof v.displayLevel !== 'string') continue
+      if (v.parentPlaceId !== null && typeof v.parentPlaceId !== 'string') continue
+      map.set(v.id, { id: v.id, name: v.name, displayLevel: v.displayLevel, parentPlaceId: v.parentPlaceId })
+    }
+    return { ok: true, value: map }
+  })
+  hierarchyCache = p
+  void p.then(r => { if (!r.ok && hierarchyCache === p) hierarchyCache = null })
+  return p
+}
+
 // ---------------------------------------------------------------------------
 // 地点列表 / 搜索（M5 WO#18；审核 62 的 A2）
 //
@@ -1673,7 +1701,7 @@ export interface ApiPlaceListItem {
   address: string | null
   latitude: number | null
   longitude: number | null
-  /** ⭐ P0（F02）：'地标' | '食堂' —— 地图首页的分类筛选依据 */
+  /** ⭐ P0（F02）：PlaceCategory（地标/教学楼/活动场地/运动场地/食堂）—— 地图首页的分类筛选依据 */
   category: string
   /** ⭐ P0（F02）：是否启用。公开列表默认只含启用的（服务端过滤） */
   enabled: boolean
@@ -1690,7 +1718,7 @@ export interface ApiPlaceListItem {
  */
 export async function listPlaces(
   q?: string,
-  category?: '地标' | '食堂',
+  category?: PlaceCategory,
 ): Promise<ApiResult<ApiPlaceListItem[]>> {
   const params = new URLSearchParams()
   if (q && q.trim()) params.set('q', q.trim())

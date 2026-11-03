@@ -22,6 +22,7 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import type { Db } from './db'
+import { isPlaceCategory, PLACE_CATEGORY_HINT } from './placeCategories.ts'
 
 export interface TimemapSessionUser {
   sessionId: string
@@ -945,9 +946,9 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       return { error: 'invalid_payload', details: ['name 不能超过 40 字'] }
     }
     const category = typeof payload.category === 'string' && payload.category ? payload.category : '地标'
-    if (category !== '地标' && category !== '食堂') {
+    if (!isPlaceCategory(category)) {
       reply.code(400)
-      return { error: 'invalid_payload', details: ["category 必须是 '地标' 或 '食堂'"] }
+      return { error: 'invalid_payload', details: [PLACE_CATEGORY_HINT] }
     }
     const id = randomUUID()
     try {
@@ -1017,9 +1018,9 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       push('name', name)
     }
     if (payload.category !== undefined) {
-      if (payload.category !== '地标' && payload.category !== '食堂') {
+      if (!isPlaceCategory(payload.category)) {
         reply.code(400)
-        return { error: 'invalid_payload', details: ["category 必须是 '地标' 或 '食堂'"] }
+        return { error: 'invalid_payload', details: [PLACE_CATEGORY_HINT] }
       }
       push('category', payload.category)
     }

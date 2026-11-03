@@ -3,7 +3,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
-import type { MapHandle } from './mapApi'
+import { measureMarkerExtent, nextMapInstance, type MapHandle } from './mapApi'
 import { activeTileConfig, CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
@@ -66,6 +66,11 @@ export function RealMap({
     })
     layer.addTo(map)
 
+    host.dataset.mapInstance = nextMapInstance()
+    const byPlace = new Map<string, L.Marker>()
+    let selected: string | null = null
+    const rmOf = (placeId: string) => byPlace.get(placeId)?.getElement()?.querySelector('.rm') ?? null
+
     // 标记：照片卡片 + 图钉 + 地点名
     for (const m of markers) {
             const cover = m.coverUrl
@@ -73,7 +78,7 @@ export function RealMap({
         ? `<img class="rm__img" src="${escapeHtml(cover)}" alt="" />`
         : `<span class="rm__img rm__img--text">${escapeHtml((m.excerpt ?? '').slice(0, 10))}</span>`
       const html = `
-        <div class="rm ${m.imageMode === 'sticker' ? 'rm--sticker' : ''} ${m.highlight ? 'rm--highlight' : ''} ${!cover && m.postId ? 'rm--text' : ''}">
+        <div data-place-id="${escapeHtml(m.placeId)}" class="rm ${m.imageMode === 'sticker' ? 'rm--sticker' : ''} ${m.highlight ? 'rm--highlight' : ''} ${!cover && m.postId ? 'rm--text' : ''}">
           <div class="rm__card">${body}${cover && m.imageMode !== 'sticker' ? `<span class="rm__likes">♥ ${m.likeCount ?? 0}</span>` : ''}<span class="rm__name">${escapeHtml(m.place)}</span></div>
           <span class="rm__pin" style="color:${m.color}">
             <svg width="18" height="24" viewBox="0 0 20 26"><path d="M10 25.5S19 15.6 19 9.6A9 9 0 0 0 1 9.6c0 6 9 15.9 9 15.9Z" fill="currentColor"/><circle cx="10" cy="9.6" r="3.4" fill="#fff"/></svg>
@@ -88,10 +93,13 @@ export function RealMap({
       const marker = L.marker([m.lat, m.lng], { icon })
       marker.on('click', (e) => onMarkerClick(m.placeId, (e.originalEvent.target as Element)?.closest('.rm__card') ? m.postId || undefined : undefined))
       marker.addTo(map)
+      byPlace.set(m.placeId, marker)
     }
 
     mapObjRef.current = map
     setReady(true)
+    /** 动画平移结束后的精确对齐（Leaflet 会把平移量取整到整像素） */
+    let exactFix: (() => void) | null = null
     mapRef?.({
       provider: 'raster',
       flyTo: (lat, lng, zoom = 16) => {
@@ -103,6 +111,51 @@ export function RealMap({
         return { lat: c.lat, lng: c.lng }
       },
       getZoom: () => map.getZoom(),
+      project: (lat, lng) => {
+        const p = map.latLngToContainerPoint([lat, lng])
+        return { x: p.x, y: p.y }
+      },
+      unproject: (x, y) => {
+        const c = map.containerPointToLatLng([x, y])
+        return { lat: c.lat, lng: c.lng }
+      },
+      setView: (lat, lng, zoom, animate) => {
+        if (exactFix) { map.off('moveend', exactFix); exactFix = null }
+        if (!animate) { map.setView([lat, lng], zoom, { animate: false }); return }
+        /*
+          先 stop() 结束上一段动画（它会同步触发 moveend），再注册监听、再 setView（design-review F6）。
+          不能放到 setView 之后：平移量取整为 0 时 Leaflet 会在 setView 内部同步触发 moveend。
+        */
+        map.stop()
+        const fix = () => {
+          exactFix = null
+          const c = map.latLngToContainerPoint([lat, lng])
+          const m = map.latLngToContainerPoint(map.getCenter())
+          // 只补齐取整误差；用户中途拖动或缩放过就不把地图拽回去
+          // reset: true —— 不到 1px 的偏移 Leaflet 的普通 setView 会直接忽略（平移量取整为 0）
+          if (map.getZoom() === zoom && Math.hypot(c.x - m.x, c.y - m.y) <= 1.5) map.setView([lat, lng], zoom, { reset: true } as L.ZoomPanOptions)
+        }
+        exactFix = fix
+        map.once('moveend', fix)
+        map.setView([lat, lng], zoom, { animate: true, duration: 0.3 })
+      },
+      getSize: () => {
+        const s = map.getSize()
+        return { width: s.x, height: s.y }
+      },
+      // pan: true 保持中心不变（pan: false 会保持左上角，容器变高时中心漂移）
+      resize: () => { map.invalidateSize({ pan: true, animate: false }) },
+      setSelected: (placeId) => {
+        if (selected) { rmOf(selected)?.classList.remove('rm--selected'); byPlace.get(selected)?.setZIndexOffset(0) }
+        selected = placeId
+        if (placeId) { rmOf(placeId)?.classList.add('rm--selected'); byPlace.get(placeId)?.setZIndexOffset(1000) }
+      },
+      getMarkerExtent: (placeId) => {
+        const mk = byPlace.get(placeId)
+        if (!mk) return null
+        const p = map.latLngToContainerPoint(mk.getLatLng())
+        return measureMarkerExtent(rmOf(placeId), map.getContainer(), p)
+      },
     })
 
     // 把地图真实状态写到 data-*，验收脚本据此判断拖拽/缩放（provider 无关）
