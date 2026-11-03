@@ -10,13 +10,15 @@
  *      成因：上传是"先写文件、后写 DB 行"（为了不产生悬空引用），进程在两步之间死掉就留下它。
  *      判据：storage_key 全集里查不到文件名 **且** mtime 早于 `--max-age-hours`（默认 24h）。
  *
- *   B. **unattached（有行、有文件，但没有任何消息引用）** —— M5 新增。
+ *   B. **unattached（有行、有文件，但没有任何引用）** —— M5 新增。
  *      成因：用户上传成功、**接着发消息失败**（断网、会话过期、App 被杀），
  *      于是 media 行与文件都在，却永远没有 message_media 指向它 → 永久占磁盘。
- *      判据：`media.scope='private'` **且** 不存在任何 `message_media` 引用它
+ *      判据：`media.scope='private'` **且** 不存在任何引用（聊天消息 **或** 活动投稿版本封面）
  *      **且** `media.created_at` 早于 `--unattached-max-age-hours`。
  *      注意它**不是** orphan：文件与行都在，只是没有引用关系 —— 两种泄漏的原因与
  *      处置窗口完全不同，混成一个数字就没法判断"到底哪条路径在漏"。
+ *      ⚠️ 031 起 private 还有第二类合法引用：活动投稿封面（`activity_submission_revisions.cover_image_id`）。
+ *         曾经只认 message_media，会把超时未审核的投稿封面当垃圾删掉；判据见 `IN_USE_SQL`。
  *
  * ## unattached 的 TTL 取值依据（为什么是 24 小时）
  *
@@ -148,16 +150,33 @@ interface UnattachedRow {
 
 /**
  * 找出 unattached 的 private media：
- *   scope='private' 且 没有任何 message_media 引用 且 created_at 早于阈值。
+ *   scope='private' 且 **没有任何引用** 且 created_at 早于阈值。
  *
  * 用 **created_at**（行插入时刻，也是"文件落盘时刻"，上传是同事务内先写文件后写行）
  * 而不是文件 mtime：判断"用户多久以前传的"问的是 DB，而且 created_at 与消息发送
  * 用的是同一个库时钟，不受宿主机时钟漂移影响。
  *
+ * ## private 的两类引用（031 起）
+ *   ① `message_media`   —— 聊天图片/语音
+ *   ② `activity_submission_revisions.cover_image_id` —— **活动投稿封面**
+ *      （031 起投稿封面是 private 媒体：审核前只有投稿人与管理员可读）
+ *
+ * ⚠️ ② 曾经漏判过：只按 message_media 判定时，投稿超过 TTL 仍未被审核，
+ *    封面就会被当成"没人用的私图"删掉 —— 用户看到的是"待审核投稿的海报没了"。
+ *    执行文档 §7.3 明确要求把「投稿版本、当前封面」纳入保留规则。
+ *    这里判定的是**所有版本**（不仅是当前版本）：历史版本的封面仍被审核记录与
+ *    「我的提交」的版本历史使用，删掉同样是数据损坏（§7.4）。
+ *
  * scope='public' 的 media 刻意**不在**本类范围内：动态图片被引用在 post_media 上，
  * 而帖子可能是草稿态、也可能被删 —— 那属于另一条泄漏路径，需要单独的证据与设计，
  * 不能靠"看起来没人引用就删"来顺手处理（那会删掉草稿里的图）。
+ * 审核通过时复制出的 public 副本同样落在 public，因此不进入本清理类别。
  */
+const IN_USE_SQL = `
+  not exists (select 1 from message_media mm where mm.media_id = m.id)
+  and not exists (select 1 from activity_submission_revisions r where r.cover_image_id = m.id)
+`
+
 async function findUnattached(client: PoolClient, ttlHours: number): Promise<UnattachedRow[]> {
   const q = await client.query<{ id: string; storage_key: string; bytes: number; age_hours: string }>(
     `select m.id, m.storage_key, m.bytes,
@@ -165,7 +184,7 @@ async function findUnattached(client: PoolClient, ttlHours: number): Promise<Una
        from media m
       where m.scope = 'private'
         and m.created_at < now() - make_interval(hours => $1::int)
-        and not exists (select 1 from message_media mm where mm.media_id = m.id)
+        and ${IN_USE_SQL}
       order by m.created_at`,
     [ttlHours],
   )
@@ -329,7 +348,7 @@ async function main(): Promise<void> {
         `delete from media m
           where m.id = any($1::uuid[])
             and m.scope = 'private'
-            and not exists (select 1 from message_media mm where mm.media_id = m.id)
+            and ${IN_USE_SQL}
         returning m.id`,
         [candidates],
       )

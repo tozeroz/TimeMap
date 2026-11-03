@@ -1892,3 +1892,35 @@ export function submitActivity(fields: ActivitySubmissionFields, clientRequestId
     method: 'POST', body: { ...fields, clientRequestId, ...(original ? { expectedRevision: original.revision } : {}) },
   })
 }
+
+/**
+ * 管理端审核队列（ACT-005）。
+ *
+ * 与用户侧的区别只有两点：多一个 `submitter`（审核要看是谁交的），
+ * 以及可以按状态筛选全部用户的投稿。审核动作**必须带 expectedRevision**：
+ * 服务端据此拒绝"用过期页面覆盖别人的决定"（返回 409 → 界面刷新）。
+ */
+export interface AdminActivitySubmission extends ActivitySubmission {
+  submitter?: { id: string; displayName: string; handle: string }
+}
+
+export function adminListActivitySubmissions(status?: SubmissionStatus, cursor?: string) {
+  const params = new URLSearchParams({ limit: '20' })
+  if (status) params.set('status', status)
+  if (cursor) params.set('cursor', cursor)
+  return request<{ items: AdminActivitySubmission[]; nextCursor?: string | null }>(`/api/admin/activity-submissions?${params}`)
+}
+
+export function adminGetActivitySubmission(id: string) {
+  return request<AdminActivitySubmission>(`/api/admin/activity-submissions/${encodeURIComponent(id)}`)
+}
+
+export function adminReviewActivitySubmission(
+  id: string,
+  input: { decision: 'approved' | 'rejected'; reason?: string; expectedRevision: number },
+) {
+  return request<AdminActivitySubmission>(`/api/admin/activity-submissions/${encodeURIComponent(id)}/review`, {
+    method: 'POST',
+    body: { clientRequestId: crypto.randomUUID(), ...input },
+  })
+}

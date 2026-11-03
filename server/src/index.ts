@@ -24,6 +24,7 @@ import { registerCutoutRoutes } from './cutout.ts'
 import { registerTimemapRoutes } from './timemap.ts'
 import { registerMapRoutes } from './mapRoutes.ts'
 import { registerProfileRoutes } from './profileRoutes.ts'
+import { registerSubmissionRoutes } from './submissionsRoutes.ts'
 
 /**
  * Campus 后端（M3 Slice 0B）。
@@ -2213,16 +2214,20 @@ export function buildServer(deps: ServerDeps) {
     //   chat     → private   聊天图片/语音
     //   place    → public    地点照片（029 时光机；由管理员接口挂到 place_photos）
     //   avatar   → public    用户主动选取的头像（030；只接受图片，关联时校验上传者）
+    //   活动投稿封面（031）：
+    //   activity-submission → private  未审核的活动封面。审核前只有投稿人本人与管理员可读；
+    //                         审核通过时由服务端复制出 public 副本给公开活动用
+    //                         （见 submissionsRoutes.promoteCover），私有原件归属不变。
     const purpose = ((data.fields?.purpose as { value?: string } | undefined)?.value ?? 'post').trim()
     const scope =
-      purpose === 'chat'
+      purpose === 'chat' || purpose === 'activity-submission'
         ? 'private'
         : purpose === 'post' || purpose === 'activity' || purpose === 'place' || purpose === 'avatar'
           ? 'public'
           : null
     if (!scope) {
       reply.code(400)
-      return { error: 'bad_purpose', allowed: ['post', 'chat', 'activity', 'place', 'avatar'] }
+      return { error: 'bad_purpose', allowed: ['post', 'chat', 'activity', 'place', 'avatar', 'activity-submission'] }
     }
 
     /**
@@ -3277,6 +3282,8 @@ export function buildServer(deps: ServerDeps) {
   })
 
   registerProfileRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
+  // ACT-004 / ACT-005：校园活动投稿与审核闭环（迁移 031）
+  registerSubmissionRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   registerMapRoutes(app, db)
   registerTimemapRoutes({
     app,
