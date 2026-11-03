@@ -204,7 +204,8 @@ export function PublishScreen() {
   }
   function restore(d: PublishDraft) {
     dirty.current = Boolean(d.text.trim() || d.original)
-    draftId.current = d.id; setText(d.text); setOriginal(d.original); setPlaceId(d.placeId)
+    // 草稿没有地点时保留当前预选地点（例如从地图地点抽屉进入）
+    draftId.current = d.id; setText(d.text); setOriginal(d.original); setPlaceId(prev => d.placeId || prev)
     setPendingSubmission(d.pendingSubmission)
     setImageText(d.imageText ?? defaultImageText()); setTextEditorOpen(Boolean(d.imageText?.text))
     stickerRequested.current = d.stickerRequested; setSheet(null)
@@ -216,6 +217,8 @@ export function PublishScreen() {
     const target = pendingRoute.current
     pendingRoute.current = null
     if (target) window.location.hash = target
+    // 从地图地点抽屉进入：关闭后回到原抽屉（上一条历史就是抽屉地址）
+    else if (route.query.from === 'sheet' && window.history.length > 1) window.history.back()
     else navigate('map')
   }
   async function exit(save: boolean) {

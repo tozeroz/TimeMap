@@ -1,0 +1,22 @@
+/* 通用照片查看器：深色全屏，只覆盖 .shell__viewport（桌面上也是居中的手机宽度） */
+.pv { position: absolute; inset: 0; z-index: 1000; display: flex; flex-direction: column; background: #0b0b0b; color: #f4f4f4; }
+.pv__top { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+.pv__count { font-size: 14px; font-variant-numeric: tabular-nums; }
+.pv__spacer { flex: 1; }
+.pv__btn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0 8px; border: 0; border-radius: 22px; background: rgba(255, 255, 255, 0.12); color: #fff; font-size: 20px; cursor: pointer; }
+.pv__btn:disabled { opacity: 0.35; cursor: default; }
+.pv__btn:focus-visible { outline: 2px solid #ffb48f; outline-offset: 2px; }
+.pv__stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.pv__img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center; will-change: transform; }
+.pv__note { position: absolute; inset: auto 0; text-align: center; color: #bbb; font-size: 14px; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.pv__note p { margin: 0; }
+.pv__retry { min-height: 44px; padding: 0 20px; border: 1px solid #666; border-radius: 22px; background: transparent; color: #fff; }
+.pv__nav { position: absolute; top: 50%; transform: translateY(-50%); }
+.pv__nav--prev { left: 8px; }
+.pv__nav--next { right: 8px; }
+.pv__bottom { flex: none; display: flex; align-items: flex-end; gap: 10px; padding: 10px 14px calc(14px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+.pv__caption { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; overflow-wrap: anywhere; }
+.pv__caption strong { font-size: 15px; }
+.pv__caption span { font-size: 12px; color: #bdbdbd; line-height: 1.5; }
+.pv__zoom { flex: none; display: flex; gap: 6px; }
+.pv__reset { font-size: 14px; }

@@ -8,16 +8,23 @@ import {
   adminListPlaces,
   adminListPosts,
   adminListReports,
+  adminGetActivitySubmission,
+  adminListActivitySubmissions,
+  adminReviewActivitySubmission,
   adminResolveReport,
   adminTakedownPost,
   adminUpdateActivity,
   adminUpdatePlace,
   mediaUrl,
+  PLACE_CATEGORIES,
   relativeTime,
   uploadMedia,
   type ApiActivity,
   type ApiAdminPlace,
+  type PlaceCategory,
   type ApiAdminPost,
+  type AdminActivitySubmission,
+  type SubmissionStatus,
   type ApiAuditEntry,
   type ApiReport,
   failText,
@@ -25,7 +32,8 @@ import {
 import { isAdmin } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack } from '../components/icons'
-import { goBack } from '../router'
+import { goBack, navigate } from '../router'
+import { SubmissionCover } from './MyActivitySubmissions'
 import './admin.css'
 
 /**
@@ -49,10 +57,11 @@ import './admin.css'
  *     各列表，而不是只改本地那一行
  *   · 操作记录包含管理员、对象、时间、动作
  */
-type PanelKey = 'reports' | 'posts' | 'activities' | 'places' | 'audit'
+type PanelKey = 'reports' | 'submissions' | 'posts' | 'activities' | 'places' | 'audit'
 
 const PANELS: { key: PanelKey; label: string }[] = [
   { key: 'reports', label: '举报处理' },
+  { key: 'submissions', label: '投稿审核' },
   { key: 'posts', label: '内容管理' },
   { key: 'activities', label: '活动管理' },
   { key: 'places', label: '地点管理' },
@@ -104,6 +113,7 @@ export function AdminScreen() {
       </nav>
 
       {panel === 'reports' && <ReportsPanel />}
+      {panel === 'submissions' && <SubmissionsPanel />}
       {panel === 'posts' && <PostsPanel />}
       {panel === 'activities' && <ActivitiesPanel />}
       {panel === 'places' && <PlacesPanel />}
@@ -724,7 +734,7 @@ function PlacesPanel() {
   const { data, phase, err, reload } = useLoader<ApiAdminPlace[]>(() => adminListPlaces())
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
-  const [form, setForm] = useState<{ name: string; category: '地标' | '食堂'; description: string } | null>(null)
+  const [form, setForm] = useState<{ name: string; category: PlaceCategory; description: string } | null>(null)
 
   async function submit() {
     if (!form) return
@@ -822,10 +832,13 @@ function PlacesPanel() {
               className="adm__input"
               data-place-category
               value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value as '地标' | '食堂' })}
+              onChange={(e) => setForm({ ...form, category: e.target.value as PlaceCategory })}
             >
-              <option value="地标">地标</option>
-              <option value="食堂">食堂</option>
+              {PLACE_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
             <textarea
               className="adm__textarea"
@@ -885,5 +898,377 @@ function AuditPanel() {
         </ul>
       )}
     </section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 投稿审核（ACT-005）
+// ---------------------------------------------------------------------------
+/*
+  这一面板是"审核动作的**唯一**入口"，三条规则都直接对应执行文档：
+    ① 通过 / 驳回都必须**看着具体版本**做（expectedRevision 由服务端比对）；
+       别人先处理过 → 409，界面刷新并说明，而不是把旧决定盖上去。
+    ② 驳回必须写原因（前端先拦一次，服务端再拦一次）。
+    ③ 通过后活动由服务端生成，这里只负责刷新 —— 不本地拼一条"看起来成功了"的数据。
+  列表状态与服务端一致：pending / approved / rejected，筛选走**服务端**参数。
+*/
+
+const SUB_LABELS: Record<SubmissionStatus, string> = { pending: '待审核', approved: '已通过', rejected: '未通过' }
+
+function fmtDateTime(value: string | null | undefined) {
+  if (!value) return '未填写'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return '时间待确认'
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(d)
+}
+
+function SubmissionsPanel() {
+  const [filter, setFilter] = useState<SubmissionStatus>('pending')
+  const [items, setItems] = useState<AdminActivitySubmission[]>([])
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [err, setErr] = useState('')
+  const [loadingMore, setLoadingMore] = useState(false)
+  /* 审核结果提示放在**面板层**：成功后卡片会离开当前筛选（服务端按状态过滤），
+     卡片内的提示会随卡片一起卸载，等于没有反馈。 */
+  const [notice, setNotice] = useState('')
+
+  const load = useCallback(async () => {
+    setPhase('loading')
+    const r = await adminListActivitySubmissions(filter)
+    if (r.ok) {
+      setItems(r.value.items)
+      setNextCursor(r.value.nextCursor ?? null)
+      setPhase('ready')
+      setErr('')
+    } else {
+      setItems([])
+      setNextCursor(null)
+      setErr(failText(r))
+      setPhase('error')
+    }
+  }, [filter])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function loadMore() {
+    if (!nextCursor) return
+    setLoadingMore(true)
+    const r = await adminListActivitySubmissions(filter, nextCursor)
+    setLoadingMore(false)
+    if (!r.ok) {
+      setErr(failText(r))
+      return
+    }
+    setItems((old) => [...old, ...r.value.items.filter((i) => !old.some((o) => o.id === i.id))])
+    setNextCursor(r.value.nextCursor ?? null)
+  }
+
+  return (
+    <section className="adm__pane">
+      <div className="adm__row">
+        {(['pending', 'approved', 'rejected'] as const).map((s) => (
+          <button
+            key={s}
+            className={`adm__chip ${filter === s ? 'is-active' : ''}`}
+            data-sub-filter={s}
+            onClick={() => {
+              setFilter(s)
+              setNotice('')
+            }}
+          >
+            {SUB_LABELS[s]}
+          </button>
+        ))}
+        <button className="adm__chip adm__chip--ghost" onClick={() => void load()}>
+          刷新
+        </button>
+      </div>
+
+      {notice && (
+        <p className="adm__cardResult" data-sub-panel-notice role="status">
+          {notice}
+        </p>
+      )}
+
+      <PaneState
+        phase={phase}
+        err={err}
+        onRetry={() => void load()}
+        empty={phase === 'ready' && items.length === 0 ? `没有${SUB_LABELS[filter]}的投稿` : undefined}
+      />
+
+      {phase === 'ready' && items.length > 0 && (
+        <>
+          <p className="adm__cardMeta" data-sub-count={String(items.length)}>
+            共 {items.length} 条{nextCursor ? '（还有更多）' : ''}
+          </p>
+          <ul className="adm__list">
+            {items.map((item) => (
+              <SubmissionCard key={item.id} item={item} onHandled={load} onReviewed={setNotice} />
+            ))}
+          </ul>
+          {nextCursor && (
+            <button className="adm__btn" disabled={loadingMore} onClick={() => void loadMore()}>
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+function SubmissionCard({
+  item,
+  onHandled,
+  onReviewed,
+}: {
+  item: AdminActivitySubmission
+  onHandled: () => Promise<void>
+  onReviewed: (message: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState<AdminActivitySubmission | null>(null)
+  const [detailErr, setDetailErr] = useState('')
+  /** 'approve' = 正在确认通过；'reject' = 正在填驳回原因 */
+  const [acting, setActing] = useState<'approve' | 'reject' | null>(null)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+
+  const shown = detail ?? item
+
+  async function refreshDetail() {
+    const r = await adminGetActivitySubmission(item.id)
+    if (r.ok) {
+      setDetail(r.value)
+      setDetailErr('')
+    } else {
+      setDetailErr(failText(r))
+    }
+  }
+
+  async function toggle() {
+    const next = !open
+    setOpen(next)
+    setNotice('')
+    if (next) await refreshDetail()
+  }
+
+  async function submit() {
+    if (!acting || busy) return
+    const trimmed = reason.trim()
+    // ② 前端先拦一次：空原因提交后才被拒的体验很差
+    if (acting === 'reject' && !trimmed) {
+      setNotice('驳回必须填写原因，请写明需要修改的地方。')
+      return
+    }
+    setBusy(true)
+    setNotice('')
+    try {
+      const r = await adminReviewActivitySubmission(shown.id, {
+        decision: acting === 'approve' ? 'approved' : 'rejected',
+        reason: trimmed || undefined,
+        expectedRevision: shown.revision,
+      })
+      if (!r.ok) {
+        /*
+          ① 冲突（409）：别人已经处理过、或版本已变。
+          这里必须**重新拉详情与列表**，让界面显示真实状态，而不是停在一个过期视图上。
+        */
+        if (r.status === 409) {
+          setNotice('这条投稿已被处理过或版本已变化，已为你刷新到最新状态，请重新确认。')
+          await refreshDetail()
+          await onHandled()
+          setActing(null)
+          return
+        }
+        setNotice(`审核失败：${failText(r)}`)
+        return
+      }
+      setDetail(r.value)
+      setActing(null)
+      setReason('')
+      onReviewed(acting === 'approve' ? '已通过：公开活动已生成，投稿人可在「我的提交」看到。' : '已驳回：投稿人能看到你填写的原因。')
+      // ③ 通过会改变公开列表与地点活动区 ⇒ 队列重新拉取
+      await onHandled()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li className="adm__card" data-sub-id={item.id} data-sub-status={shown.status}>
+      <div className="adm__cardHead">
+        <span className={`adm__tag ${shown.status === 'pending' ? 'adm__tag--reason' : ''}`} data-sub-badge={shown.status}>
+          {SUB_LABELS[shown.status]}
+        </span>
+        <span className="adm__tag adm__tag--actor">{shown.submitter?.displayName || '未知提交人'}</span>
+        <span className="adm__time">{relativeTime(shown.submittedAt)}</span>
+      </div>
+      <p className="adm__cardBody">{shown.title}</p>
+      <p className="adm__cardMeta">
+        {shown.placeName} · 开始 {fmtDateTime(shown.startsAt)} · 版本 {shown.revision}
+      </p>
+
+      {shown.status !== 'pending' && (
+        <p className="adm__cardResult" data-sub-result={shown.status}>
+          {shown.status === 'approved'
+            ? `已通过${shown.publicationStatus === 'cancelled' ? '（活动已被取消）' : shown.publicationStatus === 'public' ? ' · 已公开展示' : ''}`
+            : `已驳回 · 原因：${shown.reviewReason || shown.history?.find((h) => h.revision === shown.revision)?.reason || '（未记录）'}`}
+        </p>
+      )}
+
+      <div className="adm__actions">
+        <button className="adm__btn" data-sub-open onClick={() => void toggle()}>
+          {open ? '收起详情' : '查看详情'}
+        </button>
+        {shown.status === 'approved' && shown.publishedActivityId && (
+          <button className="adm__btn" data-sub-goto-activity onClick={() => navigate('activity', { id: shown.publishedActivityId! })}>
+            查看公开活动
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="adm__subDetail" data-sub-detail>
+          {detailErr && <p className="adm__stateSub">{detailErr}</p>}
+          <div className="adm__subCover">
+            <SubmissionCover id={shown.coverImageId} />
+          </div>
+          <dl className="adm__subFields">
+            <div>
+              <dt>提交人</dt>
+              <dd>
+                {shown.submitter?.displayName || '未知'}
+                {shown.submitter?.handle ? `（@${shown.submitter.handle}）` : ''}
+              </dd>
+            </div>
+            <div>
+              <dt>地点</dt>
+              <dd>{shown.placeName}</dd>
+            </div>
+            <div>
+              <dt>开始 / 结束</dt>
+              <dd>
+                {fmtDateTime(shown.startsAt)} — {shown.endsAt ? fmtDateTime(shown.endsAt) : '未填写'}
+              </dd>
+            </div>
+            <div>
+              <dt>简介</dt>
+              <dd>{shown.description || '未填写'}</dd>
+            </div>
+            <div>
+              <dt>主办方 / 类型</dt>
+              <dd>
+                {shown.organizer || '未填写'} · {shown.activityType || '未填写'}
+              </dd>
+            </div>
+            <div>
+              <dt>信息来源</dt>
+              <dd>{shown.source || '未填写'}</dd>
+            </div>
+            <div>
+              <dt>原文 / 报名链接</dt>
+              <dd>
+                {/^https?:\/\//i.test(shown.externalLink) ? (
+                  <a href={shown.externalLink} target="_blank" rel="noreferrer noopener">
+                    {shown.externalLink}
+                  </a>
+                ) : (
+                  '未填写'
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>当前版本 / 提交时间</dt>
+              <dd>
+                第 {shown.revision} 版 · {fmtDateTime(shown.submittedAt)}
+              </dd>
+            </div>
+          </dl>
+
+          {!!shown.history?.length && (
+            <div className="adm__subHistory" data-sub-history={String(shown.history.length)}>
+              <p className="adm__cardMeta">审核历史</p>
+              <ul>
+                {shown.history.map((h) => (
+                  <li key={`${h.revision}-${h.reviewedAt}`}>
+                    第 {h.revision} 版 · {SUB_LABELS[h.decision]} · {fmtDateTime(h.reviewedAt)}
+                    {h.reason ? ` · ${h.reason}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {notice && (
+            <p className="adm__cardResult" data-sub-notice role="status">
+              {notice}
+            </p>
+          )}
+
+          {shown.status === 'pending' && (
+            <div className="adm__subActions">
+              {acting === null ? (
+                <>
+                  <button className="adm__btn" data-sub-approve onClick={() => setActing('approve')}>
+                    通过
+                  </button>
+                  <button className="adm__btn adm__btn--danger" data-sub-reject onClick={() => setActing('reject')}>
+                    驳回
+                  </button>
+                </>
+              ) : (
+                <>
+                  {acting === 'reject' && (
+                    <textarea
+                      className="adm__subReason"
+                      data-sub-reason
+                      rows={3}
+                      maxLength={500}
+                      placeholder="写明需要修改的地方（投稿人能看到这段原因）"
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                    />
+                  )}
+                  <p className="adm__cardMeta">
+                    {acting === 'approve'
+                      ? `将按第 ${shown.revision} 版内容通过，并生成一条公开活动。`
+                      : `将按第 ${shown.revision} 版驳回，原因会展示给投稿人。`}
+                  </p>
+                  <div className="adm__actions">
+                    <button className="adm__btn" data-sub-confirm disabled={busy} onClick={() => void submit()}>
+                      {busy ? '提交中…' : acting === 'approve' ? '确认通过' : '确认驳回'}
+                    </button>
+                    <button
+                      className="adm__btn adm__btn--ghost"
+                      disabled={busy}
+                      onClick={() => {
+                        setActing(null)
+                        setNotice('')
+                      }}
+                    >
+                      取消
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </li>
   )
 }

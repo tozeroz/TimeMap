@@ -30,6 +30,8 @@ import bjtuParentPlaceSql from './migrations/027_bjtu_parent_place.sql'
 import activityExternalLinksSql from './migrations/028_activity_external_links.sql'
 import placePhotoTimemachineSql from './migrations/029_place_photo_timemachine.sql'
 import userProfilesSql from './migrations/030_user_profiles.sql'
+import landmarkImportSql from './migrations/031_landmark_import.sql'
+import activitySubmissionsSql from './migrations/031_activity_submissions.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -148,6 +150,11 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   // 029：地点「时光机」——place_photos 增加 media_id / post_id / view_key / year_sort。
   { version: '029_place_photo_timemachine', sql: placePhotoTimemachineSql },
   { version: '030_user_profiles', sql: userProfilesSql },
+  { version: '030_user_profiles', sql: userProfilesSql },
+  { version: '031_activity_submissions', sql: activitySubmissionsSql },
+  // 导入《地标地点表》29 个地点，地点分类扩到 5 类。
+  { version: '031_landmark_import', sql: landmarkImportSql },
+]
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

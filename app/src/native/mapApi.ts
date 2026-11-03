@@ -12,6 +12,49 @@ export interface MapHandle {
   zoomIn(): void
   getCenter(): { lat: number; lng: number } | null
   getZoom(): number | null
+  /*
+    地点抽屉（design.md §7.5）：把选中地点移到「抽屉上方露出区域」需要的投影能力。
+    偏移算法只写一份（native/mapFocus.ts），各适配器只负责 SDK 投影。
+  */
+  /** 经纬度 → 地图容器像素 */
+  project(lat: number, lng: number): { x: number; y: number } | null
+  /** 地图容器像素 → 经纬度 */
+  unproject(x: number, y: number): { lat: number; lng: number } | null
+  setView(lat: number, lng: number, zoom: number, animate: boolean): void
+  getSize(): { width: number; height: number } | null
+  /** 容器尺寸变化后通知 SDK（保持中心不变） */
+  resize(): void
+  /** 高亮选中地点的标记（.rm--selected）；null 取消 */
+  setSelected(placeId: string | null): void
+  /**
+   * 实测标记可见盒相对锚点（经纬度点）向上 / 向下的像素（design-review F1：不假设 100px）。
+   * 拿不到时返回 null。
+   */
+  getMarkerExtent(placeId: string): { above: number; below: number } | null
+}
+
+/** 由 `.rm` 内卡片与图钉的实际 rect 和锚点像素算出标记的上下范围（三个适配器共用） */
+export function measureMarkerExtent(rm: Element | null | undefined, container: Element, anchor: { x: number; y: number } | null): { above: number; below: number } | null {
+  if (!rm || !anchor) return null
+  const parts = rm.querySelectorAll('.rm__card, .rm__pin')
+  let top = Infinity
+  let bottom = -Infinity
+  for (const el of Array.from(parts.length ? parts : [rm])) {
+    const r = el.getBoundingClientRect()
+    if (r.height === 0 && r.width === 0) continue
+    top = Math.min(top, r.top)
+    bottom = Math.max(bottom, r.bottom)
+  }
+  if (!Number.isFinite(top) || !Number.isFinite(bottom)) return null
+  const c = container.getBoundingClientRect()
+  return { above: anchor.y - (top - c.top), below: bottom - c.top - anchor.y }
+}
+
+let instanceCounter = 0
+/** 每次建图递增，写到宿主 data-map-instance，验收「地图没有重建」用 */
+export function nextMapInstance(): string {
+  instanceCounter += 1
+  return String(instanceCounter)
 }
 
 export type MapProvider = MapHandle['provider'] | 'offline'

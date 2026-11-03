@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
 import { AMAP_JS_KEY, AMAP_SECURITY_CODE, hasAmapKey } from './keys'
-import type { MapHandle } from './mapApi'
+import { measureMarkerExtent, nextMapInstance, type MapHandle } from './mapApi'
 import { CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
@@ -33,8 +33,21 @@ interface AMapLngLat {
   getLng(): number
 }
 
+interface AMapPixelValue {
+  getX(): number
+  getY(): number
+}
+
+interface AMapMarkerInstance {
+  setzIndex?: (z: number) => void
+}
+
 interface AMapMapInstance {
   setZoomAndCenter(zoom: number, center: [number, number]): void
+  /** 以下 1.4 API 未在本机验证（无 Key），调用前检查是否存在 */
+  panTo?: (center: [number, number]) => void
+  lngLatToContainer?: (lngLat: unknown) => AMapPixelValue | null
+  containerToLngLat?: (px: unknown) => AMapLngLat | null
   zoomIn(): void
   getZoom(): number
   getCenter(): AMapLngLat
@@ -49,6 +62,7 @@ interface AMapSdk {
   Marker: new (options: Record<string, unknown>) => unknown
   Circle: new (options: Record<string, unknown>) => unknown
   Pixel: AMapPixel
+  LngLat?: new (lng: number, lat: number) => unknown
   v?: string
 }
 
@@ -96,6 +110,7 @@ function buildMarkerElement(m: MapMarker): HTMLDivElement {
   const el = document.createElement('div')
   el.className = `rm ${m.imageMode === 'sticker' ? 'rm--sticker' : ''} ${m.highlight ? 'rm--highlight' : ''} ${!cover && m.postId ? 'rm--text' : ''}`
   el.dataset.markerId = m.id
+  el.dataset.placeId = m.placeId
 
   const card = document.createElement('div')
   card.className = 'rm__card'
@@ -172,6 +187,9 @@ export function AmapMap({
         viewMode: '2D',
       })
       mapObjRef.current = map
+      host.dataset.mapInstance = nextMapInstance()
+      const byPlace = new Map<string, { el: HTMLDivElement; marker: AMapMarkerInstance; lat: number; lng: number }>()
+      let selected: string | null = null
 
       for (const m of markers) {
         const el = buildMarkerElement(m)
@@ -185,8 +203,14 @@ export function AmapMap({
           zIndex: 120,
         })
         overlays.push(marker)
+        byPlace.set(m.placeId, { el, marker: marker as AMapMarkerInstance, lat: m.lat, lng: m.lng })
       }
       map.add(overlays)
+      const toContainer = (lat: number, lng: number) => {
+        if (!map || typeof map.lngLatToContainer !== 'function') return null
+        const p = map.lngLatToContainer(AMap.LngLat ? new AMap.LngLat(lng, lat) : [lng, lat])
+        return p ? { x: p.getX(), y: p.getY() } : null
+      }
 
       const handle: MapHandle = {
         provider: 'amap',
@@ -197,6 +221,29 @@ export function AmapMap({
           return c ? { lat: c.getLat(), lng: c.getLng() } : null
         },
         getZoom: () => map?.getZoom() ?? null,
+        project: toContainer,
+        unproject: (x, y) => {
+          if (!map || typeof map.containerToLngLat !== 'function') return null
+          const c = map.containerToLngLat(new AMap.Pixel(x, y))
+          return c ? { lat: c.getLat(), lng: c.getLng() } : null
+        },
+        setView: (lat, lng, zoom, animate) => {
+          if (!map) return
+          if (animate && map.getZoom() === zoom && typeof map.panTo === 'function') map.panTo([lng, lat])
+          else map.setZoomAndCenter(zoom, [lng, lat])
+        },
+        getSize: () => (host.clientWidth && host.clientHeight ? { width: host.clientWidth, height: host.clientHeight } : null),
+        // resizeEnable: true，高德自己按中心保持
+        resize: () => {},
+        setSelected: (placeId) => {
+          if (selected) { const it = byPlace.get(selected); it?.el.classList.remove('rm--selected'); it?.marker.setzIndex?.(120) }
+          selected = placeId
+          if (placeId) { const it = byPlace.get(placeId); it?.el.classList.add('rm--selected'); it?.marker.setzIndex?.(200) }
+        },
+        getMarkerExtent: (placeId) => {
+          const it = byPlace.get(placeId)
+          return it ? measureMarkerExtent(it.el, host, toContainer(it.lat, it.lng)) : null
+        },
       }
       mapRef?.(handle)
 
