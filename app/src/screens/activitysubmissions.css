@@ -1,0 +1,41 @@
+.submissions { color: #092752; }
+.submissions__filters { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; margin: -2px 10px 3px; }
+.submissions__filters button { border: 0; background: transparent; padding: 6px 0; min-height: 44px; color: #415877; font-size: 14px; }
+.submissions__filters span { display: block; background: #f1f1f1; border-radius: 99px; padding: 6px 2px; }
+.submissions__filters [aria-pressed=true] span { background: #ffeadc; color: #d94c0c; }
+.submission { display: grid; grid-template-columns: 108px minmax(0,1fr); gap: 15px; padding: 13px 0; border-bottom: 1px solid #dfe3e5; }
+.submission__cover { aspect-ratio: 1; overflow: hidden; border-radius: 5px; background: #f0e8dc; color: #8b7965; display: grid; place-items: center; align-self: start; }
+.submission__cover img { width: 100%; height: 100%; object-fit: cover; }
+.submission__body { min-width: 0; }
+.submission__heading { display: flex; align-items: start; gap: 6px; justify-content: space-between; }
+.submission__heading h2 { margin: 1px 0 8px; font-size: 16px; line-height: 1.4; font-weight: 750; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.submission__badge { flex: none; font-size: 11px; padding: 4px 7px; border-radius: 6px; display: inline-block; }
+.submission__badge.is-pending { color: #d94b09; background: #ffecdf; }
+.submission__badge.is-approved { color: #387d2d; background: #e8f3df; }
+.submission__badge.is-rejected { color: #d52d14; background: #ffe6e0; }
+.submission__meta { display: flex; gap: 5px; margin: 0 0 15px; font-size: 12px; line-height: 1.7; color: #415877; }
+.submission__meta svg { flex: none; color: #f65d1c; margin-top: 2px; }
+.submission__muted { font-size: 12px; line-height: 1.8; color: #66788e; margin: 5px 0 0; }
+.submission__reason { color: #c64710; background: #fff0e6; border-radius: 6px; padding: 8px; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; margin: 8px 0 0; }
+.submission__actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 2px 8px; }
+.submission__actions button { display: inline-flex; align-items: center; gap: 3px; border: 0; background: transparent; color: #415877; padding: 4px 0; font-size: 12px; min-height: 44px; }
+.submission__actions .submission__resubmit { background: #fa662b; color: white; padding: 8px 12px; border-radius: 10px; }
+.submissions__more { display: block; margin: 10px auto; min-height: 44px; border: 0; background: transparent; color: #b84514; }
+.submissions__loading { padding: 12px 0; color: #66788e; text-align: center; font-size: 13px; }
+.submissions__loading i { display: block; height: 108px; background: #f2eee8; margin-bottom: 15px; border-radius: 5px; }
+.submission-detail { background: #fbfaf7; color: #092752; }
+.submission-detail article { padding: 20px; overflow-wrap: anywhere; }
+.submission-detail article > .submission__cover { width: 160px; margin-bottom: 16px; }
+.submission-detail h1 { font-size: 23px; }
+.submission-detail h2 { font-size: 17px; }
+.submission-detail p, .submission-detail dl { font-size: 14px; line-height: 1.8; }
+.submission-detail__description { white-space: pre-wrap; }
+.submission-detail dl > div { display: grid; grid-template-columns: 80px minmax(0,1fr); padding: 8px 0; border-bottom: 1px solid #dfe3e5; }
+.submission-detail dd { margin: 0; }
+.submissions button:focus-visible, .submission-detail button:focus-visible { outline: 2px solid #d94b09; outline-offset: 2px; }
+@media(max-width: 370px) { .submission { grid-template-columns: 84px minmax(0,1fr); gap: 12px; } .submission__heading { flex-direction: column; gap: 0; } .submission__heading h2 { margin-bottom: 4px; } .submission__meta { margin: 6px 0; } .submissions__filters { margin-inline: 0; gap: 5px; } }
+.submission:not(.is-rejected) .submission__body { display: grid; grid-template-columns: minmax(0,1fr); align-content: start; }
+.submission:not(.is-rejected) .submission__muted { grid-area: 3 / 1; padding-right: 62px; }
+.submission:not(.is-rejected) .submission__actions { grid-area: 3 / 1; justify-content: end; align-self: end; pointer-events: none; }
+.submission:not(.is-rejected) .submission__actions button { pointer-events: auto; }
+@media(max-width: 350px) { .submission:not(.is-rejected) .submission__muted { padding-right: 0; } .submission:not(.is-rejected) .submission__actions { grid-area: auto; justify-content: start; } }

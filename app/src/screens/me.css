@@ -11,7 +11,7 @@
 .me__edit { margin-top: -7px; margin-bottom: -9px; position: relative; min-height: 44px; min-width: 90px; display: inline-flex; gap: 6px; align-items: center; justify-content: center; padding: 0 10px; border: 0; background: transparent; color: var(--me-ink); font-size: 12px; z-index: 0; }
 .me__edit::before { content: ''; position: absolute; z-index: -1; inset: 9px 0; border: 1px solid var(--me-ink); border-radius: 99px; }
 .me__tabs { display: flex; border-bottom: 1px solid var(--c-divider); margin: 0 0 11px; }
-.me__tabs button { position: relative; width: 50%; min-height: 44px; padding: 7px 4px 11px; color: var(--c-text-2); background: transparent; font-weight: 650; font-size: 15px; border: 0; }
+.me__tabs button { position: relative; width: 33.333%; min-height: 44px; padding: 7px 4px 11px; color: var(--c-text-2); background: transparent; font-weight: 650; font-size: 15px; border: 0; }
 .me__tabs button.is-active { color: var(--me-ink); font-weight: 750; }
 .me__tabs button.is-active::after { content: ''; position: absolute; width: 40px; height: 3px; border-radius: 6px 6px 0 0; background: var(--c-brand); bottom: -1px; left: calc(50% - 20px); }
 .me__panel { outline-offset: 4px; }
@@ -71,3 +71,5 @@
 
 .me-page button:disabled { cursor: wait; opacity: .6; }
 .tabbar--me .tabbar__item.is-active > svg { color: var(--c-brand); }
+.me__avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.me__bio { max-width: 100%; margin: 6px 16px 8px; font-size: 13px; line-height: 1.6; color: var(--c-text-2); overflow-wrap: anywhere; white-space: pre-wrap; text-align: center; }
