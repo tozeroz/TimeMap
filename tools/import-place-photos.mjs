@@ -9,7 +9,7 @@
 //            两者都没有默认值：工具不替照片编出处和年份。
 //   --api    API origin，默认 http://127.0.0.1:3002（本地后端）。对生产跑时传生产域名。
 //            除 127.0.0.1/localhost 外必须是 https://，否则直接报错（避免明文发送管理员凭据）。
-//   --dir    照片文件夹，默认 D:\TimeMap-local\地标图片。平铺，文件名 = 地点名（精确匹配），扩展名 .jpg/.jpeg/.png/.webp（大小写均可）。
+//   --dir    照片文件夹，默认仓库内的 assets/place-photos（随代码提交的原图）。平铺，文件名 = 地点名（精确匹配），扩展名 .jpg/.jpeg/.png/.webp（大小写均可）。
 //   --phone  管理员手机号，默认 19900000001（本地管理员）。
 //   --dry-run 只登录 + 读取，打印将要做什么，不上传、不挂图、不删除。
 //   --remove-demo-photos 显式开启才生效：对本次文件夹里有照片的地点（本次新挂上或已经挂过），
@@ -23,7 +23,7 @@
 //      读不到（例如生产发的是短信）就在终端提示输入验证码，再 POST /api/auth/verify-code。
 //
 // 流程（每个文件）：
-//   GET /api/admin/places 按名字精确匹配地点（同名多个 → 报错不导入）
+//   GET /api/admin/places 按名字精确匹配地点（同名多个 → 报错不导入；已停用地点 → 跳过）
 //   → GET /api/places/:id 看是否已有同 title 的照片（title = 地点名），有就跳过（幂等）
 //   → POST /api/media（purpose=place，uploadRequestId 由文件内容 sha256 派生，重跑不会重复建媒体）
 //   → 若返回的 mediaId 已挂在该地点（title 被改过的情况），也跳过
@@ -44,7 +44,7 @@ const DEMO_SOURCE_PREFIX = '演示素材'
 const EXT_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }
 
 function parseArgs(argv) {
-  const opts = { dryRun: false, api: 'http://127.0.0.1:3002', dir: 'D:\\TimeMap-local\\地标图片', phone: '19900000001' }
+  const opts = { dryRun: false, api: 'http://127.0.0.1:3002', dir: path.join(import.meta.dirname, '..', 'assets', 'place-photos'), phone: '19900000001' }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--dry-run') opts.dryRun = true
@@ -132,6 +132,12 @@ for (const { file, name } of files) {
   }
   const place = matches[0]
   covered.add(place.id)
+  // 已停用地点（如迁移 032 下架的茅以升坐像、郑振铎铜像、留园）不挂新图、不删演示照片。
+  if (!place.enabled) {
+    tally.skipped++
+    console.log(`SKIP   ${name}: 地点已停用`)
+    continue
+  }
   try {
     const detail = await call('GET', `/api/places/${place.id}`, { token })
     const photos = detail.photos ?? []

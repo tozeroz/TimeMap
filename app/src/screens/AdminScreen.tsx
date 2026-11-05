@@ -779,7 +779,7 @@ function PlacesPanel() {
   return (
     <section className="adm__pane">
       <div className="adm__row">
-        <button className="adm__btn adm__btn--primary" data-admin-new-place onClick={() => setForm({ name: '', category: '地标', description: '' })}>
+        <button className="adm__btn adm__btn--primary" data-admin-new-place onClick={() => setForm({ name: '', category: '校园地标', description: '' })}>
           新建地点
         </button>
         <button className="adm__chip adm__chip--ghost" onClick={() => void reload()}>
