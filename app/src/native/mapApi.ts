@@ -119,4 +119,11 @@ export interface MapMarker {
   coverUrl?: string
   /** 没有封面图时卡片里显示的正文片段（同样来自权威帖子） */
   excerpt?: string
+  /**
+   * 地点类别（校园地标 / 食堂 / 教学楼 / 运动场 / 休闲场所）。
+   *
+   * 为什么放在 marker 上：缩放分级时没有 displayTier 数据可用，
+   * 显示优先级按「有帖子 > 类别顺序」计算，这里需要类别。
+   */
+  category?: string
 }
