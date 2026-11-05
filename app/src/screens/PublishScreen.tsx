@@ -188,7 +188,7 @@ export function PublishScreen() {
     const blob = await (await fetch(source)).blob()
     if (!uploadKeys.current.has(source)) uploadKeys.current.set(source, crypto.randomUUID())
     const r = await uploadMedia(blob, 'post', undefined, uploadKeys.current.get(source))
-    if (!r.ok) throw new Error(`图片上传失败：${r.reason}`)
+    if (!r.ok) throw new Error(`图片上传失败：${r.human ?? r.reason}`)
     uploaded.current.set(source, r.value.id)
     return r.value.id
   }
