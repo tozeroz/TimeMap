@@ -37,7 +37,9 @@
 .projects__like.is-liked { color: var(--c-primary); }
 .projects__like small { font-size: 10px; padding: 2px 8px; border-radius: 20px; background: var(--c-primary-soft); }
 .projects__like:disabled { opacity: .55; cursor: wait; }
-.projects__info .projects__experience { margin-right: 72px; }
+.projects__links { display: flex; flex-wrap: wrap; column-gap: 14px; padding-right: 72px; min-height: 44px; }
+.projects__source { display: inline-flex; align-items: center; gap: 5px; min-height: 44px; font-size: 13px; color: var(--c-text-2); text-decoration: none; }
+.projects__source:hover { color: var(--c-primary); }
 .projects__rank { width: 24px; padding-top: 21px; text-align: center; color: var(--c-text-2); font-size: 18px; font-weight: 700; }
 .projects__rank.is-medal { position: relative; padding: 0; margin-top: 16px; width: 24px; height: 24px; color: var(--project-gold); }
 .projects__rank.is-medal::before { content: ''; position: absolute; top: 18px; left: 3px; width: 18px; height: 18px; background: currentColor; clip-path: polygon(5% 0, 95% 0, 100% 100%, 50% 72%, 0 100%); opacity: .65; }
@@ -51,6 +53,8 @@
 .is-popular .projects__info { grid-column: 3; grid-row: 1; }
 .is-popular .projects__info h3 { font-size: 16px; }
 .is-popular .projects__info .projects__experience { margin-right: 0; font-size: 12px; }
+.is-popular .projects__links { padding-right: 0; }
+.is-popular .projects__source { font-size: 12px; }
 .is-popular .projects__like { grid-column: 4; grid-row: 1; margin-top: 12px; min-width: 45px; }
 .projects__state { text-align: center; padding: 52px 12px; color: var(--c-text-2); }
 .projects__state > svg { margin: 0 auto 12px; }
@@ -74,5 +78,5 @@
   .is-popular .projects__cover { width: 58px; }
   .is-popular .projects__like { grid-column: 3; grid-row: 1; align-self: end; margin-top: 0; }
   .is-popular .projects__like small { display: none; }
-  .is-popular .projects__info .projects__experience { margin-right: 50px; }
+  .is-popular .projects__links { padding-right: 54px; }
 }

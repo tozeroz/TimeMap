@@ -17,7 +17,7 @@ const fixtures = [
   { name: '交园搭子', summary: '找到一起运动、自习的伙伴', groupName: '第六小组', likeCount: 96 },
   { name: '校园失物招领', summary: '让遗失的物品找到回家的路', groupName: '第二小组', likeCount: 83 },
   { name: '自习室助手', summary: '轻松查询空位，预约自习座位', groupName: '第四小组', likeCount: 67 },
-].map((p, i) => ({ ...p, id: `project-${i}`, memberCount: 5, experienceUrl: `https://example.com/project-${i}`, coverImageId: `cover-${i}`, position: i, published: true, likedByMe: i === 0 }))
+].map((p, i) => ({ ...p, id: `project-${i}`, memberCount: i === 0 ? null : 5, groupName: i === 0 ? null : p.groupName, projectUrl: `https://github.com/example/project-${i}`, experienceUrl: i === 0 ? null : `https://example.com/project-${i}`, coverImageId: `cover-${i}`, position: i, published: true, likedByMe: i === 0 }))
 let items = structuredClone(fixtures), state = 'ready', failLike = false
 const errors = [], evidence = []
 try {
@@ -70,6 +70,10 @@ try {
   await goto(); await page.getByRole('heading', { name: fixtures[0].name, exact: true }).waitFor()
   assert.equal(await page.getByLabel('提交活动', { exact: true }).count(), 0)
   assert.equal(await page.getByLabel('时间筛选').count(), 0)
+  const linkOnly = page.locator('[data-project-id="project-0"]')
+  assert.equal(await linkOnly.getByRole('link', { name: '项目链接' }).getAttribute('href'), fixtures[0].projectUrl)
+  assert.equal(await linkOnly.getByRole('link', { name: '体验项目' }).count(), 0)
+  assert.ok((await linkOnly.innerText()).includes('团队信息待补充'))
   for (const [width, height] of [[320, 740], [390, 844], [430, 932], [1440, 900]]) {
     await page.setViewportSize({ width, height })
     await page.getByRole('tab', { name: '全部项目', exact: true }).click()
@@ -159,6 +163,20 @@ try {
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await page.waitForURL(/activities\?mode=projects&view=all/)
   await page.getByRole('tab', { name: '全部项目', exact: true }).waitFor()
+  if (process.env.CLASS_PROJECT_CATALOG_PATH) {
+    items = JSON.parse(fs.readFileSync(process.env.CLASS_PROJECT_CATALOG_PATH, 'utf8')); state = 'ready'
+    await goto(); await page.getByRole('heading', { name: '像素校园 · Pixel Campus', exact: true }).waitFor()
+    assert.equal(await page.locator('[data-project-id]').count(), 10)
+    assert.equal(await page.getByRole('link', { name: '项目链接' }).count(), 10)
+    assert.equal(await page.getByRole('link', { name: '体验项目' }).count(), 3)
+    for (const [width, height] of [[320, 740], [390, 844], [430, 932], [1440, 900]]) {
+      await page.setViewportSize({ width, height })
+      assert.equal(await page.locator('.projects__results').evaluate(e => e.scrollWidth > e.clientWidth), false)
+      const links = await page.getByRole('link', { name: '项目链接' }).evaluateAll(es => es.map(e => e.href))
+      assert.ok(links.includes('https://github.com/FoodtimeNeo/FoodtimeNeo-Web'))
+      await capture(`class-catalog-${width}`, `${width}x${height}`, '本地数据库实际导入的10个班级项目；10个项目链接、3个体验入口、未知资料留空。')
+    }
+  }
   assert.deepEqual(errors, [])
   const report = {
     contract: '../../2026-11-05-实训项目页UI复刻方案.md', targetViewports: ['320x740', '390x844', '430x932', '1440x900'],

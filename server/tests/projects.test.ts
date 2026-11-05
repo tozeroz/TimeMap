@@ -19,6 +19,8 @@ try {
     create table audit_log(id uuid primary key, actor_id uuid, action text, target_type text, target_id uuid, reason text);`)
   const migration = readFileSync(new URL('../src/migrations/032_training_projects.sql', import.meta.url), 'utf8')
   await pool.query(migration); await pool.query(migration)
+  const linksMigration = readFileSync(new URL('../src/migrations/033_training_project_links.sql', import.meta.url), 'utf8')
+  await pool.query(linksMigration); await pool.query(linksMigration)
   const [admin, a, b, cover, privateCover, audio] = Array.from({ length: 6 }, () => randomUUID())
   await pool.query('insert into users values($1),($2),($3)', [admin, a, b])
   await pool.query("insert into media values($1,'public','image/png'),($2,'private','image/png'),($3,'public','audio/webm')", [cover, privateCover, audio])
@@ -36,7 +38,7 @@ try {
   assert.equal((await request('POST', '/api/admin/projects', '', fields)).statusCode, 401)
   assert.equal((await request('POST', '/api/admin/projects', 'a', fields)).statusCode, 403)
   assert.equal((await request('GET', '/api/admin/projects', 'a')).statusCode, 403)
-  for (const patch of [{ experienceUrl: 'javascript:alert(1)' }, { memberCount: 0 }, { memberCount: 2.5 }, { name: ' ' }, { coverImageId: null }, { coverImageId: privateCover }, { coverImageId: audio }, { position: -1 }, { likeCount: 99 }, { experienceUrl: 'https://user:password@example.com' }]) {
+  for (const patch of [{ experienceUrl: 'javascript:alert(1)' }, { projectUrl: 'javascript:alert(1)' }, { projectUrl: 'https://user:password@example.com' }, { memberCount: 0 }, { memberCount: 2.5 }, { name: ' ' }, { coverImageId: 'invalid' }, { coverImageId: privateCover }, { coverImageId: audio }, { position: -1 }, { likeCount: 99 }, { experienceUrl: 'https://user:password@example.com' }]) {
     assert.equal((await request('POST', '/api/admin/projects', 'admin', { ...fields, ...patch })).statusCode, 400)
   }
   assert.ok(!parseProject(null).fields)
@@ -68,6 +70,27 @@ try {
   await request('PUT', `/api/admin/projects/${one}`, 'admin', fields)
   assert.equal((await request('GET', '/api/projects', 'b')).json().items.find((p: Project) => p.id === one).likeCount, 1)
   assert.equal((await pool.query('select count(*)::int as n from audit_log')).rows[0].n, 6)
+  const linkOnly = await create({ name: '仅有项目链接', projectUrl: 'https://github.com/example/project', experienceUrl: null, memberCount: null, groupName: null, coverImageId: null })
+  let saved = (await request('GET', '/api/projects')).json().items.find((p: Project) => p.id === linkOnly)
+  assert.equal(saved.projectUrl, 'https://github.com/example/project'); assert.equal(saved.experienceUrl, null)
+  assert.equal(saved.memberCount, null); assert.equal(saved.groupName, null); assert.equal(saved.coverImageId, null)
+  const changed = await request('PUT', `/api/admin/projects/${linkOnly}`, 'admin', { ...fields, name: '像素校园 · Pixel Campus', projectUrl: 'https://github.com/example/project', experienceUrl: '', groupName: '', memberCount: '', coverImageId: null })
+  assert.equal(changed.statusCode, 200, changed.body)
+  saved = (await request('GET', '/api/projects')).json().items.find((p: Project) => p.id === linkOnly)
+  assert.equal(saved.experienceUrl, null); assert.equal(saved.memberCount, null)
+  const seed = readFileSync(new URL('../src/migrations/034_class_training_projects.sql', import.meta.url), 'utf8')
+  const before = (await pool.query('select count(*)::int as n from training_projects')).rows[0].n
+  await pool.query(seed)
+  // Existing admin data with the same name is preserved; the other nine rows are inserted.
+  assert.equal((await pool.query('select count(*)::int as n from training_projects')).rows[0].n, before + 9)
+  const seeded = (await pool.query("select * from training_projects where id::text like 'c1a55000-%' order by position")).rows
+  assert.equal(seeded.length, 9); assert.equal(seeded.filter(p => p.experience_url).length, 3)
+  assert.ok(seeded.every(p => p.group_name === null && p.cover_image_id === null))
+  const first = seeded[0]
+  await pool.query('update training_projects set name=$2,published=false where id=$1', [first.id, '管理员后续编辑'])
+  await pool.query(seed)
+  assert.equal((await pool.query('select count(*)::int as n from training_projects')).rows[0].n, before + 9)
+  assert.equal((await pool.query('select name,published from training_projects where id=$1', [first.id])).rows[0].name, '管理员后续编辑')
   console.log('PASS project PostgreSQL: migration, admin/auth, validation, publication, public/user state, concurrent idempotent likes/cancellation, multiple projects, stable ranking, audit and re-publication.')
 } finally {
   await app.close(); await pool.end()

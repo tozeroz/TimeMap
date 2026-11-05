@@ -33,6 +33,8 @@ import userProfilesSql from './migrations/030_user_profiles.sql'
 import landmarkImportSql from './migrations/031_landmark_import.sql'
 import activitySubmissionsSql from './migrations/031_activity_submissions.sql'
 import trainingProjectsSql from './migrations/032_training_projects.sql'
+import trainingProjectLinksSql from './migrations/033_training_project_links.sql'
+import classTrainingProjectsSql from './migrations/034_class_training_projects.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -155,6 +157,8 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   // 导入《地标地点表》29 个地点，地点分类扩到 5 类。
   { version: '031_landmark_import', sql: landmarkImportSql },
   { version: '032_training_projects', sql: trainingProjectsSql },
+  { version: '033_training_project_links', sql: trainingProjectLinksSql },
+  { version: '034_class_training_projects', sql: classTrainingProjectsSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

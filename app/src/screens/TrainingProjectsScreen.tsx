@@ -91,8 +91,11 @@ export function TrainingProjectsScreen() {
         {visible.map((project, index) => <li key={project.id} className="projects__row" data-project-id={project.id}>
           {view === 'popular' && <span className={`projects__rank ${index < 3 ? `is-medal is-rank-${index + 1}` : ''}`} aria-label={`第 ${index + 1} 名`}><span>{index + 1}</span></span>}
           <ProjectCover key={`${project.id}-${project.coverImageId}`} project={project} />
-          <div className="projects__info"><h3>{project.name}</h3><p className="projects__summary">{project.summary}</p><p className="projects__group"><IconUsers size={18} /><span>{project.groupName} · {project.memberCount}人</span></p>
-            {/^https?:\/\//i.test(project.experienceUrl) ? <a className="projects__experience" href={project.experienceUrl} target="_blank" rel="noopener noreferrer">体验项目 <span aria-hidden="true">↗</span></a> : <span className="projects__unavailable">体验暂不可用</span>}
+          <div className="projects__info"><h3>{project.name}</h3><p className="projects__summary">{project.summary}</p><p className="projects__group"><IconUsers size={18} /><span>{project.groupName || '团队信息待补充'}{project.memberCount != null && ` · ${project.memberCount}人`}</span></p>
+            <div className="projects__links">
+              {project.projectUrl && /^https?:\/\//i.test(project.projectUrl) && <a className="projects__source" href={project.projectUrl} target="_blank" rel="noopener noreferrer">项目链接 <span aria-hidden="true">↗</span></a>}
+              {project.experienceUrl && /^https?:\/\//i.test(project.experienceUrl) && <a className="projects__experience" href={project.experienceUrl} target="_blank" rel="noopener noreferrer">体验项目 <span aria-hidden="true">↗</span></a>}
+            </div>
           </div>
           <button className={`projects__like ${project.likedByMe ? 'is-liked' : ''}`} aria-label={`${project.likedByMe ? '取消点赞' : '点赞'} ${project.name}，${project.likeCount} 赞`} aria-pressed={project.likedByMe} aria-busy={pending.has(project.id)} disabled={pending.has(project.id)} onClick={() => void like(project)}><span><IconHeart size={24} filled={project.likedByMe} /><span>{project.likeCount}</span></span>{project.likedByMe && <small>已点赞</small>}</button>
         </li>)}

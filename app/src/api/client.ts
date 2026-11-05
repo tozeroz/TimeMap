@@ -35,9 +35,10 @@ const TIMEOUT_MS = 8000
 export interface TrainingProjectFields {
   name: string
   summary: string
-  groupName: string
-  memberCount: number
-  experienceUrl: string
+  groupName: string | null
+  memberCount: number | null
+  projectUrl: string | null
+  experienceUrl: string | null
   coverImageId: string | null
   position: number
   published: boolean

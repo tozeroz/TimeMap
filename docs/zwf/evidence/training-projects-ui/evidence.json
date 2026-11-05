@@ -120,6 +120,26 @@
       "viewport": "320x740",
       "artifact": "login-required.png",
       "observation": "未登录点赞进入已有登录流程并记录项目模式回跳。"
+    },
+    {
+      "viewport": "320x740",
+      "artifact": "class-catalog-320.png",
+      "observation": "本地数据库实际导入的10个班级项目；10个项目链接、3个体验入口、未知资料留空。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "class-catalog-390.png",
+      "observation": "本地数据库实际导入的10个班级项目；10个项目链接、3个体验入口、未知资料留空。"
+    },
+    {
+      "viewport": "430x932",
+      "artifact": "class-catalog-430.png",
+      "observation": "本地数据库实际导入的10个班级项目；10个项目链接、3个体验入口、未知资料留空。"
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "class-catalog-1440.png",
+      "observation": "本地数据库实际导入的10个班级项目；10个项目链接、3个体验入口、未知资料留空。"
     }
   ],
   "fixtureOnly": true
