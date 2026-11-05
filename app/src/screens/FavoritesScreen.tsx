@@ -1,3 +1,5 @@
+import { useFeedSourceRestore } from '../data/feedBrowse'
+import { openFeed } from '../data/feedBrowse'
 import { useEffect, useState } from 'react'
 import {
   avatarFor,
@@ -39,6 +41,7 @@ import './favorites.css'
 type FavTab = 'activity' | 'post'
 
 export function FavoritesScreen() {
+  useFeedSourceRestore()
   const [tab, setTab] = useState<FavTab>('activity')
   const [posts, setPosts] = useState<ApiPost[]>([])
   const [acts, setActs] = useState<ApiActivity[]>([])
@@ -197,7 +200,7 @@ export function FavoritesScreen() {
                     className="fav__item"
                     data-fav-id={p.id}
                     data-fav-count={String(p.favoriteCount ?? 0)}
-                    onClick={() => navigate('feed', { id: p.id })}
+                    onClick={() => openFeed(p.id, posts.map(item => item.id))}
                   >
                     <img className="fav__avatar" src={avatarFor(p.author)} alt="" />
                     <span className="fav__main">

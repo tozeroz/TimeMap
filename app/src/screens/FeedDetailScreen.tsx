@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   REPORT_REASONS,
   createComment,
@@ -7,11 +7,8 @@ import {
   deleteMyPost,
   favoritePost,
   likePost,
-  mediaUrl,
-  relativeTime,
   unfavoritePost,
   unlikePost,
-  avatarFor,
   humanizeFailure,
   type ApiCommentNode,
   type ApiPostDetail,
@@ -22,35 +19,46 @@ import { findLocalPost, removeMyPost, stashRepublish } from '../data/store'
 import type { FeedPost } from '../data/types'
 import { getSession, isLoggedIn } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
-import { IconBack, IconComment, IconHeart, IconShare, IconStar } from '../components/icons'
+import { IconBack } from '../components/icons'
 import { goBack, navigate } from '../router'
 import './feed.css'
+import { feedBrowse, stepFeed } from '../data/feedBrowse'
+import { PostReader } from '../components/PostReader'
+import { usePostWheel } from '../components/usePostWheel'
 
-/**
- * 动态详情（原版 `FeedDetailActivity` + TimeMap P0 的 F05 互动 / F07 举报 / 作者删除）。
- *
- * 结构按 M3 Slice 1 实测（docs/pending/m3/MODEL-VALIDATION.md §2.7 + supplements/comment-detail.json）：
- *   - 顶部：返回 + 分享
- *   - 作者行：头像 + 昵称 +「地点 · 时间」
- *   - 正文 + 配图
- *   - **评论区内联在本页**：标题「评论 N」，N 是**含回复**的总数
- *   - 每条顶层评论下是**嵌套的回复列表**；回复行按「<作者> 回复 <目标> · <时间>」渲染
- *   - 底部输入框「留下我的评论...」发顶层评论
- *
- * ## ⭐ P0 新增（每一条都对应一个验收项）
- *   · **收藏**（US-03）：与点赞并列；计数与状态都取**服务端返回值**，不在本地加减
- *   · **举报**（US-08）：选原因码 → 提交。⚠️ 提交成功后**内容仍然公开**
- *     （需求明确："举报成功后进入管理端待处理列表，但**不自动下架内容**"），
- *     所以这里绝不会因为举报成功而把内容藏起来 —— 那会违反需求
- *   · **作者删除**（US-02/US-03）：仅当会话用户就是作者时显示；服务端另有一道 403 校验
- *   · **已下架状态**（US-08 + 需求 4.4）：服务端 410 时显示"内容不存在或已下架"状态页
- *     （改前 410 会落到"网络错误"，把明确的业务状态说成网络故障）
- *
- * 数据来源纪律（审核记录 07）：
- *   在线时 **API = 权威数据源**；失败时只降级到**最后一次成功的 API 快照**并明确标注，
- *   **不塞 mock** —— 否则 UI 会在离线时看起来像在线成功，那是假象。
- */
 export function FeedDetailScreen({ id }: { id: string }) {
+  const [current, setCurrent] = useState(() => {
+    const token = new URLSearchParams(window.location.hash.split('?')[1]).get('browse')
+    if (!token || token !== feedBrowse.token) {
+      feedBrowse.ids = [id]; feedBrowse.drafts = {}; feedBrowse.images = {}; feedBrowse.switched = false
+    }
+    return id
+  })
+  const [incoming, setIncoming] = useState(id)
+  if (incoming !== id) { setIncoming(id); setCurrent(id) }
+  const root = useRef<HTMLDivElement>(null)
+  const [showWheelHint, setShowWheelHint] = useState(() => {
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return false
+    try { return sessionStorage.getItem('timemap.post-wheel-hint') !== 'seen' } catch { return true }
+  })
+  useEffect(() => {
+    if (!showWheelHint) return
+    try { sessionStorage.setItem('timemap.post-wheel-hint', 'seen') } catch { /* Storage may be disabled. */ }
+    const timer = window.setTimeout(() => setShowWheelHint(false), 3200)
+    return () => window.clearTimeout(timer)
+  }, [showWheelHint])
+  const step = (direction: number) => {
+    const next = stepFeed(current, direction)
+    if (next) { setShowWheelHint(false); feedBrowse.switched = true; setCurrent(next) }
+  }
+  usePostWheel(root, step)
+  return <div className="reader-session" ref={root}>
+    <FeedDetail key={current} id={current} onStep={step} />
+    {showWheelHint && <p className="reader__wheelHint" role="status">滚动鼠标滚轮切换帖子</p>}
+  </div>
+}
+
+function FeedDetail({ id, onStep }: { id: string; onStep: (direction: number) => void }) {
   const [post, setPost] = useState<ApiPostDetail | null>(null)
   const [comments, setComments] = useState<ApiCommentNode[]>([])
   const [total, setTotal] = useState(0)
@@ -70,12 +78,10 @@ export function FeedDetailScreen({ id }: { id: string }) {
    */
   const [localPost, setLocalPost] = useState<FeedPost | null>(null)
 
-  const [draft, setDraft] = useState('')
+  const [draft, setDraft] = useState(() => feedBrowse.drafts[id] ?? '')
+  useEffect(() => { feedBrowse.drafts[id] = draft }, [id, draft])
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
-  /** 回复弹层的目标；null 表示关闭 */
-  const [replyTo, setReplyTo] = useState<{ commentId: string; name: string } | null>(null)
-  const [replyDraft, setReplyDraft] = useState('')
   /** 举报弹层：null 表示关闭 */
   const [reportOpen, setReportOpen] = useState(false)
   const [reportReason, setReportReason] = useState<string>(REPORT_REASONS[0].code)
@@ -223,13 +229,15 @@ export function FeedDetailScreen({ id }: { id: string }) {
       return
     }
     setBusy(true)
+    setPost({ ...post, likedByMe: !post.likedByMe, likeCount: Math.max(0, post.likeCount + (post.likedByMe ? -1 : 1)) })
     try {
       const r = post.likedByMe ? await unlikePost(post.id) : await likePost(post.id)
       if (!r.ok) {
+        setPost(post)
         setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${failText(r)}`)
         return
       }
-      // 用服务端返回的权威计数覆盖本地，而不是自己加减
+      // 用服务端权威计数校正即时反馈。
       setPost({
         ...post,
         likeCount: r.value.likeCount,
@@ -244,7 +252,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
   async function submitComment() {
     if (busy) return
     const body = draft.trim()
-    if (!body) return
+    if (!body || Array.from(body).length > 500) return
     if (!isLoggedIn()) {
       setNotice('请先登录后再评论')
       navigate('loginselect')
@@ -259,27 +267,16 @@ export function FeedDetailScreen({ id }: { id: string }) {
         setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `评论失败：${failText(r)}`)
         return
       }
+      setComments(items => [{ ...r.value, replies: [] }, ...items])
+      setTotal(value => value + 1)
       setDraft('')
-      await load()
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function submitReply() {
-    if (busy || !replyTo) return
-    const body = replyDraft.trim()
-    if (!body) return
-    setBusy(true)
-    try {
-      const r = await createComment(id, body, replyTo.commentId)
-      if (!r.ok) {
-        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `回复失败：${failText(r)}`)
-        return
+      feedBrowse.drafts[id] = ''
+      const refreshed = await resolvePostAndComments(id)
+      if (refreshed.state === 'ready' || refreshed.state === 'offline') {
+        setComments(refreshed.comments)
+        setTotal(refreshed.total)
+        setPost(refreshed.post)
       }
-      setReplyTo(null)
-      setReplyDraft('')
-      await load()
     } finally {
       setBusy(false)
     }
@@ -289,7 +286,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
    * 收藏 / 取消收藏（US-03）。
    *
    * 三条纪律：
-   *   ① 用**服务端返回**的 favoriteCount / favorited 覆盖本地，不自己 ±1
+   *   ① 用**服务端返回**的 favoriteCount / favorited 校正即时反馈
    *      （撤销、重复收藏、并发下本地推算会失真）
    *   ② 未登录先跳登录，不发必然 401 的请求
    *   ③ 失败**不本地假成功**：提示原因，界面维持服务端已知的状态
@@ -302,14 +299,16 @@ export function FeedDetailScreen({ id }: { id: string }) {
       return
     }
     setBusy(true)
+    setPost({ ...post, favoritedByMe: !post.favoritedByMe, favoriteCount: Math.max(0, post.favoriteCount + (post.favoritedByMe ? -1 : 1)) })
     try {
       const r = post.favoritedByMe ? await unfavoritePost(post.id) : await favoritePost(post.id)
       if (!r.ok) {
+        setPost(post)
         setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${failText(r)}`)
         return
       }
       setPost({ ...post, favoriteCount: r.value.favoriteCount, favoritedByMe: r.value.favorited })
-      setNotice('')
+      setNotice(r.value.favorited ? '已收藏' : '已取消收藏')
     } finally {
       setBusy(false)
     }
@@ -361,8 +360,15 @@ export function FeedDetailScreen({ id }: { id: string }) {
         setNotice(r.status === 403 ? '只能删除自己的评论' : `删除失败：${failText(r)}`)
         return
       }
-      // 删除会改变有效评论量 ⇒ 必须重新拉取（不能只本地过滤掉那一行）
-      await load()
+      setComments(items => items.filter(c => c.id !== commentId).map(c => ({ ...c, replies: c.replies.filter(r => r.id !== commentId) })))
+      setTotal(value => Math.max(0, value - 1))
+      // Refresh the authoritative total (deleting a parent may remove replies too).
+      const refreshed = await resolvePostAndComments(id)
+      if (refreshed.state === 'ready' || refreshed.state === 'offline') {
+        setComments(refreshed.comments)
+        setTotal(refreshed.total)
+        setPost(refreshed.post)
+      }
     } finally {
       setBusy(false)
     }
@@ -380,7 +386,11 @@ export function FeedDetailScreen({ id }: { id: string }) {
         return
       }
       setConfirmDelete(false)
-      // 删除即下架（软删除，退出所有公开面）⇒ 本页转为"已下架"状态页
+      // Move through the original order after a successful deletion.
+      const at = feedBrowse.ids.indexOf(post.id)
+      if (at >= 0 && feedBrowse.ids[at + 1]) { onStep(1); feedBrowse.ids.splice(at, 1); return }
+      if (at > 0) { onStep(-1); feedBrowse.ids.splice(at, 1); return }
+      if (at >= 0) { feedBrowse.ids.splice(at, 1); goBack('campus'); return }
       setPost(null)
       setErrorText('内容不存在或已下架')
       setState('gone')
@@ -455,7 +465,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
     return (
       <Screen header={<TopBar left={<BackBtn />} />}>
         <div className="feed__state" data-feed-state="gone">
-          <p>内容不存在或已下架</p>
+          <p>内容不存在或已下架</p>{feedBrowse.ids[feedBrowse.ids.indexOf(id) + 1] && <button className="feed__retry" onClick={() => onStep(1)}>下一条帖子</button>}
           <p className="feed__state-sub">{errorText}</p>
           <button className="feed__retry" onClick={() => goBack('map')}>
             返回
@@ -488,257 +498,13 @@ export function FeedDetailScreen({ id }: { id: string }) {
     )
   }
 
-  const header = (
-    <TopBar
-      left={<BackBtn />}
-      right={
-        <div className="feed__topActions">
-          {/*
-            作者删除（US-02：只有作者能够删除自己的帖子）。
-            ⚠️ 显示条件与会话身份有关，但这**只是界面**；服务端 DELETE 会独立校验归属。
-          */}
-          {isAuthor && (
-            <button
-              className="feed__topBtn"
-              data-post-delete
-              onClick={() => setConfirmDelete(true)}
-              disabled={busy}
-            >
-              删除
-            </button>
-          )}
-          {/* 举报（US-08）：作者举报自己的内容没意义，所以作者不显示 */}
-          {!isAuthor && (
-            <button
-              className="feed__topBtn"
-              data-post-report
-              onClick={() => {
-                setNotice('')
-                setReportOpen(true)
-              }}
-              disabled={busy}
-            >
-              举报
-            </button>
-          )}
-          <ShareBtn onShare={() => void sharePost()} />
-        </div>
-      }
-    />
-  )
-
-  return (
-    <Screen
-      header={header}
-      footer={
-        <div className="feed__bar">
-          <input
-            className="feed__input"
-            placeholder="留下我的评论..."
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void submitComment()
-            }}
-          />
-          {/* 点赞：整块热区；0 赞时刻意**不渲染计数**（对齐原版：那时没有计数控件） */}
-          <button
-            className={`feed__action ${post.likedByMe ? 'is-liked' : ''}`}
-            onClick={() => void toggleLike()}
-            disabled={busy}
-            aria-label="点赞"
-          >
-            <IconHeart size={21} filled={post.likedByMe} />
-            {post.likeCount > 0 && <span>{post.likeCount}</span>}
-          </button>
-          {/*
-            收藏（US-03）：与点赞并列，可撤销。
-            `data-favorited` 是给验收用的显式钩子 —— 收藏态必须能被机械检查，
-            而不是只能靠看图。
-          */}
-          <button
-            className={`feed__action ${post.favoritedByMe ? 'is-faved' : ''}`}
-            data-favorite-toggle
-            data-favorited={post.favoritedByMe ? '1' : '0'}
-            data-favorite-count={String(post.favoriteCount)}
-            onClick={() => void toggleFavorite()}
-            disabled={busy}
-            aria-label={post.favoritedByMe ? '取消收藏' : '收藏'}
-          >
-            <IconStar size={21} filled={post.favoritedByMe} />
-            {post.favoriteCount > 0 && <span>{post.favoriteCount}</span>}
-          </button>
-          {/*
-            评论数：0 → 显示「评论」二字；>0 → 显示数字（含回复）。
-            **简化说明**：原版是先点输入框打开评论编辑器、在编辑器里发送；
-            这里草稿非空时点这个按钮即发送（回车等价），避免再造一个弹层。
-            这是本 demo 的有意简化，不声称与原版一致。
-          */}
-          <button
-            className="feed__action feed__action--text"
-            onClick={() => {
-              if (draft.trim()) void submitComment()
-            }}
-            disabled={busy}
-            aria-label="评论"
-          >
-            <IconComment size={21} />
-            <span>{post.commentCount > 0 ? post.commentCount : '评论'}</span>
-          </button>
-        </div>
-      }
-      scroll
-    >
-      {fromSnapshot && (
-        <p className="feed__offline">
-          离线：显示的是**最后一次成功获取的服务器数据**（非本地假数据），可能不是最新
-        </p>
-      )}
-
-      <article className="feed__post">
-        <header className="feed__author">
-          <img className="feed__avatar" src={avatarFor(post.author)} alt="" />
-          <div className="feed__author-main">
-            <div className="feed__author-name">{post.author}</div>
-            <div className="feed__author-meta">
-              {relativeTime(post.createdAt)}
-              {post.place && <span> · {post.place}</span>}
-            </div>
-          </div>
-        </header>
-
-        <p className="feed__text">{post.body}</p>
-
-        {/* M4：详情页的帖子图片。与列表同口径 —— 统一走 mediaUrl(id)，
-            公图 302 → Nginx 静态、私图 X-Accel，前端不关心区别。
-            图片给出宽高（来自 media 行）以便按原版比例占位，避免加载时跳动。 */}
-        {(post.images ?? []).length > 0 && (
-          <div className="feed__media">
-            {(post.images ?? []).map((m) => (
-              <img
-                key={m.id}
-                className={`feed__mediaImg ${post.imageMode === 'sticker' ? 'feed__mediaImg--sticker' : ''}`}
-                src={mediaUrl(m.id)}
-                alt=""
-                data-media-id={m.id}
-                width={m.width ?? undefined}
-                height={m.height ?? undefined}
-                loading="lazy"
-              />
-            ))}
-          </div>
-        )}
-      </article>
-
-      <section className="feed__comments">
-        {/* 原版口径：「评论 N」把回复也算进去 */}
-        <h3 className="feed__comments-title">评论 {total}</h3>
-
-        {comments.length === 0 && <p className="feed__noComments">还没有评论，来说点什么吧</p>}
-
-        {comments.map((c) => (
-          <div key={c.id} className="cmt" data-comment-id={c.id}>
-            <img className="cmt__avatar" src={avatarFor(c.author)} alt="" />
-            <div className="cmt__body">
-              <div className="cmt__name">{c.author}</div>
-              <p className="cmt__text">{c.body}</p>
-              <div className="cmt__meta">
-                <span>{relativeTime(c.createdAt)}</span>
-                <button
-                  className="cmt__reply"
-                  onClick={() => {
-                    setReplyTo({ commentId: c.id, name: c.author })
-                    setReplyDraft('')
-                  }}
-                >
-                  回复
-                </button>
-                {/*
-                  资料里没有"评论作者 id"以外的归属信息，用 authorId 与会话 id 比对
-                  （**不用昵称比对** —— 昵称可重名）。服务端另有一道 403 校验。
-                */}
-                {Boolean(c.authorId && me?.id && c.authorId === me.id) && (
-                  <button
-                    className="cmt__delete"
-                    data-comment-delete={c.id}
-                    onClick={() => void removeComment(c.id)}
-                    disabled={busy}
-                  >
-                    删除
-                  </button>
-                )}
-              </div>
-
-              {/* 回复列表：嵌套在父评论内部（原版就是这么渲染的） */}
-              {c.replies.length > 0 && (
-                <div className="cmt__replies" data-replies-of={c.id}>
-                  {c.replies.map((r) => (
-                    <div key={r.id} className="cmt cmt--reply" data-comment-id={r.id}>
-                      <img className="cmt__avatar cmt__avatar--sm" src={avatarFor(r.author)} alt="" />
-                      <div className="cmt__body">
-                        <div className="cmt__replyMeta">
-                          <span className="cmt__name">{r.author}</span>
-                          {r.replyTo && (
-                            <>
-                              <span className="cmt__replyLabel">回复</span>
-                              <span className="cmt__replyTarget">{r.replyTo}</span>
-                            </>
-                          )}
-                          <span className="cmt__replyTime">· {relativeTime(r.createdAt)}</span>
-                        </div>
-                        <p className="cmt__text">{r.body}</p>
-                        <div className="cmt__meta">
-                          <button
-                            className="cmt__reply"
-                            onClick={() => {
-                              setReplyTo({ commentId: r.id, name: r.author })
-                              setReplyDraft('')
-                            }}
-                          >
-                            回复
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <span className="cmt__likes">
-              <IconHeart size={14} />
-            </span>
-          </div>
-        ))}
-      </section>
-
-      {notice && <p className="feed__notice">{notice}</p>}
-
-      {/* 回复弹层：标题「回复 @昵称」（原版实测的形态） */}
-      {replyTo && (
-        <div className="feed__replyMask" onClick={() => setReplyTo(null)}>
-          <div className="feed__replySheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-            <div className="feed__replyHead">
-              <button className="feed__replyClose" onClick={() => setReplyTo(null)} aria-label="关闭">
-                ×
-              </button>
-              <span className="feed__replyTitle">回复 @{replyTo.name}</span>
-              <button className="feed__replyPost" onClick={() => void submitReply()} disabled={busy}>
-                发布
-              </button>
-            </div>
-            <input
-              className="feed__replyInput"
-              placeholder="留下我的回复..."
-              value={replyDraft}
-              onChange={(e) => setReplyDraft(e.target.value)}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void submitReply()
-              }}
-            />
-          </div>
-        </div>
-      )}
+  return <>
+    <PostReader onStep={onStep} post={post} comments={comments} total={total} busy={busy}
+      draft={draft} onDraft={setDraft} notice={notice} offline={fromSnapshot}
+      onLike={() => void toggleLike()} onFavorite={() => void toggleFavorite()}
+      onSend={() => void submitComment()} onDeleteComment={cid => void removeComment(cid)}
+      onMore={() => isAuthor ? setConfirmDelete(true) : setReportOpen(true)}
+      onShare={() => void sharePost()} />
 
       {/*
         举报弹层（US-08）。
@@ -809,22 +575,13 @@ export function FeedDetailScreen({ id }: { id: string }) {
           </div>
         </div>
       )}
-    </Screen>
-  )
+    </>
 }
 
 function BackBtn() {
   return (
     <button className="iconbtn" onClick={() => goBack()} aria-label="返回">
       <IconBack size={22} />
-    </button>
-  )
-}
-
-function ShareBtn({ onShare }: { onShare: () => void }) {
-  return (
-    <button className="iconbtn" data-feed-share aria-label="分享" onClick={onShare}>
-      <IconShare size={20} />
     </button>
   )
 }

@@ -1,3 +1,4 @@
+import { feedBrowse, openFeed } from '../data/feedBrowse'
 import { mediaUrl, relativeTime, type ApiPlaceActivity, type ApiPlaceDetail, type ApiPlacePost } from '../api/client'
 import { IconCalendar, IconChevronRight, IconComment, IconHeart, IconStar } from '../components/icons'
 import type { PlaceFilter, PlaceSort } from './usePlaceDetail'
@@ -28,7 +29,7 @@ export function PlaceFeedSection({ place, sort, setSort, filter, setFilter, allE
   showFilter: boolean
   /** columns = 旧页面的 CSS 多列（按列排）；split = 抽屉的左右两列，按原始顺序交替 */
   layout: 'columns' | 'split'
-  onOpenPost: (id: string) => void
+  onOpenPost: (id: string, browse: string) => void
   onOpenAll: () => void
 }) {
   const visible = filter === 'image' ? place.posts.filter(p => p.images?.length) : place.posts
@@ -40,9 +41,9 @@ export function PlaceFeedSection({ place, sort, setSort, filter, setFilter, allE
   if (feedPhase === 'error') list = <p className="pd__feedError" role="status">加载失败 · <button className="pd__mapLink" onClick={onRetryFeed}>重试</button></p>
   else if (!visible.length) list = <div className="pd__empty" role="status" data-pd-posts="empty" data-pd-empty-reason={reason}><MemoryArtwork /><h3>{emptyTitle}</h3><p>{emptyText}</p>{(filtered || reason === 'out-of-hot-window') && <button className="pd__mapLink" onClick={() => { setFilter('all'); setSort('latest') }}>查看最新内容 →</button>}</div>
   else if (layout === 'split') list = <div className="pd__postSplit" data-pd-posts={visible.length}>
-    {[0, 1].map(col => <ul key={col} className="pd__postCol">{visible.map((post, i) => i % 2 === col ? <PostRow key={post.id} post={post} index={i} onOpen={onOpenPost} /> : null)}</ul>)}
+    {[0, 1].map(col => <ul key={col} className="pd__postCol">{visible.map((post, i) => i % 2 === col ? <PostRow key={post.id} post={post} index={i} onOpen={id => { openFeed(id, visible.map(item => item.id)); onOpenPost(id, feedBrowse.token) }} /> : null)}</ul>)}
   </div>
-  else list = <ul className="pd__postList" data-pd-posts={visible.length}>{visible.map((post, i) => <PostRow key={post.id} post={post} index={i} onOpen={onOpenPost} />)}</ul>
+  else list = <ul className="pd__postList" data-pd-posts={visible.length}>{visible.map((post, i) => <PostRow key={post.id} post={post} index={i} onOpen={id => { openFeed(id, visible.map(item => item.id)); onOpenPost(id, feedBrowse.token) }} />)}</ul>
   return <section className="pd__feed">
     <div className="pd__sectionHead"><h2 className="pd__sectionTitle">地点内容</h2><div className="pd__tools">{showFilter && <><button className={'pd__more ' + (filter === 'image' ? 'is-active' : '')} aria-pressed={filter === 'image'} data-pd-filter={filter} onClick={() => setFilter(f => f === 'all' ? 'image' : 'all')}><span aria-hidden="true">☷</span>{filter === 'image' ? '仅图文' : '筛选'}</button><span className="pd__separator" /></>}<button className="pd__more" data-pd-all={place.id} onClick={onOpenAll}>查看全部<IconChevronRight /></button></div></div>
     <div className="pd__sorts" aria-label="内容排序">{(['latest', 'hot'] as const).map(key => <button key={key} className={'pd__sort ' + (sort === key ? 'is-active' : '')} aria-pressed={sort === key} data-pd-sort={key} onClick={() => setSort(key)}>{key === 'latest' ? '最新' : '近期热门'}</button>)}</div>

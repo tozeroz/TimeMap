@@ -155,6 +155,9 @@ if (-not $SkipBuild) {
 
 $dist = Join-Path $root 'app\dist'
 if (-not (Test-Path (Join-Path $dist 'index.html'))) { throw "Build output missing: $dist\index.html" }
+if (-not (Test-Path -LiteralPath (Join-Path $dist 'timemap-logo.png') -PathType Leaf)) {
+  throw 'Required branding asset missing: dist/timemap-logo.png'
+}
 $jsCount = (Get-ChildItem (Join-Path $dist 'assets') -Filter '*.js' -ErrorAction SilentlyContinue).Count
 
 # Verify the actual bundle, not merely the parent shell environment. This also protects

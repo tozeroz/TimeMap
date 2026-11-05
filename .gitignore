@@ -32,6 +32,8 @@ app/android/app/src/main/assets/capacitor.config.json
 .mumu-capture/
 .playwright-mcp/
 *.png
+# Required web branding asset, copied by Vite from public/ into dist/.
+!app/public/timemap-logo.png
 # 例外：M0 冻结的原版行为基线截图必须入库（半分辨率，见 docs/test/original-baseline/）
 !docs/test/original-baseline/**/*.png
 # 地图复刻文档引用的用户参考图，随正式设计文档维护
