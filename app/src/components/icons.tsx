@@ -88,6 +88,17 @@ export function IconChevronDown({ size = 16, strokeWidth = 2 }: IconProps) {
   )
 }
 
+/** 调节（两条滑轨 + 圆钮）：地图「地标标签」筛选入口 */
+export function IconSliders({ size = 20, strokeWidth = 1.8 }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth} aria-hidden="true">
+      <path d="M3.5 8h4.5M12.5 8h8M3.5 16h9M17 16h3.5" />
+      <circle cx="10.25" cy="8" r="2.25" />
+      <circle cx="14.75" cy="16" r="2.25" />
+    </svg>
+  )
+}
+
 export function IconChevronRight({ size = 16, strokeWidth = 2 }: IconProps) {
   return (
     <svg {...base(size)} strokeWidth={strokeWidth}>

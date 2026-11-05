@@ -23,7 +23,7 @@
 //      读不到（例如生产发的是短信）就在终端提示输入验证码，再 POST /api/auth/verify-code。
 //
 // 流程（每个文件）：
-//   GET /api/admin/places 按名字精确匹配地点（同名多个 → 报错不导入）
+//   GET /api/admin/places 按名字精确匹配地点（同名多个 → 报错不导入；已停用地点 → 跳过）
 //   → GET /api/places/:id 看是否已有同 title 的照片（title = 地点名），有就跳过（幂等）
 //   → POST /api/media（purpose=place，uploadRequestId 由文件内容 sha256 派生，重跑不会重复建媒体）
 //   → 若返回的 mediaId 已挂在该地点（title 被改过的情况），也跳过
@@ -132,6 +132,12 @@ for (const { file, name } of files) {
   }
   const place = matches[0]
   covered.add(place.id)
+  // 已停用地点（如迁移 032 下架的茅以升坐像、郑振铎铜像、留园）不挂新图、不删演示照片。
+  if (!place.enabled) {
+    tally.skipped++
+    console.log(`SKIP   ${name}: 地点已停用`)
+    continue
+  }
   try {
     const detail = await call('GET', `/api/places/${place.id}`, { token })
     const photos = detail.photos ?? []

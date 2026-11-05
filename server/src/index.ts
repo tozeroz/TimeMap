@@ -23,7 +23,7 @@ import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts
 import { registerCutoutRoutes } from './cutout.ts'
 import { registerTimemapRoutes } from './timemap.ts'
 import { registerMapRoutes } from './mapRoutes.ts'
-import { isPlaceCategory } from './placeCategories.ts'
+import { parseCategoryFilter } from './placeCategories.ts'
 import { registerProfileRoutes } from './profileRoutes.ts'
 import { registerSubmissionRoutes } from './submissionsRoutes.ts'
 
@@ -1654,7 +1654,8 @@ export function buildServer(deps: ServerDeps) {
   // -------------------------------------------------------------------------
   app.get('/api/places', async (req, reply) => {
     const q = String((req.query as { q?: string }).q ?? '').trim()
-    const category = String((req.query as { category?: string }).category ?? '').trim()
+    // 多选按 OR；旧分类值按 placeCategories.ts 映射；未知值沿用旧行为：忽略（返回全部）
+    const categories = parseCategoryFilter((req.query as { category?: unknown }).category)
     const includeDisabled = String((req.query as { includeDisabled?: string }).includeDisabled ?? '') === '1'
     try {
       /*
@@ -1668,9 +1669,9 @@ export function buildServer(deps: ServerDeps) {
         params.push('%' + q + '%')
         conds.push(`(pl.name ilike $${params.length} or coalesce(pl.address, '') ilike $${params.length})`)
       }
-      if (isPlaceCategory(category)) {
-        params.push(category)
-        conds.push(`pl.category = $${params.length}`)
+      if (Array.isArray(categories)) {
+        params.push(categories)
+        conds.push(`pl.category = any($${params.length}::text[])`)
       }
       if (!includeDisabled) conds.push('pl.enabled = true')
       const where = conds.length ? `where ${conds.join(' and ')}` : ''

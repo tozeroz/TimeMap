@@ -32,6 +32,7 @@ import placePhotoTimemachineSql from './migrations/029_place_photo_timemachine.s
 import userProfilesSql from './migrations/030_user_profiles.sql'
 import landmarkImportSql from './migrations/031_landmark_import.sql'
 import activitySubmissionsSql from './migrations/031_activity_submissions.sql'
+import placeCategoriesV2Sql from './migrations/032_place_categories_v2.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -150,11 +151,12 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   // 029：地点「时光机」——place_photos 增加 media_id / post_id / view_key / year_sort。
   { version: '029_place_photo_timemachine', sql: placePhotoTimemachineSql },
   { version: '030_user_profiles', sql: userProfilesSql },
-  { version: '030_user_profiles', sql: userProfilesSql },
   { version: '031_activity_submissions', sql: activitySubmissionsSql },
   // 导入《地标地点表》29 个地点，地点分类扩到 5 类。
   { version: '031_landmark_import', sql: landmarkImportSql },
-]
+  // 032：分类改为《校园地点分类资料》的 5 类（教学楼/食堂/运动场/休闲场所/校园地标），
+  //      下架茅以升坐像、郑振铎铜像、留园（保留历史），南门坐标恢复为线上值。
+  { version: '032_place_categories_v2', sql: placeCategoriesV2Sql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

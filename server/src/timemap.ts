@@ -945,7 +945,7 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       reply.code(400)
       return { error: 'invalid_payload', details: ['name 不能超过 40 字'] }
     }
-    const category = typeof payload.category === 'string' && payload.category ? payload.category : '地标'
+    const category = typeof payload.category === 'string' && payload.category ? payload.category : '校园地标'
     if (!isPlaceCategory(category)) {
       reply.code(400)
       return { error: 'invalid_payload', details: [PLACE_CATEGORY_HINT] }

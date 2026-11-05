@@ -7,6 +7,7 @@ import {
   IconLocation,
   IconPlus,
   IconSearch,
+  IconSliders,
 } from '../components/icons'
 import {
   listPlaces,
@@ -73,9 +74,18 @@ interface ViewState {
   scale: number
 }
 
-/** 分类筛选：全部 / 地标 / 教学楼 / 活动场地 / 运动场地 / 食堂（需求 4.1 草图顶部的分类条，031 起扩到 5 类） */
-type CategoryFilter = '全部' | PlaceCategory
-const CATEGORY_FILTERS: CategoryFilter[] = ['全部', ...PLACE_CATEGORIES]
+/**
+ * 地标标签多选（地图页面复刻说明 §4）：按钮顺序 全部、校园地标、食堂 / 教学楼、运动场、休闲场所。
+ * 空数组 = 「全部」；「全部」只是筛选操作，不存进地点数据。
+ */
+type TagOption = '全部' | PlaceCategory
+const TAG_OPTIONS: TagOption[] = ['全部', ...PLACE_CATEGORIES]
+/** 草稿切换：点「全部」清空；点具体类别增删；全部取消时自然回到「全部」 */
+function toggleTag(draft: readonly PlaceCategory[], tag: TagOption): PlaceCategory[] {
+  if (tag === '全部') return []
+  const next = draft.includes(tag) ? draft.filter(c => c !== tag) : [...draft, tag]
+  return PLACE_CATEGORIES.filter(c => next.includes(c))
+}
 
 /**
  * 把**权威地点**派生成地图标记（TimeMap P0 / F02 + US-01）。
@@ -424,8 +434,17 @@ export function MapScreen() {
    * 那是把"读不到"伪装成"没有"——必须显式说出来。
    */
   const [postsFailed, setPostsFailed] = useState(false)
-  /** 分类筛选（需求 4.1：`[全部] [地标] [教学楼] [活动场地] [运动场地] [食堂]`） */
-  const [category, setCategory] = useState<CategoryFilter>('全部')
+  /*
+    地标标签（复刻说明 §4）：applied = 已生效，draft = 面板草稿，只有「确定」才把草稿提交为 applied。
+    面板打开时推入一条带 tmTags 标记的历史：系统返回 = 关闭并放弃草稿（与地点抽屉同一做法）。
+  */
+  const [appliedTags, setAppliedTags] = useState<PlaceCategory[]>([])
+  const [draftTags, setDraftTags] = useState<PlaceCategory[]>([])
+  const [tagsOpen, setTagsOpen] = useState(false)
+  const tagsOpenRef = useRef(false)
+  const tagsBtnRef = useRef<HTMLButtonElement | null>(null)
+  const appliedKey = appliedTags.join(',')
+  const appliedLabel = appliedTags.length ? appliedTags.join('、') : '全部'
   /*
     MAP-002 / MAP-003：地图内的「搜索地标」工具。
 
@@ -458,7 +477,7 @@ export function MapScreen() {
     void (async () => {
       setMarkerPhase('loading')
       const [pr, po] = await Promise.all([
-        listPlaces(undefined, category === '全部' ? undefined : category),
+        listPlaces(undefined, appliedKey ? (appliedKey.split(',') as PlaceCategory[]) : undefined),
         listPosts(),
       ])
       if (!alive) return
@@ -478,7 +497,7 @@ export function MapScreen() {
     return () => {
       alive = false
     }
-  }, [category, publishedPostId, markerReload])
+  }, [appliedKey, publishedPostId, markerReload])
   // ---- 真实定位 ----
   const [fix, setFix] = useState<GeoFix | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
@@ -860,7 +879,7 @@ export function MapScreen() {
     if (!stage || !page) return
     const measure = () => {
       const head = page.querySelector<HTMLElement>('.map__head')
-      const cats = page.querySelector<HTMLElement>('.map__cats')
+      const cats = page.querySelector<HTMLElement>('.map__toolbar')
       setDims(prev => {
         const H = page.clientHeight || prev.H
         const headH = head ? head.offsetHeight + (cats?.offsetHeight ?? 0) : prev.headH
@@ -885,7 +904,7 @@ export function MapScreen() {
     })
     ro.observe(page)
     ro.observe(stage)
-    for (const el of page.querySelectorAll('.map__head, .map__cats')) ro.observe(el)
+    for (const el of page.querySelectorAll('.map__head, .map__toolbar')) ro.observe(el)
     return () => { ro.disconnect(); cancelAnimationFrame(raf) }
   }, [headerHidden, runFocus, restorePreOpenView])
 
@@ -1215,6 +1234,48 @@ export function MapScreen() {
     }
   }, [coordsOf, runFocus])
 
+  // ---- 地标标签面板（复刻说明 §4）----
+  const openTags = useCallback(() => {
+    setDraftTags(appliedTags)
+    tagsOpenRef.current = true
+    setTagsOpen(true)
+    navigate('map', { ...debugQuery(), tags: '1' })
+    window.history.replaceState({ ...(window.history.state ?? {}), tmTags: 1 }, '', window.location.hash)
+  }, [appliedTags, debugQuery])
+  /** 收起：apply=true 提交草稿（确定）；否则放弃草稿。弹掉打开时推入的那条历史。 */
+  const closeTags = useCallback((apply: boolean) => {
+    if (!tagsOpenRef.current) return
+    tagsOpenRef.current = false
+    setTagsOpen(false)
+    if (apply) setAppliedTags(draftTags)
+    if (window.history.state?.tmTags === 1) window.history.back()
+  }, [draftTags])
+  // 系统返回 / 地址里已没有 tags：关闭并放弃草稿；地址残留 tags（刷新、前进）但面板未开：清掉
+  useEffect(() => {
+    if (route.path !== 'map') return
+    if (route.query.tags === undefined) {
+      if (tagsOpenRef.current) { tagsOpenRef.current = false; setTagsOpen(false) }
+    } else if (!tagsOpenRef.current) {
+      window.history.replaceState(null, '', buildHash('map', debugQuery()))
+    }
+  }, [route, debugQuery])
+  // 打开搜索或地点抽屉时收起筛选（放弃草稿），避免面板相互遮挡
+  useEffect(() => {
+    if ((sheetActive || searchOpen) && tagsOpenRef.current) { tagsOpenRef.current = false; setTagsOpen(false) }
+  }, [sheetActive, searchOpen])
+  // Esc：收起并放弃草稿
+  useEffect(() => {
+    if (!tagsOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      e.preventDefault()
+      closeTags(false)
+      tagsBtnRef.current?.focus({ preventScroll: true })
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [tagsOpen, closeTags])
+
   // Esc：与后退一致（展开 → 预览 → 关闭）；搜索面板或定位授权弹窗打开时不处理
   useEffect(() => {
     if (!sheetActive) return
@@ -1265,22 +1326,27 @@ export function MapScreen() {
       scroll={false}
     >
       {/*
-        分类筛选（需求 4.1 草图顶部：[全部] [地标] [教学楼] [活动场地] [运动场地] [食堂]）。
-        ⚠️ 筛选是**服务端**做的（`GET /api/places?category=`）——
+        工具栏：「地标标签」胶囊（复刻说明 §2–§4），展开的面板覆盖在地图上方（见 .map 内）。
+        ⚠️ 筛选是**服务端**做的（`GET /api/places?category=a,b`，多选取并集）——
           与"客户端 filter"相比，服务端筛在加页/加 limit 之后不会静默变成不完整结果。
-        `data-map-category` 是验收钩子：当前生效的分类必须能被机械读到。
+        `data-map-category` 是验收钩子：当前生效的分类（逗号分隔，或「全部」）。
+        地点抽屉打开时胶囊不可用：抽屉与筛选不同时出现。
       */}
-      {!headerHidden && <div className="map__cats no-scrollbar" data-map-category={category}>
-        {CATEGORY_FILTERS.map((c) => (
-          <button
-            key={c}
-            className={`map__cat ${category === c ? 'is-active' : ''}`}
-            data-map-cat={c}
-            onClick={() => setCategory(c)}
-          >
-            {c}
-          </button>
-        ))}
+      {!headerHidden && <div className="map__toolbar" data-map-category={appliedKey || '全部'}>
+        <button
+          ref={tagsBtnRef}
+          className={`map__tagsBtn ${tagsOpen ? 'is-open' : ''} ${appliedTags.length ? 'is-filtered' : ''}`}
+          data-map-tags-toggle
+          aria-expanded={tagsOpen}
+          aria-controls="map-tags-panel"
+          aria-label={`地标标签：${appliedLabel}`}
+          disabled={sheetOpen}
+          onClick={() => (tagsOpen ? closeTags(false) : openTags())}
+        >
+          <IconSliders size={18} />
+          <span>地标标签</span>
+          <span className="map__tagsChevron"><IconChevronDown size={14} /></span>
+        </button>
       </div>}
       {/*
         ⚠️ 这里**没有**「文字弹幕」开关（原来有一个，但它只是给根节点加 `.map--hide-text`
@@ -1386,7 +1452,7 @@ export function MapScreen() {
           </span>
         ) : markers.length === 0 ? (
           <span className="map__markerBadge" data-marker-phase="empty">
-            {category === '全部' ? '暂无已启用的地点' : `暂无${category}类地点`}
+            {appliedTags.length ? `暂无${appliedLabel}类地点` : '暂无已启用的地点'}
           </span>
         ) : (
           /*
@@ -1547,6 +1613,63 @@ export function MapScreen() {
         >
           <IconPlus size={22} />
         </button>}
+
+        {/*
+          地标标签面板（复刻说明 §3–§4）：覆盖在地图上方、不推挤地图（地图实例不重建）。
+          透明遮罩接住面板外的点按：收起并放弃草稿，且不把点按传给底图／地点标记。
+        */}
+        {tagsOpen && <>
+          <div
+            className="map__tagsScrim"
+            data-map-tags-scrim
+            aria-hidden="true"
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onClick={() => closeTags(false)}
+          />
+          <div
+            id="map-tags-panel"
+            className="map__tags"
+            role="dialog"
+            aria-label="选择地标标签"
+            data-map-tags-open="1"
+            data-map-tags-draft={draftTags.join(',') || '全部'}
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onWheel={(e) => e.stopPropagation()}
+          >
+            <div className="map__tagsBody">
+              <div className="map__tagsHead">
+                <h2 className="map__tagsTitle">选择地标标签</h2>
+                <span className="map__tagsHint">可多选</span>
+              </div>
+              <div className="map__tagsGrid" role="group" aria-label="地标标签">
+                {TAG_OPTIONS.map((t) => {
+                  const on = t === '全部' ? draftTags.length === 0 : draftTags.includes(t)
+                  return (
+                    <button
+                      key={t}
+                      className={`map__tag ${on ? 'is-on' : ''}`}
+                      data-map-tag={t}
+                      aria-pressed={on}
+                      onClick={() => setDraftTags((d) => toggleTag(d, t))}
+                    >
+                      {t}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="map__tagsFoot">
+              <button className="map__tagsReset" data-map-tags-reset onClick={() => setDraftTags([])}>
+                重置
+              </button>
+              <button className="map__tagsApply" data-map-tags-apply onClick={() => closeTags(true)}>
+                确定
+              </button>
+            </div>
+          </div>
+        </>}
 
         {tipOpen && (
           /*
