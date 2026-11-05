@@ -27,6 +27,7 @@ import { parseCategoryFilter } from './placeCategories.ts'
 import { registerProfileRoutes } from './profileRoutes.ts'
 import { registerSubmissionRoutes } from './submissionsRoutes.ts'
 import { registerProjectRoutes } from './projectRoutes.ts'
+import { ANONYMOUS_DISPLAY_NAME, publicAuthor } from './anonymous.ts'
 
 /**
  * Campus 后端（M3 Slice 0B）。
@@ -71,7 +72,20 @@ const LIST_LIMIT = 50
  *     连续点击/网络重试时服务端按它去重（US-02：连续点击发布不得产生重复帖子）。
  *   · `mediaIds` 沿用 WO#21 契约（先上传、随帖一并挂）。
  */
-const POST_ALLOWED_KEYS = ['body', 'placeId', 'mediaIds', 'clientRequestId', 'imageMode', 'mapMediaId'] as const
+const POST_ALLOWED_KEYS = [
+  'body',
+  'placeId',
+  'mediaIds',
+  'clientRequestId',
+  'imageMode',
+  'mapMediaId',
+  /**
+   * 匿名发布（2026-11-05）。**只接受布尔**，默认 false。
+   * 遮蔽发生在读模型（`server/src/anonymous.ts`），库里仍然保留真实 author_id —
+   * 管理端审核/举报处置必须能定位到人，否则匿名就成了"无法处理"。
+   */
+  'anonymous',
+] as const
 
 /** 一条帖子最多挂几个媒体（超出直接 400，**不静默截断**） */
 const POST_MEDIA_MAX = 1
@@ -96,6 +110,11 @@ interface PostRow {
    */
   place_lat?: string | number | null
   place_lng?: string | number | null
+  /**
+   * 匿名发布（033）。**可选**：只有显式 select 了该列的查询才有它
+   * （列表 / 详情 / 发布响应有；其它查询没有 → 视为非匿名）。
+   */
+  is_anonymous?: boolean | null
 }
 
 interface UserRow {
@@ -892,7 +911,7 @@ export function buildServer(deps: ServerDeps) {
         }
       >(
         `select * from (
-        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
+        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
                 -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
                 -- 为什么需要：地图页的标记按经纬度渲染（默认 provider=tencent 用
                 -- projectToContainer(LatLng)；RealMap 用 L.marker([lat,lng])），
@@ -951,9 +970,8 @@ export function buildServer(deps: ServerDeps) {
       return {
         items: r.rows.map((row) => ({
           id: row.id,
-          author: row.author_name,
-          // M1 历史帖子为 null（当时没有可信身份，不伪造归属）
-          authorId: row.author_id,
+          // 匿名帖（033）：对外统一「匿名同学」，作者本人仍拿到自己的 authorId
+          ...publicAuthor(row, meId),
           body: row.body,
           imageMode: row.image_mode,
           mapMediaId: row.map_media_id ?? null,
@@ -1022,6 +1040,18 @@ export function buildServer(deps: ServerDeps) {
     else if (!/^[0-9a-f-]{36}$/i.test(placeIdRaw)) errors.push('placeId 必须是合法地点 id')
     if (clientRequestIdRaw && !/^[0-9a-f-]{36}$/i.test(clientRequestIdRaw))
       errors.push('clientRequestId 必须是 UUID')
+
+    /*
+      匿名发布（2026-11-05）：`anonymous` 只接受 true/false，缺省 false。
+      为什么不是"有值就算真"：`anonymous: "false"` 这种字符串如果被当成真，
+      用户以为公开发布、其实匿名了（或反过来）—— 这种误判没有报错，只有事后解释。
+      所以非布尔一律 400，与既有 strict schema 一致。
+    */
+    let anonymous = false
+    if (payload.anonymous !== undefined) {
+      if (typeof payload.anonymous !== 'boolean') errors.push('anonymous 必须是布尔值')
+      else anonymous = payload.anonymous
+    }
 
     /*
       ⭐ WO#21：可选 mediaIds 的解析与校验。
@@ -1150,11 +1180,12 @@ export function buildServer(deps: ServerDeps) {
 
         // 作者完全来自服务端会话；author_name 存为快照（用户以后改名也保留当时的展示名）
         // F04：place_id 必填（上面已校验启用）；place 为地点名快照；client_request_id 幂等键
+        // 匿名（033）：is_anonymous 只影响**读模型**，真实 author_id 照常落库（审核需要）
         const r = await client.query<PostRow>(
-          `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id, image_mode)
-           values ($1, $2, $3, $4, $5, $6, $7, $8)
-           returning image_mode, id, author_name, author_id, body, place, created_at`,
-          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode],
+          `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id, image_mode, is_anonymous)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous`,
+          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode, anonymous],
         )
 
         /* 挂媒体：position 按传入顺序递增（0..n-1），与 GET 的口径一致 */
@@ -1209,8 +1240,9 @@ export function buildServer(deps: ServerDeps) {
         reply.code(201)
         return {
           id: row.id,
-          author: row.author_name,
-          authorId: row.author_id,
+          // 发布响应也走同一套遮罩：作者本人拿到 authorId（前端据此能立即管理该帖），
+          // 匿名帖的展示名同样是「匿名同学」—— 与刷新后的列表/详情保持一字不差。
+          ...publicAuthor(row, session.userId),
           body: row.body,
           imageMode: row.image_mode,
           mapMediaId: row.map_media_id ?? null,
@@ -1259,6 +1291,9 @@ export function buildServer(deps: ServerDeps) {
     author_id: string | null
     author_name: string
     reply_to_name: string | null
+    /** 所属帖子是否匿名（033）+ 帖子作者 id —— 用来遮罩"匿名帖作者自己的评论" */
+    post_anonymous: boolean
+    post_author_id: string | null
   }
 
   /** 取某帖的评论树：顶层评论 + 各自的全部后代（递归 CTE 一次查完，避免 N+1） */
@@ -1285,7 +1320,11 @@ export function buildServer(deps: ServerDeps) {
        select t.id, t.root_id, t.parent_id, t.depth,
               c.body, c.created_at, c.author_id,
               coalesce(u.display_name, po.author_name, '匿名') as author_name,
-              pu.display_name as reply_to_name
+              pu.display_name as reply_to_name,
+              -- 匿名帖（033）：帖子作者在该帖下发的评论也要遮罩，
+              -- 否则「匿名发帖 + 自己评论一句」就把自己认出来了（等于没匿名）。
+              po.is_anonymous as post_anonymous,
+              po.author_id as post_author_id
          from tree t
          join comments c on c.id = t.id
          join posts po on po.id = c.post_id
@@ -1299,11 +1338,19 @@ export function buildServer(deps: ServerDeps) {
     const byRoot = new Map<string, Record<string, unknown>>()
     const order: string[] = []
     for (const row of r.rows) {
+      /**
+       * 匿名帖（033）里，**帖子作者本人发的评论**同样遮罩成「匿名同学」且不给 authorId。
+       * 不遮罩的话：匿名发帖 → 自己在评论区说一句 → 所有人都知道他/她是谁。
+       * 其他人（非帖子作者）的评论照常显示真名 —— 匿名只针对发布者。
+       */
+      const maskComment =
+        row.post_anonymous === true && row.author_id !== null && row.author_id === row.post_author_id
       const base = {
         id: row.id,
         body: row.body,
-        authorId: row.author_id,
-        author: row.author_name,
+        authorId: maskComment ? null : row.author_id,
+        author: maskComment ? ANONYMOUS_DISPLAY_NAME : row.author_name,
+        anonymous: maskComment,
         createdAt: row.created_at.toISOString(),
       }
       if (row.depth === 0) {
@@ -1339,7 +1386,7 @@ export function buildServer(deps: ServerDeps) {
     const meId = s.kind === 'ok' ? s.user.userId : null
     try {
       const pr = await db.pool.query<PostRow & { status: string; place_id: string | null }>(
-        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.status, p.place_id,
+        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.status, p.place_id,
                 -- ⭐ WO#15：详情也要带地点坐标（原版 poi-detail 页有「距我N公里」，
                 -- 那需要地点经纬度 + 客户端自身位置）。
                 pl.latitude as place_lat, pl.longitude as place_lng
@@ -1407,8 +1454,8 @@ export function buildServer(deps: ServerDeps) {
         .map((m) => ({ id: m.id, mime: m.mime, durationMs: m.duration_ms }))
       return {
         id: post.id,
-        author: post.author_name,
-        authorId: post.author_id,
+        // 匿名帖（033）：与列表同一套遮罩（作者本人仍拿到 authorId）
+        ...publicAuthor(post, meId),
         body: post.body,
         imageMode: post.image_mode,
         mapMediaId: post.map_media_id ?? null,

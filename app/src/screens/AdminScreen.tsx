@@ -394,6 +394,8 @@ function PostsPanel() {
             <li key={p.id} className="adm__card" data-admin-post={p.id} data-post-status={p.status}>
               <div className="adm__cardHead">
                 <span className="adm__tag">{p.author}</span>
+                {/* 匿名帖（2026-11-05）：管理端仍显示真实作者，但标明「用户侧显示为匿名」 */}
+                {p.anonymous && <span className="adm__tag" data-admin-anon>匿名发布</span>}
                 <span className={`adm__tag ${p.status === 'removed' ? 'adm__tag--danger' : ''}`}>
                   {p.status === 'removed' ? '已下架' : '公开'}
                 </span>
