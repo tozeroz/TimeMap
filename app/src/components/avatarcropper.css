@@ -1,0 +1,15 @@
+.avatar-crop { position: fixed; inset: 0; width: min(380px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; margin: auto; padding: 24px; border: 0; border-radius: 20px; background: #faf8f3; color: #092752; box-shadow: 0 16px 64px #09275233; }
+.avatar-crop::backdrop { background: #09203899; }
+.avatar-crop h2 { margin: 0 0 8px; font-size: 22px; }
+.avatar-crop p { font-size: 14px; line-height: 1.6; }
+.avatar-crop__frame { position: relative; width: min(280px, 100%); aspect-ratio: 1; margin: 24px auto; overflow: hidden; border-radius: 50%; background: #e8e4dc; touch-action: none; cursor: grab; outline-offset: 5px; box-shadow: 0 0 0 2px #09275233; }
+.avatar-crop__frame:active { cursor: grabbing; }
+.avatar-crop__frame img { position: absolute; max-width: none; transform: translate(-50%, -50%); pointer-events: none; user-select: none; }
+.avatar-crop__zoom { display: flex; align-items: center; gap: 16px; font-size: 14px; }
+.avatar-crop__zoom input { flex: 1; min-width: 0; min-height: 44px; accent-color: #ff6333; }
+.avatar-crop .avatar-crop__hint { color: #536577; font-size: 12px; }
+.avatar-crop .avatar-crop__error { color: #ae2929; }
+.avatar-crop__actions { display: flex; gap: 12px; margin-top: 20px; }
+.avatar-crop__actions button { flex: 1; min-height: 44px; border-radius: 10px; background: #eae7e1; font-size: 16px; }
+.avatar-crop__actions button:last-child { background: #ff6333; color: #fff; }
+.avatar-crop__actions button:disabled { opacity: .55; }

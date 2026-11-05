@@ -366,3 +366,98 @@
   display: grid;
   gap: 8px;
 }
+/* Management center reference: scoped tokens keep other screens unchanged. */
+.admin-reference {
+  --c-bg: #f7f6f2;
+  --c-primary: #52734c;
+  --c-primary-hover: #45643f;
+  --c-text: #172635;
+  --c-text-2: #62676b;
+  --c-text-3: #62676b;
+  --c-divider: #deded9;
+  background: var(--c-bg);
+}
+.admin-reference .topbar { height: 76px; margin: 0 18px; padding: 0; background: transparent; }
+.adm__brand { display: grid; gap: 4px; line-height: 1.4; }
+.adm__brand .adm__topTitle { font-size: 21px; font-weight: 750; letter-spacing: .02em; }
+.adm__brand small { font-size: 12px; font-weight: 500; color: #41464a; }
+.adm__shield { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; }
+.adm__shield svg { width: 25px; height: 25px; }
+.admin-reference .iconbtn { width: 44px; height: 44px; }
+.admin-reference .adm__tabs { gap: 22px; margin: 0 18px 18px; padding: 0; border-bottom: 1px solid var(--c-divider); }
+.admin-reference .adm__tab { position: relative; padding: 13px 0; border: 0; border-radius: 0; background: transparent; font-size: 14px; color: var(--c-text); min-height: 48px; }
+.admin-reference .adm__tab.is-active { color: #42623d; font-weight: 700; }
+.admin-reference .adm__tab.is-active::after { position: absolute; content: ''; height: 3px; bottom: 0; left: -5px; right: -5px; background: #52734c; border-radius: 4px 4px 0 0; }
+.admin-reference button:focus-visible, .admin-reference input:focus-visible, .admin-reference select:focus-visible, .admin-reference textarea:focus-visible { outline: 2px solid #45643f; outline-offset: 3px; }
+.adm-activities { padding: 0 18px 24px; }
+.adm-activities__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
+.adm-activities__heading h1 { margin: 0; font-size: 26px; font-weight: 750; line-height: 1.3; letter-spacing: -.02em; }
+.adm-activities__heading p { margin: 5px 0 0; font-size: 14px; color: var(--c-text-2); }
+.adm-activities__create { display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex: none; min-height: 44px; padding: 0 14px; border-radius: 10px; background: #587a50; color: #fff; font-size: 14px; font-weight: 600; }
+.adm-activities__search { display: flex; gap: 10px; align-items: center; padding: 0 12px; height: 44px; border: 1px solid var(--c-divider); border-radius: 11px; background: #fff; color: #60666a; }
+.adm-activities__search input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; padding: 10px 0; color: var(--c-text); font-size: 14px; }
+.adm-activities__search input::placeholder { color: #6b7072; }
+.adm-activities__search button { min-width: 44px; height: 44px; font-size: 23px; }
+.adm-activities__filterbar { display: flex; align-items: center; gap: 10px; margin: 12px 0 8px; }
+.adm-activities__statuses { display: flex; gap: 7px; align-items: center; overflow-x: auto; min-width: 0; flex: 1; padding: 4px 2px; }
+.adm-activities__statuses button { flex: none; border: 1px solid var(--c-divider); border-radius: 30px; padding: 0 12px; min-height: 44px; background: #fff; color: var(--c-text); font-size: 13px; white-space: nowrap; }
+.adm-activities__statuses .is-active { background: #587a50; color: #fff; border-color: #587a50; font-weight: 600; }
+.adm-activities__filter { display: flex; align-items: center; justify-content: center; flex: none; gap: 5px; border-left: 1px solid var(--c-divider); min-height: 44px; padding-left: 10px; font-size: 13px; color: #565d60; }
+.adm-activities__filter.is-active { color: #42623d; font-weight: 700; }
+.adm-activities__filter span { font-size: 11px; }
+.adm-activities__summary { display: flex; justify-content: space-between; align-items: center; color: #686e70; min-height: 44px; font-size: 12px; margin-bottom: 7px; }
+.adm-activities__summary button { display: flex; gap: 6px; align-items: center; min-height: 44px; font-size: 13px; }
+.adm-activities__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.adm-activity { background: #fff; border: 1px solid #deded9; border-radius: 12px; padding: 13px 12px 0; }
+.adm-activity__main { display: flex; gap: 12px; min-width: 0; padding-bottom: 12px; }
+.adm-activity__date { align-self: flex-start; flex: 0 0 45px; overflow: hidden; background: #f3f2ee; text-align: center; border-radius: 8px; margin-top: 2px; }
+.adm-activity__date > span { display: block; background: #587a50; color: #fff; font-size: 12px; line-height: 23px; font-weight: 600; }
+.adm-activity__date strong { display: block; font-size: 27px; line-height: 34px; font-weight: 700; }
+.adm-activity__date small { display: block; font-size: 9px; color: #666c6a; padding-bottom: 4px; }
+.adm-activity__info { min-width: 0; flex: 1; border-left: 1px solid var(--c-divider); padding-left: 12px; }
+.adm-activity__titleRow { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; margin-bottom: 7px; }
+.adm-activity__titleRow h2 { flex: 1 1 140px; margin: 0; font-size: 16px; line-height: 1.5; font-weight: 700; overflow-wrap: anywhere; }
+.adm-activity__status { flex: none; padding: 3px 9px; border-radius: 20px; background: #e0e8d8; color: #42613a; font-size: 11px; font-weight: 600; line-height: 1.5; }
+.adm-activity__status.is-ongoing { background: #e0eee9; color: #27624b; }
+.adm-activity__status.is-ended { background: #eeefed; color: #626866; }
+.adm-activity__status.is-cancelled { background: #f9e9e6; color: #a44238; }
+.adm-activity__metadata { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 5px; }
+.adm-activity__metadata p, .adm-activity__place { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: #62676b; font-size: 12px; line-height: 1.6; min-width: 0; overflow-wrap: anywhere; }
+.adm-activity__metadata svg, .adm-activity__place svg { width: 15px; height: 17px; flex: none; margin-top: 1px; }
+.adm-activity__place { margin-top: 5px; }
+.adm-activity__actions { display: flex; align-items: center; border-top: 1px solid var(--c-divider); min-height: 43px; gap: 14px; }
+.adm-activity__actions button { display: flex; align-items: center; gap: 6px; color: #35414a; font-size: 13px; min-height: 44px; }
+.adm-activity__actions button + button:not(:last-child) { position: relative; padding-left: 14px; }
+.adm-activity__actions button + button:not(:last-child)::before { content: ''; position: absolute; left: 0; height: 14px; border-left: 1px solid #c4c6c4; }
+.adm-activity__actions button:last-child { margin-left: auto; }
+.adm-activity__actions svg { width: 17px; height: 17px; }
+.adm-activities__footnote { text-align: center; color: #696e6b; font-size: 12px; margin: 22px 0 6px; }
+.adm-activities__success { padding: 10px 12px; margin: 0 0 12px; border-radius: 8px; background: #e6eee2; color: #36562f; font-size: 13px; }
+.adm-activities__empty { text-align: center; color: var(--c-text-2); padding: 35px 12px; }
+.adm-activities__empty h2 { font-size: 17px; color: var(--c-text); }
+.adm-activities__empty p { font-size: 13px; line-height: 1.7; }
+.adm__dialog { --c-primary: #52734c; --c-divider: #deded9; --c-text: #172635; --c-text-2: #62676b; --c-text-3: #62676b; width: calc(100% - 32px); max-width: 398px; max-height: 85dvh; padding: 18px; border: 1px solid #deded9; border-radius: 16px; background: #fff; color: var(--c-text); box-shadow: 0 16px 60px #17263530; }
+.adm__dialog::backdrop { background: #17263566; }
+.adm__dialogHead { display: flex; gap: 12px; justify-content: space-between; align-items: center; border-bottom: 1px solid #deded9; padding-bottom: 8px; }
+.adm__dialogHead h3 { font-size: 18px; margin: 0; }
+.adm__dialogHead button { width: 44px; height: 44px; font-size: 26px; }
+.adm__dialog button:focus-visible, .adm__dialog input:focus-visible, .adm__dialog textarea:focus-visible, .adm__dialog select:focus-visible { outline: 2px solid #45643f; outline-offset: 2px; }
+.adm__dialog .adm__btn { min-height: 44px; }
+.adm__dialog .adm__input, .adm__dialog .adm__textarea { min-height: 44px; }
+.adm-activities__fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.adm-activities__menuAction { display: block; min-height: 48px; width: 100%; color: #45643f; text-align: left; font-size: 15px; padding: 12px 0; }
+.admin-reference button:disabled, .adm__dialog button:disabled { opacity: .5; cursor: default; }
+@media (max-width: 350px) {
+  .admin-reference .topbar { margin: 0 14px; }
+  .admin-reference .adm__tabs { margin-inline: 14px; }
+  .adm-activities { padding-inline: 14px; }
+  .adm-activities__heading h1 { font-size: 23px; }
+  .adm-activities__heading p { font-size: 12px; }
+  .adm-activities__create { padding-inline: 10px; font-size: 13px; }
+  .adm-activity { padding-inline: 10px; }
+  .adm-activity__main { gap: 9px; }
+  .adm-activity__info { padding-left: 9px; }
+  .adm-activity__actions { gap: 10px; }
+}
+
+.admin-reference .adm__btn, .admin-reference .adm__chip { min-height: 44px; }
