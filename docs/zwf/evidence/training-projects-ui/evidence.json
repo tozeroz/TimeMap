@@ -1,0 +1,126 @@
+{
+  "contract": "../../2026-11-05-实训项目页UI复刻方案.md",
+  "targetViewports": [
+    "320x740",
+    "390x844",
+    "430x932",
+    "1440x900"
+  ],
+  "accessibility": {
+    "status": "pass",
+    "evidence": "标题菜单键盘选择、Escape关闭与焦点返回；页签语义、点赞aria-pressed、字段标签和44px操作区域；排名包含数字。"
+  },
+  "responsive": {
+    "status": "pass",
+    "evidence": "四视口全部项目与榜单截图；窄屏长名称自然换行，列表无水平溢出。"
+  },
+  "contentStates": {
+    "loading": {
+      "status": "pass",
+      "evidence": "延迟请求捕获骨架。"
+    },
+    "empty": {
+      "status": "pass",
+      "evidence": "空集合显示暂无项目。"
+    },
+    "error": {
+      "status": "pass",
+      "evidence": "503与点赞失败可恢复，不改变计数。"
+    },
+    "partial": {
+      "status": "pass",
+      "evidence": "封面404降级，体验链接仍在。"
+    },
+    "success": {
+      "status": "pass",
+      "evidence": "点赞取消、页签同步、同赞数排名及管理员编辑通过。"
+    },
+    "permission": {
+      "status": "pass",
+      "evidence": "未登录点赞进入登录并保留回跳；普通活动发布与实训隐藏规则通过。"
+    }
+  },
+  "renderedEvidence": [
+    {
+      "viewport": "320x740",
+      "artifact": "all-320.png",
+      "observation": "全部项目、体验与点赞、底部导航；独立测试项目数据。"
+    },
+    {
+      "viewport": "320x740",
+      "artifact": "popular-320.png",
+      "observation": "人气榜金银铜及数字排名，全部内容可滚动，未发生水平溢出。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "all-390.png",
+      "observation": "全部项目、体验与点赞、底部导航；独立测试项目数据。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "popular-390.png",
+      "observation": "人气榜金银铜及数字排名，全部内容可滚动，未发生水平溢出。"
+    },
+    {
+      "viewport": "430x932",
+      "artifact": "all-430.png",
+      "observation": "全部项目、体验与点赞、底部导航；独立测试项目数据。"
+    },
+    {
+      "viewport": "430x932",
+      "artifact": "popular-430.png",
+      "observation": "人气榜金银铜及数字排名，全部内容可滚动，未发生水平溢出。"
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "all-1440.png",
+      "observation": "全部项目、体验与点赞、底部导航；独立测试项目数据。"
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "popular-1440.png",
+      "observation": "人气榜金银铜及数字排名，全部内容可滚动，未发生水平溢出。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "mode-menu.png",
+      "observation": "标题下拉选中实训项目，橙色选中项和勾选。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "empty.png",
+      "observation": "暂无项目说明，无普通用户发布引导。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "error.png",
+      "observation": "请求失败提示与重试入口。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "partial.png",
+      "observation": "封面失败保留项目与可用操作。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "loading.png",
+      "observation": "项目请求中保留骨架和加载提示。"
+    },
+    {
+      "viewport": "320x740",
+      "artifact": "long-text.png",
+      "observation": "长项目名自然换行，操作仍可到达。"
+    },
+    {
+      "viewport": "320x740",
+      "artifact": "admin.png",
+      "observation": "管理员可编辑项目资料及上下架状态。"
+    },
+    {
+      "viewport": "320x740",
+      "artifact": "login-required.png",
+      "observation": "未登录点赞进入已有登录流程并记录项目模式回跳。"
+    }
+  ],
+  "fixtureOnly": true
+}

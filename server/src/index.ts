@@ -26,6 +26,7 @@ import { registerMapRoutes } from './mapRoutes.ts'
 import { isPlaceCategory } from './placeCategories.ts'
 import { registerProfileRoutes } from './profileRoutes.ts'
 import { registerSubmissionRoutes } from './submissionsRoutes.ts'
+import { registerProjectRoutes } from './projectRoutes.ts'
 
 /**
  * Campus 后端（M3 Slice 0B）。
@@ -3285,6 +3286,7 @@ export function buildServer(deps: ServerDeps) {
   registerProfileRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   // ACT-004 / ACT-005：校园活动投稿与审核闭环（迁移 031）
   registerSubmissionRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
+  registerProjectRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   registerMapRoutes(app, db)
   registerTimemapRoutes({
     app,

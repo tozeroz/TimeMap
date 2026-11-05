@@ -141,6 +141,9 @@ export function LoginScreen() {
         try {
           const target = JSON.parse(returnRoute)
           if (target.path === 'activity-submit') { navigate('activity-submit', target.query); return }
+          if (target.path === 'activities' && target.query?.mode === 'projects') {
+            navigate('activities', { mode: 'projects', view: target.query.view === 'popular' ? 'popular' : 'all' }); return
+          }
         } catch { /* Ignore malformed return metadata. */ }
       }
       navigate('campus')

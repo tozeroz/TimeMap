@@ -32,6 +32,34 @@ export const API_ORIGIN = (env.VITE_API_ORIGIN?.trim() || DEFAULT_API_ORIGIN).re
 
 const TIMEOUT_MS = 8000
 
+export interface TrainingProjectFields {
+  name: string
+  summary: string
+  groupName: string
+  memberCount: number
+  experienceUrl: string
+  coverImageId: string | null
+  position: number
+  published: boolean
+}
+export interface TrainingProject extends TrainingProjectFields {
+  id: string
+  likeCount: number
+  likedByMe: boolean
+}
+export function listTrainingProjects(view: 'all' | 'popular') {
+  return request<{ items: TrainingProject[]; total: number }>(`/api/projects?view=${view}`)
+}
+export function setProjectLike(id: string, liked: boolean) {
+  return request<{ likeCount: number; likedByMe: boolean }>(`/api/projects/${encodeURIComponent(id)}/like`, { method: liked ? 'PUT' : 'DELETE' })
+}
+export function adminListProjects() {
+  return request<{ items: TrainingProject[] }>('/api/admin/projects')
+}
+export function adminSaveProject(id: string | null, fields: TrainingProjectFields) {
+  return request<{ id: string }>(id ? `/api/admin/projects/${encodeURIComponent(id)}` : '/api/admin/projects', { method: id ? 'PUT' : 'POST', body: fields })
+}
+
 /**
  * 上传专用超时（M5 WO#2）。**比普通请求宽 2.5 倍**：
  * 手机网络下传几 MB 图片很容易超过 8s，用普通超时会把正常上传判成失败，

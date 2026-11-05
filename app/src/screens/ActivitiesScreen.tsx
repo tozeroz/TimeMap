@@ -8,6 +8,8 @@ import { IconCalendar, IconCheck, IconChevronRight, IconClose, IconImage, IconLo
 import { useRoute, navigate } from '../router'
 import '../styles/switcher.css'
 import './activities.css'
+import { ActivityModeTitle } from '../components/ActivityModeTitle'
+import { TrainingProjectsScreen } from './TrainingProjectsScreen'
 
 /*
   ACT-001：**默认只看即将开始 + 进行中**（服务端 status 缺省就是这个口径），
@@ -23,6 +25,7 @@ const STATUS_OPTIONS: Array<{ key: StatusKey; label: string }> = [
 /** Public activity catalogue; filtering/status/counts always come from the server. */
 export function ActivitiesScreen() {
   const route = useRoute()
+  const projectMode = route.query.mode === 'projects'
   const placeId = route.query.placeId ?? route.path.split('/')[1] ?? ''
   const [items, setItems] = useState<ApiActivity[]>([])
   const [total, setTotal] = useState<number | null>(null)
@@ -57,10 +60,11 @@ export function ActivitiesScreen() {
   }, [win, status, placeId])
   const invalidateRequests = useCallback(() => { requestVersion.current++ }, [])
   useEffect(() => {
+    if (projectMode) return
     let active = true
     queueMicrotask(() => { if (active) void load() })
     return () => { active = false; invalidateRequests() }
-  }, [load, invalidateRequests])
+  }, [load, invalidateRequests, projectMode])
 
   const loadPlaces = useCallback(async () => {
     const version = ++placeRequestVersion.current
@@ -72,10 +76,11 @@ export function ActivitiesScreen() {
   }, [])
   const invalidatePlaces = useCallback(() => { placeRequestVersion.current++ }, [])
   useEffect(() => {
+    if (projectMode) return
     let active = true
     queueMicrotask(() => { if (active) void loadPlaces() })
     return () => { active = false; invalidatePlaces() }
-  }, [loadPlaces, invalidatePlaces])
+  }, [loadPlaces, invalidatePlaces, projectMode])
 
   async function toggleFavorite(a: ApiActivity) {
     if (favoriteLock.current) return
@@ -96,8 +101,10 @@ export function ActivitiesScreen() {
   const placeName = places.find(p => p.id === placeId)?.name ?? '已选地点'
   const listHeading = status === '' || status === 'upcoming' || status === 'ongoing' ? '近期活动' : '活动列表'
 
+  if (projectMode) return <TrainingProjectsScreen />
+
   return <Screen className="acts-page" header={<header className="acts__head">
-    <div><h1 className="acts__title">校园活动</h1><p className="acts__subtitle">发现校园里的新鲜事</p></div>
+    <div><ActivityModeTitle onSelect={() => setPlaceOpen(false)} /><p className="acts__subtitle">发现校园里的新鲜事</p></div>
     <button className="acts__refresh" onClick={() => void load()} disabled={phase === 'loading'} aria-label="刷新活动" aria-busy={phase === 'loading'}><IconRefresh size={27} /></button>
   </header>} scroll>
     <div className="acts__filterBlock" inert={placeOpen}>

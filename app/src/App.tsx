@@ -255,7 +255,7 @@ export default function App() {
 
       {/* 地点抽屉打开时隐藏底部主导航，关闭后恢复（spec §3.1） */}
       {tab && !(tab === 'map' && sheetOpen) && <TabBar active={tab} />}
-      {root === 'activities' && <button className="app__publish app__publish--campus" aria-label="提交活动" onClick={() => navigate('activity-submit')}>＋</button>}
+      {root === 'activities' && route.query.mode !== 'projects' && <button className="app__publish app__publish--campus" aria-label="提交活动" onClick={() => navigate('activity-submit')}>＋</button>}
       {tab && root !== 'map' && root !== 'activities' && root !== 'me' && <button className={`app__publish ${root === 'campus' ? 'app__publish--campus' : ''}`} aria-label="发布" onClick={() => navigate('publish')}>＋</button>}
     </Shell>
   )

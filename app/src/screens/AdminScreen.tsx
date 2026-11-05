@@ -36,6 +36,7 @@ import { goBack, navigate } from '../router'
 import { AdminDialog, AdminIcon } from '../components/AdminPrimitives'
 import { SubmissionCover } from './MyActivitySubmissions'
 import './admin.css'
+import { AdminProjectsPanel } from './AdminProjectsPanel'
 
 /**
  * 管理端（F07 / US-08；需求 3.1 的「举报处理管理端」）。
@@ -58,13 +59,14 @@ import './admin.css'
  *     各列表，而不是只改本地那一行
  *   · 操作记录包含管理员、对象、时间、动作
  */
-type PanelKey = 'reports' | 'submissions' | 'posts' | 'activities' | 'places' | 'audit'
+type PanelKey = 'reports' | 'submissions' | 'posts' | 'activities' | 'projects' | 'places' | 'audit'
 
 const PANELS: { key: PanelKey; label: string }[] = [
   { key: 'reports', label: '举报处理' },
   { key: 'submissions', label: '投稿审核' },
   { key: 'posts', label: '内容管理' },
   { key: 'activities', label: '活动管理' },
+  { key: 'projects', label: '实训项目' },
   { key: 'places', label: '地点管理' },
   { key: 'audit', label: '操作记录' },
 ]
@@ -119,6 +121,7 @@ export function AdminScreen() {
       {panel === 'submissions' && <SubmissionsPanel />}
       {panel === 'posts' && <PostsPanel />}
       {panel === 'activities' && <ActivitiesPanel />}
+      {panel === 'projects' && <AdminProjectsPanel />}
       {panel === 'places' && <PlacesPanel />}
       {panel === 'audit' && <AuditPanel />}
     </Screen>
