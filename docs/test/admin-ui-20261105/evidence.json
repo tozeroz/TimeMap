@@ -1,0 +1,70 @@
+{
+  "contract": "docs/zwf/2026-11-05-管理端UI复刻方案.md; scope: management shell and activities, existing loaded-list API only",
+  "targetViewports": [
+    "320x740",
+    "390x844",
+    "430x932",
+    "1440x900"
+  ],
+  "accessibility": {
+    "status": "pass",
+    "evidence": "Native dialogs support Escape, focus trap and restore; labelled form fields; visible focus; green/white and text contrast checked; reduced-motion has no decorative animation. Icon-only close controls labelled."
+  },
+  "responsive": {
+    "status": "pass",
+    "evidence": "DOM overflow assertions on screen body and every activity card at all four target viewports, including long source/title. Navigation and status filters deliberately scroll internally."
+  },
+  "contentStates": {
+    "loading": {
+      "status": "pass",
+      "evidence": "Delayed list response renders stable loading text."
+    },
+    "empty": {
+      "status": "pass",
+      "evidence": "Empty data and zero filtered results have distinct recovery actions."
+    },
+    "error": {
+      "status": "pass",
+      "evidence": "503 list and PATCH failures exercised; retry works and draft retained."
+    },
+    "partial": {
+      "status": "pass",
+      "evidence": "Place API fails independently; list stays usable and filter exposes retry."
+    },
+    "success": {
+      "status": "pass",
+      "evidence": "Mock POST/PATCH updates verified, success notices and authoritative list reload."
+    },
+    "permission": {
+      "status": "pass",
+      "evidence": "Student sees denied state; asserted no admin API requests."
+    }
+  },
+  "renderedEvidence": [
+    {
+      "viewport": "320x740",
+      "artifact": "activities-320.png",
+      "observation": "Long Chinese/English titles and long source fit; horizontally scrollable navigation/status row remains within screen; real fixture times and years visible."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "activities-390.png",
+      "observation": "Long Chinese/English titles and long source fit; horizontally scrollable navigation/status row remains within screen; real fixture times and years visible."
+    },
+    {
+      "viewport": "430x932",
+      "artifact": "activities-430.png",
+      "observation": "Long Chinese/English titles and long source fit; horizontally scrollable navigation/status row remains within screen; real fixture times and years visible."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "activities-1440.png",
+      "observation": "Long Chinese/English titles and long source fit; horizontally scrollable navigation/status row remains within screen; real fixture times and years visible."
+    }
+  ],
+  "fixtureOnly": true,
+  "limitations": [
+    "No real backend writes or deployed server integration.",
+    "Local filters apply to currently loaded list; no new pagination endpoint."
+  ]
+}

@@ -1,3 +1,5 @@
+import { useFeedSourceRestore } from '../data/feedBrowse'
+import { openFeed } from '../data/feedBrowse'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { failText, getMyIdentity, listMyFavorites, listPosts, logout, mediaUrl, type ApiPost } from '../api/client'
 import type { SessionUser } from '../api/session'
@@ -17,6 +19,7 @@ const tabKey = 'timemap.me.tab'
 
 /** Personal memories use authoritative identity and independent private collections. */
 export function MeScreen({ requestedTab = '' }: { requestedTab?: string }) {
+  useFeedSourceRestore()
   const [identity, setIdentity] = useState<SessionUser | null>(null)
   const [phase, setPhase] = useState<'loading' | 'ready' | 'unauth' | 'error'>('loading')
   const [identityError, setIdentityError] = useState('')
@@ -213,10 +216,10 @@ function MemoryGrid({ posts }: { posts: ApiPost[] }) {
     resize()
     return () => observer.disconnect()
   }, [posts])
-  return <div className="me__grid" ref={grid}>{posts.map(post => <MemoryCard key={post.id} post={post} />)}</div>
+  return <div className="me__grid" ref={grid}>{posts.map(post => <MemoryCard key={post.id} post={post} browseIds={posts.map(item => item.id)} />)}</div>
 }
 
-function MemoryCard({ post }: { post: ApiPost }) {
+function MemoryCard({ post, browseIds }: { post: ApiPost; browseIds: string[] }) {
   const [broken, setBroken] = useState(false)
   const photo = post.images?.[0]
   const sticker = post.imageMode === 'sticker'
@@ -226,7 +229,7 @@ function MemoryCard({ post }: { post: ApiPost }) {
   const shortDate = validDate ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', ...(new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric' }).format(date) !== year ? { year: 'numeric' as const } : {}), month: 'long', day: 'numeric' }).format(date) : ''
   const tall = !!photo?.width && !!photo?.height && photo.height / photo.width > 1.1
   return <article className={`memory-card ${photo ? 'memory-card--photo' : 'memory-card--text'}${sticker ? ' memory-card--sticker' : ''}${tall ? ' memory-card--tall' : ''}`}>
-    <a href={`#/feed?id=${encodeURIComponent(post.id)}`} aria-label={`查看记忆：${post.body || post.place || '校园照片'}`}>
+    <a onClick={e => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) { e.preventDefault(); openFeed(post.id, browseIds) } }} href={`#/feed?id=${encodeURIComponent(post.id)}`} aria-label={`查看记忆：${post.body || post.place || '校园照片'}`}>
       {photo && <div className="memory-card__media" style={{ aspectRatio: photo.width && photo.height ? `${photo.width} / ${photo.height}` : '1 / 1' }}>
         {broken ? <span className="memory-card__broken"><IconImage size={26} />照片暂时无法显示</span> : <img src={mediaUrl(photo.id)} alt="" loading="lazy" onError={() => setBroken(true)} />}
         {!tall && post.place && <span className="memory-card__overlay"><IconLocation size={13} />{post.place}</span>}

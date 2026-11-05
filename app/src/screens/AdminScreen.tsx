@@ -33,6 +33,7 @@ import { isAdmin } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack } from '../components/icons'
 import { goBack, navigate } from '../router'
+import { AdminDialog, AdminIcon } from '../components/AdminPrimitives'
 import { SubmissionCover } from './MyActivitySubmissions'
 import './admin.css'
 
@@ -46,8 +47,8 @@ import './admin.css'
  *      （不发请求就不能靠"403 也算发生了"来侧信道探测管理端有哪些数据）。
  *   ⚠️ 隐藏入口（MeScreen 里那个）只是**界面便利**，绝不能被当成权限控制。
  *
- * ## 五个面板
- *   举报处理 / 内容管理 / 活动管理 / 地点管理 / 操作记录
+ * ## 六个面板
+ *   举报处理 / 投稿审核 / 内容管理 / 活动管理 / 地点管理 / 操作记录
  *
  * ## US-08 的关键规则（本页每一处都对应一条验收）
  *   · 举报**不自动下架**：待处理列表只是列表，内容仍在各处可见
@@ -69,7 +70,7 @@ const PANELS: { key: PanelKey; label: string }[] = [
 ]
 
 export function AdminScreen() {
-  const [panel, setPanel] = useState<PanelKey>('reports')
+  const [panel, setPanel] = useState<PanelKey>(() => { const key = new URLSearchParams(window.location.hash.split('?')[1]).get('panel'); return PANELS.some(p => p.key === key) ? key as PanelKey : 'reports' })
   const admin = isAdmin()
 
   const header = (
@@ -79,14 +80,15 @@ export function AdminScreen() {
           <IconBack size={22} />
         </button>
       }
-      center={<span className="adm__topTitle">管理端</span>}
+      center={<div className="adm__brand"><span className="adm__topTitle">管理中心</span><small>时光坐标 · 校园记忆地图</small></div>}
+      right={<span className="adm__shield" role="img" aria-label="管理员"><AdminIcon name="shield" /></span>}
     />
   )
 
   /* ②：非管理员 —— 明确的无权限态，且**不发任何请求** */
   if (!admin) {
     return (
-      <Screen header={header} scroll>
+      <Screen className="admin-reference" header={header} scroll>
         <div className="adm__denied" data-admin-denied>
           <p className="adm__deniedTitle">无权限</p>
           <p className="adm__deniedSub">
@@ -98,14 +100,15 @@ export function AdminScreen() {
   }
 
   return (
-    <Screen header={header} scroll>
-      <nav className="adm__tabs no-scrollbar">
+    <Screen className="admin-reference" header={header} scroll>
+      <nav className="adm__tabs no-scrollbar" aria-label="管理分类">
         {PANELS.map((p) => (
           <button
             key={p.key}
             className={`adm__tab ${panel === p.key ? 'is-active' : ''}`}
             data-admin-tab={p.key}
-            onClick={() => setPanel(p.key)}
+            aria-current={panel === p.key ? 'page' : undefined}
+            onClick={event => { setPanel(p.key); window.history.replaceState(null, '', `#/admin?panel=${p.key}`); event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' }) }}
           >
             {p.label}
           </button>
@@ -479,6 +482,33 @@ function ActivitiesPanel() {
   }
   const [form, setForm] = useState<ActivityForm | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [status, setFilterStatus] = useState('all')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filters, setFilters] = useState({ placeId: '', from: '', to: '' })
+  const [filterDraft, setFilterDraft] = useState(filters)
+  const [filterError, setFilterError] = useState('')
+  const [more, setMore] = useState<ApiActivity | null>(null)
+  const [confirmAction, setConfirmAction] = useState<ApiActivity | null>(null)
+  const [success, setSuccess] = useState('')
+  const statusLabels: Record<string, string> = { all: '全部', upcoming: '即将开始', ongoing: '进行中', ended: '已结束', cancelled: '已取消' }
+  const dateParts = (value: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(value))
+  const dateKey = (value: string) => { const parts = dateParts(value); return ['year', 'month', 'day'].map(key => parts.find(p => p.type === key)?.value).join('-') }
+  const localInput = (value: string | null) => value ? `${dateKey(value)}T${new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value))}` : ''
+  const filtered = (data ?? []).filter(activity => {
+    const day = dateKey(activity.startsAt)
+    return (status === 'all' || activity.effectiveStatus === status)
+      && (!query.trim() || `${activity.title} ${activity.place.name}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+      && (!filters.placeId || activity.place.id === filters.placeId)
+      && (!filters.from || day >= filters.from) && (!filters.to || day <= filters.to)
+  })
+  const filterCount = Number(Boolean(filters.placeId)) + Number(Boolean(filters.from || filters.to))
+  function openEditor(activity?: ApiActivity) {
+    setEditingId(activity?.id ?? null); setNotice(''); setSuccess('')
+    setForm(activity ? { title: activity.title, placeId: activity.place.id, startsAt: localInput(activity.startsAt), endsAt: localInput(activity.endsAt), description: activity.description ?? '', activityType: activity.activityType ?? '', organizer: activity.organizer ?? '', externalLink: activity.externalLink ?? '', coverImageId: activity.coverImageId } : { ...EMPTY_FORM })
+  }
+
 
   const enabledPlaces = (places.data ?? []).filter((p) => p.enabled)
 
@@ -500,115 +530,121 @@ function ActivitiesPanel() {
         return
       }
       setForm((f) => (f ? { ...f, coverImageId: r.value.id } : f))
-    } finally {
+    } catch { setNotice('封面上传失败，请检查网络后重试。') } finally {
       setUploading(false)
     }
   }
 
   async function submit() {
-    if (!form) return
+    if (!form || busy || uploading) return
     if (!form.title.trim() || !form.placeId || !form.startsAt) {
       setNotice('标题、地点、开始时间都是必填')
       return
     }
+    const startsAt = new Date(`${form.startsAt}:00+08:00`)
+    const endsAt = form.endsAt ? new Date(`${form.endsAt}:00+08:00`) : null
+    if (!Number.isFinite(startsAt.getTime()) || (endsAt && (!Number.isFinite(endsAt.getTime()) || endsAt <= startsAt))) {
+      setNotice('请填写有效时间，结束时间必须晚于开始时间'); return
+    }
     setBusy(true)
     setNotice('')
     try {
-      const r = await adminCreateActivity({
+      const input = {
         title: form.title.trim(),
         placeId: form.placeId,
-        // datetime-local 给的是本地墙上时间；转成 ISO 让服务端按绝对时间存
-        startsAt: new Date(form.startsAt).toISOString(),
-        endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
-        ...(form.description.trim() ? { description: form.description.trim() } : {}),
-        ...(form.activityType.trim() ? { activityType: form.activityType.trim() } : {}),
-        ...(form.organizer.trim() ? { organizer: form.organizer.trim() } : {}),
-        ...(form.externalLink.trim() ? { externalLink: form.externalLink.trim() } : {}),
-        ...(form.coverImageId ? { coverImageId: form.coverImageId } : {}),
-      })
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt?.toISOString() ?? null,
+        description: form.description.trim() || null,
+        activityType: form.activityType.trim() || null,
+        organizer: form.organizer.trim() || null,
+        externalLink: form.externalLink.trim() || null,
+        coverImageId: form.coverImageId,
+      }
+      const r = editingId ? await adminUpdateActivity(editingId, input) : await adminCreateActivity({ ...input, description: input.description ?? undefined, activityType: input.activityType ?? undefined, organizer: input.organizer ?? undefined, externalLink: input.externalLink ?? undefined })
       if (!r.ok) {
-        setNotice(`创建失败：${failText(r)}`)
+        setNotice(`保存失败：${failText(r)}`)
         return
       }
       setForm(null)
+      setSuccess(editingId ? '活动修改已保存' : '活动已创建')
       await reload()
-    } finally {
+    } catch { setNotice('保存失败，请检查网络后重试，填写内容已保留。') } finally {
       setBusy(false)
     }
   }
 
   async function setStatus(id: string, status: 'scheduled' | 'cancelled') {
+    if (busy) return
     setBusy(true)
     setNotice('')
+    setSuccess('')
     try {
       const r = await adminUpdateActivity(id, { status })
       if (!r.ok) {
         setNotice(`操作失败：${failText(r)}`)
         return
       }
+      setConfirmAction(null)
+      setSuccess(status === 'cancelled' ? '活动已取消' : '活动已恢复')
       await reload()
-    } finally {
+    } catch { setNotice('操作失败，请检查网络后重试。') } finally {
       setBusy(false)
     }
   }
 
   return (
-    <section className="adm__pane">
-      <div className="adm__row">
-        <button className="adm__btn adm__btn--primary" data-admin-new-activity onClick={() => setForm({ ...EMPTY_FORM })}>
-          新建活动
-        </button>
-        <button className="adm__chip adm__chip--ghost" onClick={() => void reload()}>
-          刷新
-        </button>
+    <section className="adm__pane adm-activities" aria-labelledby="admin-activity-title">
+      <div className="adm-activities__heading">
+        <div><h1 id="admin-activity-title">活动管理</h1><p>维护校园活动信息</p></div>
+        <button className="adm-activities__create" data-admin-new-activity onClick={() => openEditor()}><AdminIcon name="plus" />新建活动</button>
       </div>
-
-      <PaneState
-        phase={phase}
-        err={err}
-        onRetry={() => void reload()}
-        empty={phase === 'ready' && (data ?? []).length === 0 ? '还没有活动' : undefined}
-      />
-
-      {phase === 'ready' && (data ?? []).length > 0 && (
-        <ul className="adm__list" data-admin-activities={String((data ?? []).length)}>
-          {(data ?? []).map((a) => (
-            <li key={a.id} className="adm__card" data-admin-activity={a.id} data-activity-status={a.effectiveStatus}>
-              <div className="adm__cardHead">
-                <span className="adm__tag">{a.place.name}</span>
-                <span className={`adm__tag ${a.status === 'cancelled' ? 'adm__tag--danger' : ''}`}>
-                  {a.status === 'cancelled' ? '已取消' : '正常'}
-                </span>
-                <span className="adm__tag adm__tag--ghost">展示态：{a.effectiveStatus}</span>
+      <div className="adm-activities__search"><AdminIcon name="search" /><input aria-label="搜索活动名称、地点" placeholder="搜索活动名称、地点" value={query} onChange={event => setQuery(event.target.value)} />{query && <button aria-label="清除搜索" onClick={() => setQuery('')}>×</button>}</div>
+      <div className="adm-activities__filterbar">
+        <div className="adm-activities__statuses no-scrollbar" aria-label="活动状态">{Object.entries(statusLabels).map(([key, label]) => <button key={key} className={status === key ? 'is-active' : ''} aria-pressed={status === key} onClick={() => setFilterStatus(key)}>{label}</button>)}</div>
+        <button className={`adm-activities__filter ${filterCount ? 'is-active' : ''}`} onClick={() => { setFilterDraft(filters); setFilterError(''); setFiltersOpen(true) }}><AdminIcon name="filter" />筛选{filterCount > 0 && <span>{filterCount}</span>}</button>
+      </div>
+      <div className="adm-activities__summary"><span>{phase === 'ready' ? `当前已加载 ${filtered.length} 项活动` : phase === 'loading' ? '正在读取活动…' : '活动读取失败'}</span><button disabled={phase === 'loading' || busy} onClick={() => { setSuccess(''); void reload() }}><AdminIcon name="refresh" />刷新</button></div>
+      {success && <p className="adm-activities__success" role="status">{success}</p>}
+      <PaneState phase={phase} err={err} onRetry={() => void reload()} />
+      {phase === 'ready' && filtered.length === 0 && <div className="adm-activities__empty"><AdminIcon name="search" /><h2>{(data ?? []).length ? '没有匹配的活动' : '暂无活动'}</h2><p>{(data ?? []).length ? '试试其他关键词，或清除筛选条件。' : '新建一项活动，让校园里的精彩被看见。'}</p><button className="adm__btn" onClick={() => { if (!(data ?? []).length) openEditor(); else { setQuery(''); setFilterStatus('all'); setFilters({ placeId: '', from: '', to: '' }) } }}>{(data ?? []).length ? '清除条件' : '新建活动'}</button></div>}
+      {phase === 'ready' && filtered.length > 0 && <ul className="adm-activities__list" data-admin-activities={String(filtered.length)}>
+        {filtered.map(activity => {
+          const [year, month, day] = dateKey(activity.startsAt).split('-')
+          return <li className="adm-activity" key={activity.id} data-admin-activity={activity.id} data-activity-status={activity.effectiveStatus}>
+            <div className="adm-activity__main">
+              <div className="adm-activity__date" aria-label={`${year}年${month}月${day}日`}><span>{Number(month)}月</span><strong>{day}</strong><small>{year}</small></div>
+              <div className="adm-activity__info">
+                <div className="adm-activity__titleRow"><h2>{activity.title}</h2><span className={`adm-activity__status is-${activity.effectiveStatus}`}>{statusLabels[activity.effectiveStatus]}</span></div>
+                <div className="adm-activity__metadata"><p><AdminIcon name="clock" /><span>{new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(activity.startsAt))}</span></p><p><AdminIcon name="link" /><span>来源：{activity.source || '未填写'}</span></p></div>
+                <p className="adm-activity__place"><AdminIcon name="pin" /><span>{activity.place.name}{!activity.place.enabled && '（地点已停用）'}</span></p>
               </div>
-              <p className="adm__cardBody">{a.title}</p>
-              <p className="adm__cardMeta">
-                {new Date(a.startsAt).toLocaleString()} · 来源：{a.source}
-              </p>
-              <div className="adm__actions">
-                {a.status === 'scheduled' ? (
-                  <button className="adm__btn adm__btn--danger" data-activity-cancel={a.id} disabled={busy} onClick={() => void setStatus(a.id, 'cancelled')}>
-                    取消活动
-                  </button>
-                ) : (
-                  <button className="adm__btn" data-activity-restore={a.id} disabled={busy} onClick={() => void setStatus(a.id, 'scheduled')}>
-                    恢复
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+            </div>
+            <div className="adm-activity__actions"><button onClick={() => navigate('activity', { id: activity.id })}><AdminIcon name="eye" />查看详情</button><button disabled={busy} onClick={() => openEditor(activity)}><AdminIcon name="edit" />编辑</button><button aria-label={`更多操作：${activity.title}`} onClick={() => { setNotice(''); setMore(activity) }}><AdminIcon name="more" />更多</button></div>
+          </li>
+        })}
+      </ul>}
+      <p className="adm-activities__footnote">仅展示已录入活动。</p>
+      {filtersOpen && <AdminDialog title="筛选活动" onClose={() => setFiltersOpen(false)}>
+        <form onSubmit={event => { event.preventDefault(); if (filterDraft.from && filterDraft.to && filterDraft.from > filterDraft.to) { setFilterError('结束日期不能早于开始日期'); return } setFilters(filterDraft); setFiltersOpen(false) }}>
+          <label className="adm__label">活动地点<select className="adm__input" value={filterDraft.placeId} onChange={event => setFilterDraft({ ...filterDraft, placeId: event.target.value })}><option value="">全部地点</option>{(places.data ?? []).map(place => <option key={place.id} value={place.id}>{place.name}</option>)}</select></label>
+          {places.phase === 'error' && <p className="adm__err">地点读取失败 <button type="button" className="adm__btn" onClick={() => void places.reload()}>重试</button></p>}
+          <label className="adm__label">开始日期（起）<input className="adm__input" type="date" value={filterDraft.from} onChange={event => setFilterDraft({ ...filterDraft, from: event.target.value })} /></label>
+          <label className="adm__label">开始日期（止）<input className="adm__input" type="date" value={filterDraft.to} onChange={event => setFilterDraft({ ...filterDraft, to: event.target.value })} /></label>
+          <p className="adm__modalDesc">按北京时间筛选已加载活动的开始日期。</p>{filterError && <p className="adm__err" role="alert">{filterError}</p>}
+          <div className="adm__modalActions"><button type="button" className="adm__btn" onClick={() => { setFilterDraft({ placeId: '', from: '', to: '' }); setFilterError('') }}>重置</button><button className="adm__btn adm__btn--primary" type="submit">应用筛选</button></div>
+        </form>
+      </AdminDialog>}
+      {more && <AdminDialog title="更多操作" onClose={() => setMore(null)}><p className="adm__modalDesc">{more.title}</p><button className="adm-activities__menuAction" onClick={() => { setConfirmAction(more); setMore(null) }}>{more.status === 'cancelled' ? '恢复活动' : '取消活动'}</button></AdminDialog>}
+      {confirmAction && <AdminDialog title={confirmAction.status === 'cancelled' ? '恢复活动' : '取消活动'} onClose={() => { if (!busy) setConfirmAction(null) }}><p className="adm__modalDesc">确定{confirmAction.status === 'cancelled' ? '恢复' : '取消'}“{confirmAction.title}”吗？{confirmAction.status !== 'cancelled' && '活动将标记为已取消，仍可查看详情。'}</p>{notice && <p className="adm__err" role="alert">{notice}</p>}<div className="adm__modalActions"><button className="adm__btn" disabled={busy} onClick={() => setConfirmAction(null)}>返回</button><button className="adm__btn adm__btn--primary" disabled={busy} data-activity-cancel={confirmAction.status === 'scheduled' ? confirmAction.id : undefined} data-activity-restore={confirmAction.status === 'cancelled' ? confirmAction.id : undefined} onClick={() => void setStatus(confirmAction.id, confirmAction.status === 'cancelled' ? 'scheduled' : 'cancelled')}>{busy ? '提交中…' : '确认'}</button></div></AdminDialog>}
 
       {form && (
-        <div className="adm__modalWrap" data-admin-activity-modal>
-          <div className="adm__modal">
-            <h3 className="adm__modalTitle">新建活动</h3>
+        <AdminDialog title={editingId ? '编辑活动' : '新建活动'} onClose={() => { if (!busy && !uploading) setForm(null) }}>
+          <fieldset className="adm-activities__fields" disabled={busy || uploading} data-admin-activity-modal>
             <p className="adm__modalDesc">
-              地点必须是**已启用**的预设地点；结束时间可选，但必须晚于开始时间。
+              请选择已启用的地点，时间按北京时间填写；结束时间需晚于开始时间。
             </p>
             <input
+              aria-label="活动标题"
               className="adm__input"
               data-activity-title
               placeholder="活动标题（必填）"
@@ -616,18 +652,21 @@ function ActivitiesPanel() {
               onChange={(e) => setForm({ ...form, title: e.target.value })}
             />
             <select
+              aria-label="活动地点"
               className="adm__input"
               data-activity-place
               value={form.placeId}
               onChange={(e) => setForm({ ...form, placeId: e.target.value })}
             >
               <option value="">选择地点（必填）</option>
+              {form.placeId && !enabledPlaces.some(p => p.id === form.placeId) && <option value={form.placeId}>当前地点已停用，请重新选择</option>}
               {enabledPlaces.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}（{p.category}）
                 </option>
               ))}
             </select>
+            {places.phase === 'error' && <p className="adm__err">地点读取失败 <button className="adm__btn" onClick={() => void places.reload()}>重试</button></p>}
             <label className="adm__label">
               开始时间
               <input
@@ -649,6 +688,7 @@ function ActivitiesPanel() {
               />
             </label>
             <textarea
+              aria-label="活动说明"
               className="adm__textarea"
               data-activity-desc
               placeholder="活动说明（可选）"
@@ -664,6 +704,7 @@ function ActivitiesPanel() {
             <input
               className="adm__input"
               data-activity-type
+              aria-label="活动类型"
               placeholder="活动类型（可选；取值集待评审，暂为自由文本）"
               maxLength={40}
               value={form.activityType}
@@ -672,6 +713,7 @@ function ActivitiesPanel() {
             <input
               className="adm__input"
               data-activity-organizer
+              aria-label="主办方"
               placeholder="主办方（可选）"
               maxLength={60}
               value={form.organizer}
@@ -680,6 +722,7 @@ function ActivitiesPanel() {
             <input
               className="adm__input"
               data-activity-external
+              aria-label="参与方式外部链接"
               type="url"
               placeholder="参与方式外部链接（可选，http(s)://；仅展示，不做站内报名）"
               maxLength={500}
@@ -711,15 +754,15 @@ function ActivitiesPanel() {
             )}
             {notice && <p className="adm__err">{notice}</p>}
             <div className="adm__modalActions">
-              <button className="adm__btn" onClick={() => setForm(null)} disabled={busy}>
+              <button className="adm__btn" onClick={() => setForm(null)} disabled={busy || uploading}>
                 取消
               </button>
-              <button className="adm__btn adm__btn--primary" data-activity-submit onClick={() => void submit()} disabled={busy}>
-                {busy ? '创建中…' : '创建'}
+              <button className="adm__btn adm__btn--primary" data-activity-submit onClick={() => void submit()} disabled={busy || uploading}>
+                {busy ? '保存中…' : editingId ? '保存修改' : '创建'}
               </button>
             </div>
-          </div>
-        </div>
+          </fieldset>
+        </AdminDialog>
       )}
       {!form && notice && <p className="adm__err">{notice}</p>}
     </section>

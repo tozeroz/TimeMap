@@ -1,424 +1,71 @@
-.login {
-  padding: 18px 28px 30px;
+/* Reference phone login: warm paper, navy typography and vermilion primary action. */
+.login-reference {
+  --c-bg: #f8f6f2;
+  --login-ink: #0c304a;
+  --login-muted: #587087;
+  --login-orange: #be461b;
+  color: var(--login-ink);
   background: var(--c-bg);
 }
-
-.login__title {
-  margin: 0 0 26px;
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.4px;
+.login-reference .topbar { height: 68px; padding: 0 20px 0 8px; border-bottom: 0; background: transparent; }
+.login-reference .topbar__center { flex: 1; }
+.login-reference .topbar__side--right { flex-shrink: 0; }
+.login-reference__back { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: var(--login-ink); box-shadow: 0 3px 12px #16304712; }
+.login-reference__mode { min-height: 44px; color: #646767; font-size: 14px; white-space: nowrap; }
+.login-reference__content { padding: 26px 24px 40px; }
+.login-reference__brand { display: flex; align-items: center; gap: 10px; color: var(--login-ink); font-size: 23px; line-height: 1.4; font-weight: 750; }
+.login-reference__brand svg { flex: none; }
+.login-reference__title { margin: 20px 0 6px; font-size: clamp(27px, 7.65vw, 32px); font-weight: 800; line-height: 1.3; letter-spacing: -.9px; overflow-wrap: normal; }
+.login-reference__title span { display: inline-block; }
+.login-reference__subtitle { margin: 0; font-size: 15px; color: var(--login-muted); line-height: 1.65; letter-spacing: .2px; }
+.login-reference__form { margin-top: 28px; }
+.login-reference__label { display: block; font-size: 16px; font-weight: 700; line-height: 1.5; margin-bottom: 10px; }
+.login-reference__field { display: flex; align-items: center; gap: 14px; min-height: 52px; border: 1px solid #d7d5d0; border-radius: 18px; background: #fff; padding: 0 16px; }
+.login-reference__field:focus-within { border-color: #587087; box-shadow: 0 0 0 2px #5870871a; }
+.login-reference__field.has-error { border-color: #b63c28; }
+.login-reference__prefix { flex: none; border-right: 1px solid #d7d5d0; padding-right: 14px; color: var(--login-ink); font-size: 19px; line-height: 25px; font-weight: 700; }
+.login-reference__field input { width: 100%; flex: 1; min-width: 0; border: 0; background: transparent; color: var(--login-ink); font-size: 16px; min-height: 50px; padding: 8px 0; }
+.login-reference__field input::placeholder { color: #62778a; opacity: 1; }
+.login-reference__field input:focus-visible { outline: 0; }
+.login-reference__extra { margin-top: 20px; }
+.login-reference__codeLabel { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.login-reference__codeLabel button { min-height: 44px; color: #267336; font-size: 13px; }
+.login-reference__resend { flex: none; color: #587087; min-height: 44px; font-size: 12px; border-left: 1px solid #d7d5d0; padding-left: 10px; }
+.login-reference__submit { width: 100%; min-height: 52px; padding: 10px 16px; margin-top: 30px; background: var(--login-orange); color: #fff; border: 1px solid #b13e16; border-radius: 40px; font-size: 18px; line-height: 1.5; font-weight: 700; }
+.login-reference__submit:not(:disabled):hover { background: #ad3c15; }
+.login-reference__submit:disabled { opacity: .65; cursor: default; }
+.login-reference__agreement { display: flex; align-items: flex-start; gap: 4px; margin-top: 8px; }
+.login-reference__agreement p { min-width: 0; margin: 0; padding-top: 0; color: #646767; font-size: 13px; line-height: 1.9; }
+.login-reference__agreement p button { color: #267336; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; line-height: inherit; min-height: 44px; }
+.login-reference__check { display: grid; place-items: center; position: relative; flex: 0 0 44px; min-height: 44px; cursor: pointer; }
+.login-reference__check input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.login-reference__check span { width: 17px; height: 17px; border: 1.3px solid #737875; border-radius: 3px; background: #fff; display: grid; place-items: center; pointer-events: none; }
+.login-reference__check input:checked + span { background: #267336; border-color: #267336; }
+.login-reference__check input:checked + span::after { content: ''; width: 8px; height: 4px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: translateY(-1px) rotate(-45deg); }
+.login-reference__check input:focus-visible + span { outline: 2px solid #0c304a; outline-offset: 4px; }
+.login-reference__error { color: #b33825; font-size: 13px; line-height: 1.6; margin: 12px 0 -12px; }
+.login-reference__hint { color: var(--login-muted); font-size: 13px; line-height: 1.6; margin: 14px 0 -12px; }
+.login-reference button:focus-visible { outline: 2px solid #0c304a; outline-offset: 3px; }
+.login-reference__mode:disabled, .login-reference__back:disabled, .login-reference__resend:disabled { opacity: .65; }
+.login-reference__field input:disabled { opacity: 1; -webkit-text-fill-color: #587087; }
+.login-legal { width: calc(100% - 36px); max-width: 394px; max-height: 82dvh; padding: 20px; border: 1px solid #dedbd5; border-radius: 18px; background: #f8f6f2; color: #0c304a; }
+.login-legal::backdrop { background: #0c304a66; }
+.login-legal__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #dedbd5; padding-bottom: 10px; }
+.login-legal__head h2 { margin: 0; font-size: 19px; }
+.login-legal__head button { flex: none; font-size: 26px; width: 44px; height: 44px; }
+.login-legal p { font-size: 14px; line-height: 1.7; }
+.login-legal__text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.8; padding-top: 16px; }
+.login-legal__retry, .login-legal__minors { min-height: 44px; color: #267336; font-size: 14px; text-decoration: underline; }
+.login-legal__done { min-height: 44px; display: block; width: 100%; margin-top: 16px; border-radius: 24px; background: #be461b; color: #fff; font-size: 15px; }
+.login-legal button:focus-visible { outline: 2px solid #0c304a; outline-offset: 3px; }
+@media (max-width: 350px) {
+  .login-reference__content { padding: 22px 20px 32px; }
+  .login-reference__title { font-size: 27px; letter-spacing: -1px; }
+  .login-reference__subtitle { font-size: 14px; }
+  .login-reference__field { gap: 10px; padding-inline: 12px; }
+  .login-reference__prefix { padding-right: 10px; }
 }
-
-/* ===========================================================================
-   登录方式切换（017：短信验证码 | 管理员密码）
-   =========================================================================== */
-/* 位置放在标题下方、手机号输入框上方：先选"怎么登"，再填凭据 —— 顺序与心智一致。
-   ⚠️ 默认高亮的是「短信验证码」（学生的主路径），管理员需要自己切过去：
-      这样普通学生不会误入一条需要密码的路径。 */
-.login__modes {
-  display: flex;
-  gap: 8px;
-  margin: 0 0 18px;
-}
-
-.login__mode {
-  flex: 1 1 0;
-  padding: 8px 10px;
-  border: 1px solid var(--c-divider);
-  border-radius: var(--r-pill);
-  background: var(--c-surface);
-  color: var(--c-text-2);
-  font-size: 13px;
-}
-
-.login__mode.is-active {
-  background: var(--c-primary);
-  border-color: var(--c-primary);
-  color: var(--c-primary-fg);
-  font-weight: 600;
-}
-
-
-.login__field {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--c-divider);
-}
-
-.login__field--code {
-  margin-top: 4px;
-}
-
-/* 验证码行的"重新获取"（带倒计时） */
-.login__resend {
-  flex: 0 0 auto;
-  padding: 6px 10px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--c-divider);
-  font-size: 13px;
-  color: var(--c-text-2);
-  background: transparent;
-}
-
-.login__resend:disabled {
-  color: var(--c-text-3);
-  opacity: 0.7;
-}
-
-.login__error {
-  margin: 14px 0 0;
-  font-size: 13px;
-  color: var(--c-danger);
-}
-
-/*
-  没有短信通道的如实提示（SMS_GATEWAY_NOT_INTEGRATED）。
-  只在服务端明确返回 delivery=dev-sink 时出现 —— 不假装"已发送到你的手机"。
-*/
-.login__devhint {
-  margin: 8px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--c-text-3);
-}
-
-.login__prefix {
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--c-text);
-  flex: 0 0 auto;
-}
-
-.login__input {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  color: var(--c-text);
-}
-
-.login__input::placeholder {
-  font-size: 16px;
-  font-weight: 400;
-  letter-spacing: 0;
-  color: var(--c-text-3);
-}
-
-.login__clear {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--r-pill);
-  background: var(--c-surface-sunken);
-  color: var(--c-text-3);
-  font-size: 15px;
-  line-height: 1;
-}
-
-.login__submit {
-  width: 100%;
-  height: 48px;
-  margin-top: 30px;
-  border-radius: var(--r-pill);
-  background: var(--c-primary);
-  color: var(--c-primary-fg);
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.login__submit:active {
-  transform: scale(0.99);
-}
-
-/* 登录入口（原版 CampusLoginActivity）：品牌拼贴 + 单按钮 + 协议勾选 */
-.ls {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: #fdfbf6;
-}
-
-.ls__hero {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.ls__brand {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.ls__brandMark {
-  display: block;
-  width: 86px;
-  height: 86px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.ls__brandText {
-  font-size: 34px;
-  font-weight: 800;
-  letter-spacing: -0.8px;
-  color: #111;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-
-/* 角落的拼贴装饰：做成「贴纸」质感（白边 + 轻投影 + 各自形状） */
-.ls__deco {
-  position: absolute;
-  border-radius: 14px;
-  border: 2.5px solid #fff;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-}
-
-.ls__deco--1 {
-  top: 44px;
-  left: 30px;
-  width: 78px;
-  height: 78px;
-  border-radius: 22px 14px 26px 16px;
-  background: linear-gradient(140deg, #cfe0c3, #a9c79b);
-  transform: rotate(-9deg);
-}
-
-.ls__deco--2 {
-  top: 36px;
-  right: 34px;
-  width: 96px;
-  height: 46px;
-  border-radius: 8px;
-  background: repeating-linear-gradient(45deg, #ffe08a 0 8px, #ffd166 8px 16px);
-  transform: rotate(7deg);
-}
-
-.ls__deco--3 {
-  bottom: 132px;
-  left: 38px;
-  width: 76px;
-  height: 76px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #f7c0a8, #e88f70);
-}
-
-.ls__deco--4 {
-  bottom: 96px;
-  right: 48px;
-  width: 94px;
-  height: 58px;
-  border-radius: 16px 20px 14px 18px;
-  background: linear-gradient(150deg, #bcd8f0, #8fb8dd);
-  transform: rotate(-6deg);
-}
-
-.ls__deco--5 {
-  top: 206px;
-  right: 88px;
-  width: 50px;
-  height: 50px;
-  border-radius: 50% 50% 52% 48%;
-  background: linear-gradient(160deg, #f0c2d2, #dd9fb6);
-}
-
-/* 左下角再补一块绿色「灌木」贴纸，凑出原版那种拼贴密度 */
-.ls__deco--6 {
-  top: 300px;
-  left: 60px;
-  width: 62px;
-  height: 62px;
-  border-radius: 40% 60% 55% 45%;
-  background: linear-gradient(150deg, #c9e0b4, #93bf7a);
-  transform: rotate(12deg);
-}
-
-.ls__foot {
-  flex: 0 0 auto;
-  padding: 0 28px 34px;
-}
-
-.ls__login {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  height: 52px;
-  border-radius: var(--r-pill);
-  background: #111;
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.ls__login:active {
-  transform: scale(0.99);
-}
-
-.ls__agree {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  margin-top: 14px;
-}
-
-.ls__check {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 17px;
-  height: 17px;
-  margin-top: 1px;
-  border-radius: 50%;
-  border: 1.5px solid #c2c5cb;
-  color: #fff;
-}
-
-.ls__check.is-on {
-  background: #111;
-  border-color: #111;
-}
-
-.ls__agreeText {
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: #4a4a4a;
-}
-
-/* 协议里的条款名用标准链接蓝，提高辨识度 */
-.ls__agreeText .login__link {
-  color: #2f6fe0;
-}
-
-/*
-  协议弹窗（原版行为，M3 Slice 0A 实测）。
-  原版：未勾选点「登录 Campus」→ 模态弹窗「请阅读并同意以下条款」
-  + 条款链接 + 贴底的「同意并继续」按钮（id/btn_agree 位于 [135,1748][945,1832]）。
-  此前的实现是"提示 1.6 秒"，与原版不一致，已按证据改掉。
-*/
-.ls__dialogMask {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.42);
-}
-
-.ls__dialog {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 28px 20px 22px;
-  background: #fff;
-  border-radius: 18px 18px 0 0;
-  text-align: center;
-}
-
-.ls__dialogTitle {
-  margin: 0 0 14px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--c-text);
-}
-
-.ls__dialogBody {
-  margin: 0 0 22px;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--c-text-3);
-}
-
-.ls__dialogBody .login__link {
-  color: #2f6fe0;
-}
-
-/* 与原版一致：整行宽度的主按钮，贴近底部 */
-.ls__dialogBtn {
-  display: block;
-  width: 100%;
-  height: 52px;
-  border: 0;
-  border-radius: 26px;
-  background: #111;
-  color: #fff;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.ls__dialogBtn:active {
-  opacity: 0.85;
-}
-
-.login__agree {
-  margin: 16px 0 0;
-  font-size: 12px;
-  color: var(--c-text-3);
-  text-align: center;
-}
-
-.login__link {
-  color: var(--c-accent);
-}
-
-/* 登录方式选择（login/select） */
-.login__lead {
-  margin: -18px 0 24px;
-  font-size: 13.5px;
-  color: var(--c-text-3);
-}
-
-.ls__methods {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.ls__method {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  width: 100%;
-  padding: 16px 18px;
-  border-radius: var(--r-lg);
-  background: var(--c-surface);
-  border: 1px solid var(--c-divider);
-  text-align: left;
-}
-
-.ls__method.is-primary {
-  background: var(--c-primary);
-  border-color: var(--c-primary);
-}
-
-.ls__method-label {
-  font-size: 15.5px;
-  font-weight: 700;
-  color: var(--c-text);
-}
-
-.ls__method.is-primary .ls__method-label {
-  color: var(--c-primary-fg);
-}
-
-.ls__method-desc {
-  font-size: 12.5px;
-  color: var(--c-text-3);
-}
-
-.ls__method.is-primary .ls__method-desc {
-  color: rgba(255, 255, 255, 0.72);
+@media (max-height: 600px) {
+  .login-reference__content { padding-top: 12px; }
+  .login-reference__form { margin-top: 20px; }
 }

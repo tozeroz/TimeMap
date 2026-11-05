@@ -66,6 +66,7 @@ smoke() {
   r=$(code "http://127.0.0.1/assets/$ASSET");     p "JS  /assets/$ASSET" "$r";  [ "$r" = 200 ] || fail=1
   r=$(code "http://127.0.0.1/assets/$CSS");       p "CSS /assets/$CSS" "$r";    [ "$r" = 200 ] || fail=1
   r=$(code http://127.0.0.1/favicon.svg);         p "图标 /favicon.svg" "$r";   [ "$r" = 200 ] || fail=1
+  r=$(code http://127.0.0.1/timemap-logo.png);    p "Logo /timemap-logo.png" "$r"; [ "$r" = 200 ] || fail=1
   r=$(code http://127.0.0.1/api/health);          p "API /api/health" "$r";     [ "$r" = 200 ] || fail=1
   r=$(code http://127.0.0.1/nope/should-404);     p "未知路径应 404" "$r";       [ "$r" = 404 ] || fail=1
   r=$(code http://127.0.0.1/.env);                p "点文件应 404" "$r";        [ "$r" = 404 ] || fail=1

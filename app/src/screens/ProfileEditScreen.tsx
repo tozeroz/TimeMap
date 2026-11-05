@@ -5,6 +5,7 @@ import { Screen, TopBar } from '../components/Shell'
 import { IconBack, IconCamera, IconChevronRight, IconEdit } from '../components/icons'
 import { goBack, navigate, registerNavigationGuard } from '../router'
 import './profileedit.css'
+import { AvatarCropper } from '../components/AvatarCropper'
 
 function InfoIcon() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10v1" /></svg>
@@ -31,6 +32,7 @@ export function ProfileEditScreen() {
   const [error,setError] = useState('')
   const [saved,setSaved] = useState(false)
   const [avatarBroken,setAvatarBroken] = useState(false)
+  const [avatarFile,setAvatarFile] = useState<File|null>(null)
   const dialog = useRef<HTMLDialogElement>(null)
   const input = useRef<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -77,17 +79,22 @@ export function ProfileEditScreen() {
     change({[editor]:editor==='enrollmentYear'?(next?Number(next):null):editor==='campusId'||editor==='collegeId'?(next||null):next})
     dialog.current?.close()
   }
-  async function upload(file:File|undefined){
+  function selectAvatar(file:File|undefined){
     if(!file||busy.current)return
     if(file.size>5*1024*1024){setError('头像图片过大，请压缩到 5MB 以内后重试。');return}
     if(!['image/jpeg','image/png','image/webp'].includes(file.type)){setError('头像仅支持 JPG、PNG 或 WebP 图片，请更换格式后重试。');return}
+    setError('');setAvatarFile(file)
+  }
+  async function upload(file:File):Promise<boolean>{
+    if(busy.current)return false
     busy.current=true;setUploading(true);setError('');setSaved(false)
     try{
       const result=await uploadMedia(file,'avatar')
-      if(!alive.current)return
-      if(!result.ok){setError(result.status===413?'头像图片超过服务器上传大小限制，请压缩图片或选择更小的图片后重试；原头像未改变。':`${failText(result)}；原头像未改变。`);return}
+      if(!alive.current)return false
+      if(!result.ok){setError(result.status===401?'登录已过期，请重新登录。':result.status===413?'头像图片超过服务器上传大小限制，请压缩图片或选择更小的图片后重试；原头像未改变。':`${failText(result)}；原头像未改变。`);return false}
       change({avatarMediaId:result.value.id});setAvatarBroken(false)
-    }catch{if(alive.current)setError('头像上传失败，请重试。')}
+      setAvatarFile(null);return true
+    }catch{if(alive.current)setError('头像上传失败，请重试。');return false}
     finally{busy.current=false;if(alive.current)setUploading(false)}
   }
   async function save(){
@@ -111,7 +118,7 @@ export function ProfileEditScreen() {
           <svg className="pe__sprig" viewBox="0 0 46 78" fill="none" aria-hidden="true"><path d="M39 74C14 49 15 30 19 5" stroke="currentColor" strokeWidth="1.2"/><g fill="currentColor"><ellipse cx="17" cy="12" rx="4" ry="10" transform="rotate(-8 17 12)"/><ellipse cx="10" cy="29" rx="4" ry="9" transform="rotate(-45 10 29)"/><ellipse cx="23" cy="34" rx="3" ry="9" transform="rotate(15 23 34)"/><ellipse cx="15" cy="47" rx="4" ry="10" transform="rotate(-50 15 47)"/><ellipse cx="29" cy="53" rx="3" ry="9" transform="rotate(10 29 53)"/></g></svg>
           <button className="pe__avatarButton" aria-label="更换头像" disabled={saving||uploading} onClick={()=>fileInput.current?.click()}><span className="pe__avatar">{draft.avatarMediaId&&!avatarBroken?<img src={mediaUrl(draft.avatarMediaId)} alt="当前头像" onError={()=>setAvatarBroken(true)}/>:initial}</span><span className="pe__camera" aria-hidden="true"><IconCamera size={20}/></span></button>
         </div>
-        <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" hidden aria-label="上传头像图片" onChange={event=>{void upload(event.target.files?.[0]);event.target.value=''}}/>
+        <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" hidden aria-label="上传头像图片" onChange={event=>{selectAvatar(event.target.files?.[0]);event.target.value=''}}/>
         <p className="pe__avatarTitle" role={uploading?'status':undefined}>{uploading?'正在上传头像…':'点击更换头像'}</p><p className="pe__avatarHint">支持 JPG、PNG、WebP，图片不超过 5MB。</p>
         {draft.avatarMediaId&&<button className="pe__removeAvatar" disabled={saving||uploading} onClick={()=>{change({avatarMediaId:null});setAvatarBroken(false)}}>移除头像</button>}
       </section>
@@ -131,5 +138,6 @@ export function ProfileEditScreen() {
       <p id="pe-editor-hint" className="pe__dialogHint">{editor==='bio'?`${Array.from(value.trim()).length} / 160 字。`:editor==='enrollmentYear'?'填写四位入学年份，如 2026；留空可清除。':editor==='collegeId'&&!profile?.collegeListComplete?'当前学院列表为已有资料，可选择不填写。':''}完成后点击页面底部保存。</p>
       {inputError&&<p className="pe__error" role="alert">{inputError}</p>}<div className="pe__dialogActions"><button type="button" onClick={()=>dialog.current?.close()}>取消</button><button className="pe__done" type="submit">完成</button></div>
     </form></dialog>
+    {avatarFile&&<AvatarCropper file={avatarFile} onCancel={()=>setAvatarFile(null)} onConfirm={upload}/>}
   </Screen>
 }

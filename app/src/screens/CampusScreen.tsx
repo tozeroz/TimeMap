@@ -1,3 +1,4 @@
+import { feedBrowse, useFeedSourceRestore } from '../data/feedBrowse'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   failText,
@@ -438,6 +439,8 @@ function parsePlaceIds(raw: string | undefined | null): string[] {
 }
 
 export function CampusScreen() {
+  useFeedSourceRestore()
+  const restored = feedBrowse.source === window.location.hash ? feedBrowse.campus : undefined
   const route = useRoute()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
@@ -447,14 +450,15 @@ export function CampusScreen() {
    * ⚠️ 服务端默认仍是 `latest`（其它调用方按"时间线"语义用它），
    *    所以这里必须**显式**传 `sort: 'hot'`，不能依赖默认值。
    */
-  const [sort, setSort] = useState<'hot' | 'latest'>('hot')
+  const [sort, setSort] = useState<'hot' | 'latest'>(() => restored?.sort ?? 'hot')
 
   /**
    * CAMP-003：地标筛选（多选）。**空数组 = 全部地标**（不向服务端传过滤参数）。
    * 初值来自 URL：`#/campus?placeId=xxx`（地点面板「查看全部」会带这个参数），
    * 因此从地点面板进来时筛选是**已经生效**的，界面上也有可识别的当前地标。
    */
-  const [placeIds, setPlaceIds] = useState<string[]>(() => parsePlaceIds(route.query.placeId))
+  const [placeIds, setPlaceIds] = useState<string[]>(() => restored?.placeIds ?? parsePlaceIds(route.query.placeId))
+  useEffect(() => { feedBrowse.campus = { sort, placeIds } }, [sort, placeIds])
 
   /** 筛选面板的候选地标：直接取权威地点列表（一次拉全，不在客户端猜有哪些地标） */
   const [places, setPlaces] = useState<ApiPlaceListItem[]>([])
@@ -564,7 +568,10 @@ export function CampusScreen() {
    * 这时组件**不会重新挂载**，只能靠这个 effect 把筛选更新上去。
    */
   const placeIdParam = route.query.placeId ?? ''
+  const previousPlaceParam = useRef(placeIdParam)
   useEffect(() => {
+    if (previousPlaceParam.current === placeIdParam) return
+    previousPlaceParam.current = placeIdParam
     const next = parsePlaceIds(placeIdParam)
     setPlaceIds((prev) => (prev.join(',') === next.join(',') ? prev : next))
   }, [placeIdParam])
@@ -714,7 +721,7 @@ export function CampusScreen() {
         {phase === 'loading' && feed.length > 0 && <p className="campus__refreshing" role="status">正在更新回忆…</p>}
         <div className="campus-square" aria-label="校园回忆" aria-busy={phase === 'loading'}>
           {[0, 1].map(column => <div className="campus-square__column" key={column}>
-            {feed.filter((_, index) => index % 2 === column).map(p => <CampusPostCard
+            {feed.filter((_, index) => index % 2 === column).map(p => <CampusPostCard browseIds={feed.map(item => item.id)}
               key={p.id} post={p} pending={pendingLikes.has(p.id)} local={isLocalPostId(p.id)}
               onLike={() => void onToggleLike(p)} onRemove={() => removeMyPost(p.id)}
               onRepublish={() => { stashRepublish({ text: p.text, placeName: p.location }); navigate('publish') }}

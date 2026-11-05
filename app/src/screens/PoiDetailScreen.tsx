@@ -1,3 +1,4 @@
+import { useFeedSourceRestore } from '../data/feedBrowse'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack, IconEdit, IconLocation } from '../components/icons'
 import { goBack, navigate } from '../router'
@@ -9,6 +10,7 @@ import './poidetail.css'
 
 /** Concrete place detail; school-level map aggregation remains in the map domain. */
 export function PoiDetailScreen({ id }: { id: string }) {
+  useFeedSourceRestore()
   // PLACE-002 retains the existing default: recent popular posts（地图抽屉默认「最新」，见 PlaceDetailSheet）.
   const d = usePlaceDetail(id, 'hot')
   const { place, phase, error } = d
@@ -32,7 +34,7 @@ export function PoiDetailScreen({ id }: { id: string }) {
       </section>
       <TimeMachine photos={place.photos} history={place.history} />
       <PlaceActivitiesSection place={place} onOpenActivity={aid => navigate('activity', { id: aid, placeId: place.id })} onOpenAll={() => navigate('activities', { placeId: place.id })} />
-      <PlaceFeedSection place={place} sort={d.sort} setSort={d.setSort} filter={d.filter} setFilter={d.setFilter} allEmpty={d.allEmpty} feedPhase={d.feedPhase} onRetryFeed={d.retryFeed} showFilter layout="columns" onOpenPost={pid => navigate('feed', { id: pid })} onOpenAll={() => navigate('campus', { placeId: place.id })} />
+      <PlaceFeedSection place={place} sort={d.sort} setSort={d.setSort} filter={d.filter} setFilter={d.setFilter} allEmpty={d.allEmpty} feedPhase={d.feedPhase} onRetryFeed={d.retryFeed} showFilter layout="columns" onOpenPost={(pid, browse) => navigate('feed', { id: pid, browse })} onOpenAll={() => navigate('campus', { placeId: place.id })} />
     </article>
   </Screen>
 }

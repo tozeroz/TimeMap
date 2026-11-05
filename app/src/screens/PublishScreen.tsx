@@ -14,6 +14,13 @@ import { takeRepublish } from '../data/store'
 import { navigate, registerNavigationGuard, useRoute } from '../router'
 import './publish.css'
 
+// Activity anchors outside the main campus are not memory publishing locations.
+const EXCLUDED_PUBLISH_PLACE_IDS = new Set([
+  'aaaaaaaa-1111-4111-8111-000000000091', // 线上活动
+  'aaaaaaaa-1111-4111-8111-000000000012', // 北京交通大学威海校区
+  'aaaaaaaa-1111-4111-8111-000000000013', // 香山公园
+])
+
 export function PublishScreen() {
   const route = useRoute()
   /**
@@ -86,7 +93,9 @@ export function PublishScreen() {
     setPlacesPhase('loading')
     const r = await listPlaces()
     if (r.ok) {
-      setPlaces(r.value)
+      const publishPlaces = r.value.filter(p => !EXCLUDED_PUBLISH_PLACE_IDS.has(p.id))
+      setPlaces(publishPlaces)
+      setPlaceId(current => publishPlaces.some(p => p.id === current) ? current : '')
       setPlacesPhase('ready')
       /*
         重新发布时旧记录只存了**地标名**（没有 id）：等列表回来后按名字回填 id。
@@ -94,7 +103,7 @@ export function PublishScreen() {
       */
       const want = republish?.placeName ?? ''
       if (want) {
-        const hit = r.value.find((p) => p.name === want)
+        const hit = publishPlaces.find((p) => p.name === want)
         if (hit) setPlaceId(hit.id)
       }
     } else setPlacesPhase('error')

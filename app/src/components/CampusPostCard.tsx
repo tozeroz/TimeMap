@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import type { FeedPost } from '../data/types'
+import { openFeed } from '../data/feedBrowse'
 import { navigate } from '../router'
 import { IconHeart, IconImage, IconLocation } from './icons'
 
 /** Shared author label and type-specific surfaces for the campus scrapbook. */
-export function CampusPostCard({ post, pending, local, onLike, onRemove, onRepublish }: {
+export function CampusPostCard({ post, pending, local, onLike, onRemove, onRepublish, browseIds }: {
+  browseIds?: string[]
   post: FeedPost
   pending: boolean
   local: boolean
@@ -20,7 +22,7 @@ export function CampusPostCard({ post, pending, local, onLike, onRemove, onRepub
     <button className="square-card__author" onClick={() => navigate('user', { id: post.author.id })} aria-label={`查看${post.author.name}的主页`}>
       <img src={post.author.avatar} alt="" loading="lazy" /><span>{post.author.name}</span>
     </button>
-    <a className="square-card__open" href={`#/feed?id=${encodeURIComponent(post.id)}`} aria-label={`查看帖子：${post.text || '校园照片'}`}>
+    <a className="square-card__open" onClick={e => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) { e.preventDefault(); openFeed(post.id, browseIds ?? [post.id]) } }} href={`#/feed?id=${encodeURIComponent(post.id)}`} aria-label={`查看帖子：${post.text || '校园照片'}`}>
       {image ? <div className="square-card__media" style={{ aspectRatio: post.ratio || (sticker ? '4 / 5' : '1 / 1') }}>
         {broken ? <span className="square-card__unavailable"><IconImage size={28} />图片暂时无法显示</span> : <img src={image} alt={post.text ? '' : '校园照片'} loading="lazy" onError={() => setBroken(true)} />}
       </div> : <div className="square-card__paper"><p>{post.text || '一段校园回忆'}</p><svg viewBox="0 0 140 35" fill="none" aria-hidden="true"><path d="M3 23q22 18 46 0m8 3q18-25 39-12" stroke="currentColor" strokeWidth="1"/><path d="m109 26 19-22-4 15-15 7 2-14 17-8m-19 22-6 6" stroke="#ed6536" strokeWidth="1.5"/></svg></div>}
