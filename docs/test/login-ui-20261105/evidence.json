@@ -1,0 +1,70 @@
+{
+  "contract": "docs/zwf/2026-11-05-登录页UI复刻方案.md; both login entry routes, scoped reference styling, existing authentication APIs.",
+  "targetViewports": [
+    "320x740",
+    "390x844",
+    "430x932",
+    "1440x900"
+  ],
+  "accessibility": {
+    "status": "pass",
+    "evidence": "Labelled phone/password/code fields, native checkbox, live errors/status, visible focus, dialog Escape and focus restoration/trapping; legal click does not toggle consent. Reduced-motion and enlarged agreement text checked."
+  },
+  "responsive": {
+    "status": "pass",
+    "evidence": "Four viewport screenshots and body overflow assertions; reduced-height viewport scrolls to action, 18px agreement text wraps."
+  },
+  "contentStates": {
+    "loading": {
+      "status": "pass",
+      "evidence": "Delayed send shows disabled 发送中 action."
+    },
+    "empty": {
+      "status": "pass",
+      "evidence": "Empty phone and unchecked consent prevented send API."
+    },
+    "error": {
+      "status": "pass",
+      "evidence": "503 send, 401 verify, 429 retry wait and service failure recovered with inputs intact."
+    },
+    "partial": {
+      "status": "pass",
+      "evidence": "Missing legal text exposes truthful unavailable state and retry; other login fields preserved."
+    },
+    "success": {
+      "status": "pass",
+      "evidence": "SMS/dev-sink delivery, resend, student campus/post-submission return, admin session and admin route verified with fixtures."
+    },
+    "permission": {
+      "status": "pass",
+      "evidence": "Admin rejected credentials use a uniform message; does not expose whether the account exists or its role."
+    }
+  },
+  "renderedEvidence": [
+    {
+      "viewport": "320x740",
+      "artifact": "login-320.png",
+      "observation": "Brand 北交时光 and title 欢迎回到TimeMap; warm white/navy/orange layout. Phone field, agreement row and primary action fit without horizontal overflow."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "login-390.png",
+      "observation": "Brand 北交时光 and title 欢迎回到TimeMap; warm white/navy/orange layout. Phone field, agreement row and primary action fit without horizontal overflow."
+    },
+    {
+      "viewport": "430x932",
+      "artifact": "login-430.png",
+      "observation": "Brand 北交时光 and title 欢迎回到TimeMap; warm white/navy/orange layout. Phone field, agreement row and primary action fit without horizontal overflow."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "login-1440.png",
+      "observation": "Brand 北交时光 and title 欢迎回到TimeMap; warm white/navy/orange layout. Phone field, agreement row and primary action fit without horizontal overflow."
+    }
+  ],
+  "fixtureOnly": true,
+  "limitations": [
+    "No real SMS sent; all authentication mocked.",
+    "Formal legal text is not present in repository; reading surface reports unavailable until approved .txt assets are supplied."
+  ]
+}

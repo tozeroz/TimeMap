@@ -1,311 +1,175 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { adminLogin, requestLoginCode, verifyLoginCode } from '../api/client'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack } from '../components/icons'
 import { goBack, navigate } from '../router'
 import './login.css'
 
-/**
- * 手机号登录页（原版 `com.kairuotu.account.login.activity.CampusSnsLoginActivity`）。
- *
- * 1:1 依据（M3 Slice 0A 实测，见 docs/pending/m3/SLICE0-LOGIN-SEMANTICS.md）：
- *   - 标题「输入手机号」、固定国家码「+86」、手机号输入框（原版 id: phone_number）
- *   - 主按钮「获取验证码」（原版 id: next_step）、左上返回（原版 id: btnBack）
- *   - 原版**没有密码**、**没有第三方登录入口**
- *
- * ⚠️ 诚实声明（审核记录 08）：
- *   验证码页本身**没有取得原版证据** —— 取证时手机号框里预填着一个真实号码，
- *   点「获取验证码」会给该号码真发短信，因此主动停止（BLOCKED_BY_ETHICS）。
- *   所以本页的验证码态只能算"合理推断"，Gate 里记为
- *   `OTP_UI_FUNCTIONAL: PASS` + `OTP_UI_VISUAL_CONFORMANCE: NOT_EVALUATED`。
- */
+type LegalDocument = 'agreement' | 'privacy' | 'minors'
+const legalTitles: Record<LegalDocument, string> = { agreement: '用户协议', privacy: '隐私政策', minors: '未成年人个人信息保护规则' }
+
+function LegalDialog({ document, onClose, onReadMinors }: { document: LegalDocument; onClose: () => void; onReadMinors: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const [text, setText] = useState('')
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [revision, setRevision] = useState(0)
+  useEffect(() => {
+    const opener = window.document.activeElement as HTMLElement | null
+    const element = dialog.current
+    element?.showModal()
+    return () => { element?.close(); queueMicrotask(() => { if (opener?.isConnected) opener.focus() }) }
+  }, [])
+  useEffect(() => {
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        const response = await fetch(`./legal/${document}.txt`, { signal: controller.signal })
+        if (!response.ok || !response.headers.get('content-type')?.includes('text/plain')) throw new Error('Unavailable')
+        const content = await response.text()
+        if (!content.trim()) throw new Error('Empty')
+        if (!controller.signal.aborted) { setText(content); setPhase('ready') }
+      } catch { if (!controller.signal.aborted) setPhase('error') }
+    })()
+    return () => controller.abort()
+  }, [document, revision])
+  return <dialog className="login-legal" ref={dialog} aria-labelledby="login-legal-title" onCancel={event => { event.preventDefault(); onClose() }}>
+    <div className="login-legal__head"><h2 id="login-legal-title">{legalTitles[document]}</h2><button type="button" aria-label="关闭条款" onClick={onClose}>×</button></div>
+    {phase === 'loading' && <p role="status">正在读取条款…</p>}
+    {phase === 'error' && <div role="status"><p>条款正文暂未提供或无法读取，请稍后重试。</p><button className="login-legal__retry" onClick={() => { setPhase('loading'); setRevision(v => v + 1) }}>重新读取</button></div>}
+    {phase === 'ready' && <div className="login-legal__text">{text}</div>}
+    {document === 'agreement' && <button className="login-legal__minors" onClick={onReadMinors}>未成年人个人信息保护规则</button>}
+    <button className="login-legal__done" onClick={onClose}>返回登录</button>
+  </dialog>
+}
+
+/** Reference login surface; both existing login routes share this flow. */
 export function LoginScreen() {
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  /** 服务端返回的投递方式；本项目没有短信通道，会在 dev sink 下留一条提示 */
+  const [errorField, setErrorField] = useState<'phone' | 'agreement' | 'code' | 'password' | null>(null)
   const [devHint, setDevHint] = useState('')
-  const [cooldown, setCooldown] = useState(0)
-  /**
-   * 登录方式：短信验证码（学生/管理员都能用） | 管理员密码（017）。
-   *
-   * 为什么要有密码这条路：管理端原先只有短信一条凭据路径，而实测线上短信通道故障
-   * ⇒ 谁也登不进去 ⇒ 管理端完全不可达。密码是**第二条**路，不是替换掉短信。
-   */
+  const [cooldownUntil, setCooldownUntil] = useState(0)
+  const [now, setNow] = useState(() => Date.now())
   const [mode, setMode] = useState<'otp' | 'admin'>('otp')
   const [password, setPassword] = useState('')
-  const timerRef = useRef<number | null>(null)
+  const [agreed, setAgreed] = useState(false)
+  const [legal, setLegal] = useState<LegalDocument | null>(null)
+  const phoneInput = useRef<HTMLInputElement>(null)
+  const agreementInput = useRef<HTMLInputElement>(null)
+  const codeInput = useRef<HTMLInputElement>(null)
+  const passwordInput = useRef<HTMLInputElement>(null)
+  const pending = useRef(false)
+  const alive = useRef(true)
+  const cooldown = Math.max(0, Math.ceil((cooldownUntil - now) / 1000))
 
-  function startCooldown(seconds: number) {
-    setCooldown(seconds)
-    if (timerRef.current) window.clearInterval(timerRef.current)
-    timerRef.current = window.setInterval(() => {
-      setCooldown((v) => {
-        if (v <= 1 && timerRef.current) {
-          window.clearInterval(timerRef.current)
-          timerRef.current = null
-        }
-        return v > 1 ? v - 1 : 0
-      })
-    }, 1000)
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
+  useEffect(() => {
+    if (!cooldownUntil) return
+    const tick = () => {
+      setNow(Date.now())
+      if (Date.now() >= cooldownUntil) window.clearInterval(timer)
+    }
+    const timer = window.setInterval(tick, 1000)
+    window.document.addEventListener('visibilitychange', tick)
+    return () => { window.clearInterval(timer); window.document.removeEventListener('visibilitychange', tick) }
+  }, [cooldownUntil])
+
+  function clearError() { setError(''); setErrorField(null) }
+  function validate() {
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      setError('请输入有效的 11 位中国大陆手机号'); setErrorField('phone'); phoneInput.current?.focus(); return false
+    }
+    if (!agreed) {
+      setError('请先阅读并同意用户协议与隐私政策'); setErrorField('agreement'); agreementInput.current?.focus(); return false
+    }
+    return true
   }
+  function switchMode() {
+    if (pending.current) return
+    setMode(value => value === 'otp' ? 'admin' : 'otp')
+    setPassword(''); setCode(''); setSent(false); setDevHint(''); clearError()
+  }
+  function begin() { pending.current = true; setBusy(true); clearError() }
+  function finish() { pending.current = false; if (alive.current) setBusy(false) }
 
   async function requestCode() {
-    if (busy || cooldown > 0) return
-    setError('')
-    setBusy(true)
+    if (pending.current || cooldown > 0 || !validate()) return
+    begin()
     try {
-      const r = await requestLoginCode(phone)
-      if (!r.ok) {
-        /*
-          ⚠️ 不能把失败原因一律说成"手机号格式不正确"（2026-09-26 实测踩到）。
-          服务端对**不同的失败**给了不同的 status 与 error：
-            · 400 invalid_phone        → 号确实不合法（这才是"格式不正确"）
-            · 429 too_many_requests    → 请求太频繁（服务端带 retry-after）
-            · 503 sms_delivery_failed  → **短信通道故障**（服务端刻意**不**回退到 dev sink，
-                                          避免把"渠道坏了"表现成"用户收到了码"）
-            · 503 login_disabled       → 服务端没配 LOGIN_CODE_HMAC_KEY
-            · 503 delivery_unavailable → dev sink 不可写
-          把 503 说成"格式不正确"会让人反复检查手机号，而真实原因在别处 ——
-          这正是"界面把明确的故障说成了另一件事"。
-          ⇒ 这里按 status + 服务端返回的 error 区分，并对 5xx 明确说"是服务端/通道的问题，不是你的号"。
-        */
-        let msg: string
-        if (r.status === 429) {
-          msg = '请求太频繁，请稍后再试'
-        } else if (r.status === 400) {
-          msg = '手机号格式不正确（仅支持中国大陆 +86，且需 1[3-9] 开头）'
-        } else if (r.status === 503) {
-          // 从 reason body 里尽力取服务端给的原因码（request() 把原文截在 reason 里）
-          const reason = /sms_delivery_failed/.test(r.reason)
-            ? '短信通道发送失败'
-            : /login_disabled/.test(r.reason)
-              ? '服务端未配置登录密钥'
-              : /delivery_unavailable/.test(r.reason)
-                ? '服务端验证码投递不可用'
-                : '服务暂时不可用'
-          msg = `验证码发送失败：${reason}（这是服务端/短信通道的问题，不是手机号的问题）`
-        } else {
-          msg = `获取验证码失败：${r.reason}`
+      const result = await requestLoginCode(phone)
+      if (!alive.current) return
+      if (!result.ok) {
+        if (result.status === 429) {
+          setError('请求太频繁，请稍后再试')
+          const seconds = Number(/"retryAfterS"\s*:\s*(\d+)/.exec(result.reason)?.[1])
+          if (seconds > 0) { const timestamp = Date.now(); setNow(timestamp); setCooldownUntil(timestamp + seconds * 1000) }
         }
-        setError(msg)
+        else if (result.status === 400) { setError('手机号格式不正确，请检查后重试'); setErrorField('phone') }
+        else if (result.status === 503) setError(/sms_delivery_failed/.test(result.reason) ? '短信通道暂时不可用，请稍后重新获取验证码' : '验证码服务暂时不可用，请稍后重试')
+        else setError('验证码发送失败，请检查网络后重试')
         return
       }
-      setSent(true)
-      /*
-        服务端会如实告诉我们**投递方式**，我们照着显示，不假装：
-        · delivery === 'dev-sink' ⇒ 没接短信通道，码在服务器上（照实说）
-        · delivery === 'sms'      ⇒ 真发了短信。此时再告诉用户**短信发送方名称**
-          （来自服务端的 sms_sender）—— 因为我们的短信签名是阿里云系统赠送的
-          （PNVS 不支持自定义），短信里显示的是「【恒创联众】…」而不是本 App 的名字；
-          提示出发送方，用户才知道该查收哪条短信。
-      */
-      setDevHint(
-        r.value.delivery === 'dev-sink'
-          ? r.value.delivery_note
-          : r.value.sms_sender
-            ? `验证码已发送，发送方显示为「${r.value.sms_sender}」，请注意查收。`
-            : '',
-      )
-      startCooldown(60)
-    } finally {
-      setBusy(false)
-    }
+      setSent(true); setCode('')
+      setDevHint(result.value.delivery === 'dev-sink' ? result.value.delivery_note || '当前为开发投递模式，验证码未发送到手机。' : result.value.sms_sender ? `验证码已发送，发送方显示为「${result.value.sms_sender}」，请注意查收。` : '验证码已发送，请注意查收。')
+      const timestamp = Date.now(); setNow(timestamp); setCooldownUntil(timestamp + 60_000)
+    } catch { if (alive.current) setError('验证码发送失败，请检查网络后重试') }
+    finally { finish() }
   }
 
   async function submit() {
-    if (busy) return
-    /*
-      管理员密码登录（017）。与 OTP 路径分开处理：
-      服务端对"手机号不存在 / 不是管理员 / 密码错"返回**完全相同**的 401，
-      所以这里**必须**统一提示 —— 若按状态码猜原因（比如提示"该账号不是管理员"），
-      就等于把服务端刻意抹平的信息又暴露出来。
-    */
-    if (mode === 'admin') {
-      setError('')
-      setBusy(true)
-      try {
-        const r = await adminLogin(phone, password)
-        if (!r.ok) {
-          setError(
-            r.status === 429
-              ? '尝试次数过多，请稍后再试'
-              : r.status === 400
-                ? '请输入手机号与密码'
-                : '手机号或密码不正确',
-          )
-          return
-        }
-        // 管理员登录成功 → 直接进管理端（这就是他来的目的）
-        navigate('admin')
-      } finally {
-        setBusy(false)
-      }
-      return
-    }
-
-    if (!sent) {
-      await requestCode()
-      return
-    }
-    setError('')
-    setBusy(true)
+    if (pending.current || !validate()) return
+    if (mode === 'otp' && !sent) { await requestCode(); return }
+    if (mode === 'admin' && !password) { setError('请输入管理员密码'); setErrorField('password'); passwordInput.current?.focus(); return }
+    if (mode === 'otp' && code.length !== 6) { setError('请输入 6 位验证码'); setErrorField('code'); codeInput.current?.focus(); return }
+    begin()
     try {
-      const r = await verifyLoginCode(phone, code)
-      if (!r.ok) {
-        setError(r.status === 429 ? '尝试次数过多，请稍后再试' : '验证码不正确或已过期')
+      const result = mode === 'admin' ? await adminLogin(phone, password) : await verifyLoginCode(phone, code)
+      if (!alive.current) return
+      if (!result.ok) {
+        if (result.status === 429) setError('尝试次数过多，请稍后再试')
+        else if ((result.status ?? 0) === 0 || (result.status ?? 0) >= 500) setError('登录服务暂时不可用，请稍后重试')
+        else setError(mode === 'admin' ? '手机号或密码不正确' : '验证码不正确或已过期，请重新输入或获取')
         return
       }
-      const returnRoute = sessionStorage.getItem('timemap.login.return')
-      sessionStorage.removeItem('timemap.login.return')
+      if (mode === 'admin') { setPassword(''); navigate('admin'); return }
+      let returnRoute: string | null = null
+      try { returnRoute = sessionStorage.getItem('timemap.login.return'); sessionStorage.removeItem('timemap.login.return') } catch { /* Storage may be unavailable; normal login still succeeds. */ }
       if (returnRoute) {
         try {
           const target = JSON.parse(returnRoute)
           if (target.path === 'activity-submit') { navigate('activity-submit', target.query); return }
-        } catch { /* Ignore malformed navigation metadata. */ }
+        } catch { /* Ignore malformed return metadata. */ }
       }
       navigate('campus')
-    } finally {
-      setBusy(false)
-    }
+    } catch { if (alive.current) setError('登录失败，请检查网络后重试') }
+    finally { finish() }
   }
 
-  return (
-    <Screen
-      header={
-        <TopBar
-          variant="plain"
-          left={
-            <button className="iconbtn" onClick={() => goBack('loginselect')} aria-label="返回">
-              <IconBack size={22} />
-            </button>
-          }
-        />
-      }
-      scroll
-    >
-      <div className="login">
-        <h1 className="login__title">{mode === 'admin' ? '管理员登录' : '输入手机号'}</h1>
-
-        {/* 登录方式切换：短信验证码（默认） | 管理员密码 */}
-        <div className="login__modes" role="tablist">
-          <button
-            className={`login__mode ${mode === 'otp' ? 'is-active' : ''}`}
-            data-login-mode="otp"
-            role="tab"
-            aria-selected={mode === 'otp'}
-            onClick={() => {
-              setMode('otp')
-              setError('')
-            }}
-          >
-            短信验证码
-          </button>
-          <button
-            className={`login__mode ${mode === 'admin' ? 'is-active' : ''}`}
-            data-login-mode="admin"
-            role="tab"
-            aria-selected={mode === 'admin'}
-            onClick={() => {
-              setMode('admin')
-              setError('')
-            }}
-          >
-            管理员密码
-          </button>
+  return <Screen className="login-reference" header={<TopBar
+    left={<button className="login-reference__back" aria-label="返回" disabled={busy} onClick={() => goBack('map')}><IconBack size={25} /></button>}
+    right={<button className="login-reference__mode" data-login-mode={mode === 'otp' ? 'admin' : 'otp'} disabled={busy} onClick={switchMode}>{mode === 'otp' ? '管理员登录' : '手机号登录'}</button>}
+  />} scroll>
+    <div className="login-reference__content">
+      <div className="login-reference__brand"><svg width="28" height="34" viewBox="0 0 32 40" fill="none" aria-hidden="true"><path d="M16 39S1 25 1 16a15 15 0 0 1 30 0c0 9-15 23-15 23Z" fill="currentColor" /><circle cx="16" cy="16" r="12" fill="#f8f6f2" /><path d="M16 7v10h7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg><span>北交时光</span></div>
+      <h1 className="login-reference__title">{mode === 'admin' ? '管理员登录' : <>欢迎回到<span>TimeMap</span></>}</h1>
+      <p className="login-reference__subtitle">{mode === 'admin' ? '管理校园内容，守护每一段校园记忆' : '用手机号登录，留住校园里的每段时光'}</p>
+      <form className="login-reference__form" noValidate onSubmit={event => { event.preventDefault(); void submit() }}>
+        <label className="login-reference__label" htmlFor="login-phone">手机号码</label>
+        <div className={`login-reference__field ${errorField === 'phone' ? 'has-error' : ''}`}>
+          <span className="login-reference__prefix">+86</span>
+          <input id="login-phone" ref={phoneInput} type="tel" inputMode="tel" autoComplete="tel-national" placeholder="请输入手机号" value={phone} onChange={event => { setPhone(event.target.value.replace(/\D/g, '').replace(/^86(?=1\d{10}$)/, '').slice(0, 11)); clearError() }} disabled={busy || (sent && mode === 'otp')} aria-invalid={errorField === 'phone'} aria-describedby={errorField === 'phone' ? 'login-error' : undefined} />
         </div>
-
-        <div className="login__field">
-          <button className="login__prefix">+86</button>
-          <input
-            className="login__input"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            inputMode="numeric"
-            /* 占位文字属**推断**：原版观测时输入框已有值，placeholder 未观察到 */
-            placeholder="请输入手机号"
-            disabled={sent}
-          />
-          {!sent && (
-            <button className="login__clear" onClick={() => setPhone('')} aria-label="清空">
-              ×
-            </button>
-          )}
-        </div>
-
-        {/* 管理员密码模式：密码输入框（替代验证码框） */}
-        {mode === 'admin' && (
-          <div className="login__field login__field--code">
-            <input
-              className="login__input"
-              data-login-password
-              type="password"
-              placeholder="请输入管理员密码"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void submit()
-              }}
-            />
-          </div>
-        )}
-
-        {sent && mode === 'otp' && (
-          <div className="login__field login__field--code">
-            <input
-              className="login__input"
-              placeholder="请输入验证码"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              inputMode="numeric"
-              autoFocus
-            />
-            <button
-              className="login__resend"
-              onClick={requestCode}
-              disabled={cooldown > 0 || busy}
-            >
-              {cooldown > 0 ? `${cooldown}s` : '重新获取'}
-            </button>
-          </div>
-        )}
-
-        {error && <p className="login__error">{error}</p>}
-        {devHint && mode === 'otp' && (
-          <p className="login__devhint" data-login-hint>
-            {devHint}
-          </p>
-        )}
-
-        <button
-          className="login__submit"
-          data-login-submit
-          onClick={submit}
-          disabled={
-            busy ||
-            (mode === 'admin'
-              ? !phone || !password
-              : (!sent && !phone) || (sent && code.length !== 6))
-          }
-        >
-          {busy ? '请稍候…' : mode === 'admin' ? '登录' : sent ? '登录' : '获取验证码'}
-        </button>
-
-        {mode === 'admin' && (
-          <p className="login__agree">
-            管理员账号的密码由运维在服务器上用 <code>admin.mjs set-password</code> 设置；
-            本页没有默认密码。
-          </p>
-        )}
-
-        <p className="login__agree">
-          登录即表示同意 <span className="login__link">用户协议</span> 与{' '}
-          <span className="login__link">隐私政策</span>
-        </p>
-      </div>
-    </Screen>
-  )
+        {mode === 'admin' && <div className="login-reference__extra"><label className="login-reference__label" htmlFor="login-password">管理员密码</label><div className={`login-reference__field ${errorField === 'password' ? 'has-error' : ''}`}><input id="login-password" ref={passwordInput} data-login-password type="password" autoComplete="current-password" placeholder="请输入管理员密码" value={password} onChange={event => { setPassword(event.target.value); clearError() }} disabled={busy} aria-invalid={errorField === 'password'} aria-describedby={errorField === 'password' ? 'login-error' : undefined} /></div></div>}
+        {sent && mode === 'otp' && <div className="login-reference__extra"><div className="login-reference__codeLabel"><label className="login-reference__label" htmlFor="login-code">验证码</label><button type="button" disabled={busy} onClick={() => { setSent(false); setCode(''); setDevHint(''); clearError(); phoneInput.current?.focus() }}>修改手机号</button></div><div className={`login-reference__field ${errorField === 'code' ? 'has-error' : ''}`}><input id="login-code" ref={codeInput} inputMode="numeric" autoComplete="one-time-code" placeholder="请输入验证码" value={code} onChange={event => { setCode(event.target.value.replace(/\D/g, '').slice(0, 6)); clearError() }} disabled={busy} aria-invalid={errorField === 'code'} aria-describedby={errorField === 'code' ? 'login-error' : undefined} /><button type="button" className="login-reference__resend" disabled={busy || cooldown > 0} onClick={() => void requestCode()}>{cooldown > 0 ? `${cooldown}s 后重试` : '重新获取'}</button></div></div>}
+        {error && <p className="login-reference__error" id="login-error" role="alert">{error}</p>}
+        {devHint && mode === 'otp' && <p className="login-reference__hint" data-login-hint role="status">{devHint}</p>}
+        <button className="login-reference__submit" data-login-submit type="submit" disabled={busy || (mode === 'otp' && !sent && cooldown > 0)}>{busy ? (mode === 'otp' && !sent ? '发送中…' : '登录中…') : mode === 'admin' || sent ? '登录' : cooldown > 0 ? `${cooldown}s 后重新获取` : '获取验证码'}</button>
+        <div className="login-reference__agreement"><label className="login-reference__check"><input ref={agreementInput} type="checkbox" checked={agreed} disabled={busy} onChange={event => { setAgreed(event.target.checked); clearError() }} aria-label="同意用户协议与隐私政策" aria-invalid={errorField === 'agreement'} aria-describedby={errorField === 'agreement' ? 'login-error' : undefined} /><span aria-hidden="true" /></label><p>我已阅读并同意 <button type="button" onClick={() => setLegal('agreement')}>用户协议</button> 与 <button type="button" onClick={() => setLegal('privacy')}>隐私政策</button></p></div>
+      </form>
+    </div>
+    {legal && <LegalDialog key={legal} document={legal} onClose={() => setLegal(null)} onReadMinors={() => setLegal('minors')} />}
+  </Screen>
 }
