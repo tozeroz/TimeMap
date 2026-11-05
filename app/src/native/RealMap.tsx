@@ -4,12 +4,10 @@ import 'leaflet/dist/leaflet.css'
 import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
 import { measureMarkerExtent, nextMapInstance, type MapHandle } from './mapApi'
+import { markerHtml, markerIconBox } from './markerDom'
 import { activeTileConfig, CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
-}
 
 /**
  * 栅格瓦片地图（Leaflet + 可配置瓦片源）—— 官方 SDK 不可用时的兜底。
@@ -73,22 +71,13 @@ export function RealMap({
 
     // 标记：照片卡片 + 图钉 + 地点名
     for (const m of markers) {
-            const cover = m.coverUrl
-      const body = cover
-        ? `<img class="rm__img" src="${escapeHtml(cover)}" alt="" />`
-        : `<span class="rm__img rm__img--text">${escapeHtml((m.excerpt ?? '').slice(0, 10))}</span>`
-      const html = `
-        <div data-place-id="${escapeHtml(m.placeId)}" class="rm ${m.imageMode === 'sticker' ? 'rm--sticker' : ''} ${m.highlight ? 'rm--highlight' : ''} ${!cover && m.postId ? 'rm--text' : ''}">
-          <div class="rm__card">${body}${cover && m.imageMode !== 'sticker' ? `<span class="rm__likes">♥ ${m.likeCount ?? 0}</span>` : ''}<span class="rm__name">${escapeHtml(m.place)}</span></div>
-          <span class="rm__pin" style="color:${m.color}">
-            <svg width="18" height="24" viewBox="0 0 20 26"><path d="M10 25.5S19 15.6 19 9.6A9 9 0 0 0 1 9.6c0 6 9 15.9 9 15.9Z" fill="currentColor"/><circle cx="10" cy="9.6" r="3.4" fill="#fff"/></svg>
-          </span>
-        </div>`
+      /* 共用构造器：有帖子 ⇒ 卡片；没帖子 ⇒ 只有名称标签（不再画空白卡片） */
+      const box = markerIconBox(m)
       const icon = L.divIcon({
-        html,
+        html: markerHtml(m),
         className: 'rm__wrap',
-        iconSize: [76, 100],
-        iconAnchor: [38, 100],
+        iconSize: box.size,
+        iconAnchor: box.anchor,
       })
       const marker = L.marker([m.lat, m.lng], { icon })
       marker.on('click', (e) => onMarkerClick(m.placeId, (e.originalEvent.target as Element)?.closest('.rm__card') ? m.postId || undefined : undefined))

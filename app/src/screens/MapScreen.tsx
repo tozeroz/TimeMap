@@ -111,6 +111,27 @@ function toggleTag(draft: readonly PlaceCategory[], tag: TagOption): PlaceCatego
  *   （P0 起分类筛选已经**明确**，本可以按分类配色，但那仍是"我们自己定的规则"；
  *     在没有基线的情况下换色只会让"看起来有依据"。故保持单色。）
  */
+/** 卡片封面允许的最小边长（像素）。小于它的图当"没有合适图片"处理。 */
+const MIN_COVER_EDGE_PX = 32
+
+/**
+ * 从代表帖里挑一个**可用**的封面。
+ *
+ * ⚠️ 只判断"有没有图"不够：库里可能躺着一张 1×1 的占位图（smoke 测试就会发这种），
+ *    直接拿来当封面会渲染成一片白框。文档 §9 的纪律是「没有合适图片不生成占位照片」，
+ *    所以这里按**尺寸**筛一遍；宽高未知时不擅自排除（避免误杀正常图）。
+ */
+function coverUrlOf(rep: ApiPost | undefined): string | undefined {
+  if (!rep) return undefined
+  if (rep.mapMediaId) return mediaUrl(rep.mapMediaId)
+  const img = rep.images?.[0]
+  if (!img) return undefined
+  if (typeof img.width === "number" && typeof img.height === "number") {
+    if (img.width < MIN_COVER_EDGE_PX || img.height < MIN_COVER_EDGE_PX) return undefined
+  }
+  return mediaUrl(img.id)
+}
+
 export function markersFromPlaces(
   places: ApiPlaceListItem[],
   posts: ApiPost[],
@@ -137,6 +158,7 @@ export function markersFromPlaces(
         // ⭐ 跳转目标是地点（P0 的核心改动）
         placeId: p.id,
         place: p.name,
+        category: p.category,
         // ⚠️ 单一确定色：原版配色规则 NOT_EVALUATED（见函数头注释）
         color: '#f5453b',
         userId: rep?.authorId ?? '',
@@ -146,7 +168,7 @@ export function markersFromPlaces(
         y: Math.round(1000 - dyM * PX_PER_M),
         lat,
         lng,
-        coverUrl: rep?.mapMediaId ? mediaUrl(rep.mapMediaId) : rep?.images && rep.images.length > 0 ? mediaUrl(rep.images[0].id) : undefined,
+        coverUrl: coverUrlOf(rep),
         excerpt: rep?.body ? rep.body.slice(0, 10) : undefined,
       }
     })
@@ -326,6 +348,116 @@ function OfflineMap({
   )
 }
 
+/* ============================================================================
+   地图标记的缩放分级与避让
+   ----------------------------------------------------------------------------
+   修的是两个显示问题（见桌面 bugfix/图1、图2）：
+     · 图1：30 个标记按经纬度直接摆，卡片互相叠成一坨。
+     · 图2：没有帖子的地点也画白卡片，卡片里没有图/摘要 ⇒ 一片空白。
+
+   ⚠️ 为什么不用「过滤 markers 数组」来实现：三个适配器的建图 effect 依赖 markers，
+      换数组会让地图**重建**（文档 §10 明确警告过）。所以这里只在 **DOM 层**开关
+      `.rm--hidden`，底图和标记实例都不动。
+
+   ⚠️ 为什么是轮询：MapHandle 只有 getCenter/getZoom，没有视图订阅事件。
+      每 250ms 读一次很便宜（30 个标记），且只在真正变化时重算。
+
+   ⚠️ 分级阈值是**首轮取值**，没有真机校准过。各 provider 的 zoom 语义略有差异，
+      拿到实机效果后应回写这里。
+   ============================================================================ */
+
+/** 没有 displayTier 数据时的兜底优先级：数字越小越优先留下 */
+const MAP_CATEGORY_RANK: Record<string, number> = {
+  校园地标: 1,
+  食堂: 2,
+  教学楼: 3,
+  运动场: 4,
+  休闲场所: 5,
+}
+
+const MAP_MARKER_LEVELS = {
+  /** 低于此缩放：只显示帖子最多 / 类别最靠前的少数几个（校园总览） */
+  overviewMaxZoom: 16.4,
+  /** 低于此缩放：显示视口内前 localCount 个；达到或超过：显示视口内全部（局部 / 近景） */
+  localMaxZoom: 17.4,
+  overviewCount: 4,
+  localCount: 10,
+} as const
+
+/** 排序键：有帖子 > 类别顺序 > 名称（保证同样输入下顺序稳定） */
+function markerRank(m: MapMarker): [number, number, string] {
+  return [m.postId ? 0 : 1, MAP_CATEGORY_RANK[m.category ?? ''] ?? 9, m.place]
+}
+
+function markersByPriority(markers: MapMarker[]): MapMarker[] {
+  return [...markers].sort((a, b) => {
+    const ra = markerRank(a)
+    const rb = markerRank(b)
+    if (ra[0] !== rb[0]) return ra[0] - rb[0]
+    if (ra[1] !== rb[1]) return ra[1] - rb[1]
+    return ra[2].localeCompare(rb[2], 'zh-CN')
+  })
+}
+
+/** 当前缩放下应该显示哪些标记 */
+function visibleMarkerIds(markers: MapMarker[], handle: MapHandle | null, zoom: number): Set<string> {
+  const sorted = markersByPriority(markers)
+  const size = handle?.getSize()
+  const inViewport = (m: MapMarker) => {
+    if (!handle || !size) return true
+    const p = handle.project(m.lat, m.lng)
+    if (!p) return true
+    const pad = 80
+    return p.x >= -pad && p.x <= size.width + pad && p.y >= -pad && p.y <= size.height + pad
+  }
+  if (zoom < MAP_MARKER_LEVELS.overviewMaxZoom) {
+    return new Set(sorted.slice(0, MAP_MARKER_LEVELS.overviewCount).map((m) => m.placeId))
+  }
+  const inArea = sorted.filter(inViewport)
+  if (zoom < MAP_MARKER_LEVELS.localMaxZoom) {
+    return new Set(inArea.slice(0, MAP_MARKER_LEVELS.localCount).map((m) => m.placeId))
+  }
+  return new Set(inArea.map((m) => m.placeId))
+}
+
+/** 把可见集合写到 DOM 上（三套底图的标记都带 data-place-id） */
+function applyMarkerVisibility(root: ParentNode | null, visible: Set<string>): void {
+  if (!root) return
+  root.querySelectorAll<HTMLElement>('.rm[data-place-id]').forEach((el) => {
+    el.classList.toggle('rm--hidden', !visible.has(el.dataset.placeId ?? ''))
+  })
+}
+
+/**
+ * 避让：按优先级依次摆放，后放的只要和已放下的框相交就隐藏。
+ * 只比较「卡片 / 名称标签」的盒子 —— 图钉很小，重叠也不影响读名字。
+ */
+function declutterMarkers(root: ParentNode | null, order: MapMarker[]): void {
+  if (!root) return
+  /*
+    ⚠️ 先清掉上一轮的「只收起名称」。被收起的元素 display:none，量不到尺寸；
+    不清就会永远保持收起。清 → 量 → 收 全在同一次同步调用里，浏览器不会中途绘制，所以不会闪。
+  */
+  root.querySelectorAll<HTMLElement>('.rm--collapsed').forEach((el) => el.classList.remove('rm--collapsed'))
+  const placed: Array<{ left: number; right: number; top: number; bottom: number }> = []
+  for (const m of order) {
+    const el = root.querySelector<HTMLElement>(`.rm[data-place-id="${cssEscape(m.placeId)}"]`)
+    if (!el || el.classList.contains('rm--hidden')) continue
+    const box = (el.querySelector('.rm__card, .rm__label') as HTMLElement | null) ?? el
+    const r = box.getBoundingClientRect()
+    if (!r.width || !r.height) continue
+    const overlap = placed.some((p) => !(r.right < p.left || r.left > p.right || r.bottom < p.top || r.top > p.bottom))
+    // ★ 放不下时**只收起名称/卡片，保留图钉** —— 用户仍能看到该地点、可点击进详情
+    if (overlap) el.classList.add('rm--collapsed')
+    else placed.push({ left: r.left, right: r.right, top: r.top, bottom: r.bottom })
+  }
+}
+
+/** 地点 id 是 UUID，正常无需转义；这里仍兜底处理，避免拼选择器出错 */
+function cssEscape(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`)
+}
+
 /** 定位状态徽标：把“是否真的拿到定位”显式显示出来，避免蓝点静默不动 */
 function GeoBadge({
   status,
@@ -498,6 +630,55 @@ export function MapScreen() {
       alive = false
     }
   }, [appliedKey, publishedPostId, markerReload])
+
+  /*
+    缩放分级 + 避让的驱动。
+    只在 zoom / 中心 / 标记数量变化时重算，避免每 250ms 都读一遍布局。
+  */
+  useEffect(() => {
+    if (markerPhase !== 'ready' || markers.length === 0) return
+    let lastZoom = Number.NaN
+    let lastCenter = ''
+    let lastCount = -1
+    /* ⚠️ 地图实例号也要进判断键：provider 降级 / 重建时标记 DOM 会被重新创建，
+       新元素没有 rm--hidden；只看 zoom/中心会误判"没变化"而跳过重算。 */
+    let lastInstance = ''
+
+    const apply = () => {
+      const handle = mapHandleRef.current
+      const stage = stageRef.current
+      if (!handle || !stage) return
+      const zoom = handle.getZoom() ?? 16
+      const center = handle.getCenter()
+      const centerKey = center ? `${center.lat.toFixed(5)},${center.lng.toFixed(5)}` : ''
+      const instance = stage.querySelector('[data-map-instance]')?.getAttribute('data-map-instance') ?? ''
+      if (
+        zoom === lastZoom &&
+        centerKey === lastCenter &&
+        markers.length === lastCount &&
+        instance === lastInstance
+      )
+        return
+      lastZoom = zoom
+      lastCenter = centerKey
+      lastCount = markers.length
+      lastInstance = instance
+
+      const visible = visibleMarkerIds(markers, handle, zoom)
+      applyMarkerVisibility(stage, visible)
+      /* 测试钩子（文档 §11 建议的可读状态）：当前缩放与可见标记数，便于机械校验分级是否生效 */
+      stage.dataset.mapZoom = String(zoom)
+      stage.dataset.mapVisibleCount = String(visible.size)
+      declutterMarkers(
+        stage,
+        markersByPriority(markers).filter((m) => visible.has(m.placeId)),
+      )
+    }
+
+    apply()
+    const timer = window.setInterval(apply, 250)
+    return () => window.clearInterval(timer)
+  }, [markers, markerPhase])
   // ---- 真实定位 ----
   const [fix, setFix] = useState<GeoFix | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')

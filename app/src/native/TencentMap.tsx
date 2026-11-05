@@ -3,6 +3,7 @@ import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
 import { hasTencentKey, TENCENT_MAP_KEY } from './keys'
 import { measureMarkerExtent, nextMapInstance, type MapHandle } from './mapApi'
+import { buildMarkerElement } from './markerDom'
 import { CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
@@ -102,48 +103,6 @@ interface PlacedItem {
   placeId?: string
 }
 
-/** 标记的 DOM 结构：照片卡片 + 图钉 + 地点名（与 Leaflet 版同构） */
-function buildMarkerElement(m: MapMarker): HTMLDivElement {
-  const cover = m.coverUrl
-  const el = document.createElement('div')
-  el.className = `rm ${m.imageMode === 'sticker' ? 'rm--sticker' : ''} ${m.highlight ? 'rm--highlight' : ''} ${!cover && m.postId ? 'rm--text' : ''}`
-  el.dataset.markerId = m.id
-  el.dataset.placeId = m.placeId
-
-  const card = document.createElement('div')
-  card.className = 'rm__card'
-  if (cover) {
-    const img = document.createElement('img')
-    img.className = 'rm__img'
-    img.src = cover
-    img.alt = ''
-    card.appendChild(img)
-    if (m.imageMode !== 'sticker') {
-      const likes = document.createElement('span')
-      likes.className = 'rm__likes'; likes.textContent = `♥ ${m.likeCount ?? 0}`
-      card.appendChild(likes)
-    }
-  } else {
-    const span = document.createElement('span')
-    span.className = 'rm__img rm__img--text'
-    span.textContent = (m.excerpt ?? '').slice(0, 10)
-    card.appendChild(span)
-  }
-  const name = document.createElement('span')
-  name.className = 'rm__name'
-  name.textContent = m.place
-  card.appendChild(name)
-
-  const pin = document.createElement('span')
-  pin.className = 'rm__pin'
-  pin.style.color = m.color
-  pin.innerHTML =
-    '<svg width="18" height="24" viewBox="0 0 20 26"><path d="M10 25.5S19 15.6 19 9.6A9 9 0 0 0 1 9.6c0 6 9 15.9 9 15.9Z" fill="currentColor"/><circle cx="10" cy="9.6" r="3.4" fill="#fff"/></svg>'
-
-  el.appendChild(card)
-  el.appendChild(pin)
-  return el
-}
 
 /** 墨卡托兜底：腾讯 GL 没有 unprojectFromContainer 时，按 256 像素瓦片基数把屏幕 y 偏移换算成纬度（未实测） */
 function offsetLatMercator(lat: number, zoom: number, dyPx: number): number {
