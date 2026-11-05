@@ -32,6 +32,9 @@ import placePhotoTimemachineSql from './migrations/029_place_photo_timemachine.s
 import userProfilesSql from './migrations/030_user_profiles.sql'
 import landmarkImportSql from './migrations/031_landmark_import.sql'
 import activitySubmissionsSql from './migrations/031_activity_submissions.sql'
+import trainingProjectsSql from './migrations/032_training_projects.sql'
+import trainingProjectLinksSql from './migrations/033_training_project_links.sql'
+import classTrainingProjectsSql from './migrations/034_class_training_projects.sql'
 import placeCategoriesV2Sql from './migrations/032_place_categories_v2.sql'
 import type { AppConfig } from './config.ts'
 
@@ -157,6 +160,9 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   // 032：分类改为《校园地点分类资料》的 5 类（教学楼/食堂/运动场/休闲场所/校园地标），
   //      下架茅以升坐像、郑振铎铜像、留园（保留历史），南门坐标恢复为线上值。
   { version: '032_place_categories_v2', sql: placeCategoriesV2Sql },
+  { version: '032_training_projects', sql: trainingProjectsSql },
+  { version: '033_training_project_links', sql: trainingProjectLinksSql },
+  { version: '034_class_training_projects', sql: classTrainingProjectsSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

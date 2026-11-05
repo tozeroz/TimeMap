@@ -14,6 +14,8 @@ location = /health {
 }
 
 location /api/ {
+    # Allow a 5 MiB media file plus multipart metadata through to API validation.
+    client_max_body_size 6m;
     proxy_pass http://127.0.0.1:3001/api/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
