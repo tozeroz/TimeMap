@@ -156,6 +156,21 @@ export function IconComment({ size = 20 }: IconProps) {
   )
 }
 
+/**
+ * 眼睛（2026-11-06）：帖子卡片上的「点击数」图标。
+ *
+ * 为什么用一个独立图标而不是复用 IconSearch/IconCompass：点击数是"被看过多少次"，
+ * 眼睛是这类计数在移动端的通用符号；借用搜索图标会让人以为是"搜索入口"。
+ */
+export function IconEye({ size = 20 }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={1.8}>
+      <path d="M2.5 12s3.6-6.2 9.5-6.2S21.5 12 21.5 12s-3.6 6.2-9.5 6.2S2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="2.7" />
+    </svg>
+  )
+}
+
 export function IconStar({ size = 20, filled = false }: IconProps & { filled?: boolean }) {
   return (
     <svg

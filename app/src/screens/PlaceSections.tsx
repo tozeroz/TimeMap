@@ -1,6 +1,6 @@
 import { feedBrowse, openFeed } from '../data/feedBrowse'
 import { mediaUrl, relativeTime, type ApiPlaceActivity, type ApiPlaceDetail, type ApiPlacePost } from '../api/client'
-import { IconCalendar, IconChevronRight, IconComment, IconHeart, IconStar } from '../components/icons'
+import { IconCalendar, IconChevronRight, IconComment, IconEye, IconHeart, IconStar } from '../components/icons'
 import type { PlaceFilter, PlaceSort } from './usePlaceDetail'
 import './poidetail.css'
 
@@ -91,6 +91,11 @@ export function PostRow({ post, index, onOpen }: { post: ApiPlacePost; index: nu
             <span className={`pd__postStat ${post.favoritedByMe ? 'is-on' : ''}`}>
               <IconStar size={13} filled={post.favoritedByMe} />
               {post.favoriteCount > 0 ? post.favoriteCount : ''}
+            </span>
+            {/* ⭐ 2026-11-06：点击数（迁移 036）。点击比点赞常见得多，所以 0 也照常显示 */}
+            <span className="pd__postStat" data-feed-views title="点开次数">
+              <IconEye size={13} />
+              {post.openCount ?? 0}
             </span>
           </span>
         </span>

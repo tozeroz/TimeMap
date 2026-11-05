@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { FeedPost } from '../data/types'
 import { openFeed } from '../data/feedBrowse'
 import { navigate } from '../router'
-import { IconHeart, IconImage, IconLocation } from './icons'
+import { IconEye, IconHeart, IconImage, IconLocation } from './icons'
 
 /** Shared author label and type-specific surfaces for the campus scrapbook. */
 export function CampusPostCard({ post, pending, local, onLike, onRemove, onRepublish, browseIds }: {
@@ -45,6 +45,11 @@ export function CampusPostCard({ post, pending, local, onLike, onRemove, onRepub
       <button className={`square-card__like ${post.liked ? 'is-liked' : ''}`} aria-label={`${post.liked ? '取消点赞' : '点赞'}，${post.likes} 赞`} aria-pressed={post.liked} disabled={pending || local} onClick={onLike}>
         <IconHeart size={20} filled={post.liked} /><span>{post.likes}</span>
       </button>
+      {/* ⭐ 2026-11-06：点击数（服务端去重统计）。用 span 而不是 button —— 它不可点，
+          做成按钮会让人以为能点开什么（与"仅本机"角标同一原则）。 */}
+      <span className="square-card__views" data-feed-views title="点开次数">
+        <IconEye size={18} /><span>{post.views ?? 0}</span>
+      </span>
     </div>
     {local && <div className="square-card__local"><span>仅本机</span><button onClick={onRepublish}>重新发布</button><button onClick={onRemove}>删除</button></div>}
   </article>

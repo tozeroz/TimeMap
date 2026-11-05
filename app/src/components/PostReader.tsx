@@ -3,7 +3,7 @@ import { avatarFor, postAvatar, mediaUrl, relativeTime, type ApiPostDetail, type
 import { getSession } from '../api/session'
 import { feedBrowse } from '../data/feedBrowse'
 import { goBack, navigate } from '../router'
-import { IconBack, IconClose, IconComment, IconEdit, IconHeart, IconLocation } from './icons'
+import { IconBack, IconClose, IconComment, IconEdit, IconEye, IconHeart, IconLocation } from './icons'
 import { PhotoViewer } from './PhotoViewer'
 import './postreader.css'
 
@@ -164,6 +164,10 @@ export function PostReader(p: Props) {
         <button className={`reader__action ${post.likedByMe ? 'is-liked' : ''}`} aria-label={post.likedByMe ? '取消点赞' : '点赞'} aria-pressed={post.likedByMe} disabled={p.busy} onClick={p.onLike}><IconHeart size={24} filled={post.likedByMe}/><span>{post.likeCount}</span></button>
         <button className={`reader__action ${post.favoritedByMe ? 'is-saved' : ''}`} data-favorite-toggle data-favorited={post.favoritedByMe ? '1' : '0'} data-favorite-count={post.favoriteCount} aria-label={post.favoritedByMe ? '取消收藏' : '收藏'} aria-pressed={post.favoritedByMe} disabled={p.busy} onClick={p.onFavorite}><Bookmark filled={post.favoritedByMe}/><span>{post.favoriteCount}</span></button>
         <button className="reader__action" aria-label="评论" onClick={() => openComments(false)}><IconComment size={24}/><span>{p.total}</span></button>
+        {/* ⭐ 2026-11-06：点击数（迁移 036）。详情页里它只读 —— 不是按钮，点了没反应会让人困惑 */}
+        <span className="reader__stat reader__stat--views" data-feed-views aria-label={`被点开 ${post.openCount ?? 0} 次`} title="被点开次数">
+          <IconEye size={22}/><span>{post.openCount ?? 0}</span>
+        </span>
       </footer>
     </div>
     {(p.notice || hint) && <p className="reader__toast" role="status">{hint || p.notice}</p>}

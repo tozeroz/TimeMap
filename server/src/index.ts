@@ -28,6 +28,14 @@ import { registerProfileRoutes } from './profileRoutes.ts'
 import { registerSubmissionRoutes } from './submissionsRoutes.ts'
 import { registerProjectRoutes } from './projectRoutes.ts'
 import { ANONYMOUS_DISPLAY_NAME, publicAuthor } from './anonymous.ts'
+import { hotOrderSql, hotScoreSql } from './hotScore.ts'
+import {
+  eventSubject,
+  normalizeImpressionItems,
+  normalizeSessionId,
+  normalizeSurface,
+  recordPostViews,
+} from './postViews.ts'
 
 /**
  * Campus 后端（M3 Slice 0B）。
@@ -100,6 +108,8 @@ interface PostRow {
   author_name: string
   author_avatar_media_id?: string | null
   author_id: string | null
+  /** 点击数（迁移 036 的去重点开计数；列表/详情都下发） */
+  open_count?: number | null
   body: string
   place: string | null
   created_at: Date
@@ -890,12 +900,7 @@ export function buildServer(deps: ServerDeps) {
       外层包一个子查询，是为了直接对聚合出来的三个文本列做算术（`q.like_count::int`），
       不必在 ORDER BY 里重复写三遍 `(select count(*) ...)` 子查询。
     */
-    const orderBy =
-      sort === 'hot'
-        ? `(q.like_count::int * 2 + q.comment_count::int * 3 + q.favorite_count::int
-            - greatest(0, extract(epoch from (now() - q.created_at)) / 3600 - 24)) desc,
-           q.created_at desc, q.id desc`
-        : 'q.created_at desc, q.id desc'
+    const orderBy = sort === 'hot' ? hotOrderSql('q') : 'q.created_at desc, q.id desc'
 
     try {
       const r = await db.pool.query<
@@ -909,10 +914,14 @@ export function buildServer(deps: ServerDeps) {
           place_id: string | null
           favorite_count: string
           favorited_by_me: boolean
+          /* 2026-11-06：点击数展示与热度排序用（迁移 036） */
+          open_count: number
+          view_impressions: string
+          view_opens: string
         }
       >(
         `select * from (
-        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
+        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
                 -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
                 -- 为什么需要：地图页的标记按经纬度渲染（默认 provider=tencent 用
                 -- projectToContainer(LatLng)；RealMap 用 L.marker([lat,lng])），
@@ -928,6 +937,11 @@ export function buildServer(deps: ServerDeps) {
                 -- F05/US-03：删除后不计入有效评论量 → 只统计 published 状态的评论
                 (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
                 (select count(*) from favorites f where f.post_id = p.id)::text as favorite_count,
+                -- ⭐ 2026-11-06：最近 14 天曝光/点开数，热度排序用它算贝叶斯点击率（迁移 036）。
+                (select coalesce(sum(s.impressions), 0) from post_daily_stats s
+                  where s.post_id = p.id and s.day > current_date - 14)::text as view_impressions,
+                (select coalesce(sum(s.opens), 0) from post_daily_stats s
+                  where s.post_id = p.id and s.day > current_date - 14)::text as view_opens,
                 exists (
                   select 1 from likes l2
                    where l2.post_id = p.id and l2.user_id = $2::uuid
@@ -973,6 +987,8 @@ export function buildServer(deps: ServerDeps) {
           id: row.id,
           // 匿名帖（033）：对外统一「匿名同学」，作者本人仍拿到自己的 authorId
           ...publicAuthor(row, meId),
+          // 头像：匿名帖不下发作者头像 id（否则等于泄露“匿名者是谁”的头像）
+          authorAvatarMediaId: row.is_anonymous ? null : (row.author_avatar_media_id ?? null),
           body: row.body,
           imageMode: row.image_mode,
           mapMediaId: row.map_media_id ?? null,
@@ -992,6 +1008,8 @@ export function buildServer(deps: ServerDeps) {
           // F05：收藏计数与"我收藏过没"
           favoriteCount: Number.parseInt(row.favorite_count ?? '0', 10),
           favoritedByMe: row.favorited_by_me,
+          /* ⭐ 2026-11-06：点击数（去重后的点开次数，迁移 036）。老库首次启动时列为 0。 */
+          openCount: Number(row.open_count ?? 0),
           // M4：帖子图片（只给 id 与尺寸；客户端用 /api/media/:id 取图）
           images: row.images ?? [],
           /* ⭐ 审核 68 P0：audio 独立返回（语音不会被报成图片） */
@@ -1388,7 +1406,7 @@ export function buildServer(deps: ServerDeps) {
     const meId = s.kind === 'ok' ? s.user.userId : null
     try {
       const pr = await db.pool.query<PostRow & { status: string; place_id: string | null }>(
-        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.status, p.place_id,
+        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.status, p.place_id,
                 -- ⭐ WO#15：详情也要带地点坐标（原版 poi-detail 页有「距我N公里」，
                 -- 那需要地点经纬度 + 客户端自身位置）。
                 pl.latitude as place_lat, pl.longitude as place_lng
@@ -1458,6 +1476,7 @@ export function buildServer(deps: ServerDeps) {
         id: post.id,
         // 匿名帖（033）：与列表同一套遮罩（作者本人仍拿到 authorId）
         ...publicAuthor(post, meId),
+        authorAvatarMediaId: post.is_anonymous ? null : (post.author_avatar_media_id ?? null),
         body: post.body,
         imageMode: post.image_mode,
         mapMediaId: post.map_media_id ?? null,
@@ -1475,10 +1494,89 @@ export function buildServer(deps: ServerDeps) {
         // F05：收藏计数与状态（US-03：收藏内容可在个人中心查看，取消后移除）
         favoriteCount: Number.parseInt(favCount.rows[0]?.n ?? '0', 10),
         favoritedByMe,
+        /* ⭐ 2026-11-06：点击数（与列表同源字段，迁移 036） */
+        openCount: Number(post.open_count ?? 0),
         /* ⭐ 审核 68 P0：audio 是**独立附件类型**，不出现在 images 里（见上方 imgs 查询的分流） */
         audio,
         images,
       }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  /**
+   * 曝光上报（2026-11-06，迁移 036）
+   *
+   * 为什么是"上报接口"而不是在 GET /api/posts 里顺手计数：
+   *   列表接口是**无副作用的读**，一旦在 GET 里写库，缓存、预取、爬虫、翻页
+   *   都会把曝光数刷上去，点击率就废了。曝光必须由客户端在"卡片真的出现在
+   *   视口里"时单独上报（前端用 IntersectionObserver 控制）。
+   *
+   * 幂等：同一 subject（登录用户 id / 未登录 visitorId）同一天对同一帖只记一次。
+   * 未登录且没有 visitorId 的请求直接返回 0，不写库（宁可少算，不可被刷）。
+   */
+  app.post('/api/posts/impressions', async (req, reply) => {
+    const body = (req.body ?? {}) as {
+      postIds?: unknown
+      items?: unknown
+      visitorId?: unknown
+      surface?: unknown
+      sessionId?: unknown
+    }
+    // items 带位置（新客户端）；postIds 是旧形状，保留兼容，slot 记为 null
+    const items = normalizeImpressionItems(body.items ?? body.postIds)
+    if (!items.length) {
+      reply.code(400)
+      return { error: 'invalid_post_ids' }
+    }
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    const subject = eventSubject(s.kind === 'ok' ? s.user.userId : null, body.visitorId)
+    if (!subject) return { counted: 0, skipped: items.length }
+    try {
+      return await recordPostViews(db.pool, {
+        items,
+        subject,
+        opened: false,
+        surface: normalizeSurface(body.surface),
+        sessionId: normalizeSessionId(body.sessionId),
+      })
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  /**
+   * 点开上报：进入帖子详情时调用一次（2026-11-06，迁移 036）
+   *
+   * 和曝光分开记，才能算"看完的比例"（点击率）。同一天同一人重复点开只算一次，
+   * 所以"刷新详情页"不会让点击数涨；post_events 里 `seen=false, opened=true`
+   * 的行专门用来表达"没被曝光过但被点开了"（例如从分享链接直接进来）。
+   */
+  app.post('/api/posts/:id/open', async (req, reply) => {
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    const body = (req.body ?? {}) as { visitorId?: unknown; surface?: unknown; sessionId?: unknown; slot?: unknown }
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    const subject = eventSubject(s.kind === 'ok' ? s.user.userId : null, body.visitorId)
+    if (!subject) return { counted: 0, skipped: 1 }
+    try {
+      return await recordPostViews(db.pool, {
+        items: [{ postId: id, slot: null }],
+        subject,
+        opened: true,
+        surface: normalizeSurface(body.surface),
+        sessionId: normalizeSessionId(body.sessionId),
+      })
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
       reply.code(500)
@@ -1854,8 +1952,19 @@ export function buildServer(deps: ServerDeps) {
           limit 20`,
         [id],
       )
-      // 帖子：最新（默认）或 近期热门（近 7 天按冻结的热度公式）
+      // 帖子：最新（默认）或 近期热门（与信息流共用 hotScore.ts 的同一套公式）
       const sort = String((req.query as { sort?: string }).sort ?? 'latest')
+      /*
+        ⭐ 2026-11-06（点击数 + 新热度）：
+        · latest 不加时间窗（地点页要能看到历史上所有帖子）
+        · hot 只取近 7 天（"近期热门"的语义就是最近；新公式本身也有时间衰减，
+          两层叠加是刻意的：先按时间圈定范围，再在范围内算分）
+        · 排序表达式来自 hotScoreSql()，和信息流完全同源 —— 之前两处各写一遍，
+          已经出现过 `::int` 转换不一致的隐患
+      */
+      const placeWhere = sort === 'hot' ? "p.status = 'published' and p.created_at > now() - interval '7 day'" : "p.status = 'published'"
+      const placeOrderBy =
+        sort === 'hot' ? `${hotScoreSql('q')} desc, q.created_at desc, q.id desc` : 'q.created_at desc, q.id desc'
       const posts = await db.pool.query<
         PostRow & {
           place_id: string | null
@@ -1865,35 +1974,39 @@ export function buildServer(deps: ServerDeps) {
           liked_by_me: boolean
           favorited_by_me: boolean
           images: unknown
+          open_count: number
+          view_impressions: string
+          view_opens: string
         }
       >(
-        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
-                pl.latitude as place_lat, pl.longitude as place_lng,
-                (select count(*) from likes l where l.post_id = p.id)::text as like_count,
-                (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
-                (select count(*) from favorites f where f.post_id = p.id)::text as favorite_count,
-                exists (select 1 from likes l2 where l2.post_id = p.id and l2.user_id = $2::uuid) as liked_by_me,
-                -- F05：地点详情里的帖子也要能显示"我收藏了没"（与 likedByMe 同一套写法）。
-                -- ⚠️ meId 为 null（未登录）时 exists(... uuid = null) 得 false —— 正确。
-                exists (select 1 from favorites f2 where f2.post_id = p.id and f2.user_id = $2::uuid) as favorited_by_me,
-                coalesce((
-                  select json_agg(json_build_object('id', m.id, 'width', m.width, 'height', m.height) order by pm.position)
-                    from post_media pm join media m on m.id = pm.media_id
-                   where pm.post_id = p.id and pm.purpose = 'post' and m.scope = 'public' and m.mime like 'image/%'
-                ), '[]'::json) as images
-           from posts p
-           left join places pl on pl.id = p.place_id
-          where p.place_id = $1 and p.status = 'published'
-            and ($3 = 'latest' or p.created_at > now() - interval '7 day')
-          order by case when $3 = 'hot' then
-                  (select count(*) from likes l where l.post_id = p.id) * 2
-                + (select count(*) from comments c where c.post_id = p.id and c.status='published') * 3
-                + (select count(*) from favorites f where f.post_id = p.id)
-                - greatest(0, extract(epoch from (now() - p.created_at)) / 3600.0 - 24)::int
-              else 0 end desc,
-             p.created_at desc, p.id desc
-          limit $4`,
-        [id, meId, sort, LIST_LIMIT],
+        `select * from (
+           select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
+                  pl.latitude as place_lat, pl.longitude as place_lng,
+                  (select count(*) from likes l where l.post_id = p.id)::text as like_count,
+                  (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
+                  (select count(*) from favorites f where f.post_id = p.id)::text as favorite_count,
+                  -- 最近 14 天曝光/点开（与信息流同口径，见 hotScore.ts 的 ctrWindowDays）
+                  (select coalesce(sum(s.impressions), 0) from post_daily_stats s
+                    where s.post_id = p.id and s.day > current_date - 14)::text as view_impressions,
+                  (select coalesce(sum(s.opens), 0) from post_daily_stats s
+                    where s.post_id = p.id and s.day > current_date - 14)::text as view_opens,
+                  exists (select 1 from likes l2 where l2.post_id = p.id and l2.user_id = $2::uuid) as liked_by_me,
+                  -- F05：地点详情里的帖子也要能显示"我收藏了没"（与 likedByMe 同一套写法）。
+                  -- ⚠️ meId 为 null（未登录）时 exists(... uuid = null) 得 false —— 正确。
+                  exists (select 1 from favorites f2 where f2.post_id = p.id and f2.user_id = $2::uuid) as favorited_by_me,
+                  coalesce((
+                    select json_agg(json_build_object('id', m.id, 'width', m.width, 'height', m.height) order by pm.position)
+                      from post_media pm join media m on m.id = pm.media_id
+                     where pm.post_id = p.id and pm.purpose = 'post' and m.scope = 'public' and m.mime like 'image/%'
+                  ), '[]'::json) as images
+             from posts p
+             left join places pl on pl.id = p.place_id
+            where p.place_id = $1 and ${placeWhere}
+         ) q
+         order by ${placeOrderBy}
+         limit $3`,
+        [id, meId, LIST_LIMIT],
+
       )
       return {
         id: place.id,
@@ -1927,6 +2040,7 @@ export function buildServer(deps: ServerDeps) {
         posts: posts.rows.map((row) => ({
           id: row.id,
           ...publicAuthor(row, meId),
+          authorAvatarMediaId: row.is_anonymous ? null : (row.author_avatar_media_id ?? null),
           body: row.body,
           imageMode: row.image_mode,
           mapMediaId: row.map_media_id ?? null,
@@ -1938,6 +2052,8 @@ export function buildServer(deps: ServerDeps) {
           likedByMe: row.liked_by_me,
           // F05：与 likedByMe 同型 —— "我收藏了没"必须来自服务端（前端不得推算）
           favoritedByMe: row.favorited_by_me,
+          /* ⭐ 2026-11-06：点击数（与信息流同源字段） */
+          openCount: Number(row.open_count ?? 0),
           images: row.images ?? [],
         })),
         postCount: posts.rows.length,
