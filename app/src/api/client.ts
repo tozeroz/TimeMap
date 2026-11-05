@@ -1154,9 +1154,10 @@ export function adminListAuditLog(): Promise<ApiResult<ApiAuditEntry[]>> {
  */
 /**
  * 地点分类（places.category）。
- * ⚠️ 与 server/src/placeCategories.ts 及迁移 031 的 places_category_check 保持一致。
+ * ⚠️ 与 server/src/placeCategories.ts 及迁移 032 的 places_category_check 保持一致。
+ * 顺序即地图「地标标签」面板的按钮顺序（全部之后）。
  */
-export const PLACE_CATEGORIES = ['地标', '教学楼', '活动场地', '运动场地', '食堂'] as const
+export const PLACE_CATEGORIES = ['校园地标', '食堂', '教学楼', '运动场', '休闲场所'] as const
 export type PlaceCategory = (typeof PLACE_CATEGORIES)[number]
 
 export interface ApiAdminPlace {
@@ -1655,7 +1656,7 @@ export interface ApiPlaceDetail {
   address: string | null
   latitude: number | null
   longitude: number | null
-  /** PlaceCategory：'地标' | '教学楼' | '活动场地' | '运动场地' | '食堂'（F02：地图首页的分类筛选就是这个字段） */
+  /** PlaceCategory：'校园地标' | '食堂' | '教学楼' | '运动场' | '休闲场所'（F02：地图首页的分类筛选就是这个字段） */
   category: string
   /** 是否启用（停用地点不出现在公开列表，也不能关联新帖） */
   enabled: boolean
@@ -1731,7 +1732,7 @@ export interface ApiPlaceListItem {
   address: string | null
   latitude: number | null
   longitude: number | null
-  /** ⭐ P0（F02）：PlaceCategory（地标/教学楼/活动场地/运动场地/食堂）—— 地图首页的分类筛选依据 */
+  /** ⭐ P0（F02）：PlaceCategory（校园地标/食堂/教学楼/运动场/休闲场所）—— 地图首页的分类筛选依据 */
   category: string
   /** ⭐ P0（F02）：是否启用。公开列表默认只含启用的（服务端过滤） */
   enabled: boolean
@@ -1745,14 +1746,15 @@ export interface ApiPlaceListItem {
  * ⚠️ 服务端**默认只返回启用地点**；`category` 过滤也在服务端做
  *    （沿用 WO#12 纪律：不用客户端 filter —— 一旦加 limit，客户端筛会静默变成"不完整"）。
  * ⚠️ `q` 与 `category` 可以同时用（服务端把条件 and 起来）。
+ * ⚠️ 多个分类按 OR 取并集（逗号分隔传给服务端）；空数组 / 不传 = 全部。
  */
 export async function listPlaces(
   q?: string,
-  category?: PlaceCategory,
+  categories?: readonly PlaceCategory[],
 ): Promise<ApiResult<ApiPlaceListItem[]>> {
   const params = new URLSearchParams()
   if (q && q.trim()) params.set('q', q.trim())
-  if (category) params.set('category', category)
+  if (categories?.length) params.set('category', categories.join(','))
   const qs = params.toString()
   const r = await request<{ items: ApiPlaceListItem[] }>('/api/places' + (qs ? `?${qs}` : ''))
   if (!r.ok) return r

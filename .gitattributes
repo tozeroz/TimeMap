@@ -44,3 +44,9 @@ tools/push-ops.ps1          text eol=lf
 #   ⚠️ .gitattributes 只影响**今后**的 checkout；工作区里已有的 CRLF 要手动转一次。
 *.sql text eol=lf
 server/src/migrations/*.sql text eol=lf
+# 地标原图（assets/place-photos）是二进制，禁止换行转换
+*.jpg binary
+*.jpeg binary
+*.JPG binary
+*.JPEG binary
+*.webp binary

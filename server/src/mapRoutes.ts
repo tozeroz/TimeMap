@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import type { Db } from './db.ts'
-import { isPlaceCategory } from './placeCategories.ts'
+import { parseCategoryFilter } from './placeCategories.ts'
 import { randomUUID } from 'node:crypto'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -18,7 +18,7 @@ const previewPlaces = `map_places as (
   from stored_places
   union all
   select '${BJTU_ID}'::uuid, '北京交通大学', '北京市海淀区上园村3号',
-    39.9503, 116.3396, '地标', true, 0, 'school', 4::double precision, 0, null::uuid
+    39.9503, 116.3396, '校园地标', true, 0, 'school', 4::double precision, 0, null::uuid
   where not exists(select 1 from stored_places where id='${BJTU_ID}')
 ),`
 function placeTree(previewHierarchy = false) { return `with recursive stored_places as (
@@ -62,8 +62,9 @@ export function registerMapRoutes(app: FastifyInstance, db: Db, options: { previ
   const TREE = placeTree(options.previewHierarchy)
   const snapshots = new Map<string, { placeId: string; asOf: string; ids: string[]; expires: number; truncated: boolean }>()
   app.get('/api/map/places', async (req, reply) => {
-    const category = (req.query as { category?: string }).category
-    if (category !== undefined && !isPlaceCategory(category)) return reply.code(400).send({ error: 'bad_category' })
+    // 多选（逗号分隔或重复参数）按 OR；旧分类值映射到新分类（见 placeCategories.ts）
+    const categories = parseCategoryFilter((req.query as { category?: unknown }).category)
+    if (categories === 'invalid') return reply.code(400).send({ error: 'bad_category' })
     const asOf = new Date().toISOString()
     try {
       const result = await db.pool.query<{
@@ -80,8 +81,8 @@ export function registerMapRoutes(app: FastifyInstance, db: Db, options: { previ
               order by ${ORDER} limit 12
           ) candidate), '[]') as previews
         from map_places pl cross join lateral (select pl.id) outer_place
-        where pl.enabled and ($1::text is null or pl.category=$1)
-        order by pl.display_priority desc, pl.sort_order, pl.name, pl.id limit 501`, [category ?? null, asOf])
+        where pl.enabled and ($1::text[] is null or pl.category=any($1::text[]))
+        order by pl.display_priority desc, pl.sort_order, pl.name, pl.id limit 501`, [categories, asOf])
       return { asOf, truncated: result.rows.length > 500, items: result.rows.slice(0, 500).map(row => ({
         id: row.id, name: row.name, address: row.address,
         latitude: row.latitude === null ? null : Number(row.latitude), longitude: row.longitude === null ? null : Number(row.longitude),

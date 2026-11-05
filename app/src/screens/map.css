@@ -34,35 +34,218 @@
 }
 
 /* ===========================================================================
-   TimeMap P0（F02）：分类筛选 chips（`[全部] [地标] [教学楼] [活动场地] [运动场地] [食堂]`，
-   窄屏上横向滚动）
+   地标标签：工具栏胶囊 + 下拉多选面板（docs/public/product/地图页面复刻说明.md §3–§4）
+   面板像从工具栏展开的一折纸面：与工具栏同一暖白底，连成一体，只在下沿收圆角并投一道轻影。
+   ⚠️ 真值来自服务端过滤（?category=a,b），这里只是**选择器**。
    =========================================================================== */
-/* 为什么单独一行而不是塞进 header：header 已经有标题 + 学校名 + 消息按钮，
-   三行内容在手机上会把地图压得太小；chips 独立成条还能横向滚动。
-   ⚠️ 真值来自服务端过滤（?category=），这里只是**选择器**。 */
-.map__cats {
+.map-page {
+  /* 暖白纸面与墨蓝线条（均由 tokens.css 的 --c-bg / --c-text 派生） */
+  --map-sheet: #fffcf7;
+  --map-ink-line: rgba(25, 45, 66, 0.26);
+  --map-ink-strong: rgba(25, 45, 66, 0.78);
+}
+
+.map__toolbar {
   display: flex;
-  gap: 8px;
-  padding: 0 var(--pad-page) 10px;
-  background: var(--c-surface);
-  overflow-x: auto;
+  align-items: center;
+  padding: 2px var(--pad-page) 10px;
+  background: var(--map-sheet);
   z-index: 4;
 }
 
-.map__cat {
-  flex: none;
-  padding: 5px 14px;
-  border: 1px solid var(--c-divider);
+.map__tagsBtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px 0 12px;
+  border: 1px solid var(--map-ink-strong);
   border-radius: var(--r-pill);
-  background: var(--c-surface);
-  color: var(--c-text-2);
-  font-size: var(--f-meta);
+  background: transparent;
+  color: var(--c-text);
+  font-size: var(--f-sub);
+  font-weight: 500;
+  transition: background-color var(--duration-fast) var(--ease-ui);
 }
 
-.map__cat.is-active {
-  background: var(--c-primary);
+/* 视觉 36px，触控区补到 44px */
+.map__tagsBtn::before {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+
+.map__tagsBtn:active,
+.map__tagsBtn.is-open {
+  background: rgba(25, 45, 66, 0.05);
+}
+
+.map__tagsBtn:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
+.map__tagsBtn:disabled {
+  opacity: 0.45;
+}
+
+/* 已筛选时，调节图标染成操作橙：收起状态下也看得出筛选在生效 */
+.map__tagsBtn.is-filtered > svg {
+  color: var(--c-primary);
+}
+
+.map__tagsChevron {
+  display: inline-flex;
+  transition: transform var(--duration-normal) var(--ease-ui);
+}
+
+.map__tagsBtn.is-open .map__tagsChevron {
+  transform: rotate(180deg);
+}
+
+/* 面板外的透明遮罩：只接点按，不压暗地图 */
+.map__tagsScrim {
+  position: absolute;
+  inset: 0;
+  z-index: 640;
+  background: transparent;
+  cursor: default;
+}
+
+.map__tags {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 650; /* 高于地图 SDK 内部层与搜索面板（600），低于授权弹窗（700） */
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100% - 56px);
+  background: var(--map-sheet);
+  border-radius: 0 0 var(--r-panel) var(--r-panel);
+  box-shadow: 0 12px 24px -10px rgba(25, 45, 66, 0.22);
+  cursor: default;
+  touch-action: auto;
+  user-select: none;
+  animation: map-tags-in var(--duration-normal) var(--ease-ui);
+}
+
+@keyframes map-tags-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map__tags { animation: none; }
+  .map__tagsChevron { transition: none; }
+}
+
+/* 矮屏 / 大字体：按钮区滚动，底部操作栏始终可达 */
+.map__tagsBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px var(--pad-page) 16px;
+}
+
+.map__tagsHead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.map__tagsTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--c-text);
+}
+
+.map__tagsHint {
+  font-size: var(--f-meta);
+  color: var(--c-text-2);
+}
+
+.map__tagsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.map__tag {
+  height: 40px;
+  min-width: 0;
+  padding: 0 6px;
+  border: 1px solid var(--map-ink-line);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--c-text);
+  font-size: var(--f-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color var(--duration-fast) var(--ease-ui), border-color var(--duration-fast) var(--ease-ui),
+    color var(--duration-fast) var(--ease-ui);
+}
+
+.map__tag:active {
+  background: rgba(25, 45, 66, 0.05);
+}
+
+.map__tag.is-on {
   border-color: var(--c-primary);
+  background: var(--c-primary);
   color: var(--c-primary-fg);
+  font-weight: 600;
+}
+
+.map__tag:focus-visible,
+.map__tagsReset:focus-visible,
+.map__tagsApply:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
+.map__tagsFoot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 var(--pad-page);
+  padding: 8px 0 12px;
+  border-top: 1px solid var(--c-divider);
+}
+
+.map__tagsReset {
+  height: 44px;
+  padding: 0 12px 0 0;
+  background: transparent;
+  color: var(--c-text-2);
+  font-size: var(--f-sub);
+}
+
+.map__tagsApply {
+  height: 44px;
+  min-width: 104px;
+  padding: 0 28px;
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-size: var(--f-sub);
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.map__tagsApply:active {
+  background: var(--c-primary-hover);
+}
+
+/* 极窄屏：三列放不下时改两列，不把按钮压到难以点击 */
+@media (max-width: 299px) {
+  .map__tagsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 

@@ -7,6 +7,7 @@ import {
   IconLocation,
   IconPlus,
   IconSearch,
+  IconSliders,
 } from '../components/icons'
 import {
   listPlaces,
@@ -73,9 +74,18 @@ interface ViewState {
   scale: number
 }
 
-/** 分类筛选：全部 / 地标 / 教学楼 / 活动场地 / 运动场地 / 食堂（需求 4.1 草图顶部的分类条，031 起扩到 5 类） */
-type CategoryFilter = '全部' | PlaceCategory
-const CATEGORY_FILTERS: CategoryFilter[] = ['全部', ...PLACE_CATEGORIES]
+/**
+ * 地标标签多选（地图页面复刻说明 §4）：按钮顺序 全部、校园地标、食堂 / 教学楼、运动场、休闲场所。
+ * 空数组 = 「全部」；「全部」只是筛选操作，不存进地点数据。
+ */
+type TagOption = '全部' | PlaceCategory
+const TAG_OPTIONS: TagOption[] = ['全部', ...PLACE_CATEGORIES]
+/** 草稿切换：点「全部」清空；点具体类别增删；全部取消时自然回到「全部」 */
+function toggleTag(draft: readonly PlaceCategory[], tag: TagOption): PlaceCategory[] {
+  if (tag === '全部') return []
+  const next = draft.includes(tag) ? draft.filter(c => c !== tag) : [...draft, tag]
+  return PLACE_CATEGORIES.filter(c => next.includes(c))
+}
 
 /**
  * 把**权威地点**派生成地图标记（TimeMap P0 / F02 + US-01）。
@@ -101,6 +111,27 @@ const CATEGORY_FILTERS: CategoryFilter[] = ['全部', ...PLACE_CATEGORIES]
  *   （P0 起分类筛选已经**明确**，本可以按分类配色，但那仍是"我们自己定的规则"；
  *     在没有基线的情况下换色只会让"看起来有依据"。故保持单色。）
  */
+/** 卡片封面允许的最小边长（像素）。小于它的图当"没有合适图片"处理。 */
+const MIN_COVER_EDGE_PX = 32
+
+/**
+ * 从代表帖里挑一个**可用**的封面。
+ *
+ * ⚠️ 只判断"有没有图"不够：库里可能躺着一张 1×1 的占位图（smoke 测试就会发这种），
+ *    直接拿来当封面会渲染成一片白框。文档 §9 的纪律是「没有合适图片不生成占位照片」，
+ *    所以这里按**尺寸**筛一遍；宽高未知时不擅自排除（避免误杀正常图）。
+ */
+function coverUrlOf(rep: ApiPost | undefined): string | undefined {
+  if (!rep) return undefined
+  if (rep.mapMediaId) return mediaUrl(rep.mapMediaId)
+  const img = rep.images?.[0]
+  if (!img) return undefined
+  if (typeof img.width === "number" && typeof img.height === "number") {
+    if (img.width < MIN_COVER_EDGE_PX || img.height < MIN_COVER_EDGE_PX) return undefined
+  }
+  return mediaUrl(img.id)
+}
+
 export function markersFromPlaces(
   places: ApiPlaceListItem[],
   posts: ApiPost[],
@@ -127,6 +158,7 @@ export function markersFromPlaces(
         // ⭐ 跳转目标是地点（P0 的核心改动）
         placeId: p.id,
         place: p.name,
+        category: p.category,
         // ⚠️ 单一确定色：原版配色规则 NOT_EVALUATED（见函数头注释）
         color: '#f5453b',
         userId: rep?.authorId ?? '',
@@ -136,7 +168,7 @@ export function markersFromPlaces(
         y: Math.round(1000 - dyM * PX_PER_M),
         lat,
         lng,
-        coverUrl: rep?.mapMediaId ? mediaUrl(rep.mapMediaId) : rep?.images && rep.images.length > 0 ? mediaUrl(rep.images[0].id) : undefined,
+        coverUrl: coverUrlOf(rep),
         excerpt: rep?.body ? rep.body.slice(0, 10) : undefined,
       }
     })
@@ -316,6 +348,116 @@ function OfflineMap({
   )
 }
 
+/* ============================================================================
+   地图标记的缩放分级与避让
+   ----------------------------------------------------------------------------
+   修的是两个显示问题（见桌面 bugfix/图1、图2）：
+     · 图1：30 个标记按经纬度直接摆，卡片互相叠成一坨。
+     · 图2：没有帖子的地点也画白卡片，卡片里没有图/摘要 ⇒ 一片空白。
+
+   ⚠️ 为什么不用「过滤 markers 数组」来实现：三个适配器的建图 effect 依赖 markers，
+      换数组会让地图**重建**（文档 §10 明确警告过）。所以这里只在 **DOM 层**开关
+      `.rm--hidden`，底图和标记实例都不动。
+
+   ⚠️ 为什么是轮询：MapHandle 只有 getCenter/getZoom，没有视图订阅事件。
+      每 250ms 读一次很便宜（30 个标记），且只在真正变化时重算。
+
+   ⚠️ 分级阈值是**首轮取值**，没有真机校准过。各 provider 的 zoom 语义略有差异，
+      拿到实机效果后应回写这里。
+   ============================================================================ */
+
+/** 没有 displayTier 数据时的兜底优先级：数字越小越优先留下 */
+const MAP_CATEGORY_RANK: Record<string, number> = {
+  校园地标: 1,
+  食堂: 2,
+  教学楼: 3,
+  运动场: 4,
+  休闲场所: 5,
+}
+
+const MAP_MARKER_LEVELS = {
+  /** 低于此缩放：只显示帖子最多 / 类别最靠前的少数几个（校园总览） */
+  overviewMaxZoom: 16.4,
+  /** 低于此缩放：显示视口内前 localCount 个；达到或超过：显示视口内全部（局部 / 近景） */
+  localMaxZoom: 17.4,
+  overviewCount: 4,
+  localCount: 10,
+} as const
+
+/** 排序键：有帖子 > 类别顺序 > 名称（保证同样输入下顺序稳定） */
+function markerRank(m: MapMarker): [number, number, string] {
+  return [m.postId ? 0 : 1, MAP_CATEGORY_RANK[m.category ?? ''] ?? 9, m.place]
+}
+
+function markersByPriority(markers: MapMarker[]): MapMarker[] {
+  return [...markers].sort((a, b) => {
+    const ra = markerRank(a)
+    const rb = markerRank(b)
+    if (ra[0] !== rb[0]) return ra[0] - rb[0]
+    if (ra[1] !== rb[1]) return ra[1] - rb[1]
+    return ra[2].localeCompare(rb[2], 'zh-CN')
+  })
+}
+
+/** 当前缩放下应该显示哪些标记 */
+function visibleMarkerIds(markers: MapMarker[], handle: MapHandle | null, zoom: number): Set<string> {
+  const sorted = markersByPriority(markers)
+  const size = handle?.getSize()
+  const inViewport = (m: MapMarker) => {
+    if (!handle || !size) return true
+    const p = handle.project(m.lat, m.lng)
+    if (!p) return true
+    const pad = 80
+    return p.x >= -pad && p.x <= size.width + pad && p.y >= -pad && p.y <= size.height + pad
+  }
+  if (zoom < MAP_MARKER_LEVELS.overviewMaxZoom) {
+    return new Set(sorted.slice(0, MAP_MARKER_LEVELS.overviewCount).map((m) => m.placeId))
+  }
+  const inArea = sorted.filter(inViewport)
+  if (zoom < MAP_MARKER_LEVELS.localMaxZoom) {
+    return new Set(inArea.slice(0, MAP_MARKER_LEVELS.localCount).map((m) => m.placeId))
+  }
+  return new Set(inArea.map((m) => m.placeId))
+}
+
+/** 把可见集合写到 DOM 上（三套底图的标记都带 data-place-id） */
+function applyMarkerVisibility(root: ParentNode | null, visible: Set<string>): void {
+  if (!root) return
+  root.querySelectorAll<HTMLElement>('.rm[data-place-id]').forEach((el) => {
+    el.classList.toggle('rm--hidden', !visible.has(el.dataset.placeId ?? ''))
+  })
+}
+
+/**
+ * 避让：按优先级依次摆放，后放的只要和已放下的框相交就隐藏。
+ * 只比较「卡片 / 名称标签」的盒子 —— 图钉很小，重叠也不影响读名字。
+ */
+function declutterMarkers(root: ParentNode | null, order: MapMarker[]): void {
+  if (!root) return
+  /*
+    ⚠️ 先清掉上一轮的「只收起名称」。被收起的元素 display:none，量不到尺寸；
+    不清就会永远保持收起。清 → 量 → 收 全在同一次同步调用里，浏览器不会中途绘制，所以不会闪。
+  */
+  root.querySelectorAll<HTMLElement>('.rm--collapsed').forEach((el) => el.classList.remove('rm--collapsed'))
+  const placed: Array<{ left: number; right: number; top: number; bottom: number }> = []
+  for (const m of order) {
+    const el = root.querySelector<HTMLElement>(`.rm[data-place-id="${cssEscape(m.placeId)}"]`)
+    if (!el || el.classList.contains('rm--hidden')) continue
+    const box = (el.querySelector('.rm__card, .rm__label') as HTMLElement | null) ?? el
+    const r = box.getBoundingClientRect()
+    if (!r.width || !r.height) continue
+    const overlap = placed.some((p) => !(r.right < p.left || r.left > p.right || r.bottom < p.top || r.top > p.bottom))
+    // ★ 放不下时**只收起名称/卡片，保留图钉** —— 用户仍能看到该地点、可点击进详情
+    if (overlap) el.classList.add('rm--collapsed')
+    else placed.push({ left: r.left, right: r.right, top: r.top, bottom: r.bottom })
+  }
+}
+
+/** 地点 id 是 UUID，正常无需转义；这里仍兜底处理，避免拼选择器出错 */
+function cssEscape(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`)
+}
+
 /** 定位状态徽标：把“是否真的拿到定位”显式显示出来，避免蓝点静默不动 */
 function GeoBadge({
   status,
@@ -424,8 +566,17 @@ export function MapScreen() {
    * 那是把"读不到"伪装成"没有"——必须显式说出来。
    */
   const [postsFailed, setPostsFailed] = useState(false)
-  /** 分类筛选（需求 4.1：`[全部] [地标] [教学楼] [活动场地] [运动场地] [食堂]`） */
-  const [category, setCategory] = useState<CategoryFilter>('全部')
+  /*
+    地标标签（复刻说明 §4）：applied = 已生效，draft = 面板草稿，只有「确定」才把草稿提交为 applied。
+    面板打开时推入一条带 tmTags 标记的历史：系统返回 = 关闭并放弃草稿（与地点抽屉同一做法）。
+  */
+  const [appliedTags, setAppliedTags] = useState<PlaceCategory[]>([])
+  const [draftTags, setDraftTags] = useState<PlaceCategory[]>([])
+  const [tagsOpen, setTagsOpen] = useState(false)
+  const tagsOpenRef = useRef(false)
+  const tagsBtnRef = useRef<HTMLButtonElement | null>(null)
+  const appliedKey = appliedTags.join(',')
+  const appliedLabel = appliedTags.length ? appliedTags.join('、') : '全部'
   /*
     MAP-002 / MAP-003：地图内的「搜索地标」工具。
 
@@ -458,7 +609,7 @@ export function MapScreen() {
     void (async () => {
       setMarkerPhase('loading')
       const [pr, po] = await Promise.all([
-        listPlaces(undefined, category === '全部' ? undefined : category),
+        listPlaces(undefined, appliedKey ? (appliedKey.split(',') as PlaceCategory[]) : undefined),
         listPosts(),
       ])
       if (!alive) return
@@ -478,7 +629,56 @@ export function MapScreen() {
     return () => {
       alive = false
     }
-  }, [category, publishedPostId, markerReload])
+  }, [appliedKey, publishedPostId, markerReload])
+
+  /*
+    缩放分级 + 避让的驱动。
+    只在 zoom / 中心 / 标记数量变化时重算，避免每 250ms 都读一遍布局。
+  */
+  useEffect(() => {
+    if (markerPhase !== 'ready' || markers.length === 0) return
+    let lastZoom = Number.NaN
+    let lastCenter = ''
+    let lastCount = -1
+    /* ⚠️ 地图实例号也要进判断键：provider 降级 / 重建时标记 DOM 会被重新创建，
+       新元素没有 rm--hidden；只看 zoom/中心会误判"没变化"而跳过重算。 */
+    let lastInstance = ''
+
+    const apply = () => {
+      const handle = mapHandleRef.current
+      const stage = stageRef.current
+      if (!handle || !stage) return
+      const zoom = handle.getZoom() ?? 16
+      const center = handle.getCenter()
+      const centerKey = center ? `${center.lat.toFixed(5)},${center.lng.toFixed(5)}` : ''
+      const instance = stage.querySelector('[data-map-instance]')?.getAttribute('data-map-instance') ?? ''
+      if (
+        zoom === lastZoom &&
+        centerKey === lastCenter &&
+        markers.length === lastCount &&
+        instance === lastInstance
+      )
+        return
+      lastZoom = zoom
+      lastCenter = centerKey
+      lastCount = markers.length
+      lastInstance = instance
+
+      const visible = visibleMarkerIds(markers, handle, zoom)
+      applyMarkerVisibility(stage, visible)
+      /* 测试钩子（文档 §11 建议的可读状态）：当前缩放与可见标记数，便于机械校验分级是否生效 */
+      stage.dataset.mapZoom = String(zoom)
+      stage.dataset.mapVisibleCount = String(visible.size)
+      declutterMarkers(
+        stage,
+        markersByPriority(markers).filter((m) => visible.has(m.placeId)),
+      )
+    }
+
+    apply()
+    const timer = window.setInterval(apply, 250)
+    return () => window.clearInterval(timer)
+  }, [markers, markerPhase])
   // ---- 真实定位 ----
   const [fix, setFix] = useState<GeoFix | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
@@ -860,7 +1060,7 @@ export function MapScreen() {
     if (!stage || !page) return
     const measure = () => {
       const head = page.querySelector<HTMLElement>('.map__head')
-      const cats = page.querySelector<HTMLElement>('.map__cats')
+      const cats = page.querySelector<HTMLElement>('.map__toolbar')
       setDims(prev => {
         const H = page.clientHeight || prev.H
         const headH = head ? head.offsetHeight + (cats?.offsetHeight ?? 0) : prev.headH
@@ -885,7 +1085,7 @@ export function MapScreen() {
     })
     ro.observe(page)
     ro.observe(stage)
-    for (const el of page.querySelectorAll('.map__head, .map__cats')) ro.observe(el)
+    for (const el of page.querySelectorAll('.map__head, .map__toolbar')) ro.observe(el)
     return () => { ro.disconnect(); cancelAnimationFrame(raf) }
   }, [headerHidden, runFocus, restorePreOpenView])
 
@@ -1215,6 +1415,48 @@ export function MapScreen() {
     }
   }, [coordsOf, runFocus])
 
+  // ---- 地标标签面板（复刻说明 §4）----
+  const openTags = useCallback(() => {
+    setDraftTags(appliedTags)
+    tagsOpenRef.current = true
+    setTagsOpen(true)
+    navigate('map', { ...debugQuery(), tags: '1' })
+    window.history.replaceState({ ...(window.history.state ?? {}), tmTags: 1 }, '', window.location.hash)
+  }, [appliedTags, debugQuery])
+  /** 收起：apply=true 提交草稿（确定）；否则放弃草稿。弹掉打开时推入的那条历史。 */
+  const closeTags = useCallback((apply: boolean) => {
+    if (!tagsOpenRef.current) return
+    tagsOpenRef.current = false
+    setTagsOpen(false)
+    if (apply) setAppliedTags(draftTags)
+    if (window.history.state?.tmTags === 1) window.history.back()
+  }, [draftTags])
+  // 系统返回 / 地址里已没有 tags：关闭并放弃草稿；地址残留 tags（刷新、前进）但面板未开：清掉
+  useEffect(() => {
+    if (route.path !== 'map') return
+    if (route.query.tags === undefined) {
+      if (tagsOpenRef.current) { tagsOpenRef.current = false; setTagsOpen(false) }
+    } else if (!tagsOpenRef.current) {
+      window.history.replaceState(null, '', buildHash('map', debugQuery()))
+    }
+  }, [route, debugQuery])
+  // 打开搜索或地点抽屉时收起筛选（放弃草稿），避免面板相互遮挡
+  useEffect(() => {
+    if ((sheetActive || searchOpen) && tagsOpenRef.current) { tagsOpenRef.current = false; setTagsOpen(false) }
+  }, [sheetActive, searchOpen])
+  // Esc：收起并放弃草稿
+  useEffect(() => {
+    if (!tagsOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      e.preventDefault()
+      closeTags(false)
+      tagsBtnRef.current?.focus({ preventScroll: true })
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [tagsOpen, closeTags])
+
   // Esc：与后退一致（展开 → 预览 → 关闭）；搜索面板或定位授权弹窗打开时不处理
   useEffect(() => {
     if (!sheetActive) return
@@ -1265,22 +1507,27 @@ export function MapScreen() {
       scroll={false}
     >
       {/*
-        分类筛选（需求 4.1 草图顶部：[全部] [地标] [教学楼] [活动场地] [运动场地] [食堂]）。
-        ⚠️ 筛选是**服务端**做的（`GET /api/places?category=`）——
+        工具栏：「地标标签」胶囊（复刻说明 §2–§4），展开的面板覆盖在地图上方（见 .map 内）。
+        ⚠️ 筛选是**服务端**做的（`GET /api/places?category=a,b`，多选取并集）——
           与"客户端 filter"相比，服务端筛在加页/加 limit 之后不会静默变成不完整结果。
-        `data-map-category` 是验收钩子：当前生效的分类必须能被机械读到。
+        `data-map-category` 是验收钩子：当前生效的分类（逗号分隔，或「全部」）。
+        地点抽屉打开时胶囊不可用：抽屉与筛选不同时出现。
       */}
-      {!headerHidden && <div className="map__cats no-scrollbar" data-map-category={category}>
-        {CATEGORY_FILTERS.map((c) => (
-          <button
-            key={c}
-            className={`map__cat ${category === c ? 'is-active' : ''}`}
-            data-map-cat={c}
-            onClick={() => setCategory(c)}
-          >
-            {c}
-          </button>
-        ))}
+      {!headerHidden && <div className="map__toolbar" data-map-category={appliedKey || '全部'}>
+        <button
+          ref={tagsBtnRef}
+          className={`map__tagsBtn ${tagsOpen ? 'is-open' : ''} ${appliedTags.length ? 'is-filtered' : ''}`}
+          data-map-tags-toggle
+          aria-expanded={tagsOpen}
+          aria-controls="map-tags-panel"
+          aria-label={`地标标签：${appliedLabel}`}
+          disabled={sheetOpen}
+          onClick={() => (tagsOpen ? closeTags(false) : openTags())}
+        >
+          <IconSliders size={18} />
+          <span>地标标签</span>
+          <span className="map__tagsChevron"><IconChevronDown size={14} /></span>
+        </button>
       </div>}
       {/*
         ⚠️ 这里**没有**「文字弹幕」开关（原来有一个，但它只是给根节点加 `.map--hide-text`
@@ -1386,7 +1633,7 @@ export function MapScreen() {
           </span>
         ) : markers.length === 0 ? (
           <span className="map__markerBadge" data-marker-phase="empty">
-            {category === '全部' ? '暂无已启用的地点' : `暂无${category}类地点`}
+            {appliedTags.length ? `暂无${appliedLabel}类地点` : '暂无已启用的地点'}
           </span>
         ) : (
           /*
@@ -1547,6 +1794,63 @@ export function MapScreen() {
         >
           <IconPlus size={22} />
         </button>}
+
+        {/*
+          地标标签面板（复刻说明 §3–§4）：覆盖在地图上方、不推挤地图（地图实例不重建）。
+          透明遮罩接住面板外的点按：收起并放弃草稿，且不把点按传给底图／地点标记。
+        */}
+        {tagsOpen && <>
+          <div
+            className="map__tagsScrim"
+            data-map-tags-scrim
+            aria-hidden="true"
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onClick={() => closeTags(false)}
+          />
+          <div
+            id="map-tags-panel"
+            className="map__tags"
+            role="dialog"
+            aria-label="选择地标标签"
+            data-map-tags-open="1"
+            data-map-tags-draft={draftTags.join(',') || '全部'}
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onWheel={(e) => e.stopPropagation()}
+          >
+            <div className="map__tagsBody">
+              <div className="map__tagsHead">
+                <h2 className="map__tagsTitle">选择地标标签</h2>
+                <span className="map__tagsHint">可多选</span>
+              </div>
+              <div className="map__tagsGrid" role="group" aria-label="地标标签">
+                {TAG_OPTIONS.map((t) => {
+                  const on = t === '全部' ? draftTags.length === 0 : draftTags.includes(t)
+                  return (
+                    <button
+                      key={t}
+                      className={`map__tag ${on ? 'is-on' : ''}`}
+                      data-map-tag={t}
+                      aria-pressed={on}
+                      onClick={() => setDraftTags((d) => toggleTag(d, t))}
+                    >
+                      {t}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="map__tagsFoot">
+              <button className="map__tagsReset" data-map-tags-reset onClick={() => setDraftTags([])}>
+                重置
+              </button>
+              <button className="map__tagsApply" data-map-tags-apply onClick={() => closeTags(true)}>
+                确定
+              </button>
+            </div>
+          </div>
+        </>}
 
         {tipOpen && (
           /*
