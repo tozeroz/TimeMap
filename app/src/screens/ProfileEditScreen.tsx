@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getMyProfile, patchMyProfile, uploadMedia, mediaUrl, type ApiProfile, type ProfileUpdate } from '../api/client'
+import { getMyProfile, patchMyProfile, uploadMedia, mediaUrl, failText, type ApiProfile, type ProfileUpdate } from '../api/client'
 import { updateSessionUser } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack, IconCamera, IconChevronRight, IconEdit } from '../components/icons'
@@ -79,12 +79,13 @@ export function ProfileEditScreen() {
   }
   async function upload(file:File|undefined){
     if(!file||busy.current)return
-    if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024){setError('请选择不超过 5MB 的 JPG、PNG 或 WebP 图片。');return}
+    if(file.size>5*1024*1024){setError('头像图片过大，请压缩到 5MB 以内后重试。');return}
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type)){setError('头像仅支持 JPG、PNG 或 WebP 图片，请更换格式后重试。');return}
     busy.current=true;setUploading(true);setError('');setSaved(false)
     try{
       const result=await uploadMedia(file,'avatar')
       if(!alive.current)return
-      if(!result.ok){setError(result.status===401?'登录已过期，请重新登录。':'头像上传失败，请重试；原头像未改变。');return}
+      if(!result.ok){setError(result.status===413?'头像图片超过服务器上传大小限制，请压缩图片或选择更小的图片后重试；原头像未改变。':`${failText(result)}；原头像未改变。`);return}
       change({avatarMediaId:result.value.id});setAvatarBroken(false)
     }catch{if(alive.current)setError('头像上传失败，请重试。')}
     finally{busy.current=false;if(alive.current)setUploading(false)}
@@ -111,7 +112,7 @@ export function ProfileEditScreen() {
           <button className="pe__avatarButton" aria-label="更换头像" disabled={saving||uploading} onClick={()=>fileInput.current?.click()}><span className="pe__avatar">{draft.avatarMediaId&&!avatarBroken?<img src={mediaUrl(draft.avatarMediaId)} alt="当前头像" onError={()=>setAvatarBroken(true)}/>:initial}</span><span className="pe__camera" aria-hidden="true"><IconCamera size={20}/></span></button>
         </div>
         <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" hidden aria-label="上传头像图片" onChange={event=>{void upload(event.target.files?.[0]);event.target.value=''}}/>
-        <p className="pe__avatarTitle" role={uploading?'status':undefined}>{uploading?'正在上传头像…':'点击更换头像'}</p><p className="pe__avatarHint">让同学更容易认出你。</p>
+        <p className="pe__avatarTitle" role={uploading?'status':undefined}>{uploading?'正在上传头像…':'点击更换头像'}</p><p className="pe__avatarHint">支持 JPG、PNG、WebP，图片不超过 5MB。</p>
         {draft.avatarMediaId&&<button className="pe__removeAvatar" disabled={saving||uploading} onClick={()=>{change({avatarMediaId:null});setAvatarBroken(false)}}>移除头像</button>}
       </section>
       <section className="pe__section" aria-labelledby="pe-personal-title"><h2 id="pe-personal-title">个人信息</h2>

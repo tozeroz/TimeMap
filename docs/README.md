@@ -18,12 +18,19 @@
 - [需求分析与产品设计](public/BJTUTimeMap需求分析与产品设计文档.md)
 - [详细功能设计](public/product/BJTU%20TimeMap详细功能设计文档.md)
 - [地图地标地点清单](public/地图地标地点清单.md)
+- [校园地点分类资料（26 个地点）](public/BJTUTimeMap_校园地点分类资料.md)
+- [地标数据维护手册（队友录入图片与简介）](public/地标数据维护手册.md)
+- [地标机器可读数据清单](public/data/bjtu-places.json)
+- [地图页面复刻说明](public/product/地图页面复刻说明.md)
+- [地图地标显示层级实现方案](public/product/地图地标显示层级实现方案.md)
+- [地点数据与地图改造执行方案](public/product/地点数据与地图改造执行方案.md)
 - [HTTPS 证书说明](public/TLS-IP-CERTIFICATE.md)
 - [第三方资产来源登记](public/LICENSING-NOTES.md)
 
 ## 测试与验收
 
 - [测试文档入口](test/README.md)
+- [地图分级与地点数据本地实施记录](test/地图分级与地点数据本地实施记录-2026-11-05.md)
 - [P0 交付与验证报告](test/TIMEMAP-P0-REPORT.md)
 - [设备端验收](test/device-walkthrough.md)
 - [一致性对比报告](test/comparison.md)

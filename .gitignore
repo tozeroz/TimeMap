@@ -34,6 +34,10 @@ app/android/app/src/main/assets/capacitor.config.json
 *.png
 # 例外：M0 冻结的原版行为基线截图必须入库（半分辨率，见 docs/test/original-baseline/）
 !docs/test/original-baseline/**/*.png
+# 地图复刻文档引用的用户参考图，随正式设计文档维护
+!docs/public/product/assets/坐标地图页面参考.png
+# 本轮地图布局验证截图（测试瓦片，含说明）
+!docs/test/campus-map-20261105/*.png
 # ⚠️ 例外：Android 的启动图与启动图标必须入库 —— 它们是**构建必需**的资源，不是截图。
 #    踩过的坑：`*.png` 把 res/ 下的 splash.png / ic_launcher*.png 一起忽略了，
 #    于是仓库里的 Android 工程**根本构建不起来**（AAPT2 报
