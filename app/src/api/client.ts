@@ -116,6 +116,14 @@ export interface ApiPost {
    */
   favoriteCount?: number
   favoritedByMe?: boolean
+  /**
+   * ⭐ 2026-11-06（迁移 036）：**点击数**。
+   *
+   * 语义：被"点开过"的次数，按「同一人同一天只算一次」去重，由服务端统计。
+   * 为什么不是浏览量/曝光量：曝光只能证明卡片划过屏幕，点击才说明内容被选择；
+   * 排序用的点击率 = opens / impressions，两者分开记（见 recordPostViews）。
+   */
+  openCount?: number
   /** M4：帖子的公图片（只含 id 与尺寸；用 mediaUrl(id) 取图） */
   images?: ApiMediaRef[]
   imageMode?: 'photo' | 'sticker'
@@ -1518,6 +1526,8 @@ export function toFeedPost(p: ApiPost): FeedPost {
     // M3 Slice 2：列表也用服务端计数（原版卡片上就有赞数/评论数）
     likes: p.likeCount ?? 0,
     comments: p.commentCount ?? 0,
+    /* ⭐ 2026-11-06：点击数（迁移 036）。列表卡片上显示在点赞/评论旁边 */
+    views: p.openCount ?? 0,
     liked: p.likedByMe ?? false,
     location: p.place ?? undefined,
     // 列表卡片用相对时间；精确时间留给详情页（M2 再补）
@@ -1577,6 +1587,8 @@ export interface ApiPostDetail {
   /** ⭐ P0（F05）：收藏计数与"我收藏了没" */
   favoriteCount: number
   favoritedByMe: boolean
+  /** ⭐ 2026-11-06：点击数（迁移 036），详情页顶栏显示 */
+  openCount?: number
   /** M4：帖子的公图片（只含 id 与尺寸；用 mediaUrl(id) 取图） */
   images?: ApiMediaRef[]
 }
@@ -1586,6 +1598,91 @@ export async function getPost(id: string): Promise<ApiResult<ApiPostDetail>> {
   const r = await request<ApiPostDetail>(`/api/posts/${encodeURIComponent(id)}`)
   if (r.ok) writeSnapshot(`post:${id}`, r.value)
   return r
+}
+
+/**
+ * ⭐ 2026-11-06（迁移 036）：访客标识 —— **只用于曝光/点击去重**。
+ *
+ * 为什么未登录也要有个 id：曝光和点击必须能"同一人同一天只算一次"，
+ * 否则刷新页面就能把点击数刷上去，点击率排序立刻被污染。
+ * 这个值没有任何身份信息，只是随机的 uuid，清掉本地存储就等于换了个新访客。
+ */
+const VISITOR_KEY = 'campus.demo.visitorId'
+
+export function visitorId(): string {
+  try {
+    const hit = localStorage.getItem(VISITOR_KEY)
+    if (hit && /^[0-9a-f-]{8,64}$/i.test(hit)) return hit
+    // crypto.randomUUID 在旧 WebView 上可能缺失，退化成时间戳 + 随机数（足够做去重）
+    const fresh =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`
+    localStorage.setItem(VISITOR_KEY, fresh)
+    return fresh
+  } catch {
+    // 隐私模式/存储被禁：每次给一个新 id，退化成"不去重"而不是抛错
+    return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`
+  }
+}
+
+/**
+ * 批量上报曝光（卡片真的进入视口时调用）。
+ *
+ * **故意不 await、不抛错**：埋点失败绝不能影响浏览体验。
+ * 幂等由服务端保证（同一人同一天同一帖只算一次），所以重复调用无害。
+ */
+export interface ImpressionItem {
+  postId: string
+  /** 视觉位次：1 = 第一屏第一个。服务端用它量「第 1 槽 vs 第 18 槽」的点击率差 */
+  slot?: number
+}
+
+/**
+ * 浏览器会话 id（2026-11-06，迁移 037）。
+ *
+ * 与 visitorId 的区别：visitorId 长期存在（同一个人一直是同一个值），
+ * sessionId 每次打开/刷新页面就换一个 —— 前者用来去重，后者用来区分
+ * 「一个人刷了十次」和「十个人各看一次」。
+ */
+const SESSION_KEY = 'campus.demo.sessionId'
+
+export function sessionId(): string {
+  try {
+    const hit = sessionStorage.getItem(SESSION_KEY)
+    if (hit && /^[0-9a-f-]{8,64}$/i.test(hit)) return hit
+    const fresh =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`
+    sessionStorage.setItem(SESSION_KEY, fresh)
+    return fresh
+  } catch {
+    return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`
+  }
+}
+
+/**
+ * 批量上报曝光（卡片真的进入视口时调用）。
+ *
+ * **故意不 await、不抛错**：埋点失败绝不能影响浏览体验。
+ * 幂等由服务端保证（同一人同一天同一帖只算一次），所以重复调用无害。
+ */
+export function reportImpressions(items: Array<string | ImpressionItem>, surface = 'campus'): void {
+  if (!items.length) return
+  void request<{ counted: number; skipped: number }>('/api/posts/impressions', {
+    method: 'POST',
+    body: { items, visitorId: visitorId(), surface, sessionId: sessionId() },
+  }).catch(() => undefined)
+}
+
+/** 上报"点开了这条帖子"（进详情时调用一次）。同样静默失败。 */
+export function reportPostOpen(postId: string, surface = 'campus'): void {
+  if (!postId) return
+  void request<{ counted: number; skipped: number }>(
+    `/api/posts/${encodeURIComponent(postId)}/open`,
+    { method: 'POST', body: { visitorId: visitorId(), surface, sessionId: sessionId() } },
+  ).catch(() => undefined)
 }
 
 /** 评论树：顶层评论 + replies（每条 reply 自带 replyTo） */
@@ -1662,6 +1759,8 @@ export interface ApiPlacePost {
   likedByMe: boolean
   /** ⭐ P0（F05）：我是否收藏过这条（与 likedByMe 同型，值来自服务端） */
   favoritedByMe: boolean
+  /** ⭐ 2026-11-06：点击数（迁移 036），地点页帖子行显示 */
+  openCount?: number
   /** 公图片（只给 id 与尺寸；用 mediaUrl(id) 取图） */
   images?: ApiMediaRef[]
 }

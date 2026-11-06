@@ -180,8 +180,9 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
         liked_by_me: boolean
         images: unknown
         is_anonymous: boolean
+        open_count: number
       }>(
-        `select p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.is_anonymous, p.body, p.place, p.place_id, p.created_at,
+        `select p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.is_anonymous, p.open_count, p.body, p.place, p.place_id, p.created_at,
                 (select count(*) from likes l where l.post_id = p.id)::text as like_count,
                 (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
                 exists (select 1 from likes l2 where l2.post_id = p.id and l2.user_id = $1::uuid) as liked_by_me,
@@ -202,6 +203,7 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
           id: row.id,
           // 匿名帖（033）：收藏列表也要遮罩，否则"收藏了谁的匿名帖"直接暴露作者
           ...publicAuthor(row, g.user.userId),
+          authorAvatarMediaId: row.is_anonymous ? null : (row.author_avatar_media_id ?? null),
           body: row.body,
           place: row.place,
           placeId: row.place_id,
@@ -210,6 +212,8 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
           commentCount: Number.parseInt(row.comment_count ?? '0', 10),
           likedByMe: row.liked_by_me,
           favoritedByMe: true,
+          /* ⭐ 2026-11-06：点击数（迁移 036），收藏列表与信息流同形 */
+          openCount: Number(row.open_count ?? 0),
           images: row.images ?? [],
         })),
       }

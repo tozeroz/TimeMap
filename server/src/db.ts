@@ -37,6 +37,11 @@ import trainingProjectLinksSql from './migrations/033_training_project_links.sql
 import classTrainingProjectsSql from './migrations/034_class_training_projects.sql'
 import placeCategoriesV2Sql from './migrations/032_place_categories_v2.sql'
 import postAnonymousSql from './migrations/035_post_anonymous.sql'
+import postViewsSql from './migrations/036_post_views.sql'
+import exposureSlotsSql from './migrations/037_exposure_slots.sql'
+import release133Sql from './migrations/038_release_1_3_3.sql'
+import release134Sql from './migrations/039_release_1_3_4.sql'
+import release141Sql from './migrations/040_release_1_4_1.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -168,6 +173,22 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   //      遮罩在读模型里做（server/src/anonymous.ts），真实 author_id 不落改。
   //      编号让到 035：main 上 033/034 已被「班级实训项目」占用。
   { version: '035_post_anonymous', sql: postAnonymousSql },
+  /*
+    036（2026-11-06）：点击数埋点。
+    三张/两列：posts.open_count（展示用的累计点击数）+ post_events（去重台账，
+    subject × day × post 唯一）+ post_daily_stats（按天汇总，热度算点击率用）。
+    为什么不用一张表搞定：去重需要"人×天×帖"的细粒度，排序只需要"帖×天"聚合，
+    两件事写在一张表里会让排序查询扫几十万行台账。
+  */
+  { version: '036_post_views', sql: postViewsSql },
+  /*
+    037（2026-11-06）：曝光位置与会话（影子模式，只加数据不改排序）。
+    见 server/src/migrations/037_exposure_slots.sql 顶部说明。
+  */
+  { version: '037_exposure_slots', sql: exposureSlotsSql },
+  { version: '038_release_1_3_3', sql: release133Sql },
+  { version: '039_release_1_3_4', sql: release134Sql },
+  { version: '040_release_1_4_1', sql: release141Sql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

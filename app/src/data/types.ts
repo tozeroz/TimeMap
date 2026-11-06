@@ -30,6 +30,11 @@ export interface FeedPost {
   likes: number
   comments: number
   liked: boolean
+  /**
+   * ⭐ 2026-11-06：点击数（服务端按「同一人同一天只算一次」去重后的点开次数）。
+   * 与点赞/评论并列展示；排序用的点击率由服务端算，前端不参与。
+   */
+  views?: number
   location?: string
   topic?: string
   createdAt: string

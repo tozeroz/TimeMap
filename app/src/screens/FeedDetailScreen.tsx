@@ -10,6 +10,7 @@ import {
   unfavoritePost,
   unlikePost,
   humanizeFailure,
+  reportPostOpen,
   type ApiCommentNode,
   type ApiPostDetail,
   failText,
@@ -148,6 +149,14 @@ function FeedDetail({ id, onStep }: { id: string; onStep: (direction: number) =>
         setTotal(r.total)
         setFromSnapshot(r.fromSnapshot)
         setState(r.state)
+        /*
+          ⭐ 2026-11-06（迁移 036）：点开上报。
+          只上报"真的拿到服务端数据"的那次（状态 ready）。从快照恢复（offline）意味着
+          这次根本没连上服务端，把离线打开也算点击会让点击率变成"打开过几次应用"。
+          不 await：埋点失败不该影响阅读；服务端自身幂等去重，重复调用无害。
+        */
+        // 'other'：详情页不一定是列表点进来的（可能是分享链接），没被曝光过的直接点开记在这里
+        if (r.state === 'ready') reportPostOpen(id, 'other')
         return
       case 'gone':
         // US-08：管理员下架或作者删除后，服务端回 410 —— 这是**明确的业务状态**，不是网络故障
