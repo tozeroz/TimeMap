@@ -28,7 +28,15 @@ import { registerProfileRoutes } from './profileRoutes.ts'
 import { registerSubmissionRoutes } from './submissionsRoutes.ts'
 import { registerProjectRoutes } from './projectRoutes.ts'
 import { ANONYMOUS_DISPLAY_NAME, publicAuthor } from './anonymous.ts'
-import { hotOrderSql, hotScoreSql } from './hotScore.ts'
+import {
+  fallbackOrder,
+  hotPoolDays,
+  hotPoolLimit,
+  priorCtrFromTotals,
+  rankHotPool,
+  hotRankOptionsFromEnv,
+  type HotCandidate,
+} from './hotRank.ts'
 import {
   eventSubject,
   normalizeImpressionItems,
@@ -106,10 +114,9 @@ interface PostRow {
   image_mode: 'photo' | 'sticker'
   id: string
   author_name: string
-  author_avatar_media_id?: string | null
   author_id: string | null
-  /** 点击数（迁移 036 的去重点开计数；列表/详情都下发） */
-  open_count?: number | null
+  /** 他人 PR #26：作者当前头像媒体 id（匿名帖必须为 null） */
+  author_avatar_media_id?: string | null
   body: string
   place: string | null
   created_at: Date
@@ -217,7 +224,7 @@ export function buildServer(deps: ServerDeps) {
             从部署产物提取已注册方法，逐一断言它们都在 allow-methods 里。
             它上线当天就抓到了这个 DELETE 缺失（我原本只修了 PATCH）。
       */
-      reply.header('access-control-allow-methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
+      reply.header('access-control-allow-methods', 'GET,POST,PATCH,DELETE,OPTIONS')
       reply.header('access-control-allow-headers', 'content-type,authorization')
       reply.header('access-control-max-age', '600')
     }
@@ -815,6 +822,91 @@ export function buildServer(deps: ServerDeps) {
   // 帖子
   // -------------------------------------------------------------------------
 
+  /**
+   * 热门候选池 → 候选对象（2026-11-06 第二阶段）
+   *
+   * 这里把 SQL 取回的聚合列转成 hotRank 需要的形状。**注意 pg 把 numeric/bigint
+   * 以字符串返回**，所以每个数字都显式转换 —— 之前就是漏了转换导致排序把
+   * "10" 和 "9" 按字符串比。
+   */
+  function hotCandidateOf(row: {
+    id: string
+    author_id: string | null
+    place_id: string | null
+    created_at: Date
+    like_count: string | null
+    comment_count: string | null
+    favorite_count: string | null
+    view_impressions: string | null
+    view_opens: string | null
+  }): HotCandidate {
+    return {
+      id: row.id,
+      authorId: row.author_id,
+      placeId: row.place_id,
+      createdAt: row.created_at,
+      likeCount: Number.parseInt(row.like_count ?? '0', 10),
+      commentCount: Number.parseInt(row.comment_count ?? '0', 10),
+      favoriteCount: Number.parseInt(row.favorite_count ?? '0', 10),
+      impressions: Number.parseInt(row.view_impressions ?? '0', 10),
+      opens: Number.parseInt(row.view_opens ?? '0', 10),
+    }
+  }
+
+  /**
+   * 把候选池重排成一页热门（份额分配）。
+   *
+   * 平台先验 p₀ 取「近 7 天全站点开/曝光」；数据太少（总曝光 < 200）时退回兜底值，
+   * 避免用个位数样本定先验。
+   */
+  async function hotOrderRows<T extends Parameters<typeof hotCandidateOf>[0]>(rows: T[], pageSize: number): Promise<T[]> {
+    if (!rows.length) return rows
+    const totals = await db.pool.query<{ impressions: string | null; opens: string | null }>(
+      `select coalesce(sum(impressions), 0)::text as impressions,
+              coalesce(sum(opens), 0)::text as opens
+         from post_daily_stats
+        where day > current_date - 7`,
+    )
+    const opts = hotRankOptionsFromEnv(pageSize)
+    opts.priorCtr = priorCtrFromTotals(
+      Number.parseInt(totals.rows[0]?.impressions ?? '0', 10),
+      Number.parseInt(totals.rows[0]?.opens ?? '0', 10),
+      opts.priorCtr,
+    )
+    const all = rows.map(hotCandidateOf)
+    /*
+      候选池的时间窗（HOT_POOL_DAYS，默认 21 天）：热门是"近期"概念，60 天前的高点击率帖
+      不该长期占位（它在「最新」里可以翻到）。但如果窗内候选比一页还少，就退回全量 ——
+      冷清的站点宁可让旧帖占位，也不要给用户一个半空的热门页。
+    */
+    const cutoff = Date.now() - hotPoolDays() * 24 * 3600 * 1000
+    const recent = all.filter((c) => c.createdAt.getTime() >= cutoff)
+    const candidates = recent.length > 0 ? recent : all
+    // 完全冷启动（全站还没有曝光）：退回「互动 + 新鲜度」，让页面不至于变成随机顺序
+    const result = candidates.every((c) => c.impressions === 0)
+      ? { ordered: fallbackOrder(candidates), stats: null as unknown }
+      : (({ ordered, stats }) => ({ ordered, stats }))(rankHotPool(candidates, { ...opts, pageSize }))
+    const ranked = result.ordered
+    if (process.env.HOT_DEBUG === '1') {
+      console.log(
+        '[hot]',
+        JSON.stringify(result.stats),
+        'top10=',
+        ranked.slice(0, 10).map((c) => `${c.id.slice(0, 8)}|${(c.authorId ?? '').slice(0, 8)}`).join(','),
+      )
+    }
+    /*
+      只返回真正进了这页的候选：rankHotPool 会把「过了质量门」的帖子剔出 ordered，
+      如果这里按「没进榜的排到最后」去补齐，被门挡掉的帖会顺着页面尾部溜回来 ——
+      质量门就成了只影响名次、不影响展示的东西。
+    */
+    const byId = new Map(rows.map((row) => [row.id as string, row]))
+    return ranked
+      .slice(0, pageSize)
+      .map((c) => byId.get(c.id))
+      .filter((row): row is T => Boolean(row))
+  }
+
   app.get('/api/posts', async (req, reply) => {
     // 可选会话：登录后列表里每条帖子都带上 likeCount / commentCount / likedByMe
     // （未登录时不查库，likedByMe 恒为 false）
@@ -900,7 +992,13 @@ export function buildServer(deps: ServerDeps) {
       外层包一个子查询，是为了直接对聚合出来的三个文本列做算术（`q.like_count::int`），
       不必在 ORDER BY 里重复写三遍 `(select count(*) ...)` 子查询。
     */
-    const orderBy = sort === 'hot' ? hotOrderSql('q') : 'q.created_at desc, q.id desc'
+    /*
+      热门（2026-11-06 第二阶段）：SQL 只负责取候选池，排序交给 Node 的份额分配。
+      理由见 server/src/hotRank.ts 顶部：Thompson 采样与配额组装表达不成一条 ORDER BY。
+      池子按 created_at 倒序取（与「最新」同源），保证同样的库状态能复现同样的池子。
+    */
+    const orderBy = 'q.created_at desc, q.id desc'
+    const limitParam = sort === 'hot' ? hotPoolLimit() : LIST_LIMIT
 
     try {
       const r = await db.pool.query<
@@ -980,14 +1078,14 @@ export function buildServer(deps: ServerDeps) {
         ) q
         order by ${orderBy}
         limit $1`,
-        [LIST_LIMIT, meId, authorId, placeIds],
+        [limitParam, meId, authorId, placeIds],
       )
+      const rows = sort === 'hot' ? await hotOrderRows(r.rows, LIST_LIMIT) : r.rows
       return {
-        items: r.rows.map((row) => ({
+        items: rows.map((row) => ({
           id: row.id,
           // 匿名帖（033）：对外统一「匿名同学」，作者本人仍拿到自己的 authorId
           ...publicAuthor(row, meId),
-          // 头像：匿名帖不下发作者头像 id（否则等于泄露“匿名者是谁”的头像）
           authorAvatarMediaId: row.is_anonymous ? null : (row.author_avatar_media_id ?? null),
           body: row.body,
           imageMode: row.image_mode,
@@ -1203,8 +1301,7 @@ export function buildServer(deps: ServerDeps) {
         const r = await client.query<PostRow>(
           `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id, image_mode, is_anonymous)
            values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-           returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous,
-             (select u.avatar_media_id from users u where u.id = posts.author_id) as author_avatar_media_id`,
+           returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous`,
           [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode, anonymous],
         )
 
@@ -1405,7 +1502,7 @@ export function buildServer(deps: ServerDeps) {
     if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
     const meId = s.kind === 'ok' ? s.user.userId : null
     try {
-      const pr = await db.pool.query<PostRow & { status: string; place_id: string | null }>(
+      const pr = await db.pool.query<PostRow & { status: string; place_id: string | null; open_count: number }>(
         `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.status, p.place_id,
                 -- ⭐ WO#15：详情也要带地点坐标（原版 poi-detail 页有「距我N公里」，
                 -- 那需要地点经纬度 + 客户端自身位置）。
@@ -1952,19 +2049,18 @@ export function buildServer(deps: ServerDeps) {
           limit 20`,
         [id],
       )
-      // 帖子：最新（默认）或 近期热门（与信息流共用 hotScore.ts 的同一套公式）
+      // 帖子：最新（默认）或 近期热门（与信息流共用 hotRank.ts 的同一套装配逻辑）
       const sort = String((req.query as { sort?: string }).sort ?? 'latest')
       /*
-        ⭐ 2026-11-06（点击数 + 新热度）：
+        ⭐ 2026-11-06（第二阶段：份额分配）：
         · latest 不加时间窗（地点页要能看到历史上所有帖子）
-        · hot 只取近 7 天（"近期热门"的语义就是最近；新公式本身也有时间衰减，
-          两层叠加是刻意的：先按时间圈定范围，再在范围内算分）
-        · 排序表达式来自 hotScoreSql()，和信息流完全同源 —— 之前两处各写一遍，
-          已经出现过 `::int` 转换不一致的隐患
+        · hot 的候选池按 HOT_POOL_DAYS 圈定（"近期热门"的语义就是最近），
+          圈定之后交给 hotOrderRows() 做质量门 + 份额分配，与信息流完全同源
       */
-      const placeWhere = sort === 'hot' ? "p.status = 'published' and p.created_at > now() - interval '7 day'" : "p.status = 'published'"
-      const placeOrderBy =
-        sort === 'hot' ? `${hotScoreSql('q')} desc, q.created_at desc, q.id desc` : 'q.created_at desc, q.id desc'
+      const placeWhere =
+        sort === 'hot' ? `p.status = 'published' and p.created_at > now() - interval '${hotPoolDays()} day'` : "p.status = 'published'"
+      // 热门：池子取回来后交给 hotOrderRows 做份额分配；最新：SQL 直接按时间倒序
+      const placeOrderBy = 'q.created_at desc, q.id desc'
       const posts = await db.pool.query<
         PostRow & {
           place_id: string | null
@@ -1985,7 +2081,7 @@ export function buildServer(deps: ServerDeps) {
                   (select count(*) from likes l where l.post_id = p.id)::text as like_count,
                   (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
                   (select count(*) from favorites f where f.post_id = p.id)::text as favorite_count,
-                  -- 最近 14 天曝光/点开（与信息流同口径，见 hotScore.ts 的 ctrWindowDays）
+                  -- 最近 14 天曝光/点开（与信息流同口径：两处都用 14 天窗口，改一处必须改另一处）
                   (select coalesce(sum(s.impressions), 0) from post_daily_stats s
                     where s.post_id = p.id and s.day > current_date - 14)::text as view_impressions,
                   (select coalesce(sum(s.opens), 0) from post_daily_stats s
@@ -2005,9 +2101,10 @@ export function buildServer(deps: ServerDeps) {
          ) q
          order by ${placeOrderBy}
          limit $3`,
-        [id, meId, LIST_LIMIT],
-
+        [id, meId, sort === 'hot' ? hotPoolLimit() : LIST_LIMIT],
       )
+      // 地点面板的「近期热门」同样走份额分配（口径与信息流一致，避免同一个帖子两处顺序矛盾）
+      const placePostRows = sort === 'hot' ? await hotOrderRows(posts.rows, LIST_LIMIT) : posts.rows
       return {
         id: place.id,
         name: place.name,
@@ -2037,10 +2134,10 @@ export function buildServer(deps: ServerDeps) {
           status: a.eff_status,
           source: a.source,
         })),
-        posts: posts.rows.map((row) => ({
+        posts: placePostRows.map((row) => ({
           id: row.id,
-          ...publicAuthor(row, meId),
-          authorAvatarMediaId: row.is_anonymous ? null : (row.author_avatar_media_id ?? null),
+          author: row.author_name,
+          authorId: row.author_id,
           body: row.body,
           imageMode: row.image_mode,
           mapMediaId: row.map_media_id ?? null,
