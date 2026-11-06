@@ -98,6 +98,7 @@ interface PostRow {
   image_mode: 'photo' | 'sticker'
   id: string
   author_name: string
+  author_avatar_media_id?: string | null
   author_id: string | null
   body: string
   place: string | null
@@ -206,7 +207,7 @@ export function buildServer(deps: ServerDeps) {
             从部署产物提取已注册方法，逐一断言它们都在 allow-methods 里。
             它上线当天就抓到了这个 DELETE 缺失（我原本只修了 PATCH）。
       */
-      reply.header('access-control-allow-methods', 'GET,POST,PATCH,DELETE,OPTIONS')
+      reply.header('access-control-allow-methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
       reply.header('access-control-allow-headers', 'content-type,authorization')
       reply.header('access-control-max-age', '600')
     }
@@ -911,7 +912,7 @@ export function buildServer(deps: ServerDeps) {
         }
       >(
         `select * from (
-        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
+        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
                 -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
                 -- 为什么需要：地图页的标记按经纬度渲染（默认 provider=tencent 用
                 -- projectToContainer(LatLng)；RealMap 用 L.marker([lat,lng])），
@@ -1184,7 +1185,8 @@ export function buildServer(deps: ServerDeps) {
         const r = await client.query<PostRow>(
           `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id, image_mode, is_anonymous)
            values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-           returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous`,
+           returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous,
+             (select u.avatar_media_id from users u where u.id = posts.author_id) as author_avatar_media_id`,
           [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode, anonymous],
         )
 
@@ -1386,7 +1388,7 @@ export function buildServer(deps: ServerDeps) {
     const meId = s.kind === 'ok' ? s.user.userId : null
     try {
       const pr = await db.pool.query<PostRow & { status: string; place_id: string | null }>(
-        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.status, p.place_id,
+        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.status, p.place_id,
                 -- ⭐ WO#15：详情也要带地点坐标（原版 poi-detail 页有「距我N公里」，
                 -- 那需要地点经纬度 + 客户端自身位置）。
                 pl.latitude as place_lat, pl.longitude as place_lng
@@ -1865,7 +1867,7 @@ export function buildServer(deps: ServerDeps) {
           images: unknown
         }
       >(
-        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.id, p.author_name, p.author_id, p.body, p.place, p.created_at, p.place_id,
+        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
                 pl.latitude as place_lat, pl.longitude as place_lng,
                 (select count(*) from likes l where l.post_id = p.id)::text as like_count,
                 (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
@@ -1924,8 +1926,7 @@ export function buildServer(deps: ServerDeps) {
         })),
         posts: posts.rows.map((row) => ({
           id: row.id,
-          author: row.author_name,
-          authorId: row.author_id,
+          ...publicAuthor(row, meId),
           body: row.body,
           imageMode: row.image_mode,
           mapMediaId: row.map_media_id ?? null,

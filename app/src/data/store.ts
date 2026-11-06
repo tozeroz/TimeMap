@@ -1,5 +1,5 @@
 import { type FeedPost, type User } from './types'
-import { avatarFor } from '../api/client'
+import { avatarFor, mediaUrl } from '../api/client'
 import { getSession } from '../api/session'
 
 /**
@@ -116,7 +116,7 @@ export function addMyPost(input: {
   */
   const s = getSession()
   const author: User = s
-    ? { id: `u:${s.user.id}`, name: s.user.displayName, avatar: avatarFor(s.user.displayName) }
+    ? { id: `u:${s.user.id}`, name: s.user.displayName, avatar: s.user.avatarMediaId ? mediaUrl(s.user.avatarMediaId) : avatarFor(s.user.displayName) }
     : { id: 'local:anonymous', name: '未登录', avatar: avatarFor('未登录') }
   const post: FeedPost = {
     id: `mine-${Date.now()}`,

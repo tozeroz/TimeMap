@@ -5,7 +5,7 @@ if (Test-Path -LiteralPath $record) {
   $savedJobs = Get-Content -LiteralPath $record -Raw | ConvertFrom-Json
   foreach ($entry in $savedJobs) {
     $running = Get-Process -Id $entry.processId -ErrorAction SilentlyContinue
-    if ($running -and $running.ProcessName -eq $entry.name -and $running.StartTime.ToUniversalTime().ToString('o') -eq $entry.startedAt) {
+    if ($running -and $running.ProcessName -eq $entry.name -and $running.StartTime.ToUniversalTime().Ticks -eq ([datetime]$entry.startedAt).ToUniversalTime().Ticks) {
       Stop-Process -Id $running.Id
     }
   }

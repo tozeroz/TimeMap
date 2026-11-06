@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ANONYMOUS_AVATAR, avatarFor, mediaUrl, relativeTime, type ApiPostDetail, type ApiCommentNode } from '../api/client'
+import { avatarFor, postAvatar, mediaUrl, relativeTime, type ApiPostDetail, type ApiCommentNode } from '../api/client'
 import { getSession } from '../api/session'
 import { feedBrowse } from '../data/feedBrowse'
 import { goBack, navigate } from '../router'
@@ -128,7 +128,7 @@ export function PostReader(p: Props) {
     <div className="reader__base">
       <header className="reader__header">
         <button onClick={() => goBack('campus')} aria-label="返回"><IconBack size={26} /></button>
-        <img src={post.anonymous ? ANONYMOUS_AVATAR : avatarFor(post.author)} className="reader__avatar" alt="" />
+        <img src={postAvatar(post)} className="reader__avatar" alt="" />
         <span className="reader__author">{post.author}</span>
         {post.anonymous && <span className="anon-tag" data-anon-tag>匿名</span>}
         <button onClick={() => setSheet('more')} aria-label="更多操作"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="20" cy="12" r="1.8"/></svg></button>

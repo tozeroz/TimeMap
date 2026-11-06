@@ -74,6 +74,8 @@ export interface ApiPost {
   author: string
   /** M2 起由服务端会话决定；M1 历史帖子为 null（当时没有可信身份） */
   authorId: string | null
+  /** Current public profile avatar; null for anonymous posts or missing avatars. */
+  authorAvatarMediaId?: string | null
   /**
    * ⭐ 匿名发帖（2026-11-05，迁移 033）。
    *
@@ -1483,6 +1485,12 @@ export function relativeTime(iso: string): string {
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
+/** Use the saved profile avatar, retaining placeholders for older responses. */
+export function postAvatar(post: Pick<ApiPost, 'anonymous' | 'author' | 'authorAvatarMediaId'>): string {
+  if (post.anonymous) return ANONYMOUS_AVATAR
+  return post.authorAvatarMediaId ? mediaUrl(post.authorAvatarMediaId) : avatarFor(post.author)
+}
+
 export function toFeedPost(p: ApiPost): FeedPost {
   const anonymous = p.anonymous === true
   const author: User = {
@@ -1493,7 +1501,7 @@ export function toFeedPost(p: ApiPost): FeedPost {
     // 这里也**不能**把它带进渲染模型，否则"点作者进主页"这类交互又能定位到人。
     id: anonymous ? 'anon:' : p.authorId ? `u:${p.authorId}` : `api:${p.author}`,
     name: anonymous ? ANONYMOUS_DISPLAY_NAME : p.author,
-    avatar: anonymous ? ANONYMOUS_AVATAR : avatarFor(p.author),
+    avatar: postAvatar(p),
   }
   return {
     id: p.id,

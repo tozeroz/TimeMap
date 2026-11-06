@@ -108,6 +108,7 @@ export function LoginScreen() {
           if (seconds > 0) { const timestamp = Date.now(); setNow(timestamp); setCooldownUntil(timestamp + seconds * 1000) }
         }
         else if (result.status === 400) { setError('手机号格式不正确，请检查后重试'); setErrorField('phone') }
+        else if (result.status === 405 && /read_only_preview/.test(result.reason)) setError('当前连接为只读预览，请切换到可登录模式')
         else if (result.status === 503) setError(/sms_delivery_failed/.test(result.reason) ? '短信通道暂时不可用，请稍后重新获取验证码' : '验证码服务暂时不可用，请稍后重试')
         else setError('验证码发送失败，请检查网络后重试')
         return

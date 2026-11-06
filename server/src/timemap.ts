@@ -169,6 +169,7 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       const r = await db.pool.query<{
         id: string
         author_name: string
+        author_avatar_media_id?: string | null
         author_id: string | null
         body: string
         place: string | null
@@ -180,7 +181,7 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
         images: unknown
         is_anonymous: boolean
       }>(
-        `select p.id, p.author_name, p.author_id, p.is_anonymous, p.body, p.place, p.place_id, p.created_at,
+        `select p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.is_anonymous, p.body, p.place, p.place_id, p.created_at,
                 (select count(*) from likes l where l.post_id = p.id)::text as like_count,
                 (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
                 exists (select 1 from likes l2 where l2.post_id = p.id and l2.user_id = $1::uuid) as liked_by_me,
