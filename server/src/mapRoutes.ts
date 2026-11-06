@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { Db } from './db.ts'
 import { parseCategoryFilter } from './placeCategories.ts'
+import { publicAuthor } from './anonymous.ts'
 import { randomUUID } from 'node:crypto'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -33,7 +34,7 @@ function placeTree(previewHierarchy = false) { return `with recursive stored_pla
   union
   select t.root, p.id from tree t join map_places p on p.parent_place_id=t.id where p.enabled
 )` }
-const POST_SELECT = `p.id, p.author_name, p.author_id, p.body, p.place, p.place_id, p.created_at, p.image_mode,
+const POST_SELECT = `p.id, p.author_name, p.author_id, p.is_anonymous, p.body, p.place, p.place_id, p.created_at, p.image_mode,
   pl.latitude as place_lat, pl.longitude as place_lng,
   (select count(*)::int from likes l where l.post_id=p.id) as like_count,
   (select count(*)::int from comments c where c.post_id=p.id and c.status='published') as comment_count,
@@ -46,12 +47,16 @@ const ORDER = `(q.created_at >= $2::timestamptz - interval '30 days') desc,
   q.like_count desc, q.created_at desc, q.id asc`
 
 interface PostRow {
-  id: string; author_name: string; author_id: string | null; body: string; place: string | null;
+  id: string; author_name: string; author_id: string | null; is_anonymous: boolean; body: string; place: string | null;
   place_id: string; created_at: Date | string; image_mode: string; place_lat: number | null;
   place_lng: number | null; like_count: number; comment_count: number; map_media_id: string | null; images: unknown
 }
-function post(row: PostRow) {
-  return { id: row.id, author: row.author_name, authorId: row.author_id, body: row.body,
+/**
+ * 匿名帖（033）：地图上的照片/卡片也是帖子，同样要按读模型遮罩。
+ * 地图是**匿名帖最容易泄露作者的地方** —— `authorId` 会被 MapScreen 拿去拼作者主页跳转。
+ */
+function post(row: PostRow, meId: string | null) {
+  return { id: row.id, ...publicAuthor(row, meId), body: row.body,
     place: row.place, placeId: row.place_id, createdAt: new Date(row.created_at).toISOString(),
     imageMode: row.image_mode, placeLat: row.place_lat === null ? null : Number(row.place_lat),
     placeLng: row.place_lng === null ? null : Number(row.place_lng), likeCount: Number(row.like_count),
@@ -88,7 +93,9 @@ export function registerMapRoutes(app: FastifyInstance, db: Db, options: { previ
         latitude: row.latitude === null ? null : Number(row.latitude), longitude: row.longitude === null ? null : Number(row.longitude),
         category: row.category, enabled: row.enabled, displayLevel: row.display_level,
         minDisplayZoom: row.min_display_zoom, displayPriority: row.display_priority, parentPlaceId: row.parent_place_id,
-        postCount: row.post_count, previews: row.previews.map(post),
+        postCount: row.post_count,
+        // 地图是公开读（无会话）：匿名帖的 authorId 一律 null，非匿名原样返回
+        previews: row.previews.map((p) => post(p, null)),
       })) }
     } catch (error) {
       req.log.error({ err: error }, 'Map places query failed')
@@ -144,7 +151,7 @@ export function registerMapRoutes(app: FastifyInstance, db: Db, options: { previ
         join tree t on t.id=p.place_id where t.root=$1::uuid and p.status='published'`, [q.placeId])
       return { name: place.rows[0]!.name, total: count.rows[0]!.total, asOf: snapshot.asOf,
         snapshot: token, truncated: snapshot.truncated,
-        items: result.rows.map(post), nextOffset: snapshot.ids.length > offset + limit ? offset + limit : null }
+        items: result.rows.map((p) => post(p, null)), nextOffset: snapshot.ids.length > offset + limit ? offset + limit : null }
     } catch (error) {
       req.log.error({ err: error }, 'Map posts query failed')
       const transient = db.noteFailure(error) === 'transient'

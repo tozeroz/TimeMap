@@ -84,6 +84,8 @@ export function PostCard({
 
   function openAuthor(e: React.MouseEvent) {
     e.stopPropagation()
+    // 匿名帖（2026-11-05）：不能跳作者主页 —— 跳过去就等于点名，匿名白做
+    if (post.anonymous) return
     navigate('user', { id: post.author.id })
   }
 
@@ -135,10 +137,18 @@ export function PostCard({
     >
       {hasImage ? (
         <>
-          <button className="pcard__author" onClick={openAuthor}>
-            <img className="pcard__avatar" src={post.author.avatar} alt="" />
-            <span className="pcard__author-name">{post.author.name}</span>
-          </button>
+          {post.anonymous ? (
+            <span className="pcard__author pcard__author--anon" data-anon-author>
+              <img className="pcard__avatar" src={post.author.avatar} alt="" />
+              <span className="pcard__author-name">{post.author.name}</span>
+              <span className="anon-tag" data-anon-tag>匿名</span>
+            </span>
+          ) : (
+            <button className="pcard__author" onClick={openAuthor}>
+              <img className="pcard__avatar" src={post.author.avatar} alt="" />
+              <span className="pcard__author-name">{post.author.name}</span>
+            </button>
+          )}
           <div className="pcard__mediaWrap">
             {localChip}
             <img
@@ -166,10 +176,18 @@ export function PostCard({
           <p className="pcard__text">{post.text}</p>
           {post.topic && <span className="pcard__topic">{post.topic}</span>}
           <div className="pcard__foot">
-            <button className="pcard__authorBtn" onClick={openAuthor}>
-              <img className="pcard__avatar" src={post.author.avatar} alt="" />
-              <span className="pcard__name">{post.author.name}</span>
-            </button>
+            {post.anonymous ? (
+              <span className="pcard__authorBtn pcard__author--anon" data-anon-author>
+                <img className="pcard__avatar" src={post.author.avatar} alt="" />
+                <span className="pcard__name">{post.author.name}</span>
+                <span className="anon-tag" data-anon-tag>匿名</span>
+              </span>
+            ) : (
+              <button className="pcard__authorBtn" onClick={openAuthor}>
+                <img className="pcard__avatar" src={post.author.avatar} alt="" />
+                <span className="pcard__name">{post.author.name}</span>
+              </button>
+            )}
             <span className="pcard__meta">
               <button className={`pcard__like ${liked ? 'is-liked' : ''}`} onClick={toggleLike}>
                 <IconHeart size={14} filled={liked} />

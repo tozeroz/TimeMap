@@ -6,9 +6,11 @@ export interface PublishDraft {
   original: string
   placeId: string
   stickerRequested: boolean
+  /** 匿名发布（2026-11-05）：草稿也要记住，否则「存草稿再回来」会悄悄变回实名 */
+  anonymous?: boolean
   updatedAt: number
   imageText?: ImageText
-  pendingSubmission?: { body: string; placeId: string; mediaIds: string[]; mapMediaId?: string; imageMode: 'photo' | 'sticker'; clientRequestId: string }
+  pendingSubmission?: { body: string; placeId: string; mediaIds: string[]; mapMediaId?: string; imageMode: 'photo' | 'sticker'; clientRequestId: string; anonymous?: boolean }
 }
 
 // IndexedDB keeps actual image data, rather than a temporary object URL.

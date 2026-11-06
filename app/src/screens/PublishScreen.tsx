@@ -32,6 +32,11 @@ export function PublishScreen() {
   const [owner] = useState(() => getSession()?.user.id ?? 'guest')
   const [placeId, setPlaceId] = useState(route.query.placeId ?? '')
   const [text, setText] = useState(republish?.text ?? '')
+  /**
+   * 匿名发布（2026-11-05）。默认关闭 —— 匿名要用户显式选择，
+   * 不能因为"默认更安全"就悄悄替用户决定（匿名会失去署名的社交价值，也可能被滥用）。
+   */
+  const [anonymous, setAnonymous] = useState(false)
   const [original, setOriginal] = useState('')
   const [rawSticker, setRawSticker] = useState('')
   const [stickerResult, setStickerResult] = useState<{ source: string; outline: boolean; dataUrl: string } | null>(null)
@@ -215,6 +220,7 @@ export function PublishScreen() {
     dirty.current = Boolean(d.text.trim() || d.original)
     // 草稿没有地点时保留当前预选地点（例如从地图地点抽屉进入）
     draftId.current = d.id; setText(d.text); setOriginal(d.original); setPlaceId(prev => d.placeId || prev)
+    setAnonymous(d.anonymous ?? false)
     setPendingSubmission(d.pendingSubmission)
     setImageText(d.imageText ?? defaultImageText()); setTextEditorOpen(Boolean(d.imageText?.text))
     stickerRequested.current = d.stickerRequested; setSheet(null)
@@ -233,7 +239,7 @@ export function PublishScreen() {
   async function exit(save: boolean) {
     setErr('')
     try {
-      if (save) await saveDraft({ id: draftId.current, text, original, placeId, stickerRequested: stickerRequested.current, updatedAt: Date.now(), pendingSubmission, imageText })
+      if (save) await saveDraft({ id: draftId.current, text, original, placeId, stickerRequested: stickerRequested.current, anonymous, updatedAt: Date.now(), pendingSubmission, imageText })
       else await deleteDraft(draftId.current)
       leave()
     } catch { setErr('草稿保存失败，编辑内容仍保留。请检查存储空间后重试。') }
@@ -245,7 +251,7 @@ export function PublishScreen() {
       const source = adopted ? sticker : original
       const id = !pendingSubmission && source ? await mediaId(hasImageText ? readyTextImage : source) : undefined
       const mapMediaId = !pendingSubmission && source && hasImageText ? await mediaId(source) : undefined
-      const submission = pendingSubmission ?? { body: text.trim(), placeId, mediaIds: id ? [id] : [], ...(mapMediaId ? { mapMediaId } : {}), imageMode: adopted ? 'sticker' as const : 'photo' as const, clientRequestId: requestId.current }
+      const submission = pendingSubmission ?? { body: text.trim(), placeId, mediaIds: id ? [id] : [], ...(mapMediaId ? { mapMediaId } : {}), imageMode: adopted ? 'sticker' as const : 'photo' as const, clientRequestId: requestId.current, anonymous }
       setPendingSubmission(submission)
       const r = await createPost(submission)
       if (!r.ok) {
@@ -278,6 +284,20 @@ export function PublishScreen() {
         {placesPhase === 'loading' && <p className="pub__hint" role="status">地标加载中…</p>}
         {placesPhase === 'ready' && !places.length && <p className="pub__hint">暂无可选地点，请稍后再试。</p>}
         {placesPhase === 'error' && <Button variant="text" onClick={() => void loadPlaces()}>地标加载失败，点击重试</Button>}
+      </section>
+      {/*
+        匿名开关。为什么放在地点之下、正文之上：
+        它和"这条内容以什么身份出现"有关，紧挨着"发给谁看"（地点）最自然，
+        又不会挤在正文输入框和发布按钮之间打断写作。
+      */}
+      <section className="pub__anon" data-pub-anon-field>
+        <button type="button" className={`pub__anonRow ${anonymous ? 'is-on' : ''}`} role="switch" aria-checked={anonymous} aria-describedby="pub-anon-hint" data-pub-anon={anonymous ? '1' : '0'} disabled={locked} onClick={() => setAnonymous(v => !v)}>
+          <span className="pub__anonText">
+            <strong>匿名发布</strong>
+            <span id="pub-anon-hint">别人只会看到「匿名同学」和系统头像，看不到你的昵称、头像和主页。</span>
+          </span>
+          <span className="pub__anonSwitch" aria-hidden="true"><span /></span>
+        </button>
       </section>
       <section className="pub__writing">
         <label className="ui-sr-only" htmlFor="pub-text">回忆正文</label>

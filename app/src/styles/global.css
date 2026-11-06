@@ -4,6 +4,27 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+  匿名帖标签（2026-11-05）。
+  为什么用全局样式而不是各页面各写一份：匿名标会出现在卡片、详情、收藏、地点页五处，
+  各处字号/间距不同，但"它是一枚中性的小标"这个视觉语义必须一致，
+  否则用户会以为不同位置的「匿名」含义不一样。
+*/
+.anon-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--c-fill, #eef1f4);
+  color: var(--c-text-2, #5b6b7c);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 html,
 body,
 #root {

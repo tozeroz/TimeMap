@@ -71,7 +71,7 @@ export function PostRow({ post, index, onOpen }: { post: ApiPlacePost; index: nu
       >
         {img && <img className="pd__postImg" src={img} alt="" loading="lazy" {...(sized ? { width: first.width!, height: first.height! } : {})} />}
         <span className="pd__postMain">
-          <span className="pd__postAuthor">{post.author}</span>
+          <span className="pd__postAuthor">{post.author}{post.anonymous && <span className="anon-tag" data-anon-tag>匿名</span>}</span>
           <span className="pd__postBody">{post.body}</span>
           <span className="pd__postTime">{relativeTime(post.createdAt)}</span>
           <span className="pd__postStats">

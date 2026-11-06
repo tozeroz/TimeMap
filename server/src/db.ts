@@ -36,6 +36,7 @@ import trainingProjectsSql from './migrations/032_training_projects.sql'
 import trainingProjectLinksSql from './migrations/033_training_project_links.sql'
 import classTrainingProjectsSql from './migrations/034_class_training_projects.sql'
 import placeCategoriesV2Sql from './migrations/032_place_categories_v2.sql'
+import postAnonymousSql from './migrations/035_post_anonymous.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -163,6 +164,10 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '032_training_projects', sql: trainingProjectsSql },
   { version: '033_training_project_links', sql: trainingProjectLinksSql },
   { version: '034_class_training_projects', sql: classTrainingProjectsSql },
+  // 035：匿名发帖 —— posts.is_anonymous（默认 false，历史帖行为不变）。
+  //      遮罩在读模型里做（server/src/anonymous.ts），真实 author_id 不落改。
+  //      编号让到 035：main 上 033/034 已被「班级实训项目」占用。
+  { version: '035_post_anonymous', sql: postAnonymousSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

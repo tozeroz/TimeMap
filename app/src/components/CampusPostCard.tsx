@@ -19,9 +19,21 @@ export function CampusPostCard({ post, pending, local, onLike, onRemove, onRepub
   const sticker = post.imageMode === 'sticker'
   const paperVariant = Array.from(post.id).reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 0) % 3
   return <article className={`square-card ${image ? 'square-card--image' : 'square-card--text'} ${sticker ? 'square-card--sticker' : ''} square-card--paper-${paperVariant} ${post.text.length <= 45 ? 'square-card--short' : ''}`} data-feed-id={post.id}>
-    <button className="square-card__author" onClick={() => navigate('user', { id: post.author.id })} aria-label={`查看${post.author.name}的主页`}>
-      <img src={post.author.avatar} alt="" loading="lazy" /><span>{post.author.name}</span>
-    </button>
+    {/*
+      匿名帖（2026-11-05）没有可去的主页，所以**不渲染按钮**（而不是渲染一个点了没反应的按钮）：
+      `aria-disabled` 的按钮对读屏用户是"不可用"，对点得动的用户是"骗我点了一下"。
+      用 span 保持同样的布局类名，视觉一致但语义正确。
+    */}
+    {post.anonymous ? (
+      <span className="square-card__author square-card__author--anon" data-anon-author>
+        <img src={post.author.avatar} alt="" loading="lazy" /><span>{post.author.name}</span>
+        <span className="anon-tag" data-anon-tag>匿名</span>
+      </span>
+    ) : (
+      <button className="square-card__author" onClick={() => navigate('user', { id: post.author.id })} aria-label={`查看${post.author.name}的主页`}>
+        <img src={post.author.avatar} alt="" loading="lazy" /><span>{post.author.name}</span>
+      </button>
+    )}
     <a className="square-card__open" onClick={e => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) { e.preventDefault(); openFeed(post.id, browseIds ?? [post.id]) } }} href={`#/feed?id=${encodeURIComponent(post.id)}`} aria-label={`查看帖子：${post.text || '校园照片'}`}>
       {image ? <div className="square-card__media" style={{ aspectRatio: post.ratio || (sticker ? '4 / 5' : '1 / 1') }}>
         {broken ? <span className="square-card__unavailable"><IconImage size={28} />图片暂时无法显示</span> : <img src={image} alt={post.text ? '' : '校园照片'} loading="lazy" onError={() => setBroken(true)} />}

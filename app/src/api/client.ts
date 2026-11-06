@@ -74,6 +74,15 @@ export interface ApiPost {
   author: string
   /** M2 起由服务端会话决定；M1 历史帖子为 null（当时没有可信身份） */
   authorId: string | null
+  /**
+   * ⭐ 匿名发帖（2026-11-05，迁移 033）。
+   *
+   * 为 true 时服务端已经把 `author` 换成「匿名同学」、`authorId` 置空
+   * （**只有作者本人**从列表/详情/发布响应里还能拿到自己的 id）。
+   * 前端必须据此换系统头像、并且**不提供任何作者主页跳转**——
+   * 否则点一下头像就露出"匿名同学的作者是谁"。
+   */
+  anonymous?: boolean
   body: string
   place: string | null
   /**
@@ -793,6 +802,11 @@ export function createPost(input: {
   /** 幂等键（UUID）：同一次发布的重试必须复用**同一个**值 */
   clientRequestId?: string
   imageMode?: 'photo' | 'sticker'
+  /**
+   * 匿名发布（2026-11-05）。true = 其他用户看到「匿名同学」+ 系统头像。
+   * 服务端只接受布尔；缺省 = 实名（历史行为）。
+   */
+  anonymous?: boolean
 }): Promise<ApiResult<ApiPost>> {
   return request<ApiPost>('/api/posts', { method: 'POST', body: input })
 }
@@ -1105,6 +1119,8 @@ export function adminResolveReport(
 export interface ApiAdminPost {
   id: string
   author: string
+  /** 匿名发布（033）：管理端仍能看到真实作者，这里标明「用户侧显示为匿名」 */
+  anonymous?: boolean
   body: string
   place: string | null
   status: 'published' | 'removed'
@@ -1432,6 +1448,28 @@ export function avatarFor(name: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
+/**
+ * 匿名帖的**统一系统头像**（2026-11-05）。
+ *
+ * 为什么是常量而不是按名字生成：`avatarFor` 是按名字算 hue 的，
+ * 匿名帖每个作者名字都叫「匿名同学」的话颜色会完全一样——
+ * 但更糟的是反过来：一旦有人把显示名改成别的，头像颜色就变了，
+ * 等于用头像颜色把"同一个人"这类信息泄露出去。
+ * 所以匿名的头像必须是**固定不变的同一枚**，且不带任何名字信息（中性人像剪影）。
+ */
+export const ANONYMOUS_AVATAR: string = (() => {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">` +
+    `<rect width="80" height="80" rx="40" fill="#cfd8e3"/>` +
+    `<circle cx="40" cy="31" r="13" fill="#8a99ac"/>` +
+    `<path d="M16 72c0-13.3 10.7-24 24-24s24 10.7 24 24z" fill="#8a99ac"/>` +
+    `</svg>`
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+})()
+
+/** 匿名帖的展示名（与服务端 `ANONYMOUS_DISPLAY_NAME` 必须一致） */
+export const ANONYMOUS_DISPLAY_NAME = '匿名同学'
+
 /** 相对时间（原版列表习惯：刚刚 / N分钟前 / N小时前 / N天前 / M月D日） */
 export function relativeTime(iso: string): string {
   const t = Date.parse(iso)
@@ -1446,16 +1484,21 @@ export function relativeTime(iso: string): string {
 }
 
 export function toFeedPost(p: ApiPost): FeedPost {
+  const anonymous = p.anonymous === true
   const author: User = {
     // 有 authorId 就用它（同一用户在不同设备上会得到同一个 id），
     // M1 历史帖子没有 id，退化成按名字生成，只影响本地渲染不影响数据
-    id: p.authorId ? `u:${p.authorId}` : `api:${p.author}`,
-    name: p.author,
-    avatar: avatarFor(p.author),
+    //
+    // 匿名帖：id 用 `anon:` 前缀 —— 即使服务端给作者本人回了真实 authorId，
+    // 这里也**不能**把它带进渲染模型，否则"点作者进主页"这类交互又能定位到人。
+    id: anonymous ? 'anon:' : p.authorId ? `u:${p.authorId}` : `api:${p.author}`,
+    name: anonymous ? ANONYMOUS_DISPLAY_NAME : p.author,
+    avatar: anonymous ? ANONYMOUS_AVATAR : avatarFor(p.author),
   }
   return {
     id: p.id,
     author,
+    anonymous,
     text: p.body,
     // M4：帖子的真实图片。**这里此前是硬编码 `images: []`**，
     // 所以列表卡片从来没显示过图（后端当时也没返回）。现在统一走 mediaUrl(id)：
@@ -1503,6 +1546,8 @@ export interface ApiPostDetail {
   id: string
   author: string
   authorId: string | null
+  /** 匿名发帖（033）：true 时 author 恒为「匿名同学」、authorId 对非作者为 null */
+  anonymous?: boolean
   body: string
   place: string | null
   /** ⭐ P0（F02）：地点权威 id —— 详情页据此跳地点页，而不是拿地名文本去猜 */
@@ -1597,6 +1642,8 @@ export interface ApiPlacePost {
   id: string
   author: string
   authorId: string | null
+  /** 匿名发帖（033）：地点页的帖子列表同样要标注 */
+  anonymous?: boolean
   body: string
   /** ⭐ P0：地点权威 id（地点详情里的帖子必然有值 —— 它们就是按 place_id 查出来的） */
   placeId: string | null

@@ -23,6 +23,7 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import type { Db } from './db'
 import { isPlaceCategory, PLACE_CATEGORY_HINT } from './placeCategories.ts'
+import { publicAuthor } from './anonymous.ts'
 
 export interface TimemapSessionUser {
   sessionId: string
@@ -177,8 +178,9 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
         comment_count: string
         liked_by_me: boolean
         images: unknown
+        is_anonymous: boolean
       }>(
-        `select p.id, p.author_name, p.author_id, p.body, p.place, p.place_id, p.created_at,
+        `select p.id, p.author_name, p.author_id, p.is_anonymous, p.body, p.place, p.place_id, p.created_at,
                 (select count(*) from likes l where l.post_id = p.id)::text as like_count,
                 (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
                 exists (select 1 from likes l2 where l2.post_id = p.id and l2.user_id = $1::uuid) as liked_by_me,
@@ -197,8 +199,8 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       return {
         items: r.rows.map((row) => ({
           id: row.id,
-          author: row.author_name,
-          authorId: row.author_id,
+          // 匿名帖（033）：收藏列表也要遮罩，否则"收藏了谁的匿名帖"直接暴露作者
+          ...publicAuthor(row, g.user.userId),
           body: row.body,
           place: row.place,
           placeId: row.place_id,
@@ -814,14 +816,21 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
         status: string
         removed_reason: string | null
         created_at: Date
+        is_anonymous: boolean
       }>(
-        `select id, author_name, body, place, status, removed_reason, created_at
+        /*
+          管理端**保留真实作者名**（US-08：举报/下架要能定位到人），
+          但额外返回 `anonymous`，让审核知道「这条在用户侧显示为匿名」，
+          避免管理员以为用户名字被改坏了。
+        */
+        `select id, author_name, is_anonymous, body, place, status, removed_reason, created_at
            from posts order by created_at desc limit ${LIST_LIMIT}`,
       )
       return {
         items: r.rows.map((row) => ({
           id: row.id,
           author: row.author_name,
+          anonymous: row.is_anonymous === true,
           body: row.body,
           place: row.place,
           status: row.status,

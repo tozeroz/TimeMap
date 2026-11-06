@@ -161,7 +161,8 @@ export function markersFromPlaces(
         category: p.category,
         // ⚠️ 单一确定色：原版配色规则 NOT_EVALUATED（见函数头注释）
         color: '#f5453b',
-        userId: rep?.authorId ?? '',
+        // 匿名帖（2026-11-05）：不带作者 id —— 地图卡片上点作者不该能定位到人
+        userId: rep?.anonymous ? '' : rep?.authorId ?? '',
         postId: rep?.id ?? '',
         // SVG 像素空间：中心 = (700, 1000)；纬度越大越靠北 → y 越小
         x: Math.round(700 + dxM * PX_PER_M),
