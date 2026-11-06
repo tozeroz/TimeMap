@@ -194,19 +194,32 @@ export function TencentMap({
          * 真正可点的可视化区域与 wrap 的布局盒错开；而 z-index 抬高的也是 wrap，
          * 所以点击事件的 target 可能是 .rm、.rm__card 甚至 wrap 自己 —— 统一在 wrap 上收口。
          *
-         * 另外记录 pointerdown 位置：从标记上起手的拖动不应该导航（浏览器仍会补发 click），
-         * 位移超过阈值就丢弃这次 click，避免「想拖地图却进了地点详情」。
+         * ⚠️ 必须同时监听 `pointerup`，不能只听 `click`：
+         *   腾讯 GL 的地图覆盖层会在触摸时对 touch 事件 preventDefault()，
+         *   于是浏览器**不再补发 click** —— 真手机上点标记「有按下、有抬起、没反应」，
+         *   而桌面上用鼠标（或 Playwright 的 mouse click）却完全正常
+         *   （2026-11-06 线上实测：pointerdown/touchstart/pointerup/touchend 都有，click 没有）。
+         *   所以改成 pointerup 触发，并保留 click 作为鼠标/键盘路径，两者用时间戳去重。
+         *
+         * 另外记录 pointerdown 位置：从标记上起手的拖动不应该导航，
+         * 位移超过阈值就丢弃这一次手势。
          */
         let downX = 0
         let downY = 0
+        let lastFire = 0
+        const fire = (clientX: number, clientY: number, target: EventTarget | null) => {
+          if (Math.abs(clientX - downX) > 8 || Math.abs(clientY - downY) > 8) return
+          const now = Date.now()
+          if (now - lastFire < 400) return // pointerup 与随后的 click 是同一次手势
+          lastFire = now
+          onMarkerClick(m.placeId, markerClickPostId(wrap, m, { target, clientX, clientY }))
+        }
         wrap.addEventListener('pointerdown', (e) => {
           downX = e.clientX
           downY = e.clientY
         })
-        wrap.addEventListener('click', (e) => {
-          if (Math.abs(e.clientX - downX) > 8 || Math.abs(e.clientY - downY) > 8) return
-          onMarkerClick(m.placeId, markerClickPostId(wrap, m, e))
-        })
+        wrap.addEventListener('pointerup', (e) => fire(e.clientX, e.clientY, e.target))
+        wrap.addEventListener('click', (e) => fire(e.clientX, e.clientY, e.target))
         wrap.appendChild(el)
         host.appendChild(wrap)
         const item: PlacedItem = { wrap, lat: m.lat, lng: m.lng, placeId: m.placeId }
