@@ -41,6 +41,7 @@ import postViewsSql from './migrations/036_post_views.sql'
 import exposureSlotsSql from './migrations/037_exposure_slots.sql'
 import release133Sql from './migrations/038_release_1_3_3.sql'
 import release134Sql from './migrations/039_release_1_3_4.sql'
+import release141Sql from './migrations/040_release_1_4_1.sql'
 import type { AppConfig } from './config.ts'
 
 /**
@@ -187,6 +188,7 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '037_exposure_slots', sql: exposureSlotsSql },
   { version: '038_release_1_3_3', sql: release133Sql },
   { version: '039_release_1_3_4', sql: release134Sql },
+  { version: '040_release_1_4_1', sql: release141Sql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */
