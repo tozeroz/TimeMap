@@ -3,7 +3,7 @@ import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
 import { hasTencentKey, TENCENT_MAP_KEY } from './keys'
 import { measureMarkerExtent, nextMapInstance, type MapHandle } from './mapApi'
-import { buildMarkerElement } from './markerDom'
+import { buildMarkerElement, markerClickPostId } from './markerDom'
 import { CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
@@ -204,7 +204,7 @@ export function TencentMap({
         })
         wrap.addEventListener('click', (e) => {
           if (Math.abs(e.clientX - downX) > 8 || Math.abs(e.clientY - downY) > 8) return
-          onMarkerClick(m.placeId, (e.target as Element).closest('.rm__card') ? m.postId || undefined : undefined)
+          onMarkerClick(m.placeId, markerClickPostId(wrap, m, e))
         })
         wrap.appendChild(el)
         host.appendChild(wrap)
