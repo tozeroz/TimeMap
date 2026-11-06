@@ -34,7 +34,7 @@ function placeTree(previewHierarchy = false) { return `with recursive stored_pla
   union
   select t.root, p.id from tree t join map_places p on p.parent_place_id=t.id where p.enabled
 )` }
-const POST_SELECT = `p.id, p.author_name, p.author_id, p.is_anonymous, p.body, p.place, p.place_id, p.created_at, p.image_mode,
+const POST_SELECT = `p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.is_anonymous, p.body, p.place, p.place_id, p.created_at, p.image_mode,
   pl.latitude as place_lat, pl.longitude as place_lng,
   (select count(*)::int from likes l where l.post_id=p.id) as like_count,
   (select count(*)::int from comments c where c.post_id=p.id and c.status='published') as comment_count,

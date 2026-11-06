@@ -1,4 +1,4 @@
-param([string]$Key = (Join-Path $env:USERPROFILE 'AppData/Local/Temp/timemap-ssh/id_timemap.pem'))
+param([string]$Key = (Join-Path $env:USERPROFILE 'AppData/Local/Temp/timemap-ssh/id_timemap.pem'), [switch]$Writable)
 $ErrorActionPreference = 'Stop'
 $previewRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $previewLocal = Join-Path $previewRoot '.local'
@@ -8,7 +8,7 @@ if (Test-Path -LiteralPath $record) {
   $savedJobs = Get-Content -LiteralPath $record -Raw | ConvertFrom-Json
   foreach ($entry in $savedJobs) {
     $existing = Get-Process -Id $entry.processId -ErrorAction SilentlyContinue
-    if ($existing -and $existing.StartTime.ToUniversalTime().ToString('o') -eq $entry.startedAt) {
+    if ($existing -and $existing.StartTime.ToUniversalTime().Ticks -eq ([datetime]$entry.startedAt).ToUniversalTime().Ticks) {
       throw 'A remote preview process is already running. Use tools/stop-remote-preview.ps1 before restarting.'
     }
   }
@@ -25,26 +25,28 @@ try {
   Start-Sleep -Seconds 2
   if ($tunnel.HasExited) { throw 'SSH tunnel failed. Check .local/remote-tunnel-error.log.' }
   $oldKey = $env:REMOTE_PREVIEW_KEY
+  $oldWritable = $env:REMOTE_PREVIEW_WRITABLE
   try {
     $env:REMOTE_PREVIEW_KEY = $Key
+    $env:REMOTE_PREVIEW_WRITABLE = if ($Writable) { '1' } else { '0' }
     $api = Start-Process -FilePath (Get-Command node).Source -ArgumentList '--experimental-strip-types', 'src/remotePreview.ts' `
       -WorkingDirectory (Join-Path $previewRoot 'server') -WindowStyle Hidden `
       -RedirectStandardOutput (Join-Path $previewLocal 'remote-preview.log') `
       -RedirectStandardError (Join-Path $previewLocal 'remote-preview-error.log') -PassThru
     $jobs += @{name='node'; processId=$api.Id; startedAt=$api.StartTime.ToUniversalTime().ToString('o')}
-  } finally { $env:REMOTE_PREVIEW_KEY = $oldKey }
+  } finally { $env:REMOTE_PREVIEW_KEY = $oldKey; $env:REMOTE_PREVIEW_WRITABLE = $oldWritable }
   $ready = $false
   for ($attempt=0; $attempt -lt 30; $attempt++) {
     try {
       $status = Invoke-RestMethod 'http://127.0.0.1:3003/api/ready' -TimeoutSec 2
-      if ($status.readOnly -eq $true -and $status.source -eq 'remote') { $ready=$true; break }
+      if ($status.readOnly -eq (-not $Writable.IsPresent) -and $status.source -eq 'remote') { $ready=$true; break }
     } catch { }
     Start-Sleep -Seconds 1
   }
   if (-not $ready) { throw 'Remote preview API failed to start. Check .local/remote-preview-error.log.' }
   $envFile = Join-Path $previewRoot 'app/.env.local'
   $content = if (Test-Path -LiteralPath $envFile) { [IO.File]::ReadAllText($envFile) } else { '' }
-  $settings = @{VITE_API_ORIGIN='http://127.0.0.1:3003'; VITE_READ_ONLY_PREVIEW='1'}
+  $settings = @{VITE_API_ORIGIN='http://127.0.0.1:3003'; VITE_READ_ONLY_PREVIEW=$(if ($Writable) { '0' } else { '1' })}
   foreach ($name in $settings.Keys) {
     $pattern = '(?m)^' + $name + '=.*$'
     $line = $name + '=' + $settings[$name]
@@ -62,11 +64,11 @@ try {
       ConvertTo-Json | Set-Content -LiteralPath (Join-Path $previewLocal 'remote-preview-frontend.json') -Encoding utf8
   }
   $jobs | ConvertTo-Json | Set-Content -LiteralPath $record -Encoding utf8
-  Write-Output 'Remote database read-only preview connected. Frontend: http://127.0.0.1:5180/#/map'
+  Write-Output "Remote database connected (writable=$($Writable.IsPresent)). Frontend: http://127.0.0.1:5180/#/map"
 } catch {
   foreach ($entry in $jobs) {
     $running = Get-Process -Id $entry.processId -ErrorAction SilentlyContinue
-    if ($running -and $running.StartTime.ToUniversalTime().ToString('o') -eq $entry.startedAt) { Stop-Process -Id $running.Id }
+    if ($running -and $running.StartTime.ToUniversalTime().Ticks -eq ([datetime]$entry.startedAt).ToUniversalTime().Ticks) { Stop-Process -Id $running.Id }
   }
   throw
 }

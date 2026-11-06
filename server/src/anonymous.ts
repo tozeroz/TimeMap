@@ -20,6 +20,7 @@ export const ANONYMOUS_DISPLAY_NAME = '匿名同学'
 export interface AuthorSource {
   author_name: string
   author_id: string | null
+  author_avatar_media_id?: string | null
   is_anonymous?: boolean | null
 }
 
@@ -32,6 +33,7 @@ export interface PublicAuthor {
    *   · 匿名帖 → **只有作者本人**拿得到，其他人一律 null
    */
   authorId: string | null
+  authorAvatarMediaId: string | null
   /** 是否匿名（客户端据此换系统头像、显示「匿名」标、禁止跳作者主页） */
   anonymous: boolean
 }
@@ -45,12 +47,13 @@ export interface PublicAuthor {
 export function publicAuthor(row: AuthorSource, meId: string | null): PublicAuthor {
   const anonymous = row.is_anonymous === true
   if (!anonymous) {
-    return { author: row.author_name, authorId: row.author_id, anonymous: false }
+    return { author: row.author_name, authorId: row.author_id, authorAvatarMediaId: row.author_avatar_media_id ?? null, anonymous: false }
   }
   const mine = Boolean(meId && row.author_id && row.author_id === meId)
   return {
     author: ANONYMOUS_DISPLAY_NAME,
     authorId: mine ? row.author_id : null,
+    authorAvatarMediaId: null,
     anonymous: true,
   }
 }

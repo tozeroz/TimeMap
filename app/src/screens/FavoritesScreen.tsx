@@ -2,8 +2,7 @@ import { useFeedSourceRestore } from '../data/feedBrowse'
 import { openFeed } from '../data/feedBrowse'
 import { useEffect, useState } from 'react'
 import {
-  ANONYMOUS_AVATAR,
-  avatarFor,
+  postAvatar,
   listMyActivityFavorites,
   listMyFavorites,
   mediaUrl,
@@ -203,7 +202,7 @@ export function FavoritesScreen() {
                     data-fav-count={String(p.favoriteCount ?? 0)}
                     onClick={() => openFeed(p.id, posts.map(item => item.id))}
                   >
-                    <img className="fav__avatar" src={p.anonymous ? ANONYMOUS_AVATAR : avatarFor(p.author)} alt="" />
+                    <img className="fav__avatar" src={postAvatar(p)} alt="" />
                     <span className="fav__main">
                       <span className="fav__author">{p.author}{p.anonymous && <span className="anon-tag" data-anon-tag>匿名</span>}</span>
                       <span className="fav__body">{p.body}</span>
