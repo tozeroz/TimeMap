@@ -3,7 +3,7 @@ import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
 import { hasTencentKey, TENCENT_MAP_KEY } from './keys'
 import { measureMarkerExtent, nextMapInstance, type MapHandle } from './mapApi'
-import { buildMarkerElement, markerClickPostId } from './markerDom'
+import { buildMarkerElement, markerClickPostId, markerZIndex } from './markerDom'
 import { CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
@@ -187,6 +187,7 @@ export function TencentMap({
       for (const m of markers) {
         const wrap = document.createElement('div')
         wrap.className = 'rm__wrap rm__wrap--tmap'
+        wrap.style.zIndex = String(markerZIndex(m))
         const el = buildMarkerElement(m)
         /*
          * 监听挂在 wrap 而不是 .rm 上：.rm 有 translate(-50%,-100%)，

@@ -130,3 +130,18 @@ export function markerIconBox(m: MapMarker): { size: [number, number]; anchor: [
   }
   return { size: [CARD_MARKER_BOX.width, CARD_MARKER_BOX.height], anchor: [CARD_MARKER_BOX.width / 2, CARD_MARKER_BOX.height] }
 }
+
+/**
+ * 标记的叠放层级：**有帖子内容的卡片永远压在没有内容的名称标签之上**。
+ *
+ * ⚠️ 为什么需要显式层级：37 个地点里只有少数有帖子，其余是宽度 124px 的名称标签。
+ *   标签的盒子比卡片大，若二者同层且标签在 DOM 里排后面，它就会盖住卡片 ——
+ *   用户点看得见的帖子卡片，事件却落到标签上（于是开地点抽屉，而不是帖子详情）。
+ *   给卡片高一档，保证「看得见的卡片一定点得到」。
+ */
+export const MARKER_Z_WITH_POST = 1002
+export const MARKER_Z_BARE = 1001
+
+export function markerZIndex(m: MapMarker): number {
+  return markerHasPost(m) ? MARKER_Z_WITH_POST : MARKER_Z_BARE
+}

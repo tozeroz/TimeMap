@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
 import { measureMarkerExtent, nextMapInstance, type MapHandle } from './mapApi'
-import { markerClickPostId, markerHtml, markerIconBox } from './markerDom'
+import { markerClickPostId, markerHasPost, markerHtml, markerIconBox } from './markerDom'
 import { activeTileConfig, CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
@@ -79,7 +79,7 @@ export function RealMap({
         iconSize: box.size,
         iconAnchor: box.anchor,
       })
-      const marker = L.marker([m.lat, m.lng], { icon })
+      const marker = L.marker([m.lat, m.lng], { icon, zIndexOffset: markerHasPost(m) ? 200 : 0 })
       marker.on('click', (e) => {
         const native = e.originalEvent
         const el = (native?.target instanceof Element ? native.target : document.body) as HTMLElement

@@ -3,7 +3,7 @@ import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
 import { AMAP_JS_KEY, AMAP_SECURITY_CODE, hasAmapKey } from './keys'
 import { measureMarkerExtent, nextMapInstance, type MapHandle } from './mapApi'
-import { buildMarkerElement, markerClickPostId } from './markerDom'
+import { buildMarkerElement, markerClickPostId, markerZIndex } from './markerDom'
 import { CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
@@ -152,6 +152,7 @@ export function AmapMap({
 
       for (const m of markers) {
         const el = buildMarkerElement(m)
+        el.style.zIndex = String(markerZIndex(m))
         el.addEventListener('click', (e) => onMarkerClick(m.placeId, markerClickPostId(el, m, e)))
         // anchor: bottom-center —— 图钉尖端落在坐标点上
         const marker = new AMap.Marker({
