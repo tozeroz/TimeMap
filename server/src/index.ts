@@ -1090,7 +1090,7 @@ export function buildServer(deps: ServerDeps) {
           body: row.body,
           imageMode: row.image_mode,
           mapMediaId: row.map_media_id ?? null,
-            place: row.place,
+          place: row.place,
           // F02：关联地点的权威 id（地点详情/地点页跳转用）
           placeId: row.place_id,
           // ⭐ WO#15：地点坐标（可为 null）。**注意 pg 的 numeric 会以字符串返回**，
@@ -1301,7 +1301,8 @@ export function buildServer(deps: ServerDeps) {
         const r = await client.query<PostRow>(
           `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id, image_mode, is_anonymous)
            values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-           returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous`,
+           returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous,
+             (select u.avatar_media_id from users u where u.id = posts.author_id) as author_avatar_media_id`,
           [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode, anonymous],
         )
 

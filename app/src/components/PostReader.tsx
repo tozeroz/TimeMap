@@ -187,7 +187,7 @@ export function PostReader(p: Props) {
         </form>
       </>}
       {sheet === 'body' && <div className="reader__fullBody"><p>{post.body}</p><time>{relativeTime(post.createdAt)}{post.place ? ` · ${post.place}` : ''}</time></div>}
-      {sheet === 'more' && <div className="reader__menu"><button data-feed-share onClick={() => { close(); p.onShare() }}>分享这段记忆</button><button onClick={() => { close(); p.onMore() }}>{post.authorId === me?.id ? '删除帖子' : '举报帖子'}</button></div>}
+      {sheet === 'more' && <div className="reader__menu"><button data-feed-share onClick={() => { close(); p.onShare() }}>分享这段记忆</button><button data-post-more onClick={() => { close(); p.onMore() }} data-post-delete={post.authorId === me?.id ? '' : undefined}>{post.authorId === me?.id ? '删除帖子' : '举报帖子'}</button></div>}
     </Sheet>}
     {preview && <PhotoViewer label="帖子图片预览" photos={images.map((m, i) => ({ key: m.id, src: mediaUrl(m.id), title: `第 ${i + 1} 张`, meta: post.place }))} index={index} onIndexChange={changeImage} onClose={() => setPreview(false)} />}
   </div>

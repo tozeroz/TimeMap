@@ -51,6 +51,10 @@ export function CampusPostCard({ post, pending, local, onLike, onRemove, onRepub
         <IconEye size={18} /><span>{post.views ?? 0}</span>
       </span>
     </div>
-    {local && <div className="square-card__local"><span>仅本机</span><button onClick={onRepublish}>重新发布</button><button onClick={onRemove}>删除</button></div>}
+    {local && <div className="square-card__local" data-feed-local-actions>
+      <span data-feed-local-tag>仅本机</span>
+      <button data-feed-local-republish onClick={onRepublish}>重新发布</button>
+      <button data-feed-local-remove onClick={onRemove}>删除</button>
+    </div>}
   </article>
 }
