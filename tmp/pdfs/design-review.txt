@@ -1,0 +1,426 @@
+=== PAGE 1 ===
+概要设计与详情设计⽂档
+1.概要设计
+1.1系统架构设计
+本系统采⽤前后端分离的分层架构，以校园地标为内容组织核⼼，将校园地图、地点介绍、⽤⼾帖⼦
+与校园活动进⾏关联，为⽤⼾提供校园信息浏览与内容共创服务。系统划分为表现层、业务逻辑层和
+数据访问与存储层，各层通过明确的接⼝协作，降低模块之间的耦合，便于后续维护与功能扩展。
+（1）表现层
+表现层包括⽤⼾端和管理端。⽤⼾端提供校园地图浏览、地标详情查看、帖⼦发布与浏览、校园活动
+查询及个⼈内容管理等功能，通过地图、列表和详情⻚⾯展⽰校园信息。管理端⾯向管理员，提供地
+标维护、活动审核、帖⼦管理与举报处理等功能。前端负责⻚⾯展⽰与⽤⼾交互，并通过接⼝向后端
+提交请求、获取处理结果。
+（2）业务逻辑层
+业务逻辑层负责处理系统的核⼼业务，包括⽤⼾⾝份认证与权限校验、地标信息查询、帖⼦发布与管
+理、评论点赞收藏、活动提交与审核以及举报处理等。各业务模块围绕⽤⼾和地标建⽴关联：帖⼦与
+活动关联具体地点，⽤⼾通过发布内容和参与互动形成校园记忆。后端对请求进⾏⾝份、权限及数据
+有效性校验，保证业务处理符合系统规则。
+（3）数据访问与存储层
+数据访问与存储层负责业务数据的查询、写⼊和维护。系统采⽤关系型数据库，存储⽤⼾、学校、校
+区、学院、地标、帖⼦、活动及互动记录等结构化数据，通过主外键、唯⼀约束和检查约束保证数据
+的完整性与⼀致性。图⽚、语⾳等媒体资源通过媒体记录与帖⼦建⽴关联，实现内容数据与媒体信息
+的统⼀管理。
+系统运⾏时，⽤⼾在前端发起操作，后端接收请求并完成业务处理，通过数据访问层读取或更新相关
+数据，最后将结果返回前端展⽰。系统通过⻆⾊权限控制区分普通⽤⼾与管理员的操作范围，并结合
+会话管理和操作审计，⽀持登录状态维护与管理操作追溯。
+=== PAGE 2 ===
+1.2系统功能结构设计
+本系统围绕“以地图发现校园、以地点聚合内容、以共创记录记忆”的业务主线组织功能，主要包括
+校园地图、校园内容、校园活动、⽤⼾与个⼈中⼼以及后台管理五个模块。各模块通过⽤⼾⾝份和地
+标信息建⽴联系，形成从地点发现、内容浏览到发布互动的完整业务流程。
+（1）校园地图模块
+校园地图模块是系统的主要浏览⼊⼝，包括地图浏览与地标详情两个部分。地图浏览功能展⽰校园地
+标的位置，⽀持地图缩放、拖动及地标选择；地标详情功能集中展⽰地点名称、图⽚、简介、历史资
+料及关联帖⼦，帮助⽤⼾从空间位置进⼊对应的校园内容。
+（2）校园内容模块
+校园内容模块负责校园记忆的发布、展⽰与互动，包括帖⼦发布与管理、帖⼦浏览与筛选等功能。⽤
+⼾可通过⽂字、图⽚等形式记录校园⽣活，并将帖⼦关联到校园地标；发布后可查看和管理⾃⼰的帖
+⼦。系统⽀持帖⼦列表与详情浏览、按地标筛选，以及评论、点赞和收藏，促进⽤⼾围绕具体地点交
+流与分享。
+（3）校园活动模块
+校园活动模块负责活动信息的发现与发布，包括活动浏览与筛选、活动提交与审核两个部分。⽤⼾可
+查看活动名称、时间、地点、介绍及来源，并按条件筛选活动，通过关联地点查看活动所在位置。⽤
+⼾提交活动信息后，由管理员进⾏审核，通过审核的活动公开展⽰，未通过的活动向提交者反馈审核
+结果。
+（4）⽤⼾与个⼈中⼼模块
+=== PAGE 3 ===
+⽤⼾与个⼈中⼼模块负责⾝份识别及个⼈信息管理，包括登录、个⼈资料维护、个⼈帖⼦查看与管
+理、帖⼦收藏查询等功能。⽤⼾登录后可参与内容发布与互动，并在个⼈中⼼集中查看⾃⼰发布和收
+藏的内容。系统通过会话管理维持登录状态，并根据⽤⼾⻆⾊控制功能访问权限。
+1.3系统数据库设计
+说明⽤⼾、地标、帖⼦、活动、收藏之间的关系；主要表列出字段、类型、主外键、⾮空及唯⼀约束
+1.3.1ER图
+本项⽬共17张表，以 users （⽤⼾）和 plac es （地标）为核⼼锚点：基础层由
+sc hools / c ampuses / c olleges 提供学校―校区―学院归属；内容层以 posts 为主线，通
+过 post_media 与 media 挂载配图与语⾳，并延伸出 c omments / likes / favorites 三
+类互动；场景层包含 plac e_photos （校史照⽚）与 ac tivities （活动）；治理层由
+reports / audit_log / sessions / app_release ⽀撑举报、审计、登录与会话管理。
+=== PAGE 4 ===
+1.3.2主要物理表设计
+1.users
+索引：users_pkey(id)、users_phone_e164_uniq(phone_e164)，
+users_school_campus_idx(school_campus_id)。
+字段 类型 可空 默认 键/约束 说明
+id uuid NOT
+NULL
+— PK 主键
+handle text NOT
+NULL
+— UNIQUE（lower(handle)）+
+CHECK去空格后⾮空
+展⽰标识；
+display_nam
+e
+text NOT
+NULL
+— CHECK⾮空 昵称；发帖时快照进
+posts.author_name
+phone_e164 text NULL — UNIQUE+CHECK^\+[1-9][0-9]
+{7,14}$
+登录⾝份（⼿机号
++验证码）
+role text CHECK∈{student,admin} 管理端仅admin
+=== PAGE 5 ===
+NOT
+NULL
+'stude
+nt'
+
+password_ha
+sh
+text NULL — CHECK：NULL或
+^scrypt\$N\$r\$p\$salt\$hash$
+仅admin，学⽣恒
+NULL
+school_camp
+us_id
+uuid NULL — FK→`campuses(id)`ONDELETE
+SETNULL
+校区归属
+created_at timesta
+mptz
+NOT
+NULL
+now()  
+updated_at timesta
+mptz
+NOT
+NULL
+now()  
+2.places
+索引：places_pkey(id)、places_name_idx(name)。
+字段 类型 可空 默认 键/约束 说明
+id uuid NOT
+NULL
+— PK 
+name text NOT
+NULL
+— CHECK⾮空 ⽆唯⼀约束（允许重名，⻅§⼋-6）
+category text NOT
+NULL
+'地
+标'
+CHECK∈{地标,⻝
+堂}
+（后续可拓展分
+类）
+是完整划分（地点列表按此分类不重不
+漏）
+
+enabled boolean NOT
+NULL
+true  停⽤地点不能再关联新帖；地图/列表
+只显⽰启⽤的
+descripti
+on
+text NULL —  地点简介
+history text NULL —  校史（字段必须在，值可空）
+address text NULL —  
+latitude double
+precision
+NULL — CHECK∈[-90,90] 
+longitud
+e
+double
+precision
+NULL — CHECK∈
+[-180,180]
+
+=== PAGE 6 ===
+sort_ord
+er
+integer NOT
+NULL
+0  ⼈⼯排序
+created_
+at
+timestamptz NOT
+NULL
+now(
+)
+ 
+3.posts
+索引：posts_pkey、posts_created_at_desc_idx(created_atDESC,idDESC)、
+posts_place_idx(place_id)、posts_author_idx(author_id)、posts_status_idx(status)、
+posts_school_campus_created_idx(school_campus_id,created_atDESC)、
+posts_client_request_id_uniq(...)WHERENOTNULL。
+字段 类型 可空 默认 键/约束 说明
+id uuid NOT
+NUL
+L
+— PK 
+body text NOT
+NUL
+L
+— CHECK⾮空且length≤500 
+author_n
+ame
+text NOT
+NUL
+L
+— CHECKlength≤40 快照：发帖时的
+users.display_name
+author_id uuid NUL
+L
+— FK→`users(id)`SETNULL M1历史帖⼦为NULL（当时
+⽆会话，不伪造归属）
+place text NUL
+L
+— CHECKNULL或length≤60 快照：发帖时的地点名
+place_id uuid NUL
+L
+— FK→`places(id)`SETNULL 
+client_re
+quest_id
+uuid NUL
+L
+— 索引：WHEREclient_request_idIS
+NOTNULL
+幂等键：同键重放返回原帖
+school_ca
+mpus_id
+uuid NUL
+L
+— FK→`campuses(id)`SETNULL 
+status text NOT
+NUL
+L
+'publi
+shed'
+CHECK∈{published,removed} 所有公开⾯同步排除
+removed
+=== PAGE 7 ===
+removed_
+reason
+text NUL
+L
+—  下架原因（要求必须记录）
+removed_
+by
+uuid NUL
+L
+— FK→`users(id)`SETNULL 下架操作⼈
+removed_
+at
+times
+tampt
+z
+NUL
+L
+—  
+created_a
+t
+times
+tampt
+z
+NOT
+NUL
+L
+now()  
+4.favorites(关系表多对多)
+约束：`UNIQUE(user_id,post_id)`⇒同⼀⽤⼾对同⼀帖只能有⼀⾏。索引：favorites_pkey、
+favorites_user_post_uniq(user_id,post_id)、favorites_user_idx(user_id)、
+favorites_post_idx(post_id)。
+字段 类型 可空 默认 键/约束 说明
+id uuid NOT
+NULL
+— PK 
+user_id uuid NOT
+NULL
+— FK→`users(id)`CASCADE 
+post_id uuid NOT
+NULL
+— FK→`posts(id)`CASCADE 
+created_a
+t
+timestamp
+tz
+NOT
+NULL
+now(
+)
+ 收藏时间（"我的收藏"按此倒
+序）
+5.activities
+索引：activities_pkey、activities_starts_idx(starts_at)。
+字段 类型 可空 默认 键/约束 说明
+id uuid NOT
+NULL
+— PK 
+title text NOT
+NULL
+— CHECK⾮空 
+=== PAGE 8 ===
+descrip
+tion
+text NULL —  
+place_i
+d
+uuid NOT
+NULL
+— FK→`places(id)`
+CASCADE
+活动必须有地点
+starts_
+at
+timesta
+mptz
+NOT
+NULL
+—  
+ends_a
+t
+timesta
+mptz
+NULL — CHECK：NULL或>
+starts_at
+空表⽰"起⽌未知"，查询按starts_at+
+2h兜底
+status text NOT
+NULL
+'schedul
+ed'
+CHECK∈
+{scheduled,cancelled}
+⼈⼯取消
+source text NOT
+NULL
+'管理员
+录⼊'
+ 数据来源标注（演⽰数据写"管理员录
+⼊（演⽰数据）"）
+created
+_by
+uuid NULL — FK→`users(id)`SET
+NULL
+可空：created_by解析不到时仍允许
+录⼊
+created
+_at
+timesta
+mptz
+NOT
+NULL
+now()  
+update
+d_at
+timesta
+mptz
+NOT
+NULL
+now()  
+2详细设计
+（每个功能模块的功能点均需包含功能描述和活动图，类图时序图，注意总的模块a也需要⼀个功能描
+述
+=== PAGE 9 ===
+2.1校园地图模块
+以校园地图为⼊⼝，展⽰地标位置及相关帖⼦，⽀持地图浏览和地标详情查看，帮助⽤⼾了解校园空
+间及各地点的相关内容。
+ 2.1.1地标详情
+展⽰地标名称、图⽚、简介及历史资料，并提供关联帖⼦的浏览⼊⼝，⽅便⽤⼾了解该地点及
+相关校园记忆。
+•
+时序图
+=== PAGE 10 ===
+•
+类图
+=== PAGE 11 ===
+
+=== PAGE 12 ===
+•
+活动图
+2.1.2地图浏览
+在地图上展⽰校园地标，⽀持地图缩放、拖动及地标选择。⽤⼾点击地标后，可查看对应的地标
+详情。
+•
+时序图
+=== PAGE 13 ===
+•
+类图
+
+=== PAGE 14 ===
+•
+活动图
+ 2.2校园内容模块
+⽀持⽤⼾发布和浏览与校园地点关联的帖⼦，通过⽂字与图⽚记录校园⽣活，并提供内容管理、筛选
+及收藏功能。
+ 2.2.1帖⼦发布与管理
+⽀持⽤⼾填写帖⼦内容、上传图⽚并关联校园地标，完成帖⼦发布。⽤⼾可查看、编辑或删除
+⾃⼰发布的帖⼦。
+•
+时序图
+=== PAGE 15 ===
+•
+类图
+=== PAGE 16 ===
+•
+活动图
+=== PAGE 17 ===
+2.2.2帖⼦浏览与筛选
+展⽰帖⼦列表及详情，⽀持按关联地标等条件筛选内容。⽤⼾可收藏感兴趣的帖⼦，并在“我
+的收藏”中查看。
+•
+时序图
+=== PAGE 18 ===
+•
+类图
+=== PAGE 19 ===
+•
+活动图
+=== PAGE 20 ===
+2.3校园活动模块
+提供校园活动信息的展⽰、提交和审核功能，帮助⽤⼾发现活动，并通过审核机制管理活动信息的发
+布。
+•
+时序图：
+=== PAGE 21 ===
+•
+类图：
+=== PAGE 22 ===
+•
+活动图：
+=== PAGE 23 ===
+2.3.1活动浏览与筛选
+展⽰活动列表及详情，包括活动时间、地点和介绍，⽀持按时间、类别等条件筛选。⽤⼾可收
+藏活动，并在“我的收藏”中查看。
+◦
+时序图
+=== PAGE 24 ===
+◦
+类图
+=== PAGE 25 ===
+◦
+活动图
+=== PAGE 26 ===
+2.3.2活动提交与审核
+⽀持⽤⼾填写活动名称、时间、地点及介绍并提交审核。管理员审核后，通过的活动公开展
+⽰，未通过的活动向提交者反馈审核结果。
+◦
+时序图
+=== PAGE 27 ===
+◦
+类图
+=== PAGE 28 ===
+◦
+活动图
+=== PAGE 29 ===

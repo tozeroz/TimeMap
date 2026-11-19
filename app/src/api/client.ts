@@ -1,4 +1,5 @@
 import type { FeedPost, User } from '../data/types'
+import type { CutoutBox } from '../../../shared/cutout'
 import { authHeaders, clearSession, setSession, updateSessionUser, type SessionUser } from './session'
 
 /**
@@ -813,14 +814,15 @@ export function createPost(input: {
   return request<ApiPost>('/api/posts', { method: 'POST', body: input })
 }
 
-export async function generateCutout(mediaId: string, requestId: string): Promise<ApiResult<{ dataUrl: string }>> {
+export async function generateCutout(mediaId: string, requestId: string, position?: CutoutBox[]): Promise<ApiResult<{ dataUrl: string; method?: 'auto' | 'control' }>> {
   try {
     const res = await fetch(`${API_ORIGIN}/api/media/cutout`, {
       method: 'POST', headers: { ...authHeaders(), 'content-type': 'application/json' },
-      body: JSON.stringify({ mediaId, requestId }), signal: AbortSignal.timeout(70000),
+      body: JSON.stringify({ mediaId, requestId, ...(position ? { method: 'control', position } : {}) }), signal: AbortSignal.timeout(70000),
     })
     const result = await res.json()
     if (!res.ok) return { ok: false, status: res.status, reason: result.message ?? result.error ?? '处理失败' }
+    if (position && result.method !== 'control') return { ok: false, reason: '远程服务尚未支持手动框选，请更新后端后再试' }
     return { ok: true, value: result }
   } catch {
     return { ok: false, reason: '网络中断或请求超时，请重试以查询同一次处理结果' }
