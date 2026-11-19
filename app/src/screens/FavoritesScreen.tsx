@@ -12,7 +12,7 @@ import {
   failText,
 } from '../api/client'
 import { Screen, TopBar } from '../components/Shell'
-import { IconBack, IconHeart, IconStar } from '../components/icons'
+import { IconBack, IconEye, IconHeart, IconStar } from '../components/icons'
 import { goBack, navigate } from '../router'
 import { StatusBadge, formatActivityTime } from './ActivitiesScreen'
 import './favorites.css'
@@ -225,6 +225,11 @@ export function FavoritesScreen() {
                       <span className="fav__mark fav__mark--on">
                         <IconStar size={13} filled={p.favoritedByMe !== false} />
                         {p.favoriteCount ?? 0}
+                      </span>
+                      {/* ⭐ 2026-11-06：点击数（迁移 036）。收藏列表也给，口径与信息流一致 */}
+                      <span className="fav__mark" data-feed-views title="点开次数">
+                        <IconEye size={13} />
+                        {p.openCount ?? 0}
                       </span>
                     </span>
                   </button>

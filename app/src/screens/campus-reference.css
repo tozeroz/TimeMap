@@ -58,6 +58,9 @@
 .square-card__like svg { width: 21px; height: 21px; }
 .square-card__like.is-liked { color: var(--c-primary); }
 .square-card__like:disabled { opacity: .5; cursor: default; }
+/* ⭐ 2026-11-06：点击数（迁移 036）。与点赞并排、同字号，但**不可点** —— 用 span 而非 button */
+.square-card__views { display: flex; align-items: center; gap: 4px; flex: none; min-height: 44px; padding: 0 2px; color: var(--square-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.square-card__views svg { width: 19px; height: 19px; }
 .square-card__author, .square-card__like, .square-card__open { transition: opacity 150ms ease; }
 .square-card__author:active, .square-card__like:active, .square-card__open:active { opacity: .72; }
 .square-card__unavailable { display: flex; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--square-muted); font-size: 12px; background: #fbfaf7b3; }

@@ -38,6 +38,37 @@ export function markerHasPost(m: MapMarker): boolean {
   return Boolean(m.coverUrl) || Boolean(m.excerpt && m.excerpt.trim())
 }
 
+/**
+ * 判断一次标记点击落在「帖子卡片」还是「地点本身（标签/图钉）」。
+ *
+ * ⚠️ 为什么不能只用 `event.target.closest('.rm__card')`：
+ *   标记是「DOM 自绘 + 自己投影定位」的。`.rm__wrap--tmap` 绝对定位在锚点，
+ *   里层 `.rm` 又被 `translate(-50%,-100%)` 抬走 —— 视觉上的卡片中心
+ *   常常落在 wrap 的**布局盒**里、而不是卡片的绘制区域里，于是
+ *   `event.target` / `elementFromPoint` 命中的是 wrap 自身，
+ *   `closest('.rm__card')` 永远是 null ⇒ 点帖子卡片被当成「点地点」，
+ *   打开地点抽屉而不是帖子详情（2026-11-06 线上实测的回归）。
+ *
+ *   所以这里两路判断：①按 target 的祖先链（正常情况）；②按卡片矩形与
+ *   点击坐标的位置关系（target 被 wrap 吃掉时的兜底）。任一命中即算帖子卡片。
+ */
+export function markerClickPostId(
+  wrap: HTMLElement,
+  m: Pick<MapMarker, 'postId'>,
+  e: { target: EventTarget | null; clientX: number; clientY: number },
+): string | undefined {
+  const postId = m.postId || undefined
+  if (!postId) return undefined
+  const target = e.target instanceof Element ? e.target : null
+  if (target?.closest('.rm__card')) return postId
+  const card = wrap.querySelector('.rm__card')
+  if (!card) return undefined
+  const r = card.getBoundingClientRect()
+  if (r.width <= 0 || r.height <= 0) return undefined
+  const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
+  return inside ? postId : undefined
+}
+
 const PIN_SVG =
   '<svg width="18" height="24" viewBox="0 0 20 26"><path d="M10 25.5S19 15.6 19 9.6A9 9 0 0 0 1 9.6c0 6 9 15.9 9 15.9Z" fill="currentColor"/><circle cx="10" cy="9.6" r="3.4" fill="#fff"/></svg>'
 
@@ -98,4 +129,19 @@ export function markerIconBox(m: MapMarker): { size: [number, number]; anchor: [
     return { size: [BARE_MARKER_BOX.width, BARE_MARKER_BOX.height], anchor: [BARE_MARKER_BOX.width / 2, BARE_MARKER_BOX.height] }
   }
   return { size: [CARD_MARKER_BOX.width, CARD_MARKER_BOX.height], anchor: [CARD_MARKER_BOX.width / 2, CARD_MARKER_BOX.height] }
+}
+
+/**
+ * 标记的叠放层级：**有帖子内容的卡片永远压在没有内容的名称标签之上**。
+ *
+ * ⚠️ 为什么需要显式层级：37 个地点里只有少数有帖子，其余是宽度 124px 的名称标签。
+ *   标签的盒子比卡片大，若二者同层且标签在 DOM 里排后面，它就会盖住卡片 ——
+ *   用户点看得见的帖子卡片，事件却落到标签上（于是开地点抽屉，而不是帖子详情）。
+ *   给卡片高一档，保证「看得见的卡片一定点得到」。
+ */
+export const MARKER_Z_WITH_POST = 1002
+export const MARKER_Z_BARE = 1001
+
+export function markerZIndex(m: MapMarker): number {
+  return markerHasPost(m) ? MARKER_Z_WITH_POST : MARKER_Z_BARE
 }

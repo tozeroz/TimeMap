@@ -23,6 +23,7 @@ import {
   IconCheck,
   IconChevronDown,
   IconComment,
+  IconEye,
   IconHeart,
   IconLocation,
   IconSearch,
@@ -31,6 +32,7 @@ import {
 // 在线时 API 是权威数据源（审核记录 07 的降级边界：已迁移页面不得混入 synthetic mock）。
 import type { FeedPost } from '../data/types'
 import { feedAuthoritative, isLocalPostId, removeMyPost, setServerPosts, stashRepublish, subscribeMyPosts } from '../data/store'
+import { useFeedImpressions } from '../data/impressions'
 import { navigate, useRoute } from '../router'
 import '../styles/switcher.css'
 import './campus.css'
@@ -160,13 +162,20 @@ export function PostCard({
             />
             <div className="pcard__overlay">
               <p className="pcard__overlay-text">{post.text}</p>
-              <button
-                className={`pcard__like pcard__like--on-image ${liked ? 'is-liked' : ''}`}
-                onClick={toggleLike}
-              >
-                <IconHeart size={13} filled={liked} />
-                <span>{likes}</span>
-              </button>
+              <div className="pcard__overlayStats">
+                <button
+                  className={`pcard__like pcard__like--on-image ${liked ? 'is-liked' : ''}`}
+                  onClick={toggleLike}
+                >
+                  <IconHeart size={13} filled={liked} />
+                  <span>{likes}</span>
+                </button>
+                {/* ⭐ 2026-11-06：图片卡也要能看到点击数（与纯文字卡一致） */}
+                <span className="pcard__views pcard__views--on-image" data-feed-views>
+                  <IconEye size={13} />
+                  <span>{post.views ?? 0}</span>
+                </span>
+              </div>
             </div>
           </div>
         </>
@@ -196,6 +205,11 @@ export function PostCard({
               <span className="pcard__comment">
                 <IconComment size={14} />
                 <span>{post.comments}</span>
+              </span>
+              {/* ⭐ 2026-11-06：点击数（服务端去重统计），与点赞/评论并列 */}
+              <span className="pcard__views" data-feed-views>
+                <IconEye size={14} />
+                <span>{post.views ?? 0}</span>
               </span>
             </span>
           </div>
@@ -501,6 +515,8 @@ export function CampusScreen() {
   const [errText, setErrText] = useState('')
   const requestVersion = useRef(0)
   const likeLocks = useRef(new Set<string>())
+  /* 2026-11-06：曝光上报的观察容器（见 data/impressions.ts） */
+  const squareRef = useRef<HTMLDivElement>(null)
   const [pendingLikes, setPendingLikes] = useState<Set<string>>(new Set())
   const [likeError, setLikeError] = useState('')
   const likeSequence = useRef(0)
@@ -521,6 +537,13 @@ export function CampusScreen() {
   useEffect(() => {
     defaultViewRef.current = isDefaultView
   }, [isDefaultView])
+
+  /*
+    ⭐ 2026-11-06：曝光上报。
+    签名用 id 列表拼串：排序/筛选一变，观察目标就要重建（否则新卡片永远不被观察）。
+    放在 isDefaultView 之后是为了保证每次渲染 hooks 顺序稳定。
+  */
+  useFeedImpressions(squareRef, feed.map((p) => p.id).join(','), 'campus')
 
   /**
    * 拉列表。`sort` + `placeIds` 都交给服务端（不在客户端二次过滤：
@@ -737,7 +760,7 @@ export function CampusScreen() {
 
         {likeError && <p className="campus__likeError" role="alert">{likeError}</p>}
         {phase === 'loading' && feed.length > 0 && <p className="campus__refreshing" role="status">正在更新回忆…</p>}
-        <div className="campus-square" aria-label="校园回忆" aria-busy={phase === 'loading'}>
+        <div className="campus-square" ref={squareRef} aria-label="校园回忆" aria-busy={phase === 'loading'}>
           {[0, 1].map(column => <div className="campus-square__column" key={column}>
             {feed.filter((_, index) => index % 2 === column).map(p => <CampusPostCard browseIds={feed.map(item => item.id)}
               key={p.id} post={p} pending={pendingLikes.has(p.id)} local={isLocalPostId(p.id)}

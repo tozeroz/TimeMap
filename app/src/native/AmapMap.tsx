@@ -3,7 +3,7 @@ import type { MapMarker } from '../native/mapApi'
 import type { GeoFix } from './geo'
 import { AMAP_JS_KEY, AMAP_SECURITY_CODE, hasAmapKey } from './keys'
 import { measureMarkerExtent, nextMapInstance, type MapHandle } from './mapApi'
-import { buildMarkerElement } from './markerDom'
+import { buildMarkerElement, markerClickPostId, markerZIndex } from './markerDom'
 import { CAMPUS_CENTER } from './mapTiles'
 import './realmaps.css'
 
@@ -152,7 +152,18 @@ export function AmapMap({
 
       for (const m of markers) {
         const el = buildMarkerElement(m)
-        el.addEventListener('click', (e) => onMarkerClick(m.placeId, (e.target as Element).closest('.rm__card') ? m.postId || undefined : undefined))
+        el.style.zIndex = String(markerZIndex(m))
+        // ⚠️ 触摸设备上高德的容器会对 touch 事件 preventDefault，浏览器不会补发 click，
+        //    所以 pointerup 也要接（与 click 去重），否则真机点标记「没反应」。
+        let lastFire = 0
+        const fire = (e: { clientX: number; clientY: number; target: EventTarget | null }) => {
+          const now = Date.now()
+          if (now - lastFire < 400) return
+          lastFire = now
+          onMarkerClick(m.placeId, markerClickPostId(el, m, e))
+        }
+        el.addEventListener('pointerup', (e) => fire(e))
+        el.addEventListener('click', (e) => fire(e))
         // anchor: bottom-center —— 图钉尖端落在坐标点上
         const marker = new AMap.Marker({
           position: [m.lng, m.lat],

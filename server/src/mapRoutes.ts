@@ -34,7 +34,7 @@ function placeTree(previewHierarchy = false) { return `with recursive stored_pla
   union
   select t.root, p.id from tree t join map_places p on p.parent_place_id=t.id where p.enabled
 )` }
-const POST_SELECT = `p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.is_anonymous, p.body, p.place, p.place_id, p.created_at, p.image_mode,
+const POST_SELECT = `p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.is_anonymous, p.open_count, p.body, p.place, p.place_id, p.created_at, p.image_mode,
   pl.latitude as place_lat, pl.longitude as place_lng,
   (select count(*)::int from likes l where l.post_id=p.id) as like_count,
   (select count(*)::int from comments c where c.post_id=p.id and c.status='published') as comment_count,
@@ -49,18 +49,24 @@ const ORDER = `(q.created_at >= $2::timestamptz - interval '30 days') desc,
 interface PostRow {
   id: string; author_name: string; author_id: string | null; is_anonymous: boolean; body: string; place: string | null;
   place_id: string; created_at: Date | string; image_mode: string; place_lat: number | null;
-  place_lng: number | null; like_count: number; comment_count: number; map_media_id: string | null; images: unknown
+  place_lng: number | null; like_count: number; comment_count: number; map_media_id: string | null; images: unknown;
+  /* 2026-11-06：点击数（迁移 036）。地图卡片目前不展示，但保持与其它列表同形 */
+  open_count: number
+  /* 2026-11-06（他人 PR #26）：作者当前头像媒体 id，匿名帖必须为 null */
+  author_avatar_media_id?: string | null
 }
 /**
  * 匿名帖（033）：地图上的照片/卡片也是帖子，同样要按读模型遮罩。
  * 地图是**匿名帖最容易泄露作者的地方** —— `authorId` 会被 MapScreen 拿去拼作者主页跳转。
  */
 function post(row: PostRow, meId: string | null) {
-  return { id: row.id, ...publicAuthor(row, meId), body: row.body,
+  return { id: row.id, ...publicAuthor(row, meId),
+    authorAvatarMediaId: row.is_anonymous ? null : (row.author_avatar_media_id ?? null), body: row.body,
     place: row.place, placeId: row.place_id, createdAt: new Date(row.created_at).toISOString(),
     imageMode: row.image_mode, placeLat: row.place_lat === null ? null : Number(row.place_lat),
     placeLng: row.place_lng === null ? null : Number(row.place_lng), likeCount: Number(row.like_count),
-    commentCount: Number(row.comment_count), mapMediaId: row.map_media_id, images: row.images }
+    commentCount: Number(row.comment_count), mapMediaId: row.map_media_id, images: row.images,
+    openCount: Number(row.open_count ?? 0) }
 }
 
 export function registerMapRoutes(app: FastifyInstance, db: Db, options: { previewHierarchy?: boolean } = {}) {
