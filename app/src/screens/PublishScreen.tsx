@@ -9,6 +9,8 @@ import { pickPhoto, takePhoto } from '../native/camera'
 import { renderSticker } from '../native/sticker'
 import { defaultImageText, renderImageText, type ImageText } from '../native/imageText'
 import { ImageTextControls, ImageTextPreview } from '../components/ImageTextControls'
+import { SubjectSelector } from '../components/SubjectSelector'
+import type { CutoutBox } from '../../../shared/cutout'
 import { deleteDraft, listDrafts, saveDraft, type PublishDraft } from '../data/publishDrafts'
 import { takeRepublish } from '../data/store'
 import { navigate, registerNavigationGuard, useRoute } from '../router'
@@ -46,6 +48,8 @@ export function PublishScreen() {
   const [textEditorOpen, setTextEditorOpen] = useState(false)
   const [textImage, setTextImage] = useState<{ source: string; key: string; dataUrl: string } | null>(null)
   const [processing, setProcessing] = useState(false)
+  const [selectingSubject, setSelectingSubject] = useState(false)
+  const [subjectBox, setSubjectBox] = useState<CutoutBox>()
   const [rendering, setRendering] = useState(false)
   const [busy, setBusy] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -61,6 +65,7 @@ export function PublishScreen() {
   const imageVersion = useRef(0)
   const requestId = useRef(crypto.randomUUID())
   const cutoutRequest = useRef(crypto.randomUUID())
+  const cutoutSelection = useRef('auto')
   const submitting = useRef(false)
   const uploaded = useRef(new Map<string, string>())
   const uploadKeys = useRef(new Map<string, string>())
@@ -81,7 +86,7 @@ export function PublishScreen() {
   const readyTextImage = textImage?.source === baseDisplay && textImage.key === imageTextKey ? textImage.dataUrl : ''
   const selectedPlace = places.find(p => p.id === placeId)
   const canPublish = Boolean(text.trim() || original) && count <= 500 && places.some(p => p.id === placeId)
-    && !publishing && !processing && !rendering && !busy && !sheet && (!rawSticker || (adopted && Boolean(sticker)))
+    && !publishing && !processing && !rendering && !busy && !sheet && !selectingSubject && (!rawSticker || (adopted && Boolean(sticker)))
     && imageTextCount <= 50 && (!hasImageText || Boolean(readyTextImage))
 
   useEffect(() => {
@@ -176,6 +181,8 @@ export function PublishScreen() {
   }, [sheet, draftReady])
 
   function clearEffect() {
+    setSelectingSubject(false)
+    setSubjectBox(undefined)
     imageVersion.current++; cutoutBusy.current = false; setRawSticker(''); setStickerResult(null); setAdopted(false); setProcessing(false)
     setOutline(true); cutoutRequest.current = crypto.randomUUID()
   }
@@ -197,15 +204,17 @@ export function PublishScreen() {
     uploaded.current.set(source, r.value.id)
     return r.value.id
   }
-  async function cutout() {
+  async function cutout(position?: CutoutBox[]) {
     if (cutoutBusy.current) return
+    const selection = position ? JSON.stringify(position) : 'auto'
+    if (selection !== cutoutSelection.current) { cutoutRequest.current = crypto.randomUUID(); cutoutSelection.current = selection }
     cutoutBusy.current = true
     const version = imageVersion.current
-    setProcessing(true); setErr(''); stickerRequested.current = true
+    setProcessing(true); setAdopted(false); setErr(''); stickerRequested.current = true
     try {
       const id = await mediaId(original)
       if (version !== imageVersion.current) return
-      const r = await generateCutout(id, cutoutRequest.current)
+      const r = await generateCutout(id, cutoutRequest.current, position)
       if (version !== imageVersion.current) return
       if (!r.ok) {
         // A timed-out request may still finish. Keep its key when its result is unknown.
@@ -317,6 +326,7 @@ export function PublishScreen() {
             <button className="pub__tool pub__tool--muted" disabled={locked || busy} onClick={() => setSheet('image')}><PublishIcon name="replace" /><span>更换</span></button>
             <button className="pub__tool pub__tool--muted" disabled={locked} onClick={() => { clearEffect(); setOriginal(''); stickerRequested.current = false; setImageText(defaultImageText()); setTextEditorOpen(false) }}><PublishIcon name="trash" /><span>删除</span></button>
           </div>
+          <Button variant="text" disabled={locked || processing || busy || rendering} onClick={() => setSelectingSubject(true)}>手动框选主体</Button>
           {textEditorOpen && <ImageTextControls value={imageText} disabled={locked} onChange={setImageText} onDone={() => setTextEditorOpen(false)} onDelete={() => setImageText(defaultImageText())} />}
           {processing && <p className="pub__hint" role="status">正在识别主体，你可以继续编辑正文和地点。</p>}
           {rawSticker && <div className="pub__stickerActions"><label><input type="checkbox" checked={outline} disabled={locked || rendering} onChange={e => setOutline(e.target.checked)} />白色描边</label><Button variant="secondary" disabled={locked || processing || rendering || !sticker} onClick={() => setAdopted(true)}>{rendering ? '预览处理中…' : adopted ? '已采用贴纸' : '确认采用贴纸'}</Button></div>}
@@ -335,6 +345,7 @@ export function PublishScreen() {
         {original ? <p><PublishIcon name="pin" size={20} /><span>{selectedPlace ? `发布后，这段回忆会出现在${selectedPlace.name}的地图上。` : '选择校园地点，让这段回忆有一个坐标。'}</span></p> : <><p data-pub-blocked={!placeId ? 'no-place' : !text.trim() ? 'empty' : undefined}>选择地点，写点文字或添加照片即可发布。</p><CampusTrail /></>}
       </footer>
     </div>
+    {selectingSubject && <SubjectSelector source={original} initialBox={subjectBox} onCancel={() => setSelectingSubject(false)} onConfirm={box => { setSubjectBox(box); setSelectingSubject(false); void cutout([box]) }} />}
     {sheet && <div className="pub__overlay"><div ref={sheetRef} tabIndex={-1} className="pub__sheet" role="dialog" aria-modal="true" aria-label={sheet === 'image' ? '添加图片' : sheet === 'image-options' ? '图片操作' : sheet === 'exit' ? '退出编辑' : '本地草稿'}>
       {sheet === 'image' && <><h2>添加图片</h2><Button variant="secondary" onClick={() => void chooseImage(true)}>拍照</Button><Button variant="secondary" onClick={() => void chooseImage(false)}>从相册选择</Button><Button variant="secondary" onClick={() => setSheet(null)}>取消</Button></>}
       {sheet === 'image-options' && <><h2>图片操作</h2><Button variant="secondary" onClick={() => { setTextEditorOpen(true); setSheet(null) }}>编辑图片文字</Button><Button variant="secondary" onClick={() => setSheet('image')}>更换图片</Button><Button variant="secondary" onClick={() => setSheet(null)}>取消</Button></>}

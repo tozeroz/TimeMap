@@ -2,6 +2,8 @@
 
 ## 功能测试
 
+- [BJTU TimeMap 验收测试用例](BJTU%20TimeMap验收测试用例.md)
+- [BJTU TimeMap 验收执行记录（CSV模板，未执行）](BJTU%20TimeMap验收执行记录.csv)
 - [本地测试环境与验证命令](../public/local-testing.md)
 - [发布流程检查](publish-flow-audit-2026-10-13.md)
 - [发布流程回归结果](publish-v02-regression-results.json)

@@ -1,0 +1,31 @@
+{
+  "source_sha256": "bba15dbcde17b2400101591190f9f824976e3541f70778df38a8cf07878ee79c",
+  "heading_count": 18,
+  "image_count": 23,
+  "table_count": 12,
+  "images": {
+    "图片和附件\\All 时序图.png": "9d488e03e1c2119ece044026b0aa5a5f80368279b019ddac6cbf85f43389f881",
+    "图片和附件\\All 类图.png": "5837cb617580278e0c9789294cd38ec2e155ff382e82a903f5333cf1daa60baf",
+    "图片和附件\\F03-place-detail-activity.png": "4fed31192a6b9689c1956b1c2c127dbfb22cb3a687cde603716d414a9b078e04",
+    "图片和附件\\F03-place-detail-class.png": "6fde669bc185a3f4108d10e04180edb5c89d3c1694fdffcd10f88391e1da0155",
+    "图片和附件\\F03-place-detail-sequence.png": "6e9716b13c937e4fe6b99b731348d904da03598e9228017b621a9eb78c6e3a13",
+    "图片和附件\\image 1.png": "bc383f76e4e4a0eb18573c28e7fe3d38e409c466464e47338d42673bc1b4d083",
+    "图片和附件\\image 10.png": "753542bb9aec1353c020bf437a6800edbda44be552ee5987a1019bf44c048995",
+    "图片和附件\\image 11.png": "aa667dde9ba82a28a36705211530c64c6100b088fd2039e3782620c802fd1319",
+    "图片和附件\\image 2.png": "1232f1d1117812d932336f2e7aee7e965a1686dcc7ba3aae0d47ea0a26d564ac",
+    "图片和附件\\image 3.png": "5368060817d5a5df2d36464db1a14eff6f0390dbbdf15991e8af8ec782982feb",
+    "图片和附件\\image 4.png": "f4e733f40641fb4c599e9e301c4e2f97460dcd62024ef25473cc30d12407d945",
+    "图片和附件\\image 5.png": "9857bd1513117a93b7056e1bd7d500aea21ff224053a98bb3a87bafa6cb13bf7",
+    "图片和附件\\image 6.png": "c0b1731e933dc25ce14626a56d5691da566427aef7c4505183b0f4ec8e97150e",
+    "图片和附件\\image 7.png": "82238e4075f273ed7c8765f8157e30ecd89711dadd100aec709df6419e76f0f9",
+    "图片和附件\\image 8.png": "b13a2c0dd4cc3a4e16ed31be9cbf56a11657969b9d510057f313a4634106c2c9",
+    "图片和附件\\image 9.png": "fd2d479dcdfc39cc08782d66ddac70da61f1ba1b57551b2a936672fd93a84126",
+    "图片和附件\\image.png": "8be5308e8dd2fac69959fa8ac9858759475425b7a4e35deb8417861d79018f8d",
+    "图片和附件\\帖子发布与管理-时序图-发布.png": "5979892b569da0c0e91d27eac48923707709f30eeedf693056c3e332b9a1087d",
+    "图片和附件\\帖子发布与管理-类图-前端.png": "0b043654a1c34bd7925c857b5ffa1234653ed988e12ef4dfbd525dc83a6ffa51",
+    "图片和附件\\活动提交与审核 时序图.png": "a87c53cf2c92697fef3ec83789ec3d23696e12c3076f3f2044a4ad99ac008e5f",
+    "图片和附件\\活动提交与审核 类图.png": "fec7faec70fdf995653332e9c55cc9e329972386f8c6f9e84d54b7c28c6e7537",
+    "图片和附件\\活动浏览与筛选 时序图.png": "5fd28812d4a9f8e9079f9443502a1d721d318a3b3f1acf80a1f6e23682a81547",
+    "图片和附件\\活动浏览与筛选 类图.png": "f5cd2f82b7767bc3affaec180191ca6edc001dfe07881469ee2b2ccdd175e290"
+  }
+}

@@ -16,7 +16,9 @@
 - [开发、Git 协作与服务器发布](public/development-and-deployment.md)
 - [完整本地测试环境](public/local-testing.md)
 - [需求分析与产品设计](public/BJTUTimeMap需求分析与产品设计文档.md)
+- [需求冻结评审稿（2026-11-13，待团队确认）](public/product/BJTU%20TimeMap需求冻结评审稿.md)
 - [详细功能设计](public/product/BJTU%20TimeMap详细功能设计文档.md)
+- [核心功能模块详细需求与设计描述（当前实现）](public/product/BJTU%20TimeMap核心功能模块详细需求与设计描述.md)
 - [地图地标地点清单](public/地图地标地点清单.md)
 - [校园地点分类资料（26 个地点）](public/BJTUTimeMap_校园地点分类资料.md)
 - [地标数据维护手册（队友录入图片与简介）](public/地标数据维护手册.md)
@@ -30,6 +32,7 @@
 ## 测试与验收
 
 - [测试文档入口](test/README.md)
+- [BJTU TimeMap 验收测试用例与执行记录](test/BJTU%20TimeMap验收测试用例.md)
 - [地图分级与地点数据本地实施记录](test/地图分级与地点数据本地实施记录-2026-11-05.md)
 - [P0 交付与验证报告](test/TIMEMAP-P0-REPORT.md)
 - [设备端验收](test/device-walkthrough.md)

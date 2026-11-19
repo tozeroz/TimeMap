@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Db } from './db.ts'
 import { probeImage } from './imageProbe.ts'
+import { createHash } from 'node:crypto'
+import { boxInside, isCutoutBox, type CutoutBox } from '../../shared/cutout.ts'
 
 export function registerCutoutRoutes(app: FastifyInstance, db: Db, root: string,
   authenticate: (req: FastifyRequest) => Promise<string | null>) {
@@ -10,14 +12,23 @@ export function registerCutoutRoutes(app: FastifyInstance, db: Db, root: string,
   app.post('/api/media/cutout', async (req, reply) => {
     const owner = await authenticate(req)
     if (!owner) return reply.code(401).send({ message: '请先登录再生成贴纸' })
-    const { mediaId, requestId } = (req.body ?? {}) as { mediaId?: string; requestId?: string }
+    const { mediaId, requestId: inputRequestId, method = 'auto', position } = (req.body ?? {}) as {
+      mediaId?: string; requestId?: string; method?: unknown; position?: unknown
+    }
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!uuid.test(mediaId ?? '') || !uuid.test(requestId ?? '')) return reply.code(400).send({ message: '图片或请求标识无效' })
+    if (!uuid.test(mediaId ?? '') || !uuid.test(inputRequestId ?? '')) return reply.code(400).send({ message: '图片或请求标识无效' })
+    if (method !== 'auto' && method !== 'control') return reply.code(400).send({ message: '抠图方式无效' })
+    if (method === 'control' ? !Array.isArray(position) || position.length < 1 || position.length > 10 || !position.every(isCutoutBox)
+      : position !== undefined) return reply.code(400).send({ message: '请框选主体，选区宽高至少10像素，且不能贴住图片边缘' })
+    const boxes = method === 'control' ? position as CutoutBox[] : undefined
+    // Different selections must not replay a cached automatic/previous selection result.
+    const hash = createHash('sha256').update(JSON.stringify([inputRequestId, boxes])).digest('hex')
+    const requestId = boxes ? `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}` : inputRequestId
     const prior = await db.pool.query('select * from cutout_jobs where request_id=$1', [requestId])
     if (prior.rows[0]) {
       const job = prior.rows[0]
       if (job.owner_id !== owner || job.media_id !== mediaId) return reply.code(403).send({ message: '处理请求归属不一致' })
-      if (job.status === 'done') return { dataUrl: `data:image/png;base64,${job.result_base64}` }
+      if (job.status === 'done') return { dataUrl: `data:image/png;base64,${job.result_base64}`, method }
       if (job.status === 'processing' && Date.now() - new Date(job.created_at).getTime() < 120000) return reply.code(409).send({ message: '该图片仍在处理，请稍后重试查询结果' })
       if (job.status === 'processing') await db.pool.query("update cutout_jobs set status='failed' where request_id=$1 and status='processing'", [requestId])
       return reply.code(422).send({ message: '上次处理失败，可重新生成或使用原图' })
@@ -31,6 +42,9 @@ export function registerCutoutRoutes(app: FastifyInstance, db: Db, root: string,
     const media = await db.pool.query('select storage_key, width, height from media where id=$1 and owner_user_id=$2 and scope=\'public\' and mime like \'image/%\'', [mediaId, owner])
     const image = media.rows[0]
     if (!image) return reply.code(403).send({ message: '无法处理该图片' })
+    if (boxes?.some(box => !boxInside(box, image.width, image.height))) {
+      return reply.code(400).send({ message: '选区超出原图范围，请重新框选主体' })
+    }
     if (Math.min(image.width, image.height) < 128 || Math.max(image.width, image.height) > 3000) {
       return reply.code(400).send({ message: '生成贴纸需要图片短边至少128像素、长边不超过3000像素' })
     }
@@ -68,7 +82,7 @@ export function registerCutoutRoutes(app: FastifyInstance, db: Db, root: string,
       }
       const res = await fetch(`https://aip.baidubce.com/rest/2.0/image-process/v1/segment?access_token=${encodeURIComponent(token.value)}`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ image: input, method: 'auto', return_form: 'rgba', refine_mask: 'true' }),
+        body: JSON.stringify({ image: input, method, ...(boxes ? { position: boxes } : {}), return_form: 'rgba', refine_mask: 'true' }),
         signal: AbortSignal.timeout(45000),
       })
       const output = await res.json() as { image?: string; error_code?: number; log_id?: string }
@@ -78,7 +92,7 @@ export function registerCutoutRoutes(app: FastifyInstance, db: Db, root: string,
       if (!probe.ok || probe.mime !== 'image/png') throw new Error('invalid_png')
       await db.pool.query("update cutout_jobs set status='done', result_base64=$2 where request_id=$1", [requestId, output.image])
       console.info('[cutout] completed', { requestId, logId: output.log_id })
-      return { dataUrl: `data:image/png;base64,${output.image}` }
+      return { dataUrl: `data:image/png;base64,${output.image}`, method }
     } catch {
       await db.pool.query("update cutout_jobs set status='failed' where request_id=$1", [requestId])
       return reply.code(502).send({ message: '贴纸服务处理失败，请重试或使用原图' })

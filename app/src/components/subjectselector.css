@@ -1,0 +1,13 @@
+.subject-select { position: fixed; inset: 0; width: min(440px, calc(100% - 24px)); max-height: calc(100dvh - 24px); overflow: auto; margin: auto; padding: 20px; border: 0; border-radius: var(--r-panel); background: var(--c-surface); color: var(--c-text); }
+.subject-select::backdrop { background: #192d4299; }
+.subject-select h2 { margin: 0 0 8px; font-size: 20px; }
+.subject-select p { font-size: 14px; line-height: 1.6; color: var(--c-text-2); }
+.subject-select__stage { position: relative; width: fit-content; max-width: 100%; margin: 16px auto; overflow: hidden; touch-action: none; cursor: crosshair; user-select: none; background: var(--c-divider); }
+.subject-select__stage img { display: block; width: 100%; height: auto; pointer-events: none; }
+.subject-select__box { position: absolute; box-sizing: border-box; border: 2px solid white; outline: 2px solid var(--c-primary); background: #ffffff12; box-shadow: 0 0 0 1000px #0006; pointer-events: none; }
+.subject-select__adjust summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.subject-select__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.subject-select__fields label { display: grid; gap: 6px; font-size: 14px; }
+.subject-select__fields input { width: 100%; min-width: 0; min-height: 44px; padding: 8px; border: 1px solid var(--c-divider); border-radius: var(--r-sm); background: var(--c-surface); color: var(--c-text); }
+.subject-select__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.subject-select__actions button { flex: 1 1 auto; min-height: 44px; }
