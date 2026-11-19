@@ -38,6 +38,20 @@
   top: 0;
   will-change: transform;
   /*
+   * ⚠️ wrap 只是定位容器，**不要用它自己的布局盒接收点击**。
+   *
+   * wrap 绝对定位在锚点上，尺寸由内容撑开；里层 `.rm` 又被 translate(-50%,-100%)
+   * 抬走 —— 于是 wrap 的盒子覆盖的是一片「看不见的区域」，而相邻标记的 wrap
+   * 会互相压住对方的可视卡片。结果就是：点一张看得见的帖子卡片，事件却被
+   * 另一个标记（甚至同一标记的空盒）接走，`event.target` 是 wrap 自己，
+   * `closest('.rm__card')` 恒为 null ⇒ 把「点帖子」误判成「点地点」，
+   * 打开地点抽屉（2026-11-06 线上回归的直接原因）。
+   *
+   * 所以：wrap 不接收指针事件，只让**真正画出来的部分**（卡片/图钉/名称标签）
+   * 接收；点击仍会冒泡到 wrap 上的监听器，JS 侧再用 markerClickPostId() 兜底。
+   */
+  pointer-events: none;
+  /*
    * 腾讯 GL 会在容器里插一层铺满的覆盖 div（`leaflet-clickable`，z-index:1000），
    * 它负责地图手势，但也会把下面的一切点击吃掉。自绘标记必须抬到它之上，
    * 否则点标记没有反应（视觉上标记可见，只是 hit-test 命中了覆盖层）。
@@ -48,6 +62,14 @@
 
 .rm__wrap--tmap .rm {
   transform: translate(-50%, -100%);
+}
+
+/* wrap 不接收指针事件（见 .rm__wrap--tmap 注释），可视部分单独放开 */
+.rm__wrap--tmap .rm__card,
+.rm__wrap--tmap .rm__pin,
+.rm__wrap--tmap .rm__label,
+.rm__wrap--tmap .rm__here {
+  pointer-events: auto;
 }
 
 .rm__wrap--tmap .rm__here {

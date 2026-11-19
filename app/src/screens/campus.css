@@ -147,6 +147,27 @@
   font-weight: 400;
 }
 
+/* ⭐ 2026-11-06：图片卡右下角的"点赞 + 点击数"一行（迁移 036） */
+.pcard__overlayStats {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.pcard__views {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--c-text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pcard__views--on-image {
+  color: rgba(255, 255, 255, 0.82);
+}
+
 /* 头像（无图卡片与作者行共用） */
 .pcard__avatar {
   width: 20px;
@@ -218,7 +239,8 @@
 }
 
 .pcard__like,
-.pcard__comment {
+.pcard__comment,
+.pcard__views {
   display: inline-flex;
   align-items: center;
   gap: 3px;
