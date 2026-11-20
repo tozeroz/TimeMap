@@ -2,6 +2,8 @@
 
 项目文档统一入口：[docs/README.md](docs/README.md)，分类与维护规则见 [文档管理约定](docs/public/文档管理约定.md)。
 
+当前日常运行和发布请看[开发、Git 协作与服务器发布](docs/public/development-and-deployment.md)：包含本地前端连接远程后端、停止/重启、生产配置与前端部署命令。下文早期 Demo 的运行与交付记录仅供追溯。
+
 把 MuMu 模拟器里的安卓 app **`com.kairuotu.campus` v2.10.0** 复刻成一个可 `adb install` 的
 安卓应用：全部页面、Capacitor + Web 实现、数据全部本地 mock（内容真实感）、纯本地无后端。
 

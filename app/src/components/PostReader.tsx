@@ -7,6 +7,12 @@ import { IconBack, IconClose, IconComment, IconEdit, IconEye, IconHeart, IconLoc
 import { PhotoViewer } from './PhotoViewer'
 import './postreader.css'
 
+const publishTimeFormat = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+})
+
 interface Props {
   post: ApiPostDetail; comments: ApiCommentNode[]; total: number; busy: boolean
   draft: string; onDraft: (value: string) => void; notice: string; offline: boolean
@@ -61,6 +67,9 @@ function Sheet({ title, children, onClose, focusInput = false }: { title: string
 
 export function PostReader(p: Props) {
   const { post } = p
+  const publishedAt = new Date(post.createdAt)
+  const hasPublishTime = Number.isFinite(publishedAt.getTime())
+  const publishTime = hasPublishTime ? publishTimeFormat.format(publishedAt) : '发布时间未知'
   const images = post.images ?? []
   const [index, setIndex] = useState(() => Math.min(feedBrowse.images[post.id] ?? 0, Math.max(0, images.length - 1)))
   const [sheet, setSheet] = useState<'comments' | 'body' | 'more' | null>(null)
@@ -165,9 +174,12 @@ export function PostReader(p: Props) {
           <button className="reader__bodyOpen" onClick={() => setSheet('body')} aria-label="展开全文"><p>{post.body}</p>{post.body.length > 70 && <span>展开全文</span>}</button>
         </section>}
       </main>
-      {post.place && <div className="reader__location">
-        <button className="reader__place" onClick={() => post.placeId ? navigate('poidetail', { id: post.placeId }) : setHint('该地点暂不可查看')}><IconLocation size={16}/>{post.place}</button>
-      </div>}
+      <div className="reader__location">
+        {post.place && <button className="reader__place" onClick={() => post.placeId ? navigate('poidetail', { id: post.placeId }) : setHint('该地点暂不可查看')}><IconLocation size={16}/><span>{post.place}</span></button>}
+        <time className="reader__publishTime" dateTime={hasPublishTime ? publishedAt.toISOString() : undefined} title={hasPublishTime ? `发布时间（北京时间）：${publishTime}` : undefined} aria-label={`发布时间：${publishTime}`}>
+          {publishTime}
+        </time>
+      </div>
       <footer className="reader__bar">
         <button className="reader__write" onClick={() => openComments(true)}><IconEdit size={18}/><span>留下我的评论…</span></button>
         <button className={`reader__action ${post.likedByMe ? 'is-liked' : ''}`} aria-label={post.likedByMe ? '取消点赞' : '点赞'} aria-pressed={post.likedByMe} disabled={p.busy} onClick={p.onLike}><IconHeart size={24} filled={post.likedByMe}/><span>{post.likeCount}</span></button>

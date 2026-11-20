@@ -1433,8 +1433,8 @@ export function buildServer(deps: ServerDeps) {
           where t.depth < 20 and c.status = 'published'
        )
        select t.id, t.root_id, t.parent_id, t.depth,
-              c.body, c.created_at, c.author_id,
-              coalesce(u.display_name, '同学') as author_name,
+              c.body, c.created_at, c.author_id, c.post_id,
+              coalesce(u.display_name, '同学') as author_name, u.avatar_media_id as author_avatar_media_id,
               c.is_anonymous, ai.number as anonymous_number,
               -- 匿名帖（033）：帖子作者在该帖下发的评论也要遮罩，
               -- 否则「匿名发帖 + 自己评论一句」就把自己认出来了（等于没匿名）。
@@ -1478,6 +1478,26 @@ export function buildServer(deps: ServerDeps) {
 
     return { items: order.map((id) => byRoot.get(id)!), total: r.rows.length }
   }
+
+  /** A stable browsing order: opened post, remaining posts at its place, then elsewhere. */
+  app.get('/api/posts/:id/browse', async (req, reply) => {
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return reply.code(400).send({ error: 'invalid_id' })
+    try {
+      const anchor = await db.pool.query<{ place_id: string | null }>(
+        "select place_id from posts where id=$1 and status='published'", [id])
+      if (!anchor.rows[0]) return reply.code(404).send({ error: 'not_found' })
+      // Only IDs are loaded; post content is still fetched individually by the reader.
+      const posts = await db.pool.query<{ id: string }>(
+        `select id from posts where status='published'
+         order by case when id=$1 then 0 when place_id=$2 then 1 else 2 end,
+                  created_at desc, id desc`, [id, anchor.rows[0].place_id])
+      return { ids: posts.rows.map(post => post.id) }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      return reply.code(500).send({ error: 'db_error' })
+    }
+  })
 
   /** 帖子详情：帖子本身 + 两个计数（评论计数含回复，点赞计数来自 likes 表） */
   app.get('/api/posts/:id', async (req, reply) => {
@@ -1748,7 +1768,7 @@ export function buildServer(deps: ServerDeps) {
       let replyTo: string | null = null
       if (parentId) {
         const pp = await client.query<CommentIdentitySource>(
-          `select c.author_id, coalesce(u.display_name, '同学') as author_name,
+          `select c.post_id, c.author_id, coalesce(u.display_name, '同学') as author_name, u.avatar_media_id as author_avatar_media_id,
                   c.is_anonymous, ai.number as anonymous_number,
                   p.is_anonymous as post_anonymous, p.author_id as post_author_id
              from comments c join posts p on p.id = c.post_id
@@ -1772,16 +1792,18 @@ export function buildServer(deps: ServerDeps) {
            returning number`, [id, s.user.userId])
         number = alias.rows[0]!.number
       }
-      const cr = await client.query<{ id: string; created_at: Date }>(
+      const cr = await client.query<{ id: string; created_at: Date; author_avatar_media_id: string | null }>(
         `insert into comments (id, post_id, author_id, parent_id, body, is_anonymous)
-         values ($1, $2, $3, $4, $5, $6) returning id, created_at`,
+         values ($1, $2, $3, $4, $5, $6) returning id, created_at,
+           (select avatar_media_id from users where id=$3) as author_avatar_media_id`,
         [randomUUID(), id, s.user.userId, parentId || null, body, anonymous])
       await client.query('commit')
       const row = cr.rows[0]!
       reply.code(201)
       return {
         id: row.id, body,
-        ...publicCommentIdentity({ author_id: s.user.userId, author_name: s.user.displayName,
+        ...publicCommentIdentity({ post_id: id, author_id: s.user.userId, author_name: s.user.displayName,
+          author_avatar_media_id: row.author_avatar_media_id,
           is_anonymous: anonymous, post_anonymous: post.is_anonymous,
           post_author_id: post.author_id, anonymous_number: number }, s.user.userId),
         createdAt: row.created_at.toISOString(), parentId: parentId || null, replyTo,

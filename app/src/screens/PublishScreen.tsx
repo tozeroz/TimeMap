@@ -303,7 +303,7 @@ export function PublishScreen() {
         <button type="button" className={`pub__anonRow ${anonymous ? 'is-on' : ''}`} role="switch" aria-checked={anonymous} aria-describedby="pub-anon-hint" data-pub-anon={anonymous ? '1' : '0'} disabled={locked} onClick={() => setAnonymous(v => !v)}>
           <span className="pub__anonText">
             <strong>匿名发布</strong>
-            <span id="pub-anon-hint">别人只会看到「匿名同学」和系统头像，看不到你的昵称、头像和主页。</span>
+            <span id="pub-anon-hint">每条帖子生成固定随机名称，评论时沿用。别人看不到你的真实昵称、头像和主页。</span>
           </span>
           <span className="pub__anonSwitch" aria-hidden="true"><span /></span>
         </button>

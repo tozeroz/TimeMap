@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import pg from 'pg'
 import { buildServer, type ServerDeps } from '../src/index.ts'
+import { anonymousPostName } from '../src/anonymous.ts'
 import { publicCommentIdentity } from '../src/commentIdentity.ts'
 
 const url = process.env.PROFILE_TEST_DATABASE_URL
@@ -18,7 +19,7 @@ const app = buildServer({ db: { pool, status: () => ({ ready: true }), noteFailu
 } as unknown as ServerDeps)
 try {
   await pool.query(`
-    create table users(id uuid primary key, display_name text, handle text default 'test', phone_e164 text, role text default 'student');
+    create table users(id uuid primary key, display_name text, avatar_media_id uuid, handle text default 'test', phone_e164 text, role text default 'student');
     create table sessions(id uuid primary key, user_id uuid, token_hash text, revoked_at timestamptz, expires_at timestamptz);
     create table posts(id uuid primary key, author_id uuid references users(id), is_anonymous boolean default false, status text default 'published');
     create table comments(id uuid primary key, post_id uuid references posts(id), author_id uuid references users(id),
@@ -53,14 +54,14 @@ try {
   await pool.query("insert into comments(id,post_id,author_id,body) values($1,$2,$3,'历史评论')", [old, post, owner.id])
   const first = await send(a, { body: '匿名 A', anonymous: true, parentId: old })
   assert.equal(first.author, '匿名同学 01')
-  assert.equal(first.replyTo, '匿名楼主')
+  assert.equal(first.replyTo, anonymousPostName(post))
   assert.equal(first.authorId, null)
   assert.equal(first.isMine, true)
   const second = await send(b, { body: '匿名 B', anonymous: true, parentId: first.id })
   assert.equal(second.author, '匿名同学 02')
   assert.equal(second.replyTo, first.author)
   const mine = await send(owner, { body: '楼主', anonymous: false })
-  assert.equal(mine.author, '匿名楼主')
+  assert.equal(mine.author, anonymousPostName(post))
   assert.equal(mine.authorId, null)
   assert.equal(mine.anonymous, true)
   assert.equal(mine.isPostAuthor, true)
@@ -89,6 +90,18 @@ try {
   const explicitNormal = await send(a, { body: '显式关闭匿名', anonymous: false }, otherPost)
   assert.equal(explicitNormal.authorId, a.id)
   assert.equal(explicitNormal.anonymous, false)
+  // Existing comments and immediate creation responses follow current profile avatars.
+  for (const avatar of [randomUUID(), randomUUID(), null]) {
+    await pool.query('update users set avatar_media_id=$1 where id=$2', [avatar, a.id])
+    const created = await send(a, { body: '当前头像' }, otherPost)
+    assert.equal(created.authorAvatarMediaId, avatar)
+    const response = await app.inject({ method: 'GET', url: `/api/posts/${otherPost}/comments` })
+    assert.equal(response.json().items.find((c: any) => c.id === normal.id).authorAvatarMediaId, avatar)
+    const masked = await send(a, { body: '仍匿名', anonymous: true })
+    assert.equal(masked.authorAvatarMediaId, null)
+    const publicTree = await read()
+    assert.equal(publicTree.items.find((c: any) => c.id === masked.id).authorAvatarMediaId, null)
+  }
   await send(a, { body: 'x', anonymous: 'false' }, post, 400)
   await send(a, { body: 'x', parentId: cross.id }, post, 400)
   await send(a, { body: 'x', parentId: mine.id }, post, 400)

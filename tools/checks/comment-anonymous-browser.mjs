@@ -31,9 +31,9 @@ try {
     await page.addInitScript(({ me }) => localStorage.setItem('campus.demo.session.v1', JSON.stringify({
       token: 'browser-test-session-token', expiresAt: '2099-01-01', user: { id: me, displayName: '我的昵称', handle: 'test' }
     })), { me })
-    const post = { id, author: '匿名同学', authorId: null, anonymous: true, body: '匿名评论浏览器测试',
+    const post = { id, author: '匿名同学·A1B2C3', authorId: null, anonymous: true, body: '匿名评论浏览器测试',
       images: [], createdAt: new Date().toISOString(), likeCount: 0, favoriteCount: 0, commentCount: 2 }
-    const root = { id: 'cccccccc-cccc-4ccc-8ccc-000000000001', author: '匿名楼主', authorId: null,
+    const root = { id: 'cccccccc-cccc-4ccc-8ccc-000000000001', author: '匿名同学·A1B2C3', authorId: null,
       anonymous: true, isPostAuthor: true, isMine: false, body: '楼主的评论', createdAt: new Date().toISOString(), parentId: null, replyTo: null, replies: [] }
     const own = { ...root, id: 'cccccccc-cccc-4ccc-8ccc-000000000002', author: '匿名同学 01',
       isPostAuthor: false, isMine: true, body: '我的匿名评论', replies: [] }
@@ -62,7 +62,7 @@ try {
     await page.getByRole('button', { name: '评论', exact: true }).click()
     await page.getByRole('switch', { name: '匿名评论' }).click()
     await page.locator(`[data-comment-id="${root.id}"]`).getByRole('button', { name: '回复', exact: true }).click()
-    const textarea = page.getByRole('textbox', { name: '回复 匿名楼主', exact: true })
+    const textarea = page.getByRole('textbox', { name: '回复 匿名同学·A1B2C3', exact: true })
     await textarea.fill('匿名回复测试')
     await page.getByRole('button', { name: '发送', exact: true }).click()
     await page.getByRole('status').filter({ hasText: '评论失败' }).waitFor()
@@ -74,7 +74,7 @@ try {
     await page.getByRole('button', { name: '取消回复', exact: true }).waitFor({ state: 'hidden' })
     await page.locator(`[data-comment-id="cccccccc-cccc-4ccc-8ccc-000000000003"]`).waitFor()
     assert.equal(await page.getByRole('textbox', { name: '写下你的评论', exact: true }).inputValue(), '')
-    assert.equal(await page.locator('.reader__replyTo').last().textContent(), '回复 匿名楼主')
+    assert.equal(await page.locator('.reader__replyTo').last().textContent(), '回复 匿名同学·A1B2C3')
     assert.equal(await page.locator('.reader__authorBadge').count(), 1)
     assert.equal(await page.locator(`[data-comment-delete="${own.id}"]`).count(), 1)
     const overflow = await page.locator('.reader__sheet').evaluate(el => el.scrollWidth > el.clientWidth + 1)

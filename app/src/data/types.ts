@@ -39,7 +39,7 @@ export interface FeedPost {
   topic?: string
   createdAt: string
   /**
-   * 匿名帖（2026-11-05）。为 true 时 `author` 已经是「匿名同学」+ 系统头像，
+   * 匿名帖（2026-11-05）。为 true 时 `author` 已经是帖内固定随机名称+ 系统头像，
    * 且**不允许**提供作者主页跳转（跳过去就等于点名）。
    */
   anonymous?: boolean

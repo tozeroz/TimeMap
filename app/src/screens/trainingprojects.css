@@ -29,6 +29,13 @@
 .projects__heading > span { font-size: 12px; color: var(--c-text-2); }
 .projects__list { list-style: none; padding: 0; margin: 0; }
 .projects__row { position: relative; display: grid; grid-template-columns: 94px minmax(0, 1fr) auto; column-gap: 14px; align-items: start; padding: 17px 0; border-bottom: 1px solid var(--c-divider); }
+.projects__row--current { margin-block: 10px; padding: 14px 8px 6px; border: 1px solid color-mix(in srgb, var(--c-brand) 35%, var(--c-bg)); border-radius: var(--r-md); background: color-mix(in srgb, var(--c-primary-soft) 40%, var(--c-bg)); }
+.projects__row--current .projects__coverLink { align-self: center; }
+.projects__currentBadges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.projects__currentBadges > span { padding: 2px 8px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; line-height: 1.5; }
+.projects__pinnedBadge { color: var(--c-text-2); background: var(--c-surface-sunken); }
+.projects__currentBadge { color: var(--c-primary); background: var(--c-primary-soft); }
+.projects__currentNote { margin: 0 0 4px; font-size: 13px; font-weight: 600; line-height: 1.6; color: var(--c-primary); overflow-wrap: anywhere; }
 .projects__cover { width: 94px; aspect-ratio: 1; overflow: hidden; border-radius: 10px; background: #f2ecdf; }
 .projects__cover img { width: 100%; height: 100%; object-fit: cover; }
 .projects__cover > span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 100%; height: 100%; color: var(--c-text-2); }
