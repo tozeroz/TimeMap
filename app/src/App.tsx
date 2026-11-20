@@ -43,6 +43,7 @@ import {
   PrivacyScreen,
   VerifyScreen,
 } from './screens/DrawerPages'
+import { FeedbackScreen } from './screens/FeedbackScreen'
 import './styles/pages.css'
 
 /**
@@ -220,6 +221,7 @@ export default function App() {
       {root === 'blacklist' && <BlacklistScreen />}
       {root === 'about' && <AboutScreen />}
       {root === 'contact' && <ContactScreen />}
+          {root === 'feedback' && <FeedbackScreen />}
       {root === 'profile-edit' && <ProfileEditScreen />}
       {root === 'media' && (
         <MediaPreviewScreen

@@ -461,3 +461,26 @@
 }
 
 .admin-reference .adm__btn, .admin-reference .adm__chip { min-height: 44px; }
+
+/* 用户反馈面板（043）：正文可能很长，保持换行并给折叠态一个渐隐 */
+.adm__fbContent {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.adm__fbContent.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.adm__link {
+  align-self: flex-start;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--c-primary);
+  font-size: var(--f-meta);
+  cursor: pointer;
+}
