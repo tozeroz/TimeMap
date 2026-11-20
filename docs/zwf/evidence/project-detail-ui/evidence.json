@@ -1,0 +1,116 @@
+{
+  "contract": "../../2026-11-20-实训项目详情页UI复刻方案.md",
+  "targetViewports": [
+    "320x740",
+    "390x844",
+    "430x932",
+    "1440x900"
+  ],
+  "accessibility": {
+    "status": "pass",
+    "evidence": "图库按钮、方向键、Escape和焦点返回；评价表单标签、对话框与可见焦点；按钮触控区域。"
+  },
+  "responsive": {
+    "status": "pass",
+    "evidence": "四视口无横向溢出；横图1200:420、竖图400:900比例断言；操作栏保持可达。"
+  },
+  "contentStates": {
+    "loading": {
+      "status": "pass",
+      "evidence": "延迟详情捕获加载态。"
+    },
+    "empty": {
+      "status": "pass",
+      "evidence": "缺少图库、体验、评价的空态正确。"
+    },
+    "error": {
+      "status": "pass",
+      "evidence": "详情及点赞/评价503，保留正文与草稿可重试。"
+    },
+    "partial": {
+      "status": "pass",
+      "evidence": "首张图片404，正文保持可用。"
+    },
+    "success": {
+      "status": "pass",
+      "evidence": "点赞/取消、评价提交与删除、管理员上传排序保存回读。"
+    },
+    "permission": {
+      "status": "pass",
+      "evidence": "匿名评价进入登录，模拟登录回到原详情。"
+    }
+  },
+  "renderedEvidence": [
+    {
+      "viewport": "320x740",
+      "artifact": "detail-320.png",
+      "observation": "横版展示图、项目介绍、功能、真实样式评价与固定操作栏；均为隔离测试数据。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "detail-390.png",
+      "observation": "横版展示图、项目介绍、功能、真实样式评价与固定操作栏；均为隔离测试数据。"
+    },
+    {
+      "viewport": "430x932",
+      "artifact": "detail-430.png",
+      "observation": "横版展示图、项目介绍、功能、真实样式评价与固定操作栏；均为隔离测试数据。"
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "detail-1440.png",
+      "observation": "横版展示图、项目介绍、功能、真实样式评价与固定操作栏；均为隔离测试数据。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "reviews.png",
+      "observation": "评价头像、昵称、时间、正文和固定底栏。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "portrait.png",
+      "observation": "竖版海报按400:900完整展示，没有裁成横幅。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "lightbox.png",
+      "observation": "放大层支持方向键、缩放、复位与关闭。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "no-gallery.png",
+      "observation": "无展示图和体验网址时直接展示介绍评价，仅保留可用操作。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "loading.png",
+      "observation": "详情请求等待中可见加载提示。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "error.png",
+      "observation": "详情失败可重试。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "missing.png",
+      "observation": "下架或不存在时隐藏操作栏。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "partial.png",
+      "observation": "部分展示图失败，介绍与其他图片仍可用。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "empty.png",
+      "observation": "评价空态，不生成示例用户内容。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "login-required.png",
+      "observation": "匿名写评价引导登录，保存受控项目回跳。"
+    }
+  ],
+  "fixtureOnly": true
+}

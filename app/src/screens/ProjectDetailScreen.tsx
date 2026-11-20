@@ -157,8 +157,11 @@ function ReviewAvatar({ review }: { review: ProjectReview }) {
 function ProjectGallery({ ids, name }: { ids: string[]; name: string }) {
   const [index, setIndex] = useState(0), [expanded, setExpanded] = useState(false), [zoom, setZoom] = useState(1)
   const [failed, setFailed] = useState<Set<string>>(new Set())
+  const [retry, setRetry] = useState(0)
   const touch = useRef<number | null>(null), dialog = useRef<HTMLDialogElement>(null), opener = useRef<HTMLButtonElement>(null)
   const pick = (next: number) => { setIndex((next + ids.length) % ids.length); setZoom(1) }
+  const source = mediaUrl(ids[index]) + (retry ? `?retry=${retry}` : '')
+  function retryImage() { setFailed(previous => { const next = new Set(previous); next.delete(ids[index]); return next }); setRetry(value => value + 1) }
   useEffect(() => {
     if (!expanded) return
     const box = dialog.current
@@ -168,12 +171,12 @@ function ProjectGallery({ ids, name }: { ids: string[]; name: string }) {
   }, [expanded])
   const controls = <div className="project-detail__galleryControls"><button disabled={ids.length < 2} aria-label="上一张展示图" onClick={() => pick(index - 1)}>←</button><span aria-live="polite">{index + 1} / {ids.length}</span><button disabled={ids.length < 2} aria-label="下一张展示图" onClick={() => pick(index + 1)}>→</button></div>
   return <div className="project-detail__gallery" aria-label="项目详情展示图" onTouchStart={e => { touch.current = e.touches[0]?.clientX ?? null }} onTouchEnd={e => { const x = e.changedTouches[0]?.clientX; if (touch.current !== null && x !== undefined && Math.abs(x - touch.current) > 50) pick(index + (x < touch.current ? 1 : -1)); touch.current = null }}>
-    <button ref={opener} className="project-detail__galleryImage" aria-label={`放大查看${name}第${index + 1}张展示图`} onClick={() => { setExpanded(true); setZoom(1) }}>
-      {failed.has(ids[index]) ? <span className="project-detail__broken"><IconImage size={32} />展示图暂不可用，点击查看</span> : <img key={ids[index]} src={mediaUrl(ids[index])} alt={`${name}展示图 ${index + 1}`} onError={() => setFailed(previous => new Set(previous).add(ids[index]))} />}
+    <button ref={opener} className="project-detail__galleryImage" aria-label={failed.has(ids[index]) ? '重试展示图' : `放大查看${name}第${index + 1}张展示图`} onClick={() => { if (failed.has(ids[index])) { retryImage(); return }; setExpanded(true); setZoom(1) }}>
+      {failed.has(ids[index]) ? <span className="project-detail__broken"><IconImage size={32} />展示图暂不可用，点击重试</span> : <img key={source} src={source} alt={`${name}展示图 ${index + 1}`} onError={() => setFailed(previous => new Set(previous).add(ids[index]))} />}
     </button>{ids.length > 1 && controls}
     {expanded && <dialog ref={dialog} className="project-detail__lightbox" aria-label="放大浏览展示图" onCancel={e => { e.preventDefault(); setExpanded(false) }} onKeyDown={e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); pick(index + (e.key === 'ArrowLeft' ? -1 : 1)) } }}>
       <div className="project-detail__lightboxBar"><button onClick={() => setExpanded(false)}>关闭</button><div><button aria-label="缩小图片" disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom - .5))}>−</button><button aria-label="复位图片" onClick={() => setZoom(1)}>复位</button><button aria-label="放大图片" disabled={zoom >= 3} onClick={() => setZoom(Math.min(3, zoom + .5))}>＋</button></div></div>
-      <div className="project-detail__lightboxStage"><img key={ids[index]} style={{ width: zoom === 1 ? undefined : `${zoom * 100}%`, maxWidth: zoom === 1 ? '100%' : 'none', maxHeight: zoom === 1 ? '100%' : 'none' }} src={mediaUrl(ids[index])} alt={`${name}展示图 ${index + 1}`} /></div>{controls}
+      <div className="project-detail__lightboxStage">{failed.has(ids[index]) ? <div className="project-detail__broken"><span>展示图暂不可用</span><button onClick={retryImage}>重试</button></div> : <img key={source} style={{ width: zoom === 1 ? undefined : `${zoom * 100}%`, maxWidth: zoom === 1 ? '100%' : 'none', maxHeight: zoom === 1 ? '100%' : 'none' }} src={source} alt={`${name}展示图 ${index + 1}`} onError={() => setFailed(previous => new Set(previous).add(ids[index]))} />}</div>{controls}
     </dialog>}
   </div>
 }

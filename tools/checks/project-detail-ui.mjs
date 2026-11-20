@@ -136,7 +136,7 @@ try {
     if (next === 'loading') { await page.getByText('正在读取项目详情…', { exact: true }).waitFor(); await capture(next, '390x844', '详情请求等待中可见加载提示。'); await waitProject() }
     else if (next === 'error') { await page.getByRole('heading', { name: '项目加载失败' }).waitFor(); await capture(next, '390x844', '详情失败可重试。') }
     else if (next === 'missing') { await page.getByRole('heading', { name: '项目已下架或不存在' }).waitFor(); assert.equal(await page.locator('.project-detail__actions').count(), 0); await capture(next, '390x844', '下架或不存在时隐藏操作栏。') }
-    else if (next === 'partial') { await page.getByText('展示图暂不可用，点击查看').waitFor(); await capture(next, '390x844', '部分展示图失败，介绍与其他图片仍可用。') }
+    else if (next === 'partial') { await page.getByText('展示图暂不可用，点击重试').waitFor(); await capture(next, '390x844', '部分展示图失败，介绍与其他图片仍可用。'); state = 'ready'; await page.getByRole('button', { name: '重试展示图', exact: true }).click(); await page.locator('.project-detail__galleryImage img').waitFor() }
     else { await page.getByText('还没有评价，来分享你的体验吧。').waitFor(); await capture(next, '390x844', '评价空态，不生成示例用户内容。') }
   }
   state = 'ready'
