@@ -26,7 +26,7 @@ try {
     create table places(id uuid primary key, latitude numeric, longitude numeric);
     create table posts(id uuid primary key, author_name text, author_id uuid, body text default '',
       place text, place_id uuid, created_at timestamptz default now(), image_mode text default 'photo',
-      is_anonymous boolean default false, status text default 'published', open_count int default 0);
+      is_anonymous boolean default false, allow_anonymous_comments boolean default true, status text default 'published', open_count int default 0);
     create table post_daily_stats(post_id uuid, day date, impressions int, opens int);
     create table likes(post_id uuid, user_id uuid);
     create table comments(post_id uuid, status text);
@@ -89,6 +89,9 @@ try {
     'Renaming must not require rewriting the post snapshot')
   assert.equal(postAvatar({ author: 'legacy' }), avatarFor('legacy'))
   assert.equal(postAvatar({ author: 'tozero', anonymous: true, authorAvatarMediaId: randomUUID() }), ANONYMOUS_AVATAR)
+  await pool.query('update posts set allow_anonymous_comments=false where id=$1', [id])
+  assert.equal((await read('/api/posts/' + id)).allowAnonymousComments, false)
+  assert.equal((await read('/api/posts/' + anonymousId)).allowAnonymousComments, true)
   const commentAvatarId = randomUUID()
   assert.equal(commentAvatar({ author: '评论者', anonymous: false, authorAvatarMediaId: commentAvatarId }), mediaUrl(commentAvatarId))
   assert.equal(commentAvatar({ author: '评论者', authorAvatarMediaId: null }), avatarFor('评论者'))

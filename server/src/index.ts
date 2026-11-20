@@ -104,6 +104,7 @@ const POST_ALLOWED_KEYS = [
    * 管理端审核/举报处置必须能定位到人，否则匿名就成了"无法处理"。
    */
   'anonymous',
+  'allowAnonymousComments',
 ] as const
 
 /** 一条帖子最多挂几个媒体（超出直接 400，**不静默截断**） */
@@ -1022,7 +1023,7 @@ export function buildServer(deps: ServerDeps) {
         }
       >(
         `select * from (
-        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
+        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.allow_anonymous_comments, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
                 -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
                 -- 为什么需要：地图页的标记按经纬度渲染（默认 provider=tencent 用
                 -- projectToContainer(LatLng)；RealMap 用 L.marker([lat,lng])），
@@ -1167,6 +1168,10 @@ export function buildServer(deps: ServerDeps) {
       用户以为公开发布、其实匿名了（或反过来）—— 这种误判没有报错，只有事后解释。
       所以非布尔一律 400，与既有 strict schema 一致。
     */
+    const allowAnonymousComments = payload.allowAnonymousComments !== false
+    if (payload.allowAnonymousComments !== undefined && typeof payload.allowAnonymousComments !== 'boolean') {
+      errors.push('allowAnonymousComments 必须是布尔值')
+    }
     let anonymous = false
     if (payload.anonymous !== undefined) {
       if (typeof payload.anonymous !== 'boolean') errors.push('anonymous 必须是布尔值')
@@ -1302,11 +1307,11 @@ export function buildServer(deps: ServerDeps) {
         // F04：place_id 必填（上面已校验启用）；place 为地点名快照；client_request_id 幂等键
         // 匿名（033）：is_anonymous 只影响**读模型**，真实 author_id 照常落库（审核需要）
         const r = await client.query<PostRow>(
-          `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id, image_mode, is_anonymous)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-           returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous,
+          `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id, image_mode, is_anonymous, allow_anonymous_comments)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous, allow_anonymous_comments,
              (select u.avatar_media_id from users u where u.id = posts.author_id) as author_avatar_media_id`,
-          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode, anonymous],
+          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode, anonymous, anonymous || allowAnonymousComments],
         )
 
         /* 挂媒体：position 按传入顺序递增（0..n-1），与 GET 的口径一致 */
@@ -1512,7 +1517,7 @@ export function buildServer(deps: ServerDeps) {
     const meId = s.kind === 'ok' ? s.user.userId : null
     try {
       const pr = await db.pool.query<PostRow & { status: string; place_id: string | null; open_count: number }>(
-        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.status, p.place_id,
+        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.allow_anonymous_comments, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.status, p.place_id,
                 -- ⭐ WO#15：详情也要带地点坐标（原版 poi-detail 页有「距我N公里」，
                 -- 那需要地点经纬度 + 客户端自身位置）。
                 pl.latitude as place_lat, pl.longitude as place_lng
@@ -1757,13 +1762,18 @@ export function buildServer(deps: ServerDeps) {
       client = await db.pool.connect()
       await client.query('begin')
       // Serialize allocation within this post, including concurrent first-time participants.
-      const pr = await client.query<{ author_id: string | null; is_anonymous: boolean }>(
-        "select author_id, is_anonymous from posts where id = $1 and status = 'published' for update", [id])
+      const pr = await client.query<{ author_id: string | null; is_anonymous: boolean; allow_anonymous_comments: boolean }>(
+        "select author_id, is_anonymous, allow_anonymous_comments from posts where id = $1 and status = 'published' for update", [id])
       const post = pr.rows[0]
       if (!post) {
         await client.query('rollback')
         reply.code(404)
         return { error: 'not_found' }
+      }
+      if (payload.anonymous === true && !post.is_anonymous && post.allow_anonymous_comments === false) {
+        await client.query('rollback')
+        reply.code(403)
+        return { error: 'anonymous_comments_disabled', message: '作者不允许匿名评论，请使用实名评论' }
       }
       let replyTo: string | null = null
       if (parentId) {
@@ -2116,7 +2126,7 @@ export function buildServer(deps: ServerDeps) {
         }
       >(
         `select * from (
-           select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
+           select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.allow_anonymous_comments, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
                   pl.latitude as place_lat, pl.longitude as place_lng,
                   (select count(*) from likes l where l.post_id = p.id)::text as like_count,
                   (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,

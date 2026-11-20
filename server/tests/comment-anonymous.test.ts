@@ -29,6 +29,7 @@ try {
   const migration = readFileSync('src/migrations/042_comment_anonymous.sql', 'utf8')
   await pool.query(migration)
   await pool.query(migration)
+  await pool.query(readFileSync('src/migrations/044_post_comment_policy.sql', 'utf8'))
   const people = await Promise.all(Array.from({ length: 7 }, async (_, index) => {
     const id = randomUUID(), token = randomUUID() + randomUUID()
     await pool.query('insert into users(id, display_name) values($1,$2)', [id, `真实昵称${index}`])
@@ -114,6 +115,16 @@ try {
   const aliases = await pool.query('select number from post_anonymous_identities where post_id=$1', [post])
   assert.equal(aliases.rows.length, 6)
   assert.equal(new Set(aliases.rows.map(r => r.number)).size, 6)
+  await pool.query('update posts set allow_anonymous_comments=false where id=$1', [otherPost])
+  const before = await pool.query('select count(*)::int as n from comments where post_id=$1', [otherPost])
+  await send(a, { body: '禁止匿名', anonymous: true }, otherPost, 403)
+  const after = await pool.query('select count(*)::int as n from comments where post_id=$1', [otherPost])
+  assert.equal(after.rows[0].n, before.rows[0].n)
+  assert.equal((await send(a, { body: '允许实名', anonymous: false }, otherPost)).anonymous, false)
+  assert.equal((await send(a, { body: '旧客户端实名' }, otherPost)).anonymous, false)
+  // Anonymous posts always allow anonymous participation, even with contradictory stored data.
+  await pool.query('update posts set allow_anonymous_comments=false where id=$1', [post])
+  assert.equal((await send(a, { body: '匿名帖', anonymous: true })).anonymous, true)
   await pool.query("update posts set status='removed' where id=$1", [post])
   await send(a, { body: '下架' }, post, 404)
   assert.equal(publicCommentIdentity({ author_id: owner.id, author_name: '秘密', is_anonymous: false,

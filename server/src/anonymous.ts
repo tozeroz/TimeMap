@@ -17,6 +17,7 @@ export interface AuthorSource {
   author_name: string
   author_id: string | null
   author_avatar_media_id?: string | null
+  allow_anonymous_comments?: boolean
   is_anonymous?: boolean | null
 }
 
@@ -31,6 +32,7 @@ export interface PublicAuthor {
   authorId: string | null
   authorAvatarMediaId: string | null
   /** 是否匿名（客户端据此换系统头像、显示「匿名」标、禁止跳作者主页） */
+  allowAnonymousComments: boolean
   anonymous: boolean
 }
 
@@ -43,7 +45,7 @@ export interface PublicAuthor {
 export function publicAuthor(row: AuthorSource, meId: string | null): PublicAuthor {
   const anonymous = row.is_anonymous === true
   if (!anonymous) {
-    return { author: row.author_name, authorId: row.author_id, authorAvatarMediaId: row.author_avatar_media_id ?? null, anonymous: false }
+    return { author: row.author_name, authorId: row.author_id, authorAvatarMediaId: row.author_avatar_media_id ?? null, anonymous: false, allowAnonymousComments: row.allow_anonymous_comments !== false }
   }
   const mine = Boolean(meId && row.author_id && row.author_id === meId)
   return {
@@ -51,5 +53,6 @@ export function publicAuthor(row: AuthorSource, meId: string | null): PublicAuth
     authorId: mine ? row.author_id : null,
     authorAvatarMediaId: null,
     anonymous: true,
+    allowAnonymousComments: true,
   }
 }

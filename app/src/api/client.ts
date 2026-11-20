@@ -96,6 +96,7 @@ export interface ApiPost {
    * 前端必须据此换系统头像、并且**不提供任何作者主页跳转**——
    * 否则点一下头像就露出"匿名同学的作者是谁"。
    */
+  allowAnonymousComments?: boolean
   anonymous?: boolean
   body: string
   place: string | null
@@ -828,6 +829,7 @@ export function createPost(input: {
    * 匿名发布（2026-11-05）。true = 其他用户看到帖内固定随机名称 + 系统头像。
    * 服务端只接受布尔；缺省 = 实名（历史行为）。
    */
+  allowAnonymousComments?: boolean
   anonymous?: boolean
 }): Promise<ApiResult<ApiPost>> {
   return request<ApiPost>('/api/posts', { method: 'POST', body: input })
@@ -1143,6 +1145,7 @@ export interface ApiAdminPost {
   id: string
   author: string
   /** 匿名发布（033）：管理端仍能看到真实作者，这里标明「用户侧显示为匿名」 */
+  allowAnonymousComments?: boolean
   anonymous?: boolean
   body: string
   place: string | null
@@ -1590,6 +1593,7 @@ export interface ApiPostDetail {
   author: string
   authorId: string | null
   /** 匿名发帖（033）：true 时 author 为帖内固定随机名称、authorId 对非作者为 null */
+  allowAnonymousComments?: boolean
   anonymous?: boolean
   body: string
   place: string | null
@@ -1778,6 +1782,7 @@ export interface ApiPlacePost {
   author: string
   authorId: string | null
   /** 匿名发帖（033）：地点页的帖子列表同样要标注 */
+  allowAnonymousComments?: boolean
   anonymous?: boolean
   body: string
   /** ⭐ P0：地点权威 id（地点详情里的帖子必然有值 —— 它们就是按 place_id 查出来的） */
