@@ -6,6 +6,7 @@ import projectContentEnrichmentSql from './migrations/042_project_content_enrich
 import commentAnonymousSql from './migrations/042_comment_anonymous.sql'
 import userFeedbackSql from './migrations/043_user_feedback.sql'
 import release142Sql from './migrations/044_release_1_4_2.sql'
+import placeGinkgoPositionSql from './migrations/045_place_ginkgo_position.sql'
 import initSql from './migrations/001_init.sql'
 import identitySql from './migrations/002_identity.sql'
 import dataModelSql from './migrations/003_data_model_v01.sql'
@@ -201,6 +202,10 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '043_user_feedback', sql: userFeedbackSql },
   { version: '044_post_comment_policy', sql: postCommentPolicySql },
   { version: '044_release_1_4_2', sql: release142Sql },
+  // 045（2026-11-20）：银杏大道定位修正到芳华园与明湖的分界处。
+  //      只改 latitude/longitude，带旧值守卫（不动 address/简介，不改已应用的 031）；
+  //      中点估算过程与 238.5 米位移见迁移文件头部。
+  { version: '045_place_ginkgo_position', sql: placeGinkgoPositionSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */
