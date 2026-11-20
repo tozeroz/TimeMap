@@ -1,0 +1,78 @@
+.project-detail { background: var(--c-bg); color: var(--c-text); }
+.project-detail__top { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; gap:12px; }
+.project-detail__top h1 { margin:0; font-size:22px; font-weight:750; }
+.project-detail__top button { width:44px; min-height:44px; display:grid; place-items:center; }
+.project-detail__content { padding:0 20px 28px; }
+.project-detail__identity { padding:12px 0 18px; }
+.project-detail__identity h2 { margin:0 0 5px; font-size:28px; line-height:1.35; letter-spacing:-.025em; overflow-wrap:anywhere; }
+.project-detail__identity > p { margin:0 0 10px; font-size:16px; line-height:1.65; color:var(--c-text-2); }
+.project-detail__tags { display:flex; align-items:center; gap:16px; }
+.project-detail__tags span { background:var(--c-primary-soft); color:var(--c-primary); font-size:14px; border-radius:24px; padding:4px 13px; }
+.project-detail__tags small { font-size:14px; color:var(--c-text-2); }
+.project-detail__intro { padding:0 0 14px; border-bottom:1px solid var(--c-divider); }
+.project-detail__heading { display:flex; align-items:center; margin:0 0 12px; font-size:22px; line-height:1.5; }
+.project-detail__heading::before { content:''; width:5px; height:23px; background:var(--c-brand); border-radius:4px; margin-right:10px; flex-shrink:0; }
+.project-detail__intro > p { font-size:15px; line-height:1.75; margin:0 0 14px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.project-detail__features { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 16px; padding:0; list-style:none; margin:18px 0; }
+.project-detail__features li { display:flex; align-items:flex-start; gap:8px; font-size:13px; line-height:1.6; }
+.project-detail__features li > svg { color:var(--c-text); flex-shrink:0; stroke:var(--c-text); }
+.project-detail__features li > span { font-weight:600; }
+@media(min-width:380px) { .project-detail__features.has-three { grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; } .project-detail__features.has-three li { gap:5px; } }
+.project-detail__intro .project-detail__team { display:flex; align-items:center; gap:7px; color:var(--c-text-2); font-size:13px; }
+.project-detail__intro .project-detail__notes { font-size:13px; color:var(--c-text-2); }
+.project-detail__source { display:inline-flex; align-items:center; min-height:44px; color:var(--c-primary); font-size:14px; gap:8px; text-decoration:none; }
+.project-detail__reviews { padding-top:18px; }
+.project-detail__reviewHead { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.project-detail__reviewHead h2 { font-size:21px; margin:0; }
+.project-detail__reviewHead h2 > span { color:var(--c-text-2); font-size:17px; font-weight:400; }
+.project-detail__reviewHead > button { display:flex; align-items:center; gap:5px; min-height:44px; color:var(--c-primary); font-size:14px; flex-shrink:0; }
+.project-detail__prompt { background:var(--c-surface-sunken); color:var(--c-text-2); width:100%; text-align:left; border-radius:8px; padding:10px 12px; margin:9px 0; min-height:44px; font-size:13px; line-height:1.6; }
+.project-detail__reviewList { list-style:none; margin:0; padding:0; }
+.project-detail__reviewList > li { display:flex; align-items:flex-start; gap:12px; padding:18px 0; border-bottom:1px solid var(--c-divider); }
+.project-detail__reviewList > li > div:last-child { flex:1; min-width:0; }
+.project-detail__avatar { width:44px; height:44px; border-radius:50%; background:#e5ecee; display:grid; place-items:center; flex-shrink:0; overflow:hidden; color:var(--c-text-2); }
+.project-detail__avatar img { width:100%; height:100%; object-fit:cover; }
+.project-detail__reviewName { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.project-detail__reviewName h3 { font-size:16px; margin:0; overflow-wrap:anywhere; }
+.project-detail__reviewName button { color:var(--c-text-2); font-size:12px; min-height:44px; margin:-10px 0; padding:5px; }
+.project-detail__reviewList time { color:var(--c-text-2); font-size:12px; }
+.project-detail__reviewList p { font-size:15px; margin:5px 0 0; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; }
+.project-detail__empty,.project-detail__muted { font-size:14px; line-height:1.7; padding:18px 0; color:var(--c-text-2); }
+.project-detail__notice { color:var(--c-primary); font-size:13px; line-height:1.6; }
+.project-detail__notice button,.project-detail__more { min-height:44px; color:var(--c-primary); }
+.project-detail__more { display:block; margin:10px auto; padding:4px 18px; }
+.project-detail__actions { display:flex; flex-shrink:0; align-items:center; gap:10px; border-top:1px solid var(--c-divider); padding:9px 14px max(9px,env(safe-area-inset-bottom)); background:var(--c-bg); }
+.project-detail__actions > button { min-height:44px; display:flex; align-items:center; justify-content:center; gap:7px; font-size:14px; white-space:nowrap; }
+.project-detail__actions > button:first-child { padding-right:12px; border-right:1px solid var(--c-divider); }
+.project-detail__actions > button.is-liked { color:var(--c-primary); }
+.project-detail__actions > a { display:flex; align-items:center; justify-content:center; gap:8px; background:var(--c-primary); color:white; text-decoration:none; min-height:46px; border-radius:30px; flex:1; min-width:100px; padding:8px 12px; font-size:16px; font-weight:700; margin-left:auto; white-space:nowrap; }
+.project-detail__actions > a > span { font-size:21px; }
+.project-detail__actions:not(:has(a)) > button { flex:1; }
+.project-detail__gallery { margin:6px 12px 0; touch-action:pan-y; }
+.project-detail__galleryImage { display:block; width:100%; overflow:hidden; border-radius:12px; padding:0; background:var(--c-surface-sunken); }
+.project-detail__galleryImage img { display:block; width:100%; height:auto; object-fit:contain; }
+.project-detail__galleryControls { display:flex; align-items:center; justify-content:center; gap:16px; color:var(--c-text-2); font-size:12px; }
+.project-detail__galleryControls button { min-width:44px; min-height:44px; font-size:19px; }
+.project-detail__broken { display:flex; flex-direction:column; gap:8px; align-items:center; padding:35px 10px; color:var(--c-text-2); font-size:13px; }
+.project-detail__lightbox { position:fixed; inset:0; width:100%; height:100dvh; max-width:none; max-height:none; padding:12px; border:0; background:#101e2bf5; color:white; margin:0; }
+.project-detail__lightbox[open] { display:flex; flex-direction:column; }
+.project-detail__lightboxBar { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.project-detail__lightboxBar button { min-height:44px; min-width:44px; padding:8px; }
+.project-detail__lightboxStage { overflow:auto; flex:1; min-height:0; display:flex; align-items:safe center; justify-content:safe center; }
+.project-detail__lightboxStage img { object-fit:contain; flex-shrink:0; }
+.project-detail__lightbox .project-detail__galleryControls { color:white; }
+.project-detail__form { display:grid; gap:10px; }
+.project-detail__form label { font-size:15px; }
+.project-detail__form textarea { width:100%; border:1px solid var(--c-input-border); background:var(--c-bg); color:var(--c-text); border-radius:10px; padding:12px; font-size:16px; resize:vertical; }
+.project-detail__form small { text-align:right; color:var(--c-text-2); }
+.project-detail__form > div,.project-detail__confirm { display:flex; justify-content:flex-end; gap:14px; }
+.project-detail__form button,.project-detail__confirm button { min-height:44px; padding:8px 18px; }
+.project-detail__form button[type=submit],.project-detail__confirm button:last-child { background:var(--c-primary); color:white; border-radius:24px; }
+.project-detail__form > p { color:var(--c-primary); font-size:13px; }
+.project-detail__copy { width:100%; padding:12px; font-size:16px; }
+.project-detail__state { text-align:center; padding:64px 20px; color:var(--c-text-2); }
+.project-detail__state h2 { color:var(--c-text); font-size:21px; }
+.project-detail__state button { min-height:44px; padding:8px 20px; color:var(--c-primary); }
+.project-detail :focus-visible { outline:2px solid var(--c-primary); outline-offset:3px; }
+.project-detail button:disabled { opacity:.5; }
+@media(max-width:360px) { .project-detail__content { padding-inline:16px; } .project-detail__identity h2 { font-size:25px; } .project-detail__actions { gap:7px; padding-inline:10px; } .project-detail__actions > button { font-size:12px; gap:4px; } .project-detail__actions > button:first-child { padding-right:7px; } .project-detail__actions > a { font-size:14px; min-width:94px; padding-inline:8px; } }

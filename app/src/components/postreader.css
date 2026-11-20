@@ -3,6 +3,7 @@
 .reader__base{height:100%;display:flex;flex-direction:column;min-height:0}
 .reader__header{height:64px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px 0 4px;background:var(--paper)}
 .reader__header>button,.reader__sheetHead>button{min-width:44px;min-height:44px;display:grid;place-items:center}.reader__avatar{width:40px;height:40px;border-radius:50%;object-fit:cover}.reader__author{flex:1;min-width:0;font-size:17px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reader__header>.reader__identity{display:flex;align-items:center;gap:10px;flex:1;min-width:0;min-height:44px;text-align:left;color:inherit}.reader__identity .reader__avatar{flex:none}
 .reader__content{flex:1;min-height:0;display:flex;flex-direction:column;touch-action:none;animation:reader-reveal .24s ease-out}
 .reader__media{flex:1;min-height:80px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#eee8db}.reader__media>img{display:block;width:100%;height:100%;object-fit:contain;cursor:zoom-in}.reader__media--sticker{padding:24px;background:radial-gradient(ellipse at center,#fffdf6,#eee8d8)}
 .reader__counter{position:absolute;right:14px;top:14px;border-radius:30px;background:#29292199;color:white;padding:3px 10px;font-size:13px;font-variant-numeric:tabular-nums;pointer-events:none}
@@ -31,3 +32,9 @@
 .reader-session{height:100%;min-height:0;position:relative;display:flex;flex-direction:column}
 .reader__wheelHint{position:absolute;z-index:8;top:72px;left:50%;transform:translateX(-50%);margin:0;padding:9px 16px;border-radius:24px;background:#303321e8;color:#fff;font-size:13px;white-space:nowrap;pointer-events:none}
 .reader-session:has([role="dialog"]) .reader__wheelHint{visibility:hidden}
+.reader__authorBadge{display:inline-block;margin-left:8px;padding:2px 6px;border-radius:5px;background:#e4e8d8;font-size:11px;font-weight:500}
+.reader__comment .reader__replyTo{margin:0 0 5px;color:var(--muted);font-size:12px}
+.reader__anonymous,.reader__replyTarget{width:100%;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.reader__anonymous>button,.reader__replyTarget>button{flex:none;min-height:44px;padding:0 10px;color:var(--green);border:1px solid var(--line);border-radius:12px}
+.reader__anonymous>button[aria-checked="true"]{background:#e4e8d8;border-color:var(--green)}
+.reader__replyTarget>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

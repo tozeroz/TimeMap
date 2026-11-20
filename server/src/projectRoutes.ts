@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import type { TimemapCtx } from './timemap.ts'
+import { registerProjectReviewRoutes } from './projectReviewRoutes.ts'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const names = new Intl.Collator('zh-CN', { sensitivity: 'variant', numeric: false })
 export interface ProjectFields {
   name: string; summary: string; groupName: string | null; memberCount: number | null
   projectUrl: string | null; experienceUrl: string | null; coverImageId: string | null; position: number; published: boolean
+  description?: string | null; category?: string | null; features?: string[]; experienceNotes?: string | null; showcaseImageIds?: string[]
 }
 export interface Project extends ProjectFields { id: string; likeCount: number; likedByMe: boolean }
 
@@ -20,7 +22,7 @@ export function parseProject(payload: unknown): { fields?: ProjectFields; errors
   const errors: string[] = []
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { errors: ['请填写项目信息'] }
   const p = payload as Record<string, unknown>
-  const allowed = ['name', 'summary', 'groupName', 'memberCount', 'projectUrl', 'experienceUrl', 'coverImageId', 'position', 'published']
+  const allowed = ['name', 'summary', 'groupName', 'memberCount', 'projectUrl', 'experienceUrl', 'coverImageId', 'position', 'published', 'description', 'category', 'features', 'experienceNotes', 'showcaseImageIds']
   if (Object.keys(p).some(k => !allowed.includes(k))) errors.push('包含不支持的项目字段')
   const text = (key: string, label: string, max: number) => {
     const value = typeof p[key] === 'string' ? p[key].trim() : ''
@@ -50,16 +52,32 @@ export function parseProject(payload: unknown): { fields?: ProjectFields; errors
   if (typeof p.published !== 'boolean') errors.push('请选择展示状态')
   const coverImageId = typeof p.coverImageId === 'string' && UUID.test(p.coverImageId) ? p.coverImageId : null
   if (p.coverImageId !== undefined && p.coverImageId !== null && p.coverImageId !== '' && !coverImageId) errors.push('封面 ID 格式不正确')
-  return errors.length ? { errors } : { errors, fields: { name, summary, groupName, projectUrl, experienceUrl, memberCount: memberCount as number | null, position: position as number, published: p.published as boolean, coverImageId } }
+  const extra: Pick<ProjectFields, 'description' | 'category' | 'features' | 'experienceNotes' | 'showcaseImageIds'> = {}
+  if ('description' in p) extra.description = optionalText('description', '项目介绍', 4000)
+  if ('category' in p) extra.category = optionalText('category', '分类', 24)
+  if ('experienceNotes' in p) extra.experienceNotes = optionalText('experienceNotes', '体验提示', 1000)
+  if ('features' in p) {
+    if (!Array.isArray(p.features) || p.features.length > 4 || p.features.some(f => typeof f !== 'string' || !f.trim() || Array.from(f.trim()).length > 80)) errors.push('核心功能最多 4 项，每项 1–80 字')
+    else extra.features = p.features.map(f => (f as string).trim())
+  }
+  if ('showcaseImageIds' in p) {
+    if (!Array.isArray(p.showcaseImageIds) || p.showcaseImageIds.length > 8 || p.showcaseImageIds.some(id => typeof id !== 'string' || !UUID.test(id)) || new Set(p.showcaseImageIds).size !== p.showcaseImageIds.length) errors.push('详情展示图最多 8 张，图片 ID 必须有效且不重复')
+    else extra.showcaseImageIds = p.showcaseImageIds as string[]
+  }
+  return errors.length ? { errors } : { errors, fields: { name, summary, groupName, projectUrl, experienceUrl, memberCount: memberCount as number | null, position: position as number, published: p.published as boolean, coverImageId, ...extra } }
 }
 
 const SELECT = `select p.id, p.name, p.summary, p.group_name as "groupName",
+  p.description,p.category,p.features,p.experience_notes as "experienceNotes",
+  coalesce((select jsonb_agg(i.media_id order by i.position) from training_project_images i where i.project_id=p.id),'[]'::jsonb) as "showcaseImageIds",
+  (select count(*)::int from training_project_reviews r where r.project_id=p.id and r.deleted_at is null) as "reviewCount",
   p.member_count as "memberCount", p.project_url as "projectUrl", p.experience_url as "experienceUrl", p.cover_image_id as "coverImageId",
   p.position, p.published, (select count(*)::int from training_project_likes l where l.project_id=p.id) as "likeCount",
   exists(select 1 from training_project_likes l where l.project_id=p.id and l.user_id=$1::uuid) as "likedByMe"
   from training_projects p`
 
 export function registerProjectRoutes(ctx: TimemapCtx) {
+  registerProjectReviewRoutes(ctx)
   const { app, db, resolveSession } = ctx
   async function user(req: FastifyRequest, reply: FastifyReply, admin = false) {
     const s = await resolveSession(req.headers.authorization)
@@ -90,6 +108,18 @@ export function registerProjectRoutes(ctx: TimemapCtx) {
     catch (err) { return failed(reply, err) }
   })
 
+  app.get('/api/projects/:id', async (req, reply) => {
+    reply.header('cache-control', 'private, no-store')
+    const id = (req.params as { id: string }).id
+    if (!UUID.test(id)) return reply.code(400).send({ error: 'invalid_id' })
+    const session = await resolveSession(req.headers.authorization)
+    if (session.kind === 'db_down') return reply.code(503).send({ error: 'not_ready' })
+    try {
+      const r = await db.pool.query<Project>(SELECT + ' where p.id=$2 and p.published', [session.kind === 'ok' ? session.user.userId : null, id])
+      return r.rows[0] ?? reply.code(404).send({ error: 'not_found' })
+    } catch (err) { return failed(reply, err) }
+  })
+
   for (const method of ['POST', 'PUT'] as const) app.route({
     method, url: method === 'POST' ? '/api/admin/projects' : '/api/admin/projects/:id',
     handler: async (req, reply) => {
@@ -103,16 +133,27 @@ export function registerProjectRoutes(ctx: TimemapCtx) {
       try {
         client = await db.pool.connect()
         await client.query('begin')
+        const previous = method === 'PUT' ? (await client.query('select description,category,features,experience_notes from training_projects where id=$1 for update', [id])).rows[0] : undefined
+        if (method === 'PUT' && !previous) { await client.query('rollback'); return reply.code(404).send({ error: 'not_found' }) }
         // Lock the media row while attaching it; only public uploaded images can be used.
-        if (p.coverImageId) {
-          const media = await client.query("select id from media where id=$1 and scope='public' and mime like 'image/%' for key share", [p.coverImageId])
-          if (!media.rows.length) { await client.query('rollback'); return reply.code(400).send({ error: 'invalid_payload', details: ['封面须为已上传的公开图片'] }) }
+        const imageIds = [...new Set([...(p.coverImageId ? [p.coverImageId] : []), ...(p.showcaseImageIds ?? [])])]
+        if (imageIds.length) {
+          const media = await client.query("select id from media where id=any($1::uuid[]) and scope='public' and mime like 'image/%' for key share", [imageIds])
+          if (media.rows.length !== imageIds.length) { await client.query('rollback'); return reply.code(400).send({ error: 'invalid_payload', details: ['列表封面和详情展示图须为已上传的公开图片'] }) }
         }
-        const args = [id, p.name, p.summary, p.groupName, p.memberCount, p.experienceUrl, p.coverImageId, p.position, p.published, p.projectUrl]
+        const args = [id, p.name, p.summary, p.groupName, p.memberCount, p.experienceUrl, p.coverImageId, p.position, p.published, p.projectUrl,
+          p.description === undefined ? previous?.description ?? null : p.description,
+          p.category === undefined ? previous?.category ?? null : p.category,
+          JSON.stringify(p.features === undefined ? previous?.features ?? [] : p.features),
+          p.experienceNotes === undefined ? previous?.experience_notes ?? null : p.experienceNotes]
         const r = method === 'POST'
-          ? await client.query(`insert into training_projects(id,name,summary,group_name,member_count,experience_url,cover_image_id,position,published,project_url) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`, args)
-          : await client.query(`update training_projects set name=$2,summary=$3,group_name=$4,member_count=$5,experience_url=$6,cover_image_id=$7,position=$8,published=$9,project_url=$10,updated_at=now() where id=$1 returning id`, args)
+          ? await client.query(`insert into training_projects(id,name,summary,group_name,member_count,experience_url,cover_image_id,position,published,project_url,description,category,features,experience_notes) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14) returning id`, args)
+          : await client.query(`update training_projects set name=$2,summary=$3,group_name=$4,member_count=$5,experience_url=$6,cover_image_id=$7,position=$8,published=$9,project_url=$10,description=$11,category=$12,features=$13::jsonb,experience_notes=$14,updated_at=now() where id=$1 returning id`, args)
         if (!r.rows.length) { await client.query('rollback'); return reply.code(404).send({ error: 'not_found' }) }
+        if (p.showcaseImageIds !== undefined) {
+          await client.query('delete from training_project_images where project_id=$1', [id])
+          for (const [position, mediaId] of p.showcaseImageIds.entries()) await client.query('insert into training_project_images(project_id,media_id,position) values($1,$2,$3)', [id, mediaId, position])
+        }
         await client.query('insert into audit_log(id,actor_id,action,target_type,target_id,reason) values($1,$2,$3,$4,$5,$6)', [randomUUID(), u.userId, method === 'POST' ? 'project_create' : 'project_update', 'project', id, p.published ? '项目上架/更新' : '项目下架/草稿'])
         await client.query('commit')
         return reply.code(method === 'POST' ? 201 : 200).send({ id })

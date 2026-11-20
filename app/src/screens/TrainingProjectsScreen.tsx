@@ -41,6 +41,22 @@ export function TrainingProjectsScreen() {
     queueMicrotask(() => { if (active) void load() })
     return () => { active = false; invalidate() }
   }, [load, invalidate])
+  const restoreScroll = useRef(true)
+  useEffect(() => {
+    if (phase !== 'ready' || !restoreScroll.current) return
+    restoreScroll.current = false
+    try {
+      const previous = JSON.parse(sessionStorage.getItem('timemap.projects.return') ?? 'null')
+      if (previous?.query?.view === view) requestAnimationFrame(() => {
+        const scroller = document.querySelector('.projects-page .screen__body')
+        if (scroller) scroller.scrollTop = Number(previous.scroll) || 0
+      })
+    } catch { /* No prior list state. */ }
+  }, [phase, view])
+  function openProject(id: string) {
+    try { sessionStorage.setItem('timemap.projects.return', JSON.stringify({ query: { ...route.query, mode: 'projects', view }, scroll: document.querySelector('.projects-page .screen__body')?.scrollTop ?? 0 })) } catch { /* Navigation remains available. */ }
+    navigate('project', { id })
+  }
   function login() {
     try { sessionStorage.setItem('timemap.login.return', JSON.stringify({ path: 'activities', query: { mode: 'projects', view } })) } catch { /* Login still available. */ }
     navigate('loginselect')
@@ -90,8 +106,8 @@ export function TrainingProjectsScreen() {
       {phase === 'ready' && items.length > 0 && <ol className={`projects__list ${view === 'popular' ? 'is-popular' : ''}`}>
         {visible.map((project, index) => <li key={project.id} className="projects__row" data-project-id={project.id}>
           {view === 'popular' && <span className={`projects__rank ${index < 3 ? `is-medal is-rank-${index + 1}` : ''}`} aria-label={`第 ${index + 1} 名`}><span>{index + 1}</span></span>}
-          <ProjectCover key={`${project.id}-${project.coverImageId}`} project={project} />
-          <div className="projects__info"><h3>{project.name}</h3><p className="projects__summary">{project.summary}</p><p className="projects__group"><IconUsers size={18} /><span>{project.groupName || '团队信息待补充'}{project.memberCount != null && ` · ${project.memberCount}人`}</span></p>
+          <button className="projects__coverLink" aria-label={`查看项目：${project.name}`} onClick={() => openProject(project.id)}><ProjectCover key={`${project.id}-${project.coverImageId}`} project={project} /></button>
+          <div className="projects__info"><h3><button className="projects__nameLink" onClick={() => openProject(project.id)}>{project.name}</button></h3><p className="projects__summary">{project.summary}</p><p className="projects__group"><IconUsers size={18} /><span>{project.groupName || '团队信息待补充'}{project.memberCount != null && ` · ${project.memberCount}人`}</span></p>
             <div className="projects__links">
               {project.projectUrl && /^https?:\/\//i.test(project.projectUrl) && <a className="projects__source" href={project.projectUrl} target="_blank" rel="noopener noreferrer">项目链接 <span aria-hidden="true">↗</span></a>}
               {project.experienceUrl && /^https?:\/\//i.test(project.experienceUrl) && <a className="projects__experience" href={project.experienceUrl} target="_blank" rel="noopener noreferrer">体验项目 <span aria-hidden="true">↗</span></a>}

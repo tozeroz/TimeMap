@@ -95,15 +95,15 @@ try {
   assert.equal(await page.getByRole('button', { name: '实训项目', exact: true }).evaluate(e => e === document.activeElement), true)
   // Like/cancel, pending lock, multiple projects and shared tab state.
   const second = page.locator('[data-project-id="project-1"]')
-  await second.getByRole('button').click()
-  await page.waitForFunction(() => document.querySelector('[data-project-id="project-1"] button')?.getAttribute('aria-pressed') === 'true')
+  await second.locator('.projects__like').click()
+  await page.waitForFunction(() => document.querySelector('[data-project-id="project-1"] .projects__like')?.getAttribute('aria-pressed') === 'true')
   assert.equal(items[1].likeCount, 97)
   await page.getByRole('tab', { name: '全部项目', exact: true }).click()
-  assert.equal(await second.getByRole('button').getAttribute('aria-pressed'), 'true')
-  await second.getByRole('button').click(); await page.waitForFunction(() => document.querySelector('[data-project-id="project-1"] button')?.getAttribute('aria-pressed') === 'false')
+  assert.equal(await second.locator('.projects__like').getAttribute('aria-pressed'), 'true')
+  await second.locator('.projects__like').click(); await page.waitForFunction(() => document.querySelector('[data-project-id="project-1"] .projects__like')?.getAttribute('aria-pressed') === 'false')
   assert.equal(items[1].likeCount, 96)
-  failLike = true; await second.getByRole('button').click(); await page.getByRole('alert').waitFor()
-  assert.equal(await second.getByRole('button').getAttribute('aria-pressed'), 'false'); failLike = false
+  failLike = true; await second.locator('.projects__like').click(); await page.getByRole('alert').waitFor()
+  assert.equal(await second.locator('.projects__like').getAttribute('aria-pressed'), 'false'); failLike = false
   assert.equal(await second.getByRole('link', { name: '体验项目' }).getAttribute('href'), fixtures[1].experienceUrl)
   // Equal counts reorder by name, independent of administrator's presentation order.
   items[0].likeCount = items[1].likeCount = 100
@@ -144,7 +144,7 @@ try {
   await page.getByLabel('一句话简介', { exact: true }).fill('验证管理员录入和封面上传')
   await page.getByLabel('小组名称', { exact: true }).fill('第一小组')
   await page.getByLabel('体验网址', { exact: true }).fill('https://example.com/new-project')
-  await page.getByLabel('项目封面', { exact: true }).setInputFiles({ name: 'project.png', mimeType: 'image/png', buffer: fs.readFileSync('app/public/timemap-logo.png') })
+  await page.getByLabel('列表封面', { exact: true }).setInputFiles({ name: 'project.png', mimeType: 'image/png', buffer: fs.readFileSync('app/public/timemap-logo.png') })
   await page.getByAltText('项目封面预览').waitFor()
   await page.getByRole('button', { name: '保存项目', exact: true }).click()
   await page.getByRole('heading', { name: '管理员新建的项目', exact: true }).waitFor()
@@ -152,7 +152,7 @@ try {
   await capture('admin', '320x740', '管理员可编辑项目资料及上下架状态。')
   // Permission: anonymous like navigates to existing login with a return target.
   await page.evaluate(() => { localStorage.removeItem('campus.demo.session.v1'); localStorage.setItem('project-fixture-anonymous', '1') })
-  await goto(); await page.locator('[data-project-id]').first().getByRole('button').click()
+  await goto(); await page.locator('[data-project-id]').first().locator('.projects__like').click()
   await page.waitForURL(/login/)
   assert.equal(await page.evaluate(() => JSON.parse(sessionStorage.getItem('timemap.login.return')).query.mode), 'projects')
   await capture('login-required', '320x740', '未登录点赞进入已有登录流程并记录项目模式回跳。')

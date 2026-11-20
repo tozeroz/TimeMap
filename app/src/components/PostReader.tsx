@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { avatarFor, postAvatar, mediaUrl, relativeTime, type ApiPostDetail, type ApiCommentNode } from '../api/client'
+import { commentAvatar, postAvatar, mediaUrl, relativeTime, type ApiPostDetail, type ApiCommentNode } from '../api/client'
 import { getSession } from '../api/session'
 import { feedBrowse } from '../data/feedBrowse'
 import { goBack, navigate } from '../router'
@@ -10,7 +10,7 @@ import './postreader.css'
 interface Props {
   post: ApiPostDetail; comments: ApiCommentNode[]; total: number; busy: boolean
   draft: string; onDraft: (value: string) => void; notice: string; offline: boolean
-  onLike: () => void; onFavorite: () => void; onSend: () => void
+  onLike: () => void; onFavorite: () => void; onSend: (parentId?: string, anonymous?: boolean) => Promise<boolean>
   onDeleteComment: (id: string) => void; onMore: () => void; onShare: () => void
   onStep: (direction: number) => void
 }
@@ -70,6 +70,8 @@ export function PostReader(p: Props) {
   const [broken, setBroken] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [hint, setHint] = useState('')
+  const [anonymous, setAnonymous] = useState(false)
+  const [replyTarget, setReplyTarget] = useState<{ id: string; author: string } | null>(null)
 
   const gesture = useRef<{ x: number; y: number; time: number; axis: 'x' | 'y' | null } | null>(null)
   const moved = useRef(false)
@@ -79,6 +81,7 @@ export function PostReader(p: Props) {
   const sourceIndex = feedBrowse.ids.indexOf(post.id)
   const chars = Array.from(p.draft.trim()).length
   const me = getSession()?.user
+  const forceAnonymous = post.anonymous === true && post.authorId === me?.id
   const image = images[index]
   const close = () => { setSheet(null); setDeleteId(null); input.current?.blur() }
   const openComments = (focus: boolean) => { setFocusInput(focus); setSheet('comments') }
@@ -128,8 +131,14 @@ export function PostReader(p: Props) {
     <div className="reader__base">
       <header className="reader__header">
         <button onClick={() => goBack('campus')} aria-label="返回"><IconBack size={26} /></button>
-        <img src={postAvatar(post)} className="reader__avatar" alt="" />
-        <span className="reader__author">{post.author}</span>
+        {!post.anonymous && post.authorId ? <button type="button" className="reader__identity" data-reader-author
+          aria-label={`查看${post.author}的主页`} onClick={() => navigate('user', { id: post.authorId! })}>
+          <img src={postAvatar(post)} className="reader__avatar" alt="" />
+          <span className="reader__author">{post.author}</span>
+        </button> : <span className="reader__identity">
+          <img src={postAvatar(post)} className="reader__avatar" alt="" />
+          <span className="reader__author">{post.author}</span>
+        </span>}
         {post.anonymous && <span className="anon-tag" data-anon-tag>匿名</span>}
         <button onClick={() => setSheet('more')} aria-label="更多操作"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="20" cy="12" r="1.8"/></svg></button>
       </header>
@@ -176,12 +185,14 @@ export function PostReader(p: Props) {
         <div className="reader__comments" ref={list}>
           {!p.comments.length && <p className="reader__empty">还没有评论，来留下第一条校园记忆吧</p>}
           {p.comments.flatMap(c => [c, ...c.replies]).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).map(c => <article className="reader__comment" key={c.id} data-comment-id={c.id}>
-            <img src={avatarFor(c.author)} alt=""/><div><h3>{c.author}</h3><p>{c.body}</p><div className="reader__commentMeta"><time>{relativeTime(c.createdAt)}</time>{c.authorId && c.authorId === me?.id && <button disabled={p.busy} data-comment-delete={c.id} onClick={() => setDeleteId(c.id)}>删除</button>}</div></div>
+            <img src={commentAvatar(c)} alt=""/><div><h3>{c.author}{c.isPostAuthor && <span className="reader__authorBadge">楼主</span>}</h3>{c.replyTo && <p className="reader__replyTo">回复 {c.replyTo}</p>}<p>{c.body}</p><div className="reader__commentMeta"><time>{relativeTime(c.createdAt)}</time><button type="button" disabled={p.busy} onClick={() => { setReplyTarget({ id: c.id, author: c.author }); input.current?.focus() }}>回复</button>{(c.isMine ?? Boolean(c.authorId && c.authorId === me?.id)) && <button disabled={p.busy} data-comment-delete={c.id} onClick={() => setDeleteId(c.id)}>删除</button>}</div></div>
           </article>)}
         </div>
         {deleteId && <div className="reader__deleteConfirm" role="alert"><span>删除这条评论？</span><button onClick={() => setDeleteId(null)}>取消</button><button disabled={p.busy} onClick={() => { p.onDeleteComment(deleteId); setDeleteId(null) }}>删除</button></div>}
-        <form className="reader__compose" onSubmit={e => { e.preventDefault(); if (!p.busy && chars > 0 && chars <= 500) p.onSend() }}>
-          <label className="reader__draft"><IconEdit size={18}/><textarea ref={input} rows={1} aria-label="写下你的评论" placeholder="写下你的评论…" value={p.draft} onChange={e => p.onDraft(e.target.value)} /></label>
+        <form className="reader__compose" onSubmit={e => { e.preventDefault(); if (!p.busy && chars > 0 && chars <= 500) void p.onSend(replyTarget?.id, forceAnonymous || anonymous).then(sent => { if (sent) setReplyTarget(null) }) }}>
+          {replyTarget && <div className="reader__replyTarget"><span>回复 {replyTarget.author}</span><button type="button" disabled={p.busy} onClick={() => setReplyTarget(null)}>取消回复</button></div>}
+          <div className="reader__anonymous"><button type="button" role="switch" aria-checked={forceAnonymous || anonymous} aria-describedby="reader-anon-hint" disabled={p.busy || forceAnonymous} onClick={() => setAnonymous(v => !v)}>{forceAnonymous || anonymous ? '✓ ' : ''}匿名评论</button><span id="reader-anon-hint">{forceAnonymous ? '你将以匿名楼主身份发言' : anonymous ? '本帖内使用固定代号，其他帖子重新分配' : '将显示你的昵称；可逐条选择匿名'}</span></div>
+          <label className="reader__draft"><IconEdit size={18}/><textarea ref={input} rows={1} aria-label={replyTarget ? `回复 ${replyTarget.author}` : '写下你的评论'} placeholder={replyTarget ? `回复 ${replyTarget.author}…` : '写下你的评论…'} value={p.draft} onChange={e => p.onDraft(e.target.value)} /></label>
           <button type="submit" disabled={p.busy || !chars || chars > 500}>{p.busy ? '发送中' : '发送'}</button>
           {chars > 450 && <p className="reader__limit" role="status">{chars}/500{chars > 500 ? '，请缩减后发送' : ''}</p>}
         </form>

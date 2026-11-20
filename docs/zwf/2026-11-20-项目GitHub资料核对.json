@@ -1,0 +1,158 @@
+[
+  {
+    "repo": "24301001/campus_game",
+    "category": "校园生活",
+    "description": "以北京交通大学为背景的像素校园探索项目，用浏览器里的像素地图还原教学楼、图书馆、明湖和校门。玩家可以自由行走、缩放地图、进入部分建筑，并与校园向导互动，在熟悉的校园空间中发现不同场景。",
+    "features": [
+      "像素校园与地标漫游",
+      "自由移动与多档缩放",
+      "部分建筑室内场景",
+      "校园向导与互动"
+    ],
+    "experienceNotes": "线上版可直接打开，首页标题为“代码拾遗”。推荐使用电脑浏览器，方向键或 WASD 移动；部分向导能力需额外配置，具体以项目提示为准。",
+    "experienceUrl": "https://bjtupixelcampus.online/",
+    "checkedAt": "2026-11-20",
+    "sourceUrl": "https://github.com/24301001/campus_game/blob/main/README.md",
+    "sourceSha": "7d8a75be368c66249a6f762b94e8af17d0a7a63b"
+  },
+  {
+    "repo": "tozeroz/TimeMap",
+    "category": "校园生活",
+    "description": "面向北交大学生的校园记忆地图，把地点、照片、校园故事和活动连接起来。你可以从地图发现校园内容，在具体地点留下自己的记忆，也能浏览同学分享的瞬间、校园活动与班级实训项目，让每段回忆拥有自己的坐标。",
+    "features": [
+      "校园地图与地点探索",
+      "照片与校园记忆发布",
+      "校园活动与项目展示",
+      "点赞、收藏与互动"
+    ],
+    "experienceNotes": "当前页面展示的就是 TimeMap 项目。地图与内容浏览无需登录，发布和互动需登录；网页与 Android 版本以团队发布信息为准。",
+    "sourceNote": "远程根 README 仍是早期 Demo 说明；本项目介绍以当前本地页面及已核对功能为准。",
+    "checkedAt": "2026-11-20",
+    "sourceUrl": "https://github.com/tozeroz/TimeMap/blob/main/README.md",
+    "sourceSha": "ea1221fa021982b94517f294f4a6b9bc08440073"
+  },
+  {
+    "repo": "g18809050728-design/kapai001",
+    "category": "卡牌策略",
+    "description": "将大学四年的成长与 DDL 压力融入卡牌策略体验。围绕四位不同角色的牌组思路，在连续学年地图中选择路线，经历战斗、奖励与商店，并通过卡牌、伙伴和饰品逐步形成自己的策略。",
+    "features": [
+      "四位角色与专属构筑",
+      "四学年路线探索",
+      "卡牌战斗与奖励选择",
+      "伙伴、饰品与存档继续"
+    ],
+    "experienceNotes": "仓库使用 Godot 工程运行，目前未提供已确认的网页体验入口。角色接入已有仓库记录，正式平衡、最终美术及完整发布验收仍以团队最新说明为准。",
+    "checkedAt": "2026-11-20",
+    "sourceUrl": "https://github.com/g18809050728-design/kapai001/blob/main/README.md",
+    "sourceSha": "1724c3928998bf7957168171ff71df950381fedb"
+  },
+  {
+    "repo": "yaya11111111/BeiJiaoGame",
+    "category": "协作解谜",
+    "description": "以北京交通大学为舞台的双视角协作解谜项目。线索按不同视角拆分，玩家需要对照观察、沟通交流，把分散的信息拼成完整答案。项目设计包含单人切换视角与双人协作两种模式，结合校园章节逐步展开谜题。",
+    "features": [
+      "双视角信息差解谜设计",
+      "单人切换与双人协作",
+      "校园章节与线索探索",
+      "文字聊天与快捷语句"
+    ],
+    "experienceNotes": "五人实训项目，面向微信小游戏。README 描述了玩法和关卡计划，尚未发现可直接进入的公开体验网址；具体完成范围与体验版本请以小组提供为准。",
+    "checkedAt": "2026-11-20",
+    "sourceUrl": "https://github.com/yaya11111111/BeiJiaoGame/blob/main/README.md",
+    "sourceSha": "8df24856d28774a1cbb035b24c934f1c2d8eb6e4"
+  },
+  {
+    "repo": "sunchao213/bjtu_treasure_hunt",
+    "category": "探索冒险",
+    "description": "在校园中探索、搜索物资并规划撤离路线的冒险项目。玩家通过地图移动与战斗收集物品，在背包容量、装备选择和风险之间作出取舍，达到撤离条件后带出收获，并在仓库、图鉴与任务进度中继续成长。",
+    "features": [
+      "校园探索与物资搜索",
+      "武器战斗与装备管理",
+      "限时撤离与对局结算",
+      "账号云存档与图鉴"
+    ],
+    "experienceNotes": "先注册或登录账号再进入游戏。电脑端可用 WASD 或方向键移动、长按 E 搜索。局中退出可能按中断失败结算；联机权威服务的部署情况以项目内提示为准。",
+    "experienceUrl": "https://123.57.160.49/",
+    "previousExperienceUrl": "https://sunchao213.github.io/bjtu_treasure_hunt/",
+    "checkedAt": "2026-11-20",
+    "sourceUrl": "https://github.com/sunchao213/bjtu_treasure_hunt/blob/main/README.md",
+    "sourceSha": "e60be69ca1731884883f2efc499ee257475ea957"
+  },
+  {
+    "repo": "LucidDream444/BJTUrogue",
+    "category": "休闲闯关",
+    "description": "面向大学生课后和宿舍休憩等零散时间的轻量化冒险项目，以二维俯视角地牢闯关作为核心方向，强调短时、易进入的休闲体验。仓库提供网页游戏客户端和开发说明，适合了解项目的玩法定位与实现进展。",
+    "features": [
+      "二维俯视角冒险方向",
+      "短时地牢闯关体验设计",
+      "浏览器客户端工程",
+      "本地玩法测试场"
+    ],
+    "experienceNotes": "当前 README 提供客户端本地启动和测试场说明，服务端标注尚未开工，未公布可直接进入的线上网址。功能完成范围应以小组实际演示为准。",
+    "checkedAt": "2026-11-20",
+    "sourceUrl": "https://github.com/LucidDream444/BJTUrogue/blob/main/README.md",
+    "sourceSha": "b74fc0579ca74cb2d075b906091dc4f2a400e56f"
+  },
+  {
+    "repo": "fjw345/mathonline",
+    "category": "学习工具",
+    "description": "面向考研数学和大学生数学竞赛练习的在线学习平台。支持从题库筛选题目、随机练习和每日一题，作答后对照参考答案，并在个人学习页面查看记录与错题。可以发布题解、交流方法，逐步养成持续练习的习惯。",
+    "features": [
+      "题库筛选与随机练习",
+      "每日一题与打卡",
+      "作答记录与错题回顾",
+      "题解交流与问题反馈"
+    ],
+    "experienceNotes": "可先浏览题库；提交作答、解锁答案和保存学习记录需注册登录，必要时完成邮箱验证。部分 AI 能力需要自行配置 DeepSeek 密钥，以站内说明为准。",
+    "experienceUrl": "https://www.mathonline.top/",
+    "checkedAt": "2026-11-20",
+    "sourceUrl": "https://github.com/fjw345/mathonline/blob/master/README.md",
+    "sourceSha": "2f6620cc9956cb95b369fdd90cc5afae781cc1f0"
+  },
+  {
+    "repo": "FSYShu/BJTU-lecture-analy",
+    "category": "课程复习",
+    "description": "面向课程回放复习的 AI 解析项目，将长视频整理为带时间信息的字幕、课程重点、分层总结与思维导图。学生可以从结构化结果跳回视频对应位置，更快定位概念、公式和例题，减少反复拖动进度条寻找内容的时间。",
+    "features": [
+      "AI 字幕与时间戳",
+      "重点片段快速跳转",
+      "分层课程总结",
+      "可跳转课程思维导图"
+    ],
+    "experienceNotes": "需要有权限访问对应课程。学校视频通常要求校内网络或 VPN；仓库提供本地和容器化启动方式，尚未确认可直接进入的公开体验地址。",
+    "checkedAt": "2026-11-20",
+    "sourceUrl": "https://github.com/FSYShu/BJTU-lecture-analy/blob/main/README.md",
+    "sourceSha": "9517171c2d9509ab49c2d5a8dd35b24a215a42b3"
+  },
+  {
+    "repo": "FoodtimeNeo/FoodtimeNeo-Web",
+    "category": "校园美食",
+    "description": "以食堂手账为视觉风格的校园美食点评与社区互动平台。围绕食堂、档口和菜品展开浏览，结合菜品图册、同学点评与社区投稿，帮助大家发现校园里的好味道，也让自己的用餐体验成为他人的参考。",
+    "features": [
+      "食堂与档口导览",
+      "菜品信息与图册",
+      "美食点评与社区投稿",
+      "个人资料与内容管理"
+    ],
+    "experienceNotes": "公开站点名为“北交干饭吧”。仓库当前标注 2.0.0α 测试版，部分互动需要登录；Web、后端与 Android 分仓维护，单端进度不代表全部平台已完成。",
+    "experienceUrl": "https://bjtufoodtime.top/",
+    "checkedAt": "2026-11-20",
+    "sourceUrl": "https://github.com/FoodtimeNeo/FoodtimeNeo-Web/blob/main/README.md",
+    "sourceSha": "745701d1294ed8a96eb616a4fae1d0fc1d3f0a10"
+  },
+  {
+    "repo": "zjr231/BJTU-Life-Simulator",
+    "category": "校园模拟",
+    "description": "把大学生活中的学习、社交、锻炼和成长选择融入校园人生模拟。在八个学期中安排课程与行动，体验校园事件和人物交流，平衡时间、精力与生活属性，再根据长期积累走向不同的毕业方向。",
+    "features": [
+      "学期规划与选课考试",
+      "校园事件与人物对话",
+      "生活属性与成长选择",
+      "多存档与毕业方向"
+    ],
+    "experienceNotes": "仓库提供静态网页本地运行，手机验证码登录目前为可选演示入口。存档与浏览器环境绑定，在线 AI 对话为可选能力；尚未发现正式公开体验网址。",
+    "checkedAt": "2026-11-20",
+    "sourceUrl": "https://github.com/zjr231/BJTU-Life-Simulator/blob/main/README.md",
+    "sourceSha": "4dfbf254e4cce5ffe34d3668f9e0f2f30a11795f"
+  }
+]

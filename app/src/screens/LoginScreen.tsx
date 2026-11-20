@@ -142,6 +142,9 @@ export function LoginScreen() {
         try {
           const target = JSON.parse(returnRoute)
           if (target.path === 'activity-submit') { navigate('activity-submit', target.query); return }
+          if (target.path === 'project' && typeof target.query?.id === 'string' && /^[0-9a-f-]{36}$/i.test(target.query.id)) {
+            navigate('project', { id: target.query.id }); return
+          }
           if (target.path === 'activities' && target.query?.mode === 'projects') {
             navigate('activities', { mode: 'projects', view: target.query.view === 'popular' ? 'popular' : 'all' }); return
           }
