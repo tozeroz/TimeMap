@@ -1,0 +1,10 @@
+{
+  "source": "local development PostgreSQL",
+  "origin": "http://127.0.0.1:5198",
+  "api": "http://127.0.0.1:3005",
+  "projects": 10,
+  "allEnriched": true,
+  "realImagesNotSupplied": true,
+  "reviewsNotFabricated": true,
+  "errors": []
+}

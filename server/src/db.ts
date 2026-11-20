@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto'
 import pg from 'pg'
+import projectDetailsSql from './migrations/041_project_details.sql'
+import projectContentEnrichmentSql from './migrations/042_project_content_enrichment.sql'
+import commentAnonymousSql from './migrations/042_comment_anonymous.sql'
 import initSql from './migrations/001_init.sql'
 import identitySql from './migrations/002_identity.sql'
 import dataModelSql from './migrations/003_data_model_v01.sql'
@@ -189,6 +192,9 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '038_release_1_3_3', sql: release133Sql },
   { version: '039_release_1_3_4', sql: release134Sql },
   { version: '040_release_1_4_1', sql: release141Sql },
+  { version: '041_project_details', sql: projectDetailsSql },
+  { version: '042_project_content_enrichment', sql: projectContentEnrichmentSql },
+  { version: '042_comment_anonymous', sql: commentAnonymousSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

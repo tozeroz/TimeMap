@@ -1,0 +1,29 @@
+{
+  "projectUrl": "https://github.com/FoodtimeNeo/FoodtimeNeo-Web",
+  "providedBy": "用户提供",
+  "note": "保留JPEG结束标记前的所有原始字节，仅去掉微信附加的24字节尾部；未裁切、缩放或重绘。",
+  "images": [
+    {
+      "role": "poster",
+      "path": "assets/training-projects/foodtime-neo/poster.jpg",
+      "ok": true,
+      "mime": "image/jpeg",
+      "width": 682,
+      "height": 896,
+      "bytes": 84307,
+      "sha256": "19b1a7a9d8b125aa6cb7fae2b7e5df56994af7e0f3b37926e0fade3e9f88a0c0",
+      "removedTrailingBytes": 24
+    },
+    {
+      "role": "logo",
+      "path": "assets/training-projects/foodtime-neo/logo.jpg",
+      "ok": true,
+      "mime": "image/jpeg",
+      "width": 223,
+      "height": 197,
+      "bytes": 15997,
+      "sha256": "4564029dacda977581a42fb3eb5845c9ff6a9da9fc1e46eb72cd46b1198e21a8",
+      "removedTrailingBytes": 24
+    }
+  ]
+}

@@ -15,14 +15,15 @@ await setup.query(`create schema ${schema}`)
 const pool = new pg.Pool({ connectionString: url, options: '-c search_path=' + schema + ',public' })
 const app = Fastify()
 try {
-  await pool.query(`create table users(id uuid primary key); create table media(id uuid primary key, scope text, mime text);
+  await pool.query(`create table users(id uuid primary key, display_name text, avatar_media_id uuid); create table media(id uuid primary key, scope text, mime text);
     create table audit_log(id uuid primary key, actor_id uuid, action text, target_type text, target_id uuid, reason text);`)
   const migration = readFileSync(new URL('../src/migrations/032_training_projects.sql', import.meta.url), 'utf8')
   await pool.query(migration); await pool.query(migration)
   const linksMigration = readFileSync(new URL('../src/migrations/033_training_project_links.sql', import.meta.url), 'utf8')
   await pool.query(linksMigration); await pool.query(linksMigration)
+  await pool.query(readFileSync(new URL('../src/migrations/041_project_details.sql', import.meta.url), 'utf8'))
   const [admin, a, b, cover, privateCover, audio] = Array.from({ length: 6 }, () => randomUUID())
-  await pool.query('insert into users values($1),($2),($3)', [admin, a, b])
+  await pool.query('insert into users(id) values($1),($2),($3)', [admin, a, b])
   await pool.query("insert into media values($1,'public','image/png'),($2,'private','image/png'),($3,'public','audio/webm')", [cover, privateCover, audio])
   registerProjectRoutes({ app, db: { pool, noteFailure: () => 'terminal' } as unknown as Db,
     resolveSession: async auth => {

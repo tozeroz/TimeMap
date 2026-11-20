@@ -43,12 +43,23 @@ export interface TrainingProjectFields {
   coverImageId: string | null
   position: number
   published: boolean
+  description?: string | null
+  category?: string | null
+  features?: string[]
+  experienceNotes?: string | null
+  showcaseImageIds?: string[]
 }
 export interface TrainingProject extends TrainingProjectFields {
   id: string
   likeCount: number
   likedByMe: boolean
+  reviewCount?: number
 }
+export interface ProjectReview { id: string; body: string; createdAt: string; userId: string; displayName: string; avatarMediaId: string | null; canDelete: boolean }
+export function getTrainingProject(id: string) { return request<TrainingProject>(`/api/projects/${encodeURIComponent(id)}`) }
+export function listProjectReviews(id: string, cursor?: string) { return request<{ items: ProjectReview[]; total: number; nextCursor: string | null }>(`/api/projects/${encodeURIComponent(id)}/reviews${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`) }
+export function createProjectReview(id: string, body: string, clientRequestId: string) { return request<{ id: string }>(`/api/projects/${encodeURIComponent(id)}/reviews`, { method: 'POST', body: { body, clientRequestId } }) }
+export function deleteProjectReview(id: string, reviewId: string) { return request<void>(`/api/projects/${encodeURIComponent(id)}/reviews/${encodeURIComponent(reviewId)}`, { method: 'DELETE' }) }
 export function listTrainingProjects(view: 'all' | 'popular') {
   return request<{ items: TrainingProject[]; total: number }>(`/api/projects?view=${view}`)
 }
@@ -1479,6 +1490,14 @@ export const ANONYMOUS_AVATAR: string = (() => {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 })()
 
+/** Comment avatars depend only on the public alias within the post. */
+export function commentAvatar(comment: Pick<ApiComment, 'anonymous' | 'author'>): string {
+  if (!comment.anonymous) return avatarFor(comment.author)
+  const hue = hashHue(comment.author)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="40" fill="hsl(${hue},40%,88%)"/><g fill="hsl(${hue},35%,42%)"><circle cx="40" cy="30" r="13"/><path d="M16 72c0-32 48-32 48 0z"/></g></svg>`
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
 /** 匿名帖的展示名（与服务端 `ANONYMOUS_DISPLAY_NAME` 必须一致） */
 export const ANONYMOUS_DISPLAY_NAME = '匿名同学'
 
@@ -1551,6 +1570,9 @@ export interface ApiComment {
   body: string
   authorId: string | null
   author: string
+  anonymous?: boolean
+  isMine?: boolean
+  isPostAuthor?: boolean
   createdAt: string
   parentId: string | null
   /** 回复的目标昵称（来自 parent_id 指向的那条评论的作者）；顶层评论为 null */
@@ -1701,10 +1723,11 @@ export async function createComment(
   postId: string,
   body: string,
   parentId?: string,
+  anonymous = false,
 ): Promise<ApiResult<ApiComment>> {
   const r = await request<ApiComment>(`/api/posts/${encodeURIComponent(postId)}/comments`, {
     method: 'POST',
-    body: parentId ? { body, parentId } : { body },
+    body: { body, ...(parentId ? { parentId } : {}), anonymous },
   })
   return r
 }

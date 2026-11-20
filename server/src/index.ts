@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import multipart, { type MultipartFile } from '@fastify/multipart'
 import Fastify from 'fastify'
+import type { PoolClient } from 'pg'
 import { probeAudioWebm } from './audioProbe.ts'
 import { probeImage } from './imageProbe.ts'
 import {
@@ -27,7 +28,8 @@ import { parseCategoryFilter } from './placeCategories.ts'
 import { registerProfileRoutes } from './profileRoutes.ts'
 import { registerSubmissionRoutes } from './submissionsRoutes.ts'
 import { registerProjectRoutes } from './projectRoutes.ts'
-import { ANONYMOUS_DISPLAY_NAME, publicAuthor } from './anonymous.ts'
+import { publicAuthor } from './anonymous.ts'
+import { publicCommentIdentity, type CommentIdentitySource } from './commentIdentity.ts'
 import {
   fallbackOrder,
   hotPoolDays,
@@ -1019,7 +1021,7 @@ export function buildServer(deps: ServerDeps) {
         }
       >(
         `select * from (
-        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
+        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
                 -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
                 -- 为什么需要：地图页的标记按经纬度渲染（默认 provider=tencent 用
                 -- projectToContainer(LatLng)；RealMap 用 L.marker([lat,lng])），
@@ -1295,7 +1297,7 @@ export function buildServer(deps: ServerDeps) {
           }
         }
 
-        // 作者完全来自服务端会话；author_name 存为快照（用户以后改名也保留当时的展示名）
+        // 作者完全来自服务端会话；author_name 存为历史快照，公开读取优先展示 users 中的当前昵称
         // F04：place_id 必填（上面已校验启用）；place 为地点名快照；client_request_id 幂等键
         // 匿名（033）：is_anonymous 只影响**读模型**，真实 author_id 照常落库（审核需要）
         const r = await client.query<PostRow>(
@@ -1399,23 +1401,17 @@ export function buildServer(deps: ServerDeps) {
   //       每条回复自带 replyTo 说明它回的是谁（与实测的平面嵌套一致）
   // -------------------------------------------------------------------------
 
-  interface CommentRow {
+  interface CommentRow extends CommentIdentitySource {
     id: string
     root_id: string
     parent_id: string | null
     depth: number
     body: string
     created_at: Date
-    author_id: string | null
-    author_name: string
-    reply_to_name: string | null
-    /** 所属帖子是否匿名（033）+ 帖子作者 id —— 用来遮罩"匿名帖作者自己的评论" */
-    post_anonymous: boolean
-    post_author_id: string | null
   }
 
   /** 取某帖的评论树：顶层评论 + 各自的全部后代（递归 CTE 一次查完，避免 N+1） */
-  async function loadComments(postId: string): Promise<{
+  async function loadComments(postId: string, meId: string | null): Promise<{
     items: Array<Record<string, unknown>>
     total: number
   }> {
@@ -1437,8 +1433,8 @@ export function buildServer(deps: ServerDeps) {
        )
        select t.id, t.root_id, t.parent_id, t.depth,
               c.body, c.created_at, c.author_id,
-              coalesce(u.display_name, po.author_name, '匿名') as author_name,
-              pu.display_name as reply_to_name,
+              coalesce(u.display_name, '同学') as author_name,
+              c.is_anonymous, ai.number as anonymous_number,
               -- 匿名帖（033）：帖子作者在该帖下发的评论也要遮罩，
               -- 否则「匿名发帖 + 自己评论一句」就把自己认出来了（等于没匿名）。
               po.is_anonymous as post_anonymous,
@@ -1447,28 +1443,19 @@ export function buildServer(deps: ServerDeps) {
          join comments c on c.id = t.id
          join posts po on po.id = c.post_id
          left join users u on u.id = c.author_id
-         left join comments pc on pc.id = c.parent_id
-         left join users pu on pu.id = pc.author_id
+         left join post_anonymous_identities ai on ai.post_id = c.post_id and ai.user_id = c.author_id
         order by t.root_id, t.depth, c.created_at, c.id`,
       [postId],
     )
 
+    const publicNames = new Map(r.rows.map(row => [row.id, publicCommentIdentity(row, meId).author]))
     const byRoot = new Map<string, Record<string, unknown>>()
     const order: string[] = []
     for (const row of r.rows) {
-      /**
-       * 匿名帖（033）里，**帖子作者本人发的评论**同样遮罩成「匿名同学」且不给 authorId。
-       * 不遮罩的话：匿名发帖 → 自己在评论区说一句 → 所有人都知道他/她是谁。
-       * 其他人（非帖子作者）的评论照常显示真名 —— 匿名只针对发布者。
-       */
-      const maskComment =
-        row.post_anonymous === true && row.author_id !== null && row.author_id === row.post_author_id
       const base = {
         id: row.id,
         body: row.body,
-        authorId: maskComment ? null : row.author_id,
-        author: maskComment ? ANONYMOUS_DISPLAY_NAME : row.author_name,
-        anonymous: maskComment,
+        ...publicCommentIdentity(row, meId),
         createdAt: row.created_at.toISOString(),
       }
       if (row.depth === 0) {
@@ -1483,7 +1470,7 @@ export function buildServer(deps: ServerDeps) {
           ...base,
           parentId: row.parent_id,
           // 「回复 <目标>」的目标：来自 parent_id 指向的那条评论的作者
-          replyTo: row.reply_to_name,
+          replyTo: publicNames.get(row.parent_id ?? '') ?? null,
         })
       }
     }
@@ -1504,7 +1491,7 @@ export function buildServer(deps: ServerDeps) {
     const meId = s.kind === 'ok' ? s.user.userId : null
     try {
       const pr = await db.pool.query<PostRow & { status: string; place_id: string | null; open_count: number }>(
-        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.status, p.place_id,
+        `select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.status, p.place_id,
                 -- ⭐ WO#15：详情也要带地点坐标（原版 poi-detail 页有「距我N公里」，
                 -- 那需要地点经纬度 + 客户端自身位置）。
                 pl.latitude as place_lat, pl.longitude as place_lng
@@ -1695,7 +1682,9 @@ export function buildServer(deps: ServerDeps) {
         reply.code(404)
         return { error: 'not_found' }
       }
-      const { items, total } = await loadComments(id)
+      const session = await resolveSession(req.headers.authorization)
+      if (session.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+      const { items, total } = await loadComments(id, session.kind === 'ok' ? session.user.userId : null)
       return { items, total }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
@@ -1717,11 +1706,15 @@ export function buildServer(deps: ServerDeps) {
     }
 
     const payload = (req.body ?? {}) as Record<string, unknown>
-    // strict schema：只允许 body / parentId，多一个字段就 400（与发帖同一原则）
-    const extra = Object.keys(payload).filter((k) => !['body', 'parentId'].includes(k))
+    // 作者及匿名编号由服务端决定。
+    const extra = Object.keys(payload).filter((k) => !['body', 'parentId', 'anonymous'].includes(k))
     if (extra.length) {
       reply.code(400)
       return { error: 'invalid_payload', details: [`不支持字段: ${extra.join(', ')}（作者由服务端会话决定）`] }
+    }
+    if (payload.anonymous !== undefined && typeof payload.anonymous !== 'boolean') {
+      reply.code(400)
+      return { error: 'invalid_payload', details: ['anonymous 必须是布尔值'] }
     }
     const body = typeof payload.body === 'string' ? payload.body.trim() : ''
     const parentId = typeof payload.parentId === 'string' ? payload.parentId.trim() : ''
@@ -1738,44 +1731,67 @@ export function buildServer(deps: ServerDeps) {
       return { error: 'invalid_payload', details: ['parentId 不是合法 id'] }
     }
 
+    let client: PoolClient | undefined
     try {
-      // F07：只能对**未下架**的帖子发评论（下架帖同步退出互动面）
-      const pr = await db.pool.query("select 1 from posts where id = $1 and status = 'published'", [id])
-      if (!pr.rowCount) {
+      client = await db.pool.connect()
+      await client.query('begin')
+      // Serialize allocation within this post, including concurrent first-time participants.
+      const pr = await client.query<{ author_id: string | null; is_anonymous: boolean }>(
+        "select author_id, is_anonymous from posts where id = $1 and status = 'published' for update", [id])
+      const post = pr.rows[0]
+      if (!post) {
+        await client.query('rollback')
         reply.code(404)
         return { error: 'not_found' }
       }
+      let replyTo: string | null = null
       if (parentId) {
-        // 被回复的评论必须存在**且属于同一篇帖子**且未被删除 —— 否则就会跨帖挂载
-        const pp = await db.pool.query(
-          "select 1 from comments where id = $1 and post_id = $2 and status = 'published'",
-          [parentId, id],
-        )
-        if (!pp.rowCount) {
+        const pp = await client.query<CommentIdentitySource>(
+          `select c.author_id, coalesce(u.display_name, '同学') as author_name,
+                  c.is_anonymous, ai.number as anonymous_number,
+                  p.is_anonymous as post_anonymous, p.author_id as post_author_id
+             from comments c join posts p on p.id = c.post_id
+             left join users u on u.id = c.author_id
+             left join post_anonymous_identities ai on ai.post_id = c.post_id and ai.user_id = c.author_id
+            where c.id = $1 and c.post_id = $2 and c.status = 'published' for share of c`, [parentId, id])
+        if (!pp.rows[0]) {
+          await client.query('rollback')
           reply.code(400)
           return { error: 'invalid_payload', details: ['parentId 不属于该帖子或已删除'] }
         }
+        replyTo = publicCommentIdentity(pp.rows[0], s.user.userId).author
       }
-      const cr = await db.pool.query<{ id: string; created_at: Date }>(
-        `insert into comments (id, post_id, author_id, parent_id, body)
-         values ($1, $2, $3, $4, $5)
-         returning id, created_at`,
-        [randomUUID(), id, s.user.userId, parentId || null, body],
-      )
+      const anonymous = payload.anonymous === true || (post.is_anonymous && post.author_id === s.user.userId)
+      let number: number | null = null
+      if (anonymous && post.author_id !== s.user.userId) {
+        const alias = await client.query<{ number: number }>(
+          `insert into post_anonymous_identities (post_id, user_id, number)
+           select $1, $2, coalesce(max(number), 0) + 1 from post_anonymous_identities where post_id = $1
+           on conflict (post_id, user_id) do update set user_id = excluded.user_id
+           returning number`, [id, s.user.userId])
+        number = alias.rows[0]!.number
+      }
+      const cr = await client.query<{ id: string; created_at: Date }>(
+        `insert into comments (id, post_id, author_id, parent_id, body, is_anonymous)
+         values ($1, $2, $3, $4, $5, $6) returning id, created_at`,
+        [randomUUID(), id, s.user.userId, parentId || null, body, anonymous])
+      await client.query('commit')
       const row = cr.rows[0]!
       reply.code(201)
       return {
-        id: row.id,
-        body,
-        authorId: s.user.userId,
-        author: s.user.displayName,
-        createdAt: row.created_at.toISOString(),
-        parentId: parentId || null,
+        id: row.id, body,
+        ...publicCommentIdentity({ author_id: s.user.userId, author_name: s.user.displayName,
+          is_anonymous: anonymous, post_anonymous: post.is_anonymous,
+          post_author_id: post.author_id, anonymous_number: number }, s.user.userId),
+        createdAt: row.created_at.toISOString(), parentId: parentId || null, replyTo,
       }
     } catch (err) {
+      await client?.query('rollback').catch(() => {})
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
       reply.code(500)
       return { error: 'db_error', message: (err as Error).message }
+    } finally {
+      client?.release()
     }
   })
 
@@ -2077,7 +2093,7 @@ export function buildServer(deps: ServerDeps) {
         }
       >(
         `select * from (
-           select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, p.author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
+           select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
                   pl.latitude as place_lat, pl.longitude as place_lng,
                   (select count(*) from likes l where l.post_id = p.id)::text as like_count,
                   (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,

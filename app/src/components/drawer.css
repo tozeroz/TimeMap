@@ -64,25 +64,6 @@
   background: var(--c-surface-sunken);
 }
 
-.drawer__divider {
-  height: 1px;
-  margin: 6px 20px;
-  background: var(--c-divider);
-}
-
-.drawer__item--demo {
-  color: var(--c-text-3);
-  font-size: 14px;
-}
-
-.drawer__badge {
-  padding: 1px 6px;
-  border-radius: 5px;
-  background: var(--c-surface-sunken);
-  font-size: 10.5px;
-  color: var(--c-text-3);
-}
-
 /* 抽屉二级页 */
 .dp {
   display: flex;

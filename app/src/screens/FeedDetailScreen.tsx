@@ -258,25 +258,28 @@ function FeedDetail({ id, onStep }: { id: string; onStep: (direction: number) =>
     }
   }
 
-  async function submitComment() {
-    if (busy) return
+  async function submitComment(parentId?: string, anonymous = false) {
+    if (busy) return false
     const body = draft.trim()
-    if (!body || Array.from(body).length > 500) return
+    if (!body || Array.from(body).length > 500) return false
     if (!isLoggedIn()) {
       setNotice('请先登录后再评论')
       navigate('loginselect')
-      return
+      return false
     }
     setBusy(true)
     setNotice('')
     try {
-      const r = await createComment(id, body)
+      const r = await createComment(id, body, parentId, anonymous)
       if (!r.ok) {
         // 写操作失败**绝不**本地假成功（M1 冻结原则）
         setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `评论失败：${failText(r)}`)
-        return
+        return false
       }
-      setComments(items => [{ ...r.value, replies: [] }, ...items])
+      setComments(items => parentId
+        ? items.map(root => root.id === parentId || root.replies.some(reply => reply.id === parentId)
+          ? { ...root, replies: [...root.replies, r.value] } : root)
+        : [{ ...r.value, replies: [] }, ...items])
       setTotal(value => value + 1)
       setDraft('')
       feedBrowse.drafts[id] = ''
@@ -286,6 +289,10 @@ function FeedDetail({ id, onStep }: { id: string; onStep: (direction: number) =>
         setTotal(refreshed.total)
         setPost(refreshed.post)
       }
+      return true
+    } catch {
+      setNotice('评论失败，请稍后重试')
+      return false
     } finally {
       setBusy(false)
     }
@@ -511,7 +518,7 @@ function FeedDetail({ id, onStep }: { id: string; onStep: (direction: number) =>
     <PostReader onStep={onStep} post={post} comments={comments} total={total} busy={busy}
       draft={draft} onDraft={setDraft} notice={notice} offline={fromSnapshot}
       onLike={() => void toggleLike()} onFavorite={() => void toggleFavorite()}
-      onSend={() => void submitComment()} onDeleteComment={cid => void removeComment(cid)}
+      onSend={submitComment} onDeleteComment={cid => void removeComment(cid)}
       onMore={() => isAuthor ? setConfirmDelete(true) : setReportOpen(true)}
       onShare={() => void sharePost()} />
 

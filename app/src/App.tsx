@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { ProjectDetailScreen } from './screens/ProjectDetailScreen'
 import { Shell } from './components/Shell'
 import { TabBar, type TabKey } from './components/TabBar'
 import { navigate, useRoute } from './router'
@@ -98,6 +99,7 @@ export default function App() {
         由页面显示"未指定"(而不是拿一个 mock 默认值假装成功)。
       */}
       {root === 'feed' && <FeedDetailScreen id={route.query.id ?? param ?? ''} />}
+      {root === 'project' && <ProjectDetailScreen key={route.query.id ?? param ?? ''} id={route.query.id ?? param ?? ''} />}
       {/*
         ⭐ WO#19（审核 65）：**已删除** #/comments 独立产品路由。
         为什么删而不是保留：原版**根本没有**独立的 comments 屏 ——
