@@ -134,7 +134,7 @@ ls -l "`$installed"
 echo "  -- served through nginx (Host header pinned, port 80) --"
 curl -s -o /dev/null -w '  http=%{http_code} type=%{content_type} size=%{size_download}\n' -H 'Host: 8.148.156.146' "http://127.0.0.1/download/$remoteName"
 "@
-$enc = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($remoteSh))
+$enc = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($remoteSh -replace "`r`n", "`n")))
 $remoteOut = & ssh -i $Key @SSH_OPTS $Target "echo '$enc' | base64 -d | bash" 2>&1
 $remoteCode = $LASTEXITCODE
 $remoteOut | ForEach-Object { Write-Host "  $_" }

@@ -27,6 +27,7 @@ import { registerMapRoutes } from './mapRoutes.ts'
 import { parseCategoryFilter } from './placeCategories.ts'
 import { registerProfileRoutes } from './profileRoutes.ts'
 import { registerSubmissionRoutes } from './submissionsRoutes.ts'
+import { registerFeedbackRoutes } from './feedbackRoutes.ts'
 import { registerProjectRoutes } from './projectRoutes.ts'
 import { publicAuthor } from './anonymous.ts'
 import { publicCommentIdentity, type CommentIdentitySource } from './commentIdentity.ts'
@@ -3565,6 +3566,8 @@ export function buildServer(deps: ServerDeps) {
   registerProfileRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   // ACT-004 / ACT-005：校园活动投稿与审核闭环（迁移 031）
   registerSubmissionRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
+  // 043：用户反馈（bug / 功能建议）。写=登录用户，读与管理=管理员。
+  registerFeedbackRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   registerProjectRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   registerMapRoutes(app, db)
   registerTimemapRoutes({
