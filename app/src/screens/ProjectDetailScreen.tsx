@@ -129,7 +129,6 @@ export function ProjectDetailScreen({ id }: { id: string }) {
         <section className="project-detail__intro"><h2 className="project-detail__heading">项目介绍</h2><p>{project.description || project.summary}</p>
           {!!project.features?.length && <ul className={`project-detail__features ${project.features.length === 3 ? 'has-three' : ''}`}>{project.features.map((feature, i) => { const Icon = featureIcons[i % featureIcons.length]; return <li key={`${i}-${feature}`}><Icon size={25} /><span>{feature}</span></li> })}</ul>}
           {(project.groupName || project.memberCount != null) && <p className="project-detail__team"><IconUsers size={19} />{project.groupName || '项目团队'}{project.memberCount != null && ` · ${project.memberCount}人`}</p>}
-          {project.experienceNotes && <p className="project-detail__notes">{project.experienceNotes}</p>}
           {validUrl(project.projectUrl) && <a className="project-detail__source" href={project.projectUrl} target="_blank" rel="noopener noreferrer">项目链接 · GitHub <span aria-hidden="true">↗</span></a>}
         </section>
         <section className="project-detail__reviews"><div className="project-detail__reviewHead"><h2 className="project-detail__heading">用户评价 <span>（{reviewTotal}）</span></h2><button onClick={writeReview}><IconEdit size={19} />写评价</button></div>

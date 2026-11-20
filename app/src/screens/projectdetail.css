@@ -19,7 +19,6 @@
 .project-detail__features li > span { font-weight:600; }
 @media(min-width:380px) { .project-detail__features.has-three { grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; } .project-detail__features.has-three li { gap:5px; } }
 .project-detail__intro .project-detail__team { display:flex; align-items:center; gap:7px; color:var(--c-text-2); font-size:13px; }
-.project-detail__intro .project-detail__notes { font-size:13px; color:var(--c-text-2); }
 .project-detail__source { display:inline-flex; align-items:center; min-height:44px; color:var(--c-primary); font-size:14px; gap:8px; text-decoration:none; }
 .project-detail__reviews { padding-top:18px; }
 .project-detail__reviewHead { display:flex; justify-content:space-between; align-items:center; gap:8px; }

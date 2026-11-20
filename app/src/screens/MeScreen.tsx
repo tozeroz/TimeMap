@@ -123,10 +123,6 @@ export function MeScreen({ requestedTab = '' }: { requestedTab?: string }) {
   const displayName = identity?.displayName ?? ''
   const initial = Array.from(displayName.trim())[0] || '?'
   const menuActions = [
-    { label: '我的发布', action: () => switchTab('posts') },
-    { label: '我的收藏', action: () => switchTab('favorites') },
-    { label: '我的提交', action: () => switchTab('submissions') },
-    { label: '活动收藏', action: () => navigate('favorites') },
     { label: '清除本机缓存', action: () => { setCacheMsg(''); cacheDialog.current?.showModal() } },
     ...(identity?.role === 'admin' ? [{ label: '管理端', action: () => navigate('admin') }] : []),
     { label: loggingOut ? '正在退出…' : identity ? '退出登录' : '登录 TimeMap', action: () => {
