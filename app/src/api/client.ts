@@ -2163,3 +2163,50 @@ export function adminReviewActivitySubmission(
     body: { clientRequestId: crypto.randomUUID(), ...input },
   })
 }
+
+/* ---------------------------------------------------------------------------
+ * 用户反馈（043）
+ *
+ * 写：登录用户一条。读/处理：仅管理员。
+ * 与举报（reports）不是一回事：举报针对站内内容，反馈针对产品本身（bug / 功能建议）。
+ * ------------------------------------------------------------------------- */
+export type FeedbackCategory = 'bug' | 'feature' | 'other'
+export type FeedbackStatus = 'open' | 'resolved'
+
+export interface ApiFeedback {
+  id: string
+  category: FeedbackCategory
+  content: string
+  contact: string | null
+  pageContext: string | null
+  appVersion: string | null
+  status: FeedbackStatus
+  /** 管理员内部备注；用户端拿不到这个字段 */
+  adminNote: string | null
+  createdAt: string
+  updatedAt: string
+  submitter: { id: string; displayName: string; handle: string } | null
+}
+
+export function createFeedback(input: {
+  category: FeedbackCategory
+  content: string
+  contact?: string
+  pageContext?: string
+  appVersion?: string
+}) {
+  return request<{ id: string; status: FeedbackStatus }>('/api/feedback', { method: 'POST', body: input })
+}
+
+export function adminListFeedback(status: FeedbackStatus = 'open') {
+  return request<{ items: ApiFeedback[]; counts: Partial<Record<FeedbackStatus, number>> }>(
+    `/api/admin/feedback?status=${status}`,
+  )
+}
+
+export function adminSetFeedbackStatus(id: string, status: FeedbackStatus, note?: string) {
+  return request<ApiFeedback>(`/api/admin/feedback/${encodeURIComponent(id)}/status`, {
+    method: 'POST',
+    body: { status, ...(note ? { note } : {}) },
+  })
+}

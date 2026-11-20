@@ -123,6 +123,8 @@ export function MeScreen({ requestedTab = '' }: { requestedTab?: string }) {
   const displayName = identity?.displayName ?? ''
   const initial = Array.from(displayName.trim())[0] || '?'
   const menuActions = [
+    // 用户反馈（043）：把"当前所在页面"一起带过去，管理员复现 bug 时最需要这个信息
+    { label: '意见反馈', action: () => navigate('feedback', { from: window.location.hash }) },
     { label: '清除本机缓存', action: () => { setCacheMsg(''); cacheDialog.current?.showModal() } },
     ...(identity?.role === 'admin' ? [{ label: '管理端', action: () => navigate('admin') }] : []),
     { label: loggingOut ? '正在退出…' : identity ? '退出登录' : '登录 TimeMap', action: () => {

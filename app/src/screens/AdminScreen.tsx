@@ -8,6 +8,8 @@ import {
   adminListPlaces,
   adminListPosts,
   adminListReports,
+  adminListFeedback,
+  adminSetFeedbackStatus,
   adminGetActivitySubmission,
   adminListActivitySubmissions,
   adminReviewActivitySubmission,
@@ -27,6 +29,8 @@ import {
   type SubmissionStatus,
   type ApiAuditEntry,
   type ApiReport,
+  type ApiFeedback,
+  type FeedbackStatus,
   failText,
 } from '../api/client'
 import { isAdmin } from '../api/session'
@@ -59,11 +63,12 @@ import { AdminProjectsPanel } from './AdminProjectsPanel'
  *     各列表，而不是只改本地那一行
  *   · 操作记录包含管理员、对象、时间、动作
  */
-type PanelKey = 'reports' | 'submissions' | 'posts' | 'activities' | 'projects' | 'places' | 'audit'
+type PanelKey = 'reports' | 'feedback' | 'submissions' | 'posts' | 'activities' | 'projects' | 'places' | 'audit'
 
 const PANELS: { key: PanelKey; label: string }[] = [
   { key: 'reports', label: '举报处理' },
   { key: 'submissions', label: '投稿审核' },
+  { key: 'feedback', label: '用户反馈' },
   { key: 'posts', label: '内容管理' },
   { key: 'activities', label: '活动管理' },
   { key: 'projects', label: '实训项目' },
@@ -119,6 +124,7 @@ export function AdminScreen() {
 
       {panel === 'reports' && <ReportsPanel />}
       {panel === 'submissions' && <SubmissionsPanel />}
+      {panel === 'feedback' && <FeedbackPanel />}
       {panel === 'posts' && <PostsPanel />}
       {panel === 'activities' && <ActivitiesPanel />}
       {panel === 'projects' && <AdminProjectsPanel />}
@@ -1315,6 +1321,235 @@ function SubmissionCard({
               )}
             </div>
           )}
+        </div>
+      )}
+    </li>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 用户反馈（043）
+// ---------------------------------------------------------------------------
+/*
+  与「举报处理」的区别：举报的对象是站内内容（帖子/评论），处理动作是下架或不处理；
+  反馈的对象是产品本身，处理动作只有"已处理 / 重新打开 + 内部备注"。
+  所以这里是独立面板，不复用 ReportsPanel 的状态与文案。
+
+  反馈里可能带用户联系方式与未公开的问题描述 ⇒ 只有管理员能看到（服务端 /api/admin/feedback 强校验）。
+  详情默认折叠展开：一屏能扫到多条，需要时再展开看完整上下文。
+*/
+
+const FEEDBACK_KIND: Record<ApiFeedback['category'], string> = {
+  bug: '问题',
+  feature: '建议',
+  other: '其他',
+}
+
+function FeedbackPanel() {
+  const [status, setStatus] = useState<FeedbackStatus>('open')
+  const [items, setItems] = useState<ApiFeedback[]>([])
+  const [counts, setCounts] = useState<Partial<Record<FeedbackStatus, number>>>({})
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [err, setErr] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busyId, setBusyId] = useState<string | null>(null)
+  /** 正在写备注的那条（null = 没在编辑） */
+  const [noteFor, setNoteFor] = useState<string | null>(null)
+  const [note, setNote] = useState('')
+
+  const load = useCallback(async () => {
+    setPhase('loading')
+    const r = await adminListFeedback(status)
+    if (r.ok) {
+      setItems(r.value.items)
+      setCounts(r.value.counts ?? {})
+      setPhase('ready')
+      setErr('')
+    } else {
+      setItems([])
+      setErr(failText(r))
+      setPhase('error')
+    }
+  }, [status])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function apply(item: ApiFeedback, next: FeedbackStatus, withNote?: string) {
+    if (busyId) return
+    setBusyId(item.id)
+    setNotice('')
+    const r = await adminSetFeedbackStatus(item.id, next, withNote?.trim() || undefined)
+    setBusyId(null)
+    if (!r.ok) {
+      setNotice(`操作失败：${failText(r)}`)
+      return
+    }
+    setNoteFor(null)
+    setNote('')
+    setNotice(next === 'resolved' ? '已标记为已处理。' : '已重新打开，回到待处理。')
+    // 列表按状态过滤，处理完该条会离开当前筛选 ⇒ 重新拉取，不用本地猜
+    await load()
+  }
+
+  return (
+    <section className="adm__pane">
+      <div className="adm__row">
+        {(['open', 'resolved'] as const).map((s) => (
+          <button
+            key={s}
+            className={`adm__chip ${status === s ? 'is-active' : ''}`}
+            data-fb-filter={s}
+            onClick={() => {
+              setStatus(s)
+              setNotice('')
+              setNoteFor(null)
+            }}
+          >
+            {s === 'open' ? '待处理' : '已处理'}
+            {typeof counts[s] === 'number' ? `（${counts[s]}）` : ''}
+          </button>
+        ))}
+        <button className="adm__chip adm__chip--ghost" onClick={() => void load()}>
+          刷新
+        </button>
+      </div>
+
+      {notice && (
+        <p className="adm__cardResult" data-fb-panel-notice role="status">
+          {notice}
+        </p>
+      )}
+
+      <PaneState
+        phase={phase}
+        err={err}
+        onRetry={() => void load()}
+        empty={phase === 'ready' && items.length === 0 ? (status === 'open' ? '没有待处理的反馈' : '还没有处理过的反馈') : undefined}
+      />
+
+      {phase === 'ready' && items.length > 0 && (
+        <>
+          <p className="adm__cardMeta" data-fb-count={String(items.length)}>
+            共 {items.length} 条
+          </p>
+          <ul className="adm__list">
+            {items.map((item) => (
+              <FeedbackCard
+                key={item.id}
+                item={item}
+                busy={busyId === item.id}
+                noteOpen={noteFor === item.id}
+                note={note}
+                onNote={setNote}
+                onStartNote={() => {
+                  setNoteFor(item.id)
+                  setNote(item.adminNote ?? '')
+                }}
+                onCancelNote={() => {
+                  setNoteFor(null)
+                  setNote('')
+                }}
+                onApply={(next, withNote) => void apply(item, next, withNote)}
+              />
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  )
+}
+
+function FeedbackCard({
+  item,
+  busy,
+  noteOpen,
+  note,
+  onNote,
+  onStartNote,
+  onCancelNote,
+  onApply,
+}: {
+  item: ApiFeedback
+  busy: boolean
+  noteOpen: boolean
+  note: string
+  onNote: (value: string) => void
+  onStartNote: () => void
+  onCancelNote: () => void
+  onApply: (next: FeedbackStatus, withNote?: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const long = item.content.length > 90
+
+  return (
+    <li className="adm__card" data-fb-id={item.id} data-fb-status={item.status}>
+      <div className="adm__cardHead">
+        <span className="adm__tag" data-fb-badge={item.category}>
+          {FEEDBACK_KIND[item.category]}
+        </span>
+        <span className="adm__tag adm__tag--actor">{item.submitter?.displayName || '已注销用户'}</span>
+        <span className="adm__time">{relativeTime(item.createdAt)}</span>
+      </div>
+
+      <p className={`adm__cardBody adm__fbContent${open || !long ? '' : ' is-clamped'}`}>{item.content}</p>
+      {long && (
+        <button className="adm__link" data-fb-expand onClick={() => setOpen((v) => !v)}>
+          {open ? '收起' : '展开全文'}
+        </button>
+      )}
+
+      <p className="adm__cardMeta">
+        {item.pageContext ? <code className="adm__code">{item.pageContext}</code> : '未记录页面'}
+        {item.appVersion ? ` · v${item.appVersion}` : ''}
+      </p>
+      {item.contact && (
+        <p className="adm__cardMeta">
+          联系方式：<span data-fb-contact>{item.contact}</span>
+        </p>
+      )}
+      {item.adminNote && (
+        <p className="adm__cardResult" data-fb-admin-note>
+          内部备注：{item.adminNote}
+        </p>
+      )}
+
+      {noteOpen ? (
+        <div className="adm__subActions">
+          <textarea
+            className="adm__subReason"
+            data-fb-note
+            rows={2}
+            maxLength={500}
+            placeholder="内部备注（选填，不会展示给用户）"
+            value={note}
+            onChange={(e) => onNote(e.target.value)}
+          />
+          <div className="adm__actions">
+            <button
+              className="adm__btn"
+              data-fb-confirm
+              disabled={busy}
+              onClick={() => onApply(item.status === 'open' ? 'resolved' : 'open', note)}
+            >
+              {busy ? '提交中…' : item.status === 'open' ? '确认已处理' : '确认重新打开'}
+            </button>
+            <button className="adm__btn adm__btn--ghost" disabled={busy} onClick={onCancelNote}>
+              取消
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="adm__actions">
+          <button
+            className="adm__btn"
+            data-fb-toggle
+            disabled={busy}
+            onClick={onStartNote}
+          >
+            {item.status === 'open' ? '标记已处理' : '重新打开'}
+          </button>
         </div>
       )}
     </li>

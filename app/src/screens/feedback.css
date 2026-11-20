@@ -1,0 +1,233 @@
+/* 意见反馈（043）
+   复用全局 token，不改动任何既有页面样式；类名统一 fb__ 前缀，避免与别处冲突。 */
+
+.fb {
+  background: #fbfaf7;
+}
+
+.fb__content {
+  display: grid;
+  gap: 14px;
+  padding: 18px 19px calc(24px + env(safe-area-inset-bottom));
+}
+
+.fb__content h1 {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 780;
+  line-height: 1.35;
+  color: #092752;
+}
+
+.fb__lede {
+  margin: -6px 0 0;
+  font-size: var(--f-meta);
+  color: var(--c-text-2);
+}
+
+.fb__group {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.fb__group legend,
+.fb__group > label {
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.fb__group b {
+  color: #e2542a;
+}
+
+.fb__optional {
+  font-weight: 400;
+  color: var(--c-text-2);
+}
+
+/* 类型：三个可点的大chip，各自带一行说明（单靠颜色区分不够，文字说明是主要信息） */
+.fb__chips {
+  display: grid;
+  gap: 8px;
+}
+
+.fb__chip {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--c-divider);
+  border-radius: var(--r-sm);
+  background: var(--c-surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.fb__chip span {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.fb__chip small {
+  font-size: 12px;
+  color: var(--c-text-2);
+}
+
+.fb__chip.is-on {
+  border-color: #e2542a;
+  background: #fff4ef;
+}
+
+.fb__chip.is-on span {
+  color: #a53a15;
+}
+
+.fb__textarea,
+.fb__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--c-divider);
+  border-radius: var(--r-sm);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.fb__textarea {
+  min-height: 132px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.fb__textarea:focus,
+.fb__input:focus {
+  outline: 2px solid #e2542a;
+  outline-offset: 1px;
+}
+
+.fb__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--c-text-2);
+}
+
+.fb__meta .is-over {
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.fb__error {
+  margin: 0;
+  font-size: 13px;
+  color: #b3261e;
+}
+
+/* 自动附加的上下文：弱化显示，避免干扰主要输入 */
+.fb__attach {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--c-text-2);
+}
+
+.fb__attach code {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f0eee9;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.fb__primary {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  border-radius: 10px;
+  background: #e2542a;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fb__primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fb__ghost {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--c-divider);
+  border-radius: 10px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.fb__footnote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--c-text-2);
+}
+
+.fb__state {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 18px;
+  border: 1px solid var(--c-divider);
+  border-radius: var(--r-sm);
+  background: var(--c-surface);
+}
+
+.fb__state h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--c-text);
+}
+
+.fb__state p {
+  margin: 0;
+  font-size: var(--f-meta);
+  color: var(--c-text-2);
+}
+
+.fb__state--done {
+  justify-items: center;
+  text-align: center;
+}
+
+.fb__ok {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #e8f6ec;
+  color: #1f8a4c;
+}
+
+.fb__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.fb__actions .fb__primary {
+  width: auto;
+  padding: 0 18px;
+}
