@@ -85,6 +85,10 @@ try {
   const normal = await send(a, { body: '实名' }, otherPost)
   assert.equal(normal.authorId, a.id)
   assert.equal(normal.anonymous, false)
+  // The current client always includes this flag, even for ordinary comments.
+  const explicitNormal = await send(a, { body: '显式关闭匿名', anonymous: false }, otherPost)
+  assert.equal(explicitNormal.authorId, a.id)
+  assert.equal(explicitNormal.anonymous, false)
   await send(a, { body: 'x', anonymous: 'false' }, post, 400)
   await send(a, { body: 'x', parentId: cross.id }, post, 400)
   await send(a, { body: 'x', parentId: mine.id }, post, 400)
