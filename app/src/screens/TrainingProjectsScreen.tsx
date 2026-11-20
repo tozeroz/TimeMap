@@ -8,6 +8,10 @@ import { navigate, useRoute } from '../router'
 import './trainingprojects.css'
 
 const projectNames = new Intl.Collator('zh-CN', { sensitivity: 'variant', numeric: false })
+function isCurrentProject(project: TrainingProject) {
+  return project.id === 'c1a55000-2026-4000-8000-000000000002'
+    || /^https:\/\/github\.com\/tozeroz\/timemap(?:\.git)?\/?$/i.test(project.projectUrl ?? '')
+}
 
 export function TrainingProjectsScreen() {
   const route = useRoute(), view = route.query.view === 'popular' ? 'popular' : 'all'
@@ -81,7 +85,8 @@ export function TrainingProjectsScreen() {
     } finally { locks.current.delete(project.id); if (alive.current) setPending(new Set(locks.current)) }
   }
   // Both views use the complete catalogue, including stable ties after a local update.
-  const visible = view === 'popular' ? [...items].sort((a, b) => b.likeCount - a.likeCount || projectNames.compare(a.name, b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) : items
+  const visible = view === 'popular' ? [...items].sort((a, b) => b.likeCount - a.likeCount || projectNames.compare(a.name, b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    : [...items.filter(isCurrentProject), ...items.filter(project => !isCurrentProject(project))]
   return <Screen className="acts-page projects-page" header={<header className="acts__head">
     <div><ActivityModeTitle /><p className="acts__subtitle">看见同学们的创意，为喜欢的项目点赞</p></div>
     <button className="acts__refresh" aria-label="刷新项目" aria-busy={phase === 'loading'} disabled={phase === 'loading'} onClick={() => { setNotice(''); void load() }}><IconRefresh size={27} /></button>
@@ -104,10 +109,14 @@ export function TrainingProjectsScreen() {
       {phase === 'error' && <div className="projects__state" role="alert"><IconImage size={32} /><h3>项目加载失败</h3><p>{error}</p><button onClick={() => void load()}>重试</button></div>}
       {phase === 'ready' && !items.length && <div className="projects__state"><IconImage size={36} /><h3>暂无实训项目</h3><p>项目由管理员统一录入，敬请期待</p></div>}
       {phase === 'ready' && items.length > 0 && <ol className={`projects__list ${view === 'popular' ? 'is-popular' : ''}`}>
-        {visible.map((project, index) => <li key={project.id} className="projects__row" data-project-id={project.id}>
+        {visible.map((project, index) => <li key={project.id} className={`projects__row${isCurrentProject(project) ? ' projects__row--current' : ''}`} data-project-id={project.id}>
           {view === 'popular' && <span className={`projects__rank ${index < 3 ? `is-medal is-rank-${index + 1}` : ''}`} aria-label={`第 ${index + 1} 名`}><span>{index + 1}</span></span>}
           <button className="projects__coverLink" aria-label={`查看项目：${project.name}`} onClick={() => openProject(project.id)}><ProjectCover key={`${project.id}-${project.coverImageId}`} project={project} /></button>
-          <div className="projects__info"><h3><button className="projects__nameLink" onClick={() => openProject(project.id)}>{project.name}</button></h3><p className="projects__summary">{project.summary}</p><p className="projects__group"><IconUsers size={18} /><span>{project.groupName || '团队信息待补充'}{project.memberCount != null && ` · ${project.memberCount}人`}</span></p>
+          <div className="projects__info">
+            {isCurrentProject(project) && <div className="projects__currentBadges">{view === 'all' && <span className="projects__pinnedBadge">置顶</span>}<span className="projects__currentBadge">当前体验</span></div>}
+            <h3><button className="projects__nameLink" onClick={() => openProject(project.id)}>{project.name}</button></h3>
+            {isCurrentProject(project) && <p className="projects__currentNote">你正在使用的就是这个项目</p>}
+            <p className="projects__summary">{project.summary}</p><p className="projects__group"><IconUsers size={18} /><span>{project.groupName || '团队信息待补充'}{project.memberCount != null && ` · ${project.memberCount}人`}</span></p>
             <div className="projects__links">
               {project.projectUrl && /^https?:\/\//i.test(project.projectUrl) && <a className="projects__source" href={project.projectUrl} target="_blank" rel="noopener noreferrer">项目链接 <span aria-hidden="true">↗</span></a>}
               {project.experienceUrl && /^https?:\/\//i.test(project.experienceUrl) && <a className="projects__experience" href={project.experienceUrl} target="_blank" rel="noopener noreferrer">体验项目 <span aria-hidden="true">↗</span></a>}

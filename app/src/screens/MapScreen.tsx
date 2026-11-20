@@ -1,3 +1,4 @@
+import { openFeed } from '../data/feedBrowse'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Screen } from '../components/Shell'
 import {
@@ -332,7 +333,7 @@ function OfflineMap({
               transformOrigin: '50% 100%',
             }}
           >
-            <button className="map__markerCard" onClick={() => navigate('feed', { id: m.postId })}>
+            <button className="map__markerCard" onClick={() => openFeed(m.postId, [m.postId], true)}>
               <span className="map__markerImg map__markerImg--text">{m.place}</span>
               <span className="map__markerName">{m.place}</span>
             </button>
@@ -1348,7 +1349,7 @@ export function MapScreen() {
       ⚠️ 不回落到 postId —— 两者的语义不同，混用会让"点进哪个地点"变得不可预测。
     */
     // 代表帖卡片仍进帖子详情（离开前保存视图，返回时停在同一处）；地点区域打开地点抽屉
-    if (postId) { persistView(); navigate('feed', { id: postId }); return }
+    if (postId) { persistView(); openFeed(postId, [postId], true); return }
     openOrSwitch(placeId)
   }, [persistView, openOrSwitch])
 

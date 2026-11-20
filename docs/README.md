@@ -1,6 +1,6 @@
 # TimeMap 项目文档
 
-日常开发先看[开发、Git 协作与服务器发布](public/development-and-deployment.md)，文档维护遵循[文档管理约定](public/文档管理约定.md)。整理日期：2026-10-27。
+日常开发先看[开发、Git 协作与服务器发布](public/development-and-deployment.md)，其中包含[本地前端连接远程后端](public/development-and-deployment.md#连接远程后端运行日常使用)、停止服务和[前端部署](public/development-and-deployment.md#发布前端网页)的完整步骤。文档维护遵循[文档管理约定](public/文档管理约定.md)。入口更新日期：2026-11-20。
 
 | 目录 | 用途 |
 | --- | --- |
@@ -13,6 +13,7 @@
 ## 公共文档
 
 - [UI 设计规范](public/UI设计规范.md)
+- [实训项目入口首次提示](public/product/实训项目入口首次提示.md)
 - [开发、Git 协作与服务器发布](public/development-and-deployment.md)
 - [完整本地测试环境](public/local-testing.md)
 - [需求分析与产品设计](public/BJTUTimeMap需求分析与产品设计文档.md)

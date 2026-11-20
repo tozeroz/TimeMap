@@ -182,7 +182,7 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
         is_anonymous: boolean
         open_count: number
       }>(
-        `select p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.is_anonymous, p.open_count, p.body, p.place, p.place_id, p.created_at,
+        `select p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.is_anonymous, p.allow_anonymous_comments, p.open_count, p.body, p.place, p.place_id, p.created_at,
                 (select count(*) from likes l where l.post_id = p.id)::text as like_count,
                 (select count(*) from comments c where c.post_id = p.id and c.status='published')::text as comment_count,
                 exists (select 1 from likes l2 where l2.post_id = p.id and l2.user_id = $1::uuid) as liked_by_me,

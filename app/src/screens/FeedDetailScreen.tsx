@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   REPORT_REASONS,
+  getPlaceFirstBrowse,
   createComment,
   createReport,
   deleteMyComment,
@@ -31,10 +32,28 @@ export function FeedDetailScreen({ id }: { id: string }) {
   const [current, setCurrent] = useState(() => {
     const token = new URLSearchParams(window.location.hash.split('?')[1]).get('browse')
     if (!token || token !== feedBrowse.token) {
+      feedBrowse.placeFirst = false
       feedBrowse.ids = [id]; feedBrowse.drafts = {}; feedBrowse.images = {}; feedBrowse.switched = false
     }
     return id
   })
+  const [, refreshOrder] = useState(0)
+  const [browseError, setBrowseError] = useState('')
+  const [browseAttempt, setBrowseAttempt] = useState(0)
+  useEffect(() => {
+    if (!feedBrowse.placeFirst) return
+    const token = feedBrowse.token
+    let active = true
+    setBrowseError('')
+    void getPlaceFirstBrowse(id).then(result => {
+      if (!active || feedBrowse.token !== token) return
+      if (result.ok) {
+        feedBrowse.ids = [...new Set([id, ...result.value.ids])]
+        refreshOrder(value => value + 1)
+      } else setBrowseError('刷帖列表加载失败')
+    })
+    return () => { active = false }
+  }, [id, browseAttempt])
   const [incoming, setIncoming] = useState(id)
   if (incoming !== id) { setIncoming(id); setCurrent(id) }
   const root = useRef<HTMLDivElement>(null)
@@ -55,7 +74,8 @@ export function FeedDetailScreen({ id }: { id: string }) {
   usePostWheel(root, step)
   return <div className="reader-session" ref={root}>
     <FeedDetail key={current} id={current} onStep={step} />
-    {showWheelHint && <p className="reader__wheelHint" role="status">滚动鼠标滚轮切换帖子</p>}
+    {browseError && <p className="reader__wheelHint" style={{ pointerEvents: 'auto' }} role="status">{browseError} · <button onClick={() => setBrowseAttempt(value => value + 1)}>重试</button></p>}
+    {!browseError && showWheelHint && <p className="reader__wheelHint" role="status">滚动鼠标滚轮切换帖子</p>}
   </div>
 }
 

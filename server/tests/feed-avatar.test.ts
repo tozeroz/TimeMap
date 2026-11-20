@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { createHash, randomUUID } from 'node:crypto'
 import pg from 'pg'
 import { buildServer, type ServerDeps } from '../src/index.ts'
-import { publicAuthor } from '../src/anonymous.ts'
-import { ANONYMOUS_AVATAR, avatarFor, mediaUrl, postAvatar, toFeedPost, type ApiPost } from '../../app/src/api/client.ts'
+import { anonymousPostName, publicAuthor } from '../src/anonymous.ts'
+import { ANONYMOUS_AVATAR, commentAvatar, avatarFor, mediaUrl, postAvatar, toFeedPost, type ApiPost } from '../../app/src/api/client.ts'
 
 const url = process.env.PROFILE_TEST_DATABASE_URL
 assert(url, 'Set PROFILE_TEST_DATABASE_URL to a local test database')
@@ -26,7 +26,7 @@ try {
     create table places(id uuid primary key, latitude numeric, longitude numeric);
     create table posts(id uuid primary key, author_name text, author_id uuid, body text default '',
       place text, place_id uuid, created_at timestamptz default now(), image_mode text default 'photo',
-      is_anonymous boolean default false, status text default 'published', open_count int default 0);
+      is_anonymous boolean default false, allow_anonymous_comments boolean default true, status text default 'published', open_count int default 0);
     create table post_daily_stats(post_id uuid, day date, impressions int, opens int);
     create table likes(post_id uuid, user_id uuid);
     create table comments(post_id uuid, status text);
@@ -63,7 +63,7 @@ try {
     const favorites = await app.inject({ method: 'GET', url: '/api/me/favorites', headers })
     assert.equal(favorites.statusCode, 200, favorites.body)
     const favoritePosts = favorites.json().items as ApiPost[]
-    assert.equal(favoritePosts.find(post => post.id === anonymousId)!.author, '匿名同学')
+    assert.equal(favoritePosts.find(post => post.id === anonymousId)!.author, anonymousPostName(anonymousId))
     for (const value of [post, detail, favoritePosts.find(post => post.id === id)!]) {
       assert.equal(value.author, name ?? 'tozero')
       assert.equal(toFeedPost(value).author.name, name ?? 'tozero')
@@ -72,20 +72,31 @@ try {
       assert.equal(toFeedPost(value).author.avatar, postAvatar(value))
     }
     const anonymous = list.find(post => post.id === anonymousId)!
-    assert.equal(anonymous.author, '匿名同学')
+    assert.equal(anonymous.author, anonymousPostName(anonymousId))
+    assert.equal(toFeedPost(anonymous).author.name, anonymous.author)
+    assert.notEqual(anonymousPostName(id), anonymous.author)
+    assert.equal(anonymousPostName(anonymousId), anonymousPostName(anonymousId))
     assert.equal(anonymous.authorAvatarMediaId, null)
     assert.equal(anonymous.authorId, null)
     assert.equal(toFeedPost(anonymous).author.avatar, ANONYMOUS_AVATAR)
     const anonymousDetail = await read('/api/posts/' + anonymousId)
-    assert.equal(anonymousDetail.author, '匿名同学')
+    assert.equal(anonymousDetail.author, anonymousPostName(anonymousId))
     assert.equal(anonymousDetail.authorAvatarMediaId, null)
-    assert.equal(publicAuthor({ author_name: 'tozero', author_id: owner,
+    assert.equal(publicAuthor({ id: anonymousId, author_name: 'tozero', author_id: owner,
       author_avatar_media_id: avatar, is_anonymous: true }, owner).authorAvatarMediaId, null)
   }
   assert.equal((await pool.query('select author_name from posts where id=$1', [id])).rows[0].author_name, 'tozero',
     'Renaming must not require rewriting the post snapshot')
   assert.equal(postAvatar({ author: 'legacy' }), avatarFor('legacy'))
   assert.equal(postAvatar({ author: 'tozero', anonymous: true, authorAvatarMediaId: randomUUID() }), ANONYMOUS_AVATAR)
+  await pool.query('update posts set allow_anonymous_comments=false where id=$1', [id])
+  assert.equal((await read('/api/posts/' + id)).allowAnonymousComments, false)
+  assert.equal((await read('/api/posts/' + anonymousId)).allowAnonymousComments, true)
+  const commentAvatarId = randomUUID()
+  assert.equal(commentAvatar({ author: '评论者', anonymous: false, authorAvatarMediaId: commentAvatarId }), mediaUrl(commentAvatarId))
+  assert.equal(commentAvatar({ author: '评论者', authorAvatarMediaId: null }), avatarFor('评论者'))
+  assert.equal(commentAvatar({ author: '匿名同学 01', anonymous: true, authorAvatarMediaId: commentAvatarId }),
+    commentAvatar({ author: '匿名同学 01', anonymous: true, authorAvatarMediaId: null }))
   console.log('PASS post profiles: nickname PATCH, repeated renames, list/detail/favorites, avatar changes/removal, anonymous masking and legacy fallback')
 } finally {
   await app.close()

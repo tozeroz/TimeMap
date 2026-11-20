@@ -4,6 +4,11 @@
 .projects__nameLink { color: inherit; font: inherit; text-align: left; }
 .projects__coverLink:focus-visible,.projects__nameLink:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 3px; }
 .acts__mode { position: relative; width: fit-content; z-index: 20; }
+.acts__mode--hint { padding-bottom: 56px; }
+.acts__modeHint { position: absolute; top: 52px; left: 0; display: flex; align-items: center; width: max-content; max-width: calc(100vw - 2 * var(--pad-page)); min-height: 44px; padding-left: 12px; border-radius: var(--r-sm); background: var(--c-text); color: var(--c-surface); box-shadow: var(--shadow-float); font-size: 14px; line-height: 1.5; }
+.acts__modeHint::before { content: ''; position: absolute; top: -7px; left: 24px; border-inline: 7px solid transparent; border-bottom: 7px solid var(--c-text); }
+.acts__modeHintClose { display: grid; place-items: center; flex: 0 0 44px; align-self: stretch; min-height: 44px; margin-left: 4px; border-radius: var(--r-sm); }
+.acts__mode .acts__modeHintClose:focus-visible { outline-color: var(--c-surface); outline-offset: -4px; }
 .acts__modeTrigger { display: flex; align-items: center; gap: 12px; min-height: 44px; font: inherit; letter-spacing: inherit; color: inherit; text-align: left; }
 .acts__modeTrigger > svg { color: var(--c-text-2); flex-shrink: 0; }
 .acts__modeMenu { position: absolute; top: calc(100% + 4px); left: 0; min-width: 152px; padding: 5px 0; border: 1px solid var(--c-divider); background: var(--c-bg); border-radius: 10px; box-shadow: 0 8px 20px #18304426; }
@@ -24,6 +29,13 @@
 .projects__heading > span { font-size: 12px; color: var(--c-text-2); }
 .projects__list { list-style: none; padding: 0; margin: 0; }
 .projects__row { position: relative; display: grid; grid-template-columns: 94px minmax(0, 1fr) auto; column-gap: 14px; align-items: start; padding: 17px 0; border-bottom: 1px solid var(--c-divider); }
+.projects__row--current { margin-block: 10px; padding: 14px 8px 6px; border: 1px solid color-mix(in srgb, var(--c-brand) 35%, var(--c-bg)); border-radius: var(--r-md); background: color-mix(in srgb, var(--c-primary-soft) 40%, var(--c-bg)); }
+.projects__row--current .projects__coverLink { align-self: center; }
+.projects__currentBadges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.projects__currentBadges > span { padding: 2px 8px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; line-height: 1.5; }
+.projects__pinnedBadge { color: var(--c-text-2); background: var(--c-surface-sunken); }
+.projects__currentBadge { color: var(--c-primary); background: var(--c-primary-soft); }
+.projects__currentNote { margin: 0 0 4px; font-size: 13px; font-weight: 600; line-height: 1.6; color: var(--c-primary); overflow-wrap: anywhere; }
 .projects__cover { width: 94px; aspect-ratio: 1; overflow: hidden; border-radius: 10px; background: #f2ecdf; }
 .projects__cover img { width: 100%; height: 100%; object-fit: cover; }
 .projects__cover > span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 100%; height: 100%; color: var(--c-text-2); }

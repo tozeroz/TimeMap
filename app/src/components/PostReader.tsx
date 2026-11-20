@@ -7,6 +7,12 @@ import { IconBack, IconClose, IconComment, IconEdit, IconEye, IconHeart, IconLoc
 import { PhotoViewer } from './PhotoViewer'
 import './postreader.css'
 
+const publishTimeFormat = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+})
+
 interface Props {
   post: ApiPostDetail; comments: ApiCommentNode[]; total: number; busy: boolean
   draft: string; onDraft: (value: string) => void; notice: string; offline: boolean
@@ -61,6 +67,9 @@ function Sheet({ title, children, onClose, focusInput = false }: { title: string
 
 export function PostReader(p: Props) {
   const { post } = p
+  const publishedAt = new Date(post.createdAt)
+  const hasPublishTime = Number.isFinite(publishedAt.getTime())
+  const publishTime = hasPublishTime ? publishTimeFormat.format(publishedAt) : '发布时间未知'
   const images = post.images ?? []
   const [index, setIndex] = useState(() => Math.min(feedBrowse.images[post.id] ?? 0, Math.max(0, images.length - 1)))
   const [sheet, setSheet] = useState<'comments' | 'body' | 'more' | null>(null)
@@ -81,6 +90,7 @@ export function PostReader(p: Props) {
   const sourceIndex = feedBrowse.ids.indexOf(post.id)
   const chars = Array.from(p.draft.trim()).length
   const me = getSession()?.user
+  const allowAnonymousComments = post.anonymous === true || post.allowAnonymousComments !== false
   const forceAnonymous = post.anonymous === true && post.authorId === me?.id
   const image = images[index]
   const close = () => { setSheet(null); setDeleteId(null); input.current?.blur() }
@@ -165,9 +175,12 @@ export function PostReader(p: Props) {
           <button className="reader__bodyOpen" onClick={() => setSheet('body')} aria-label="展开全文"><p>{post.body}</p>{post.body.length > 70 && <span>展开全文</span>}</button>
         </section>}
       </main>
-      {post.place && <div className="reader__location">
-        <button className="reader__place" onClick={() => post.placeId ? navigate('poidetail', { id: post.placeId }) : setHint('该地点暂不可查看')}><IconLocation size={16}/>{post.place}</button>
-      </div>}
+      <div className="reader__location">
+        {post.place && <button className="reader__place" onClick={() => post.placeId ? navigate('poidetail', { id: post.placeId }) : setHint('该地点暂不可查看')}><IconLocation size={16}/><span>{post.place}</span></button>}
+        <time className="reader__publishTime" dateTime={hasPublishTime ? publishedAt.toISOString() : undefined} title={hasPublishTime ? `发布时间（北京时间）：${publishTime}` : undefined} aria-label={`发布时间：${publishTime}`}>
+          {publishTime}
+        </time>
+      </div>
       <footer className="reader__bar">
         <button className="reader__write" onClick={() => openComments(true)}><IconEdit size={18}/><span>留下我的评论…</span></button>
         <button className={`reader__action ${post.likedByMe ? 'is-liked' : ''}`} aria-label={post.likedByMe ? '取消点赞' : '点赞'} aria-pressed={post.likedByMe} disabled={p.busy} onClick={p.onLike}><IconHeart size={24} filled={post.likedByMe}/><span>{post.likeCount}</span></button>
@@ -189,9 +202,9 @@ export function PostReader(p: Props) {
           </article>)}
         </div>
         {deleteId && <div className="reader__deleteConfirm" role="alert"><span>删除这条评论？</span><button onClick={() => setDeleteId(null)}>取消</button><button disabled={p.busy} onClick={() => { p.onDeleteComment(deleteId); setDeleteId(null) }}>删除</button></div>}
-        <form className="reader__compose" onSubmit={e => { e.preventDefault(); if (!p.busy && chars > 0 && chars <= 500) void p.onSend(replyTarget?.id, forceAnonymous || anonymous).then(sent => { if (sent) setReplyTarget(null) }) }}>
+        <form className="reader__compose" onSubmit={e => { e.preventDefault(); if (!p.busy && chars > 0 && chars <= 500) void p.onSend(replyTarget?.id, forceAnonymous || (allowAnonymousComments && anonymous)).then(sent => { if (sent) setReplyTarget(null) }) }}>
           {replyTarget && <div className="reader__replyTarget"><span>回复 {replyTarget.author}</span><button type="button" disabled={p.busy} onClick={() => setReplyTarget(null)}>取消回复</button></div>}
-          <div className="reader__anonymous"><button type="button" role="switch" aria-checked={forceAnonymous || anonymous} aria-describedby="reader-anon-hint" disabled={p.busy || forceAnonymous} onClick={() => setAnonymous(v => !v)}>{forceAnonymous || anonymous ? '✓ ' : ''}匿名评论</button><span id="reader-anon-hint">{forceAnonymous ? '你将以匿名楼主身份发言' : anonymous ? '本帖内使用固定代号，其他帖子重新分配' : '将显示你的昵称；可逐条选择匿名'}</span></div>
+          {allowAnonymousComments ? <div className="reader__anonymous"><button type="button" role="switch" aria-checked={forceAnonymous || anonymous} aria-describedby="reader-anon-hint" disabled={p.busy || forceAnonymous} onClick={() => setAnonymous(v => !v)}>{forceAnonymous || anonymous ? '✓ ' : ''}匿名评论</button><span id="reader-anon-hint">{forceAnonymous ? '你将以匿名楼主身份发言' : anonymous ? '本帖内使用固定代号，其他帖子重新分配' : '将显示你的昵称；可逐条选择匿名'}</span></div> : <p className="reader__anonymous">作者未允许匿名评论，将显示你的昵称和头像。</p>}
           <label className="reader__draft"><IconEdit size={18}/><textarea ref={input} rows={1} aria-label={replyTarget ? `回复 ${replyTarget.author}` : '写下你的评论'} placeholder={replyTarget ? `回复 ${replyTarget.author}…` : '写下你的评论…'} value={p.draft} onChange={e => p.onDraft(e.target.value)} /></label>
           <button type="submit" disabled={p.busy || !chars || chars > 500}>{p.busy ? '发送中' : '发送'}</button>
           {chars > 450 && <p className="reader__limit" role="status">{chars}/500{chars > 500 ? '，请缩减后发送' : ''}</p>}

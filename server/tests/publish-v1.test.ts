@@ -17,7 +17,7 @@ async function query(sql: string, values: unknown[] = []) {
   else if (sql.includes('select id, owner_user_id, scope, mime')) rows = (values[0] as string[]).map(id=>({id,owner_user_id:id===mapId ? mapOwner ?? owner : mediaOwner,scope:'public',mime:mediaMime}))
   else if (sql.includes('insert into posts')) {
     inserts++
-    const post={id:String(values[0]),author_name:'测试',author_id:owner,body:values[3],place:'图书馆',created_at:new Date(),image_mode:values[7]}
+    const post={id:String(values[0]),author_name:'测试',author_id:owner,body:values[3],place:'图书馆',created_at:new Date(),image_mode:values[7],is_anonymous:values[8],allow_anonymous_comments:values[9]}
     posts.set(String(values[6]),post);rows=[post]
   }
   return {rows}
@@ -54,6 +54,15 @@ mapOwner=owner
 const captionPost=await submit({body:'text',placeId,mediaIds:[mediaId],mapMediaId:mapId})
 assert.equal(captionPost.statusCode,201,captionPost.body)
 assert.equal(captionPost.json().mapMediaId,mapId)
+for (const allowAnonymousComments of [true, false]) {
+  const saved = await submit({ body:'评论权限', placeId, allowAnonymousComments })
+  assert.equal(saved.statusCode,201,saved.body)
+  assert.equal(saved.json().allowAnonymousComments,allowAnonymousComments)
+}
+assert.equal((await submit({body:'非法',placeId,allowAnonymousComments:'false'})).statusCode,400)
+const anonymousPolicy = await submit({body:'匿名帖',placeId,anonymous:true,allowAnonymousComments:false})
+assert.equal(anonymousPolicy.statusCode,201,anonymousPolicy.body)
+assert.equal(anonymousPolicy.json().allowAnonymousComments,true)
 await app.close()
 
 // Paid calls are not made in tests. Verify service-off, cache, ownership and pending semantics.

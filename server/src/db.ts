@@ -1,3 +1,4 @@
+import postCommentPolicySql from './migrations/044_post_comment_policy.sql'
 import { createHash } from 'node:crypto'
 import pg from 'pg'
 import projectDetailsSql from './migrations/041_project_details.sql'
@@ -198,6 +199,7 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '042_project_content_enrichment', sql: projectContentEnrichmentSql },
   { version: '042_comment_anonymous', sql: commentAnonymousSql },
   { version: '043_user_feedback', sql: userFeedbackSql },
+  { version: '044_post_comment_policy', sql: postCommentPolicySql },
   { version: '044_release_1_4_2', sql: release142Sql },
 ]
 

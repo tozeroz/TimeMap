@@ -39,6 +39,7 @@ export function PublishScreen() {
    * 不能因为"默认更安全"就悄悄替用户决定（匿名会失去署名的社交价值，也可能被滥用）。
    */
   const [anonymous, setAnonymous] = useState(false)
+  const [allowAnonymousComments, setAllowAnonymousComments] = useState(true)
   const [original, setOriginal] = useState('')
   const [rawSticker, setRawSticker] = useState('')
   const [stickerResult, setStickerResult] = useState<{ source: string; outline: boolean; dataUrl: string } | null>(null)
@@ -230,6 +231,7 @@ export function PublishScreen() {
     // 草稿没有地点时保留当前预选地点（例如从地图地点抽屉进入）
     draftId.current = d.id; setText(d.text); setOriginal(d.original); setPlaceId(prev => d.placeId || prev)
     setAnonymous(d.anonymous ?? false)
+    setAllowAnonymousComments(d.allowAnonymousComments ?? true)
     setPendingSubmission(d.pendingSubmission)
     setImageText(d.imageText ?? defaultImageText()); setTextEditorOpen(Boolean(d.imageText?.text))
     stickerRequested.current = d.stickerRequested; setSheet(null)
@@ -248,7 +250,7 @@ export function PublishScreen() {
   async function exit(save: boolean) {
     setErr('')
     try {
-      if (save) await saveDraft({ id: draftId.current, text, original, placeId, stickerRequested: stickerRequested.current, anonymous, updatedAt: Date.now(), pendingSubmission, imageText })
+      if (save) await saveDraft({ id: draftId.current, text, original, placeId, stickerRequested: stickerRequested.current, anonymous, allowAnonymousComments, updatedAt: Date.now(), pendingSubmission, imageText })
       else await deleteDraft(draftId.current)
       leave()
     } catch { setErr('草稿保存失败，编辑内容仍保留。请检查存储空间后重试。') }
@@ -260,7 +262,7 @@ export function PublishScreen() {
       const source = adopted ? sticker : original
       const id = !pendingSubmission && source ? await mediaId(hasImageText ? readyTextImage : source) : undefined
       const mapMediaId = !pendingSubmission && source && hasImageText ? await mediaId(source) : undefined
-      const submission = pendingSubmission ?? { body: text.trim(), placeId, mediaIds: id ? [id] : [], ...(mapMediaId ? { mapMediaId } : {}), imageMode: adopted ? 'sticker' as const : 'photo' as const, clientRequestId: requestId.current, anonymous }
+      const submission = pendingSubmission ?? { body: text.trim(), placeId, mediaIds: id ? [id] : [], ...(mapMediaId ? { mapMediaId } : {}), imageMode: adopted ? 'sticker' as const : 'photo' as const, clientRequestId: requestId.current, anonymous, allowAnonymousComments: anonymous || allowAnonymousComments }
       setPendingSubmission(submission)
       const r = await createPost(submission)
       if (!r.ok) {
@@ -303,10 +305,14 @@ export function PublishScreen() {
         <button type="button" className={`pub__anonRow ${anonymous ? 'is-on' : ''}`} role="switch" aria-checked={anonymous} aria-describedby="pub-anon-hint" data-pub-anon={anonymous ? '1' : '0'} disabled={locked} onClick={() => setAnonymous(v => !v)}>
           <span className="pub__anonText">
             <strong>匿名发布</strong>
-            <span id="pub-anon-hint">别人只会看到「匿名同学」和系统头像，看不到你的昵称、头像和主页。</span>
+            <span id="pub-anon-hint">每条帖子生成固定随机名称，评论时沿用。别人看不到你的真实昵称、头像和主页。</span>
           </span>
           <span className="pub__anonSwitch" aria-hidden="true"><span /></span>
         </button>
+        {!anonymous && <button type="button" className={`pub__anonRow ${allowAnonymousComments ? 'is-on' : ''}`} role="switch" aria-checked={allowAnonymousComments} aria-describedby="pub-comment-policy-hint" disabled={locked} onClick={() => setAllowAnonymousComments(v => !v)}>
+          <span className="pub__anonText"><strong>允许匿名评论</strong><span id="pub-comment-policy-hint">{allowAnonymousComments ? '评论者可以自行选择是否匿名。' : '评论者需显示昵称和头像，不能匿名。'}</span></span>
+          <span className="pub__anonSwitch" aria-hidden="true"><span /></span>
+        </button>}
       </section>
       <section className="pub__writing">
         <label className="ui-sr-only" htmlFor="pub-text">回忆正文</label>

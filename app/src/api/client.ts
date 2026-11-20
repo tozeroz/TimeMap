@@ -91,11 +91,12 @@ export interface ApiPost {
   /**
    * ⭐ 匿名发帖（2026-11-05，迁移 033）。
    *
-   * 为 true 时服务端已经把 `author` 换成「匿名同学」、`authorId` 置空
+   * 为 true 时服务端已把 `author` 换成帖内固定随机名称、`authorId` 置空
    * （**只有作者本人**从列表/详情/发布响应里还能拿到自己的 id）。
    * 前端必须据此换系统头像、并且**不提供任何作者主页跳转**——
    * 否则点一下头像就露出"匿名同学的作者是谁"。
    */
+  allowAnonymousComments?: boolean
   anonymous?: boolean
   body: string
   place: string | null
@@ -825,9 +826,10 @@ export function createPost(input: {
   clientRequestId?: string
   imageMode?: 'photo' | 'sticker'
   /**
-   * 匿名发布（2026-11-05）。true = 其他用户看到「匿名同学」+ 系统头像。
+   * 匿名发布（2026-11-05）。true = 其他用户看到帖内固定随机名称 + 系统头像。
    * 服务端只接受布尔；缺省 = 实名（历史行为）。
    */
+  allowAnonymousComments?: boolean
   anonymous?: boolean
 }): Promise<ApiResult<ApiPost>> {
   return request<ApiPost>('/api/posts', { method: 'POST', body: input })
@@ -1143,6 +1145,7 @@ export interface ApiAdminPost {
   id: string
   author: string
   /** 匿名发布（033）：管理端仍能看到真实作者，这里标明「用户侧显示为匿名」 */
+  allowAnonymousComments?: boolean
   anonymous?: boolean
   body: string
   place: string | null
@@ -1491,8 +1494,8 @@ export const ANONYMOUS_AVATAR: string = (() => {
 })()
 
 /** Comment avatars depend only on the public alias within the post. */
-export function commentAvatar(comment: Pick<ApiComment, 'anonymous' | 'author'>): string {
-  if (!comment.anonymous) return avatarFor(comment.author)
+export function commentAvatar(comment: Pick<ApiComment, 'anonymous' | 'author' | 'authorAvatarMediaId'>): string {
+  if (!comment.anonymous) return comment.authorAvatarMediaId ? mediaUrl(comment.authorAvatarMediaId) : avatarFor(comment.author)
   const hue = hashHue(comment.author)
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="40" fill="hsl(${hue},40%,88%)"/><g fill="hsl(${hue},35%,42%)"><circle cx="40" cy="30" r="13"/><path d="M16 72c0-32 48-32 48 0z"/></g></svg>`
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
@@ -1528,8 +1531,8 @@ export function toFeedPost(p: ApiPost): FeedPost {
     //
     // 匿名帖：id 用 `anon:` 前缀 —— 即使服务端给作者本人回了真实 authorId，
     // 这里也**不能**把它带进渲染模型，否则"点作者进主页"这类交互又能定位到人。
-    id: anonymous ? 'anon:' : p.authorId ? `u:${p.authorId}` : `api:${p.author}`,
-    name: anonymous ? ANONYMOUS_DISPLAY_NAME : p.author,
+    id: anonymous ? `anon:${p.id}` : p.authorId ? `u:${p.authorId}` : `api:${p.author}`,
+    name: p.author,
     avatar: postAvatar(p),
   }
   return {
@@ -1570,6 +1573,7 @@ export interface ApiComment {
   body: string
   authorId: string | null
   author: string
+  authorAvatarMediaId?: string | null
   anonymous?: boolean
   isMine?: boolean
   isPostAuthor?: boolean
@@ -1588,7 +1592,8 @@ export interface ApiPostDetail {
   id: string
   author: string
   authorId: string | null
-  /** 匿名发帖（033）：true 时 author 恒为「匿名同学」、authorId 对非作者为 null */
+  /** 匿名发帖（033）：true 时 author 为帖内固定随机名称、authorId 对非作者为 null */
+  allowAnonymousComments?: boolean
   anonymous?: boolean
   body: string
   place: string | null
@@ -1618,6 +1623,10 @@ export interface ApiPostDetail {
 }
 
 /** 帖子详情。404 会返回 ok:false + status 404，调用方可据此显示"已删除" */
+export function getPlaceFirstBrowse(id: string): Promise<ApiResult<{ ids: string[] }>> {
+  return request<{ ids: string[] }>(`/api/posts/${encodeURIComponent(id)}/browse`)
+}
+
 export async function getPost(id: string): Promise<ApiResult<ApiPostDetail>> {
   const r = await request<ApiPostDetail>(`/api/posts/${encodeURIComponent(id)}`)
   if (r.ok) writeSnapshot(`post:${id}`, r.value)
@@ -1773,6 +1782,7 @@ export interface ApiPlacePost {
   author: string
   authorId: string | null
   /** 匿名发帖（033）：地点页的帖子列表同样要标注 */
+  allowAnonymousComments?: boolean
   anonymous?: boolean
   body: string
   /** ⭐ P0：地点权威 id（地点详情里的帖子必然有值 —— 它们就是按 place_id 查出来的） */

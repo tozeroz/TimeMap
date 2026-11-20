@@ -2,11 +2,12 @@ import { useEffect } from 'react'
 import { buildHash, navigate } from '../router'
 
 /** A frozen source order, scoped to the currently opened browsing session. */
-export const feedBrowse: { ids: string[]; drafts: Record<string, string>; images: Record<string, number>; source: string; switched: boolean; token: string; scroll: number; campus?: { sort: 'hot' | 'latest'; placeIds: string[] } } = {
+export const feedBrowse: { ids: string[]; drafts: Record<string, string>; images: Record<string, number>; source: string; switched: boolean; token: string; scroll: number; placeFirst?: boolean; campus?: { sort: 'hot' | 'latest'; placeIds: string[] } } = {
   ids: [], drafts: {}, images: {}, source: '', switched: false, token: '', scroll: 0,
 }
-export function openFeed(id: string, ids: string[]) {
-  feedBrowse.ids = [...new Set(ids)]
+export function openFeed(id: string, ids: string[], placeFirst = false) {
+  feedBrowse.placeFirst = placeFirst
+  feedBrowse.ids = [...new Set(placeFirst ? [id, ...ids] : ids)]
   feedBrowse.drafts = {}
   feedBrowse.images = {}
   feedBrowse.switched = false
