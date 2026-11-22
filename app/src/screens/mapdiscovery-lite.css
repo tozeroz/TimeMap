@@ -1,4 +1,5 @@
 /* The existing map styles and provider/marker configuration remain the visual baseline. */
+.md-storyTag { display:inline-block;margin-top:5px;padding:3px 7px;border-radius:12px;background:var(--c-bg);color:var(--c-text);font-size:11px; }
 .map-page.map-discovery-lite {
   --md-paper:var(--c-bg);
   --md-ink:var(--c-text);

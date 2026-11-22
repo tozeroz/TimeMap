@@ -33,8 +33,9 @@ try{
     else if(u.pathname==='/api/map/discover'){
       calls.push(Object.fromEntries(u.searchParams))
       if(fail)return route.fulfill({status:503,json:{error:'not_ready'}})
-      const items=u.searchParams.get('filter')==='recent'?posts.slice(0,3):posts
-      data={asOf:new Date().toISOString(),total:items.length,items,places:places.map(p=>({...p,updatedAt:posts[0].createdAt,coverMediaId:'cover'})),placesTruncated:false,nextCursor:null}
+      const filter=u.searchParams.get('filter')
+      const items=filter==='recent'?posts.slice(0,3):filter==='stories'?[posts[1]]:filter==='checkins'?[posts[0],posts[2]]:posts
+      data={asOf:new Date().toISOString(),total:filter==='checkins'?1:items.length,totalKind:filter==='checkins'?'places':undefined,items,places:places.map(p=>({...p,updatedAt:posts[0].createdAt,coverMediaId:'cover'})),placesTruncated:false,nextCursor:null}
     }
     await route.fulfill({json:data})
   })
@@ -47,6 +48,8 @@ try{
   assert.equal(await nearbyPaper.locator('p').textContent(),posts[1].body)
   const paperStyle=await nearbyPaper.evaluate(el=>({background:getComputedStyle(el).backgroundColor,texture:getComputedStyle(el).backgroundImage,font:getComputedStyle(el.querySelector('p')).fontFamily}))
   assert.equal(await page.locator(`[data-discovery-post="${posts[1].id}"] .md-placeholder`).count(),0)
+  assert.equal(await page.locator('.md-locationCard').count(),0,'default nearby records retain post cards')
+  assert.equal(await page.locator('.md-card').count(),4)
   const host=page.locator('.realmaps[data-map-instance]');await host.waitFor()
   const originalInstance=await host.getAttribute('data-map-instance')
   const originalMarkers=await page.locator('[data-marker-phase="ready"]').getAttribute('data-marker-place-ids')
@@ -60,12 +63,27 @@ try{
   mkdirSync('docs/ui/assets',{recursive:true})
   await page.screenshot({path:'docs/ui/assets/map-discovery-lite-open-390.png'})
   await page.getByRole('button',{name:'拍照打卡',exact:true}).click()
-  await page.getByText('拍照打卡地正在整理中',{exact:true}).waitFor()
-  assert.equal(await page.locator('.md-card').count(),0,'do not label ordinary photos as curated check-ins')
+  await page.locator('.md-locationCard').waitFor()
+  assert.equal(await page.locator('.md-locationCard').count(),1)
+  assert.equal(await page.locator('.md-locationKind').textContent(),'拍照打卡地')
+  assert.equal(calls.at(-1).filter,'checkins')
+  await page.getByRole('button',{name:'银杏大道下一项',exact:true}).click()
+  await page.waitForFunction(()=>document.querySelector('.md-locationPaging span')?.textContent==='2 / 2')
+  assert.equal(await page.locator('.md-locationSlide').count(),2)
+  await page.getByRole('button',{name:'展开内容面板',exact:true}).click()
+  await page.locator('.md-list').evaluate(el=>{el.scrollTop=0})
+  await page.screenshot({path:'docs/ui/assets/map-checkins-connected-390.png'})
   await page.getByRole('button',{name:'校园故事',exact:true}).click()
-  await page.getByText('校园故事正在整理中',{exact:true}).waitFor()
+  await page.locator('.md-storyTag').waitFor()
+  assert.equal(await page.locator('.md-card').count(),1,'stories reuse post cards')
+  assert.equal(await page.locator('.md-locationCard').count(),0)
+  assert.equal(calls.at(-1).filter,'stories')
+  await page.locator('.md-card .square-card__paper').waitFor({state:'attached'})
+  await page.getByRole('button',{name:'展开内容面板',exact:true}).click()
+  await page.screenshot({path:'docs/ui/assets/map-stories-connected-390.png'})
   await page.getByRole('button',{name:'最近更新',exact:true}).click()
   await page.locator('[data-discovery-phase="ready"]').waitFor()
+  assert.equal(await page.locator('.md-locationCard').count(),0,'recent updates must not use place cards')
   assert.equal(await page.locator('.md-card').count(),3)
   assert.equal(calls.at(-1).filter,'recent')
   assert.equal(await host.getAttribute('data-map-instance'),originalInstance,'content filters must not rebuild the map')
@@ -101,6 +119,44 @@ try{
   await squarePaper.waitFor({state:'attached'})
   assert.equal(await squarePaper.locator('p').textContent(),posts[1].body)
   assert.deepEqual(await squarePaper.evaluate(el=>({background:getComputedStyle(el).backgroundColor,texture:getComputedStyle(el).backgroundImage,font:getComputedStyle(el.querySelector('p')).fontFamily})),paperStyle,'same post must share paper color, texture, font and text in nearby and square')
+  // Management fixtures exercise the actual admin forms without writing real user data.
+  await page.evaluate(()=>localStorage.setItem('campus.demo.session.v1',JSON.stringify({token:'curation-test',expiresAt:'2099-01-01',user:{id:'aaaaaaaa-aaaa-4aaa-8aaa-000000000099',role:'admin'}})))
+  let storySet=false,checkinSaved
+  const adminCalls=[]
+  await page.route('**/api/admin/**',async route=>{
+    const url=new URL(route.request().url()),path=url.pathname;adminCalls.push(Object.fromEntries(url.searchParams))
+    let json={items:[]}
+    if(path==='/api/admin/places')json={items:places}
+    else if(path==='/api/admin/curation/posts')json={items:[{...posts[0],campusStory:storySet,status:'published'}],nextCursor:null}
+    else if(path.endsWith('/story')){storySet=route.request().postDataJSON().enabled;json={ok:true}}
+    else if(path==='/api/admin/curation/places')json={items:[{...places[0],active:checkinSaved?.active??false,validPhotos:checkinSaved?.photos.length??0,version:checkinSaved?1:0}],nextCursor:null}
+    else if(path===`/api/admin/curation/places/${places[0].id}`){
+      if(route.request().method()==='PUT'){checkinSaved=route.request().postDataJSON();json={ok:true,version:1}}
+      else json={id:places[0].id,name:places[0].name,version:0,active:false,description:'',photos:[]}
+    }
+    await route.fulfill({json})
+  })
+  await page.goto(`${origin}/#/admin?panel=posts`)
+  await page.reload() // Reload the module session cache after installing the fixture account.
+  await page.getByRole('button',{name:'设为校园故事',exact:true}).click()
+  await page.getByRole('button',{name:'取消校园故事',exact:true}).waitFor()
+  assert.equal(storySet,true)
+  await page.screenshot({path:'docs/ui/assets/admin-stories-connected-390.png'})
+  await page.getByLabel('故事分类').selectOption('yes')
+  await page.waitForTimeout(300)
+  assert(adminCalls.some(q=>q.story==='yes'))
+  await page.getByRole('button',{name:'地点管理',exact:true}).click()
+  await page.getByRole('button',{name:'拍照打卡维护',exact:true}).click()
+  await page.getByRole('button',{name:'设置拍照打卡',exact:true}).click()
+  const dialog=page.getByRole('dialog')
+  await dialog.getByRole('button',{name:'选择林同学的照片',exact:true}).click()
+  await dialog.getByLabel('推荐状态').selectOption('active')
+  await dialog.getByLabel('推荐说明（选填）').fill('沿步道观赏银杏')
+  await page.screenshot({path:'docs/ui/assets/admin-checkin-editor-390.png'})
+  await dialog.getByRole('button',{name:'保存打卡设置',exact:true}).click()
+  await dialog.waitFor({state:'detached'})
+  assert.equal(checkinSaved.active,true);assert.equal(checkinSaved.photos[0].postId,posts[0].id);assert.equal(checkinSaved.photos[0].mediaId,'cover')
+  assert(await page.locator('.screen__body').evaluate(el=>el.scrollWidth<=el.clientWidth+1),'admin forms fit mobile width')
   assert.deepEqual(errors,[])
-  console.log('PASS lite map: retained landmark filter/card styling/marker IDs/map instance; new chips, honest curated placeholders, recent filter, close/reopen/drag-close, category overlay, retry and responsive screenshots')
+  console.log('PASS curation UI: admin story filters/toggle, check-in photo selection/save; story post cards, check-in place cards, default/recent unchanged, text covers, retained map markers, panel controls, retry and responsive screenshots')
 }catch(error){await page?.screenshot({path:'.local/map-discovery-lite-failure.png'}).catch(()=>{});throw error}finally{await browser?.close();dev.kill()}

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import type { Db } from './db.ts'
 import type { PostRow } from './mapRoutes.ts'
 import { parseCategoryFilter } from './placeCategories.ts'
+import { checkinDiscovery } from './checkinDiscovery.ts'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function registerMapDiscovery(app: FastifyInstance, db: Db, tree: string, select: string, serialize: (row: PostRow, me: string | null) => unknown) {
@@ -17,14 +18,20 @@ export function registerMapDiscovery(app: FastifyInstance, db: Db, tree: string,
     if (categories === 'invalid') return reply.code(400).send({ error:'bad_category' })
     // Only canonical, validated category values enter this SQL fragment.
     const categorySql = categories?.length ? `pl.category in (${categories.map(c=>`'${c.replaceAll("'","''")}'`).join(',')})` : 'true'
-    if (!['all','photos','recent'].includes(filter) || !['latest','hot'].includes(sort) || keyword.length > 100 ||
+    if (!['all','photos','recent','stories','checkins'].includes(filter) || !['latest','hot'].includes(sort) || keyword.length > 100 ||
       !Number.isInteger(limit) || limit < 1 || limit > 50 ||
       q.placeId && !UUID.test(q.placeId) || bounds && (bounds.length !== 4 || bounds.some(v => !Number.isFinite(v)) || bounds[0]! < -90 || bounds[2]! > 90 || bounds[1]! < -180 || bounds[3]! > 180 || bounds[0]! >= bounds[2]! || bounds[1]! >= bounds[3]!) ||
       near && (near.length !== 3 || near.some(v => !Number.isFinite(v)) || Math.abs(near[0]!) > 90 || Math.abs(near[1]!) > 180 || near[2]! < 100 || near[2]! > 50000) || bounds && near) {
       return reply.code(400).send({ error: 'invalid_query' })
     }
-    const key = JSON.stringify(['heat-v2',filter,sort,keyword,q.bounds||'',q.near||'',q.placeId||'',q.schoolId||'',q.category||''])
     if (q.schoolId && !UUID.test(q.schoolId)) return reply.code(400).send({ error: 'invalid_query' })
+    if(filter==='checkins') {
+      try {
+        const result=await checkinDiscovery(db,q,limit,bounds,near,categorySql,select,serialize)
+        return result||reply.code(400).send({error:'invalid_cursor'})
+      }catch(error){req.log.error({err:error},'Check-in discovery failed');return reply.code(db.noteFailure(error)==='transient'?503:500).send({error:'discovery_failed'})}
+    }
+    const key = JSON.stringify(['heat-v2',filter,sort,keyword,q.bounds||'',q.near||'',q.placeId||'',q.schoolId||'',q.category||''])
     let cursor: { key: string; asOf: string; time: string; id: string; score: number; fresh: number } | null = null
     if (q.cursor) {
       try {
@@ -42,7 +49,8 @@ export function registerMapDiscovery(app: FastifyInstance, db: Db, tree: string,
         case when p.created_at >= $1::timestamptz - interval '30 days' then 1 else 0 end as fresh
       from posts p join places pl on pl.id=p.place_id
       where p.status='published' and pl.enabled and ${categorySql} and p.created_at <= $1::timestamptz
-        ${sort==='hot'?"and p.created_at >= $1::timestamptz - interval '7 days'":''}
+        ${sort==='hot'&&filter!=='stories'?"and p.created_at >= $1::timestamptz - interval '7 days'":''}
+        ${filter==='stories'?"and exists(select 1 from post_story_labels sl where sl.post_id=p.id and sl.enabled)":''}
         and ($2<>'recent' or p.created_at >= $1::timestamptz - interval '7 days')
         and ($2<>'photos' or exists(select 1 from post_media pm join media m on m.id=pm.media_id
           where pm.post_id=p.id and pm.purpose='post' and m.scope='public' and m.mime like 'image/%'))
@@ -86,7 +94,7 @@ export function registerMapDiscovery(app: FastifyInstance, db: Db, tree: string,
       const total = await db.pool.query(`${cte} select count(*)::int as total from matched`,args)
       const items = rows.rows.slice(0,limit), last = items.at(-1)
       const nextCursor = rows.rows.length>limit && last ? Buffer.from(JSON.stringify({key,asOf,time:last.cursor_time,id:last.id,score:Number(last.hot_score),fresh:last.fresh})).toString('base64url') : null
-      return { asOf,total:total.rows[0]?.total||0,items:items.map(p=>serialize(p,null)),nextCursor,
+      return { asOf,total:total.rows[0]?.total||0,items:items.map(p=>({...serialize(p,null) as object,...(filter==='stories'?{campusStory:true}:{})})),nextCursor,
         placesTruncated:places.rows.length>500,places:places.rows.slice(0,500).map(p=>({id:p.id,name:p.name,address:p.address,
           latitude:Number(p.latitude),longitude:Number(p.longitude),category:p.category,enabled:p.enabled,
           description:p.description,postCount:p.post_count,updatedAt:p.updated_at ? new Date(p.updated_at).toISOString():null,

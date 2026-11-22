@@ -9,6 +9,7 @@ import { focusInVisibleArea } from '../native/mapFocus'
 import { openFeed } from '../data/feedBrowse'
 import './mapdiscovery.css'
 import {PostTextCover} from '../components/PostTextCover'
+import { MapPlaceCards } from './MapPlaceCards'
 
 type Scope = { bounds?:string; near?:string; label:string }
 type Detent = 'closed'|'collapsed'|'half'|'expanded'
@@ -42,14 +43,12 @@ export function useMapDiscovery(options:{fix:GeoFix|null;stage:RefObject<HTMLDiv
   useLayoutEffect(()=>{onData.current=options.onData},[options.onData])
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;generation.current++}},[])
   const effectiveSchoolId=options.schoolId||saved.schoolId
-  const pendingCurated=filter==='checkins'||filter==='stories'
-  const apiFilter:DiscoveryFilter=pendingCurated?'all':filter as DiscoveryFilter
+  const apiFilter:DiscoveryFilter=filter
   const query=useMemo<DiscoveryQuery>(()=>({filter:apiFilter,sort,bounds:scope.bounds,near:scope.near,placeId:selected?.id,schoolId:effectiveSchoolId,category:options.category}),[apiFilter,sort,scope,selected?.id,effectiveSchoolId,options.category])
   const queryKey=JSON.stringify({...query,view:filter})
   useEffect(()=>{
     const current=++generation.current
     setPhase('loading');setMorePhase('idle')
-    if(pendingCurated){setData(null);setSettledKey(queryKey);setPhase('ready');return}
     void getMapDiscovery(query).then(async r=>{
       if(!alive.current||current!==generation.current)return
       if(!r.ok){setSettledKey(queryKey);setPhase('error');onError.current();return}
@@ -59,7 +58,7 @@ export function useMapDiscovery(options:{fix:GeoFix|null;stage:RefObject<HTMLDiv
         const next=await getMapDiscovery(query,value.nextCursor)
         if(!alive.current||current!==generation.current)return
         if(!next.ok){setMorePhase('error');break}
-        value={...next.value,items:[...value.items,...next.value.items.filter(p=>!value.items.some(old=>old.id===p.id))]}
+        value={...next.value,places:[...value.places,...next.value.places.filter(p=>!value.places.some(old=>old.id===p.id))],items:[...value.items,...next.value.items.filter(p=>!value.items.some(old=>old.id===p.id))]}
       }
       setData(value);setSettledKey(queryKey);setPhase('ready')
       if(!query.placeId){onData.current(value);mapLoaded.current=true}
@@ -68,7 +67,7 @@ export function useMapDiscovery(options:{fix:GeoFix|null;stage:RefObject<HTMLDiv
         if(alive.current&&current===generation.current&&base.ok){onData.current(base.value);mapLoaded.current=true}
       }
     })
-  },[query,queryKey,pendingCurated,reload,options.reloadKey])
+  },[query,queryKey,reload,options.reloadKey])
   useLayoutEffect(()=>{if(phase==='ready'&&list.current){list.current.scrollTop=restore.current;restore.current=0}},[phase])
   useLayoutEffect(()=>{loadedCount.current=data?.items.length||0},[data])
   useEffect(()=>{
@@ -154,12 +153,12 @@ export function useMapDiscovery(options:{fix:GeoFix|null;stage:RefObject<HTMLDiv
     const r=await getMapDiscovery(query,data.nextCursor)
     if(!alive.current||current!==generation.current)return
     if(!r.ok){setMorePhase('error');return}
-    setData(prev=>prev?{...r.value,items:[...prev.items,...r.value.items.filter(p=>!prev.items.some(old=>old.id===p.id))]}:r.value);setMorePhase('idle')
+    setData(prev=>prev?{...r.value,places:[...prev.places,...r.value.places.filter(p=>!prev.places.some(old=>old.id===p.id))],items:[...prev.items,...r.value.items.filter(p=>!prev.items.some(old=>old.id===p.id))]}:r.value);setMorePhase('idle')
   }
   function openPost(post:ApiPost,posts:ApiPost[]=data?.items||[]){persist();openFeed(post.id,posts.map(p=>p.id))}
   function selectSearchPlace(place:ApiPlaceListItem){selectPlace({...place,description:null,updatedAt:null,coverMediaId:null})}
   return {filter,changeFilter,sort,changeSort,scope,selected,selectPlace,selectSearchPlace,backToRange,detent,setDetent,panelHeight,
-    data,pendingCurated,phase:settledKey===queryKey?phase:'loading',retry:()=>setReload(n=>n+1),morePhase,more,keyword,setKeyword,search,list,scroll,moved,searchArea,useNearby,allSchool,openPost,persist,fix:options.fix}
+    data,phase:settledKey===queryKey?phase:'loading',retry:()=>setReload(n=>n+1),morePhase,more,keyword,setKeyword,search,list,scroll,moved,searchArea,useNearby,allSchool,openPost,persist,fix:options.fix}
 }
 export type MapDiscoveryState=ReturnType<typeof useMapDiscovery>
 
@@ -209,22 +208,23 @@ export function DiscoveryOverlay({state:d,onDetail,hidden,closable=false}:{state
         {!closable&&d.detent!=='collapsed'&&<button className="md-minimize" aria-label="最小化内容面板" onClick={()=>d.setDetent('collapsed')}>收起</button>}
         <span/>{closable?<><button className="md-minimize" aria-label={d.detent==='expanded'?'收起内容面板':'展开内容面板'} onClick={()=>d.setDetent(d.detent==='expanded'?'half':'expanded')}><IconChevronDown size={16}/></button><button aria-label="关闭内容面板" onClick={()=>d.setDetent('closed')}><IconClose size={18}/></button></>:<button aria-label={d.detent==='expanded'?'收起内容面板':'展开内容面板'} onClick={()=>d.setDetent(d.detent==='expanded'?'half':d.detent==='half'?'expanded':'half')}><IconChevronDown size={16}/></button>}
       </div>
-      <div className="md-sheetHead"><nav aria-label="地图内容排序"><button aria-pressed={d.sort==='latest'} onClick={()=>d.changeSort('latest')}>附近新动态</button><button aria-pressed={d.sort==='hot'} onClick={()=>d.changeSort('hot')}>附近热门</button></nav><span title={d.scope.label}><IconLocation size={13}/>{d.scope.label}</span></div>
-      {d.sort==='hot'&&!d.pendingCurated&&<p className="md-sortNote">近 7 天 · 按点赞、评论、收藏热度排序</p>}
+      <div className="md-sheetHead">{d.filter==='checkins'?<strong>拍照打卡地</strong>:<nav aria-label="地图内容排序"><button aria-pressed={d.sort==='latest'} onClick={()=>d.changeSort('latest')}>{d.filter==='stories'?'最新故事':'附近新动态'}</button><button aria-pressed={d.sort==='hot'} onClick={()=>d.changeSort('hot')}>{d.filter==='stories'?'热门故事':'附近热门'}</button></nav>}<span title={d.scope.label}><IconLocation size={13}/>{d.scope.label}</span></div>
+      {d.filter==='checkins'?<p className="md-sortNote">按地点整理 · 精选用户照片</p>:d.filter==='stories'?<p className="md-sortNote">校园故事 · 同学们的校园记忆{d.sort==='hot'?' · 按互动热度排序':''}</p>:d.sort==='hot'&&<p className="md-sortNote">近 7 天 · 按点赞、评论、收藏热度排序</p>}
       {d.selected&&<div className="md-selection"><strong>{d.selected.name}</strong><button onClick={d.backToRange}>返回当前范围</button></div>}
-      <div className="md-list" ref={d.list} onScroll={e=>{d.scroll.current=e.currentTarget.scrollTop}}
+      <div className={`md-list${closable && d.filter === 'checkins' ? ' md-list--places' : ''}`} ref={d.list} onScroll={e=>{d.scroll.current=e.currentTarget.scrollTop}}
         onTouchStart={e=>{listTouch.current=e.currentTarget.scrollTop<=0?e.touches[0]?.clientY??null:null}}
         onTouchMove={e=>{if(listTouch.current!==null&&e.touches[0]&&e.touches[0].clientY-listTouch.current>32&&e.currentTarget.scrollTop<=0&&(closable||d.detent==='expanded')){d.setDetent(closable?'closed':'half');listTouch.current=null}}}
         onTouchEnd={()=>{listTouch.current=null}}>
         {d.phase==='loading'?<div className="md-skeleton" role="status" aria-label="正在加载附近内容"><div/><div/></div>:d.phase==='error'?<div className="md-state"><p>内容加载失败，地图仍可浏览</p><button onClick={d.retry}>重试</button></div>:<>
-          {!d.data?.items.length&&<div className="md-state"><p>{d.pendingCurated?(d.filter==='stories'?'校园故事正在整理中':'拍照打卡地正在整理中'):d.selected?'这个地点暂无符合筛选的记录':'当前范围暂无符合筛选的记录'}</p><button onClick={()=>d.changeFilter('all')}>查看附近记录</button>{!d.pendingCurated&&<button onClick={d.allSchool}>查看全校</button>}</div>}
-          {d.data?.items.map(p=><article className="md-card" key={p.id} data-discovery-post={p.id}>
+          {!d.data?.items.length&&<div className="md-state"><p>{d.filter==='stories'?'当前范围暂无校园故事':d.filter==='checkins'?'当前范围暂无拍照打卡地':d.selected?'这个地点暂无符合筛选的记录':'当前范围暂无符合筛选的记录'}</p><button onClick={()=>d.changeFilter('all')}>查看附近记录</button><button onClick={d.allSchool}>查看全校</button></div>}
+          {closable && d.filter === 'checkins' ? <MapPlaceCards curated posts={d.data?.items || []} places={d.data?.places || []} fix={d.fix} onPlace={onDetail} onPost={d.openPost}/> : d.data?.items.map(p=><article className="md-card" key={p.id} data-discovery-post={p.id}>
             <button className="md-cardOpen" onClick={()=>d.openPost(p)}>{p.images?.length?<Preview key={p.images[0].id} id={p.images[0].id} name="校园记录"/>:<PostTextCover id={p.id} text={p.body} compact/>}<span className="md-cardBody"><strong>{p.body.split('\n').find(s=>s.trim())?.slice(0,50)||'校园记录'}</strong><span className="md-cardTag">{p.images?.length?'图文记录':'校园记录'}</span></span></button>
+            {d.filter==='stories'&&<span className="md-storyTag">校园故事</span>}
             <button className="md-cardPlace" onClick={()=>{const place=d.data?.places.find(pl=>pl.id===p.placeId);if(place)d.selectPlace(place)}}><IconLocation size={13}/>{p.place||'校园地点'}{d.fix&&p.placeLat!=null&&p.placeLng!=null?` · 距你 ${formatDistance(distanceMeters(d.fix.lat,d.fix.lng,p.placeLat,p.placeLng))}`:''}</button>
             <div className="md-cardMeta"><img src={postAvatar(p)} alt=""/><span>{p.author}</span><time>{relativeTime(p.createdAt)}</time><span className="md-cardLikes" aria-label={`${p.likeCount||0}个赞`}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 21S2 15 2 8a5 5 0 0 1 10-2 5 5 0 0 1 10 2c0 7-10 13-10 13Z"/></svg>{p.likeCount||0}</span></div>
           </article>)}
           {d.data?.nextCursor&&<button className="md-more" disabled={d.morePhase==='loading'} onClick={()=>void d.more()}>{d.morePhase==='loading'?'加载中…':d.morePhase==='error'?'加载更多失败，点击重试':'加载更多记录'}</button>}
-          {d.data&&d.data.items.length>0&&!d.data.nextCursor&&<p className="md-end">已看完当前范围的 {d.data.total} 条记录</p>}
+          {d.data&&d.data.items.length>0&&!d.data.nextCursor&&<p className="md-end">已看完当前范围的 {d.data.total} {d.data.totalKind==='places'?'个打卡地':'条记录'}</p>}
           {d.data?.placesTruncated&&<p className="md-end">地点较多，请放大地图查看</p>}
         </>}
       </div>

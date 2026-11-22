@@ -30,6 +30,7 @@ import { registerProfileRoutes } from './profileRoutes.ts'
 import { registerSubmissionRoutes } from './submissionsRoutes.ts'
 import { registerFeedbackRoutes } from './feedbackRoutes.ts'
 import { registerInboxRoutes } from './inboxRoutes.ts'
+import { registerCurationRoutes } from './curationRoutes.ts'
 import { registerProjectRoutes } from './projectRoutes.ts'
 import { publicAuthor } from './anonymous.ts'
 import { publicCommentIdentity, type CommentIdentitySource } from './commentIdentity.ts'
@@ -3606,6 +3607,7 @@ export function buildServer(deps: ServerDeps) {
   // 043：用户反馈（bug / 功能建议）。写=登录用户，读与管理=管理员。
   registerFeedbackRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   registerInboxRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
+  registerCurationRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   registerDirectMessageRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   registerProjectRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   registerMapRoutes(app, db)

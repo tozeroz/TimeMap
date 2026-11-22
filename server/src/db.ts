@@ -1,3 +1,4 @@
+import mapCurationSql from './migrations/047_map_curation.sql'
 import directMessagesSql from './migrations/046_direct_messages.sql'
 import inboxSql from './migrations/045_inbox.sql'
 import postCommentPolicySql from './migrations/044_post_comment_policy.sql'
@@ -205,6 +206,7 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '044_release_1_4_2', sql: release142Sql },
   { version: '045_inbox', sql: inboxSql },
   { version: '046_direct_messages', sql: directMessagesSql },
+  { version: '047_map_curation', sql: mapCurationSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */
