@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useForegroundPoll } from '../data/useForegroundPoll'
 import {
   fetchMediaBlobUrl,
   getThread,
-  getThreadMessages,
+  getMessagePage,
+  readThreadThrough,
+  setUserBlocked,
+  mediaUrl,
+  avatarFor,
+  type ApiUserIdentity,
   postThreadImageMessage,
   postThreadTextMessage,
   postThreadVoiceMessage,
@@ -201,7 +207,7 @@ function VoiceMessage({
  * M5 WO#2 追加：**发图**。发图是两步（上传 → 发消息），两条链路都可能独立失败，
  * 所以这里的状态机按"哪一步"分开报错，不合并成一句模糊的「网络错误」。
  */
-export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: 'direct' | 'group' }) {
+function ChatSession({ id, variant = 'direct' }: { id: string; variant?: 'direct' | 'group' }) {
   const [messages, setMessages] = useState<ApiMessage[]>([])
   /**
    * 状态机（M5 WO#8 扩展了两个**不触网**的状态）。
@@ -215,7 +221,9 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
    */
   const [state, setState] = useState<'loading' | 'ready' | 'error' | 'missing' | 'invalid'>('loading')
   const [err, setErr] = useState('')
-  const [draft, setDraft] = useState('')
+  const draftKey = `timemap.dm-draft.${getSession()?.user.id ?? 'guest'}.${id}`
+  const [draft, setDraft] = useState(() => { try { return sessionStorage.getItem(draftKey) ?? '' } catch { return '' } })
+  useEffect(() => { try { if (draft) sessionStorage.setItem(draftKey,draft); else sessionStorage.removeItem(draftKey) } catch {} }, [draft,draftKey])
 
   /**
    * 当前用户 id —— 判断「这条消息是不是我发的」（M5：自己发的消息必须靠右）。
@@ -236,6 +244,30 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
   const [busy, setBusy] = useState<'' | 'uploading' | 'posting'>('')
   /** 发送失败的原因（**必须显示出来**：图没发出去却看起来正常，比报错糟得多） */
   const [sendErr, setSendErr] = useState('')
+  const textAttempt = useRef<{signature:string;key:string} | null>((() => {
+    try { return JSON.parse(sessionStorage.getItem(draftKey+'.attempt')??'null') } catch { return null }
+  })())
+  const [pendingMedia, setPendingMedia] = useState<{mediaId:string;kind:'image'|'voice';key:string}|null>(()=>{try{return JSON.parse(sessionStorage.getItem(draftKey+'.media')??'null')}catch{return null}})
+  useEffect(()=>{try{if(pendingMedia)sessionStorage.setItem(draftKey+'.media',JSON.stringify(pendingMedia));else sessionStorage.removeItem(draftKey+'.media')}catch{}},[pendingMedia,draftKey])
+  const [peer, setPeer] = useState<ApiUserIdentity|null>(null)
+  const [blockedByMe, setBlockedByMe] = useState(false)
+  const [blockConfirm, setBlockConfirm] = useState(false)
+  const [blockBusy, setBlockBusy] = useState(false)
+  const [olderCursor,setOlderCursor] = useState<string|null>(null)
+  const [olderBusy,setOlderBusy] = useState(false)
+  const [newNotice,setNewNotice] = useState(false)
+  const messagesRef = useRef<ApiMessage[]>([])
+  const listRef = useRef<HTMLDivElement>(null)
+  const pendingScroll = useRef<{height:number;top:number}|'bottom'|null>(null)
+  const pageLock = useRef(false)
+  const originalToken = useRef(getSession()?.token)
+  const scrollBody = () => listRef.current?.closest<HTMLElement>('.screen__body--scroll') ?? null
+  useLayoutEffect(() => {
+    const body=scrollBody(), pending=pendingScroll.current
+    if(body && pending) body.scrollTop=pending==='bottom'?body.scrollHeight:pending.top+body.scrollHeight-pending.height
+    pendingScroll.current=null
+  },[messages])
+  const accountAlive = () => mounted.current && getSession()?.token===originalToken.current
   const fileRef = useRef<HTMLInputElement | null>(null)
 
   // 组件是否还挂着：异步回来时不要往已卸载的组件里写 state
@@ -261,7 +293,7 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
     title: string | null
     memberCount: number
     kind: string
-    members: Array<{ id: string; displayName: string }>
+    members: Array<{ id: string; displayName: string; avatarMediaId?: string | null }>
   } | null>(null)
   /**
    * 会话元数据的加载状态（M5 WO#9B 层 A 的 closeout：空态/失败态）。
@@ -305,8 +337,10 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
     if (shape !== 'uuid') return // 形状不合法时**不发请求**（与 loadMessages 同一道防线）
     setMetaState('loading')
     const r = await getThread(id)
-    if (!mounted.current) return
+    if (!accountAlive()) return
     if (r.ok) {
+      setPeer(r.value.peer ?? null)
+      setBlockedByMe(r.value.blockedByMe === true)
       setMeta({
         title: r.value.title,
         memberCount: r.value.memberCount,
@@ -328,7 +362,6 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
   }
 
   useEffect(() => {
-    if (variant !== 'group') return
     void loadMeta()
   }, [variant, loadMeta])
 
@@ -342,33 +375,77 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
    *   服务端那边对非法 UUID 也会拒（`invalid` → 400），两边各拦一次不是重复：
    *   前端拦的是"**根本不该发出去的请求**"，服务端拦的是"**任何来源的非法输入**"。
    */
-  const loadMessages = useCallback(async () => {
-    const shape = classifyThreadId(id)
-    if (shape !== 'uuid') {
-      // 不触网：明确区分"没给 id"与"给了非法 id"
-      if (!mounted.current) return
-      setMessages([])
-      setErr(shape === 'missing' ? '未指定会话' : '无效会话')
-      setState(shape === 'missing' ? 'missing' : 'invalid')
-      return
+  async function syncMessages(mode:'initial'|'new'|'older'='new') {
+    if (classifyThreadId(id)!=='uuid') {
+      setState(classifyThreadId(id)==='missing'?'missing':'invalid');setErr('无效或未指定会话');return false
     }
-    const r = await getThreadMessages(id)
-    if (!mounted.current) return
-    if (r.ok) {
-      setMessages(r.value.items)
-      setErr('')
-      setState('ready')
-    } else {
-      // 404 同时覆盖"不存在"、"不是成员"、"未登录"三种情况 —— 前端不区分（服务端刻意不区分）
-      setErr(r.status === 404 ? '这个会话不存在，或你没有权限查看' : `加载失败：${failText(r)}`)
-      setState('error')
+    if (pageLock.current) return true
+    pageLock.current=true
+    if(mode==='older')setOlderBusy(true)
+    const body=scrollBody(), atBottom=!body || body.scrollHeight-body.scrollTop-body.clientHeight<80
+    const latest=messagesRef.current.at(-1)?.threadSeq
+    let cursor=mode==='older'?olderCursor:mode==='new'?latest:undefined
+    try {
+      let again=true
+      while(again) {
+        const r=await getMessagePage(id,cursor?mode==='older'?{beforeSeq:cursor}:{afterSeq:cursor}:undefined)
+        if(!accountAlive())return false
+        if(!r.ok){setErr(r.status===404?'这个会话不存在，或你没有权限查看':'消息同步失败，请重试');if(!messagesRef.current.length)setState('error');return false}
+        if(mode==='older' && body)pendingScroll.current={height:body.scrollHeight,top:body.scrollTop}
+        else if(mode==='initial'||atBottom)pendingScroll.current='bottom'
+        else if(r.value.items.some(m=>!messagesRef.current.some(old=>old.id===m.id)))setNewNotice(true)
+        const merged=new Map(messagesRef.current.map(m=>[m.id,m]))
+        for(const message of r.value.items)merged.set(message.id,message)
+        messagesRef.current=[...merged.values()].sort((a,b)=>a.threadSeq&&b.threadSeq?BigInt(a.threadSeq)<BigInt(b.threadSeq)?-1:BigInt(a.threadSeq)>BigInt(b.threadSeq)?1:0:Date.parse(a.createdAt)-Date.parse(b.createdAt)||a.id.localeCompare(b.id))
+        setMessages(messagesRef.current);setState('ready');setErr('')
+        if(mode==='older'||!cursor)setOlderCursor(r.value.hasMore?r.value.olderCursor:null)
+        const next=r.value.newerCursor
+        again=mode==='new' && !!cursor && r.value.hasMore && !!next && next!==cursor
+        cursor=next
+      }
+      return true
+    } finally {pageLock.current=false;setOlderBusy(false)}
+  }
+  const loadMessages = async () => { await syncMessages(messagesRef.current.length?'new':'initial') }
+  useEffect(()=>{void loadMessages()},[id])
+  useForegroundPoll(async()=>{
+    if(!accountAlive())return false
+    const result=await syncMessages('new')
+    if(result)void loadMeta()
+    return result
+  },3000,state==='ready')
+  useEffect(()=>{
+    const last=messages.at(-1)?.threadSeq
+    if(!last || state!=='ready')return
+    let cancelled=false
+    const frame=requestAnimationFrame(()=>{
+      const body=scrollBody()
+      if(!cancelled&&accountAlive()&&document.visibilityState==='visible'&&body&&body.scrollHeight-body.scrollTop-body.clientHeight<80) {
+        void readThreadThrough(id,last).then(r=>{if(accountAlive()&&!r.ok)setErr('消息已显示，但已读状态同步失败')})
+      }
+    })
+    return ()=>{cancelled=true;cancelAnimationFrame(frame)}
+  },[messages,state,id,newNotice])
+  async function retryMedia(attempt=pendingMedia) {
+    if(!attempt)return
+    setBusy('posting');setSendErr('')
+    try {
+      const r=attempt.kind==='image'?await postThreadImageMessage(id,attempt.mediaId,attempt.key):await postThreadVoiceMessage(id,attempt.mediaId,attempt.key)
+      if(!accountAlive())return
+      if(!r.ok){setSendErr(r.status===403?'暂时无法向该用户发送私信':'附件发送失败，可以重试');return}
+      setPendingMedia(null);await loadMessages()
+    } finally {if(accountAlive())setBusy('')}
+  }
+  async function toggleBlock() {
+    if(!peer || blockBusy)return
+    setBlockBusy(true)
+    const result=await setUserBlocked(peer.id,!blockedByMe)
+    if(accountAlive()){
+      if(result.ok){setBlockedByMe(result.value.blocked);setBlockConfirm(false)}
+      else setSendErr('操作失败，请重试')
+      setBlockBusy(false)
     }
-  }, [id])
-
-  useEffect(() => {
-    setState('loading')
-    void loadMessages()
-  }, [loadMessages])
+  }
 
   /**
    * 选图 → 上传 → 发消息 → 重拉。
@@ -386,7 +463,7 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
     const file = e.target.files?.[0] ?? null
     // 立刻清空 input（上面那条"选第二次没反应"的坑）—— 必须在任何 await 之前
     e.target.value = ''
-    if (!file) return
+    if (!file || busy || pendingMedia) return
 
     setSendErr('')
     setBusy('uploading')
@@ -396,13 +473,10 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
         setSendErr(`发送失败：图片上传未成功（${failText(up)}）`)
         return
       }
-      setBusy('posting')
-      const sent = await postThreadImageMessage(id, up.value.id)
-      if (!sent.ok) {
-        setSendErr(`发送失败：消息未发出（${failText(sent)}）`)
-        return
-      }
-      await loadMessages()
+      const attempt={mediaId:up.value.id,kind:'image' as const,key:crypto.randomUUID()}
+      if(!accountAlive())return
+      setPendingMedia(attempt)
+      await retryMedia(attempt)
     } finally {
       if (mounted.current) setBusy('')
     }
@@ -435,10 +509,13 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
     if (text === '' || busy !== '') return
 
     setSendErr('')
+    const signature=JSON.stringify([text,atAll])
+    if(textAttempt.current?.signature!==signature)textAttempt.current={signature,key:crypto.randomUUID()}
+    try { sessionStorage.setItem(draftKey+'.attempt',JSON.stringify(textAttempt.current)) } catch {}
     setBusy('posting')
     try {
       // M5 WO#9B：把「@所有人」作为**独立标记**随消息发出（不写进 body）
-      const sent = await postThreadTextMessage(id, text, atAll)
+      const sent = await postThreadTextMessage(id, text, atAll, textAttempt.current!.key)
       if (!sent.ok) {
         /*
           ⚠️ 失败时**既不清空 draft、也不清空 @所有人 选中状态**。
@@ -448,11 +525,13 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
           而界面上看不出任何区别。这正是审核记录 48/49 要求
           MENTIONS_ALL_FAILURE_PRESERVES_SELECTION 的原因。
         */
-        setSendErr(`发送失败：消息未发出（${failText(sent)}）`)
+        setSendErr(sent.status===403?'暂时无法向该用户发送私信':`发送未确认，请重试（${failText(sent)}）`)
         return
       }
       // 只有成功才清空输入框与选中状态
-      if (mounted.current) {
+      if (accountAlive()) {
+        try { sessionStorage.removeItem(draftKey+'.attempt') } catch {}
+        textAttempt.current=null
         setDraft('')
         setAtAll(false)
       }
@@ -497,7 +576,7 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
   )
 
   async function onRecordStart() {
-    if (recording || busy !== '') return
+    if (recording || busy !== '' || pendingMedia) return
     setSendErr('')
     try {
       const s = await startRecording()
@@ -552,13 +631,10 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
         setSendErr(`发送失败：语音上传未成功（${failText(up)}）`)
         return
       }
-      setBusy('posting')
-      const sent = await postThreadVoiceMessage(id, up.value.id)
-      if (!sent.ok) {
-        setSendErr(`发送失败：消息未发出（${failText(sent)}）`)
-        return
-      }
-      await loadMessages()
+      const attempt={mediaId:up.value.id,kind:'voice' as const,key:crypto.randomUUID()}
+      if(!accountAlive())return
+      setPendingMedia(attempt)
+      await retryMedia(attempt)
     } finally {
       if (mounted.current) setBusy('')
     }
@@ -612,12 +688,12 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
                 </span>
               </div>
             ) : (
-              '会话'
+              <span className="dm__heading">{peer && <img src={peer.avatarMediaId?mediaUrl(peer.avatarMediaId):avatarFor(peer.displayName)} alt="" onError={e=>{e.currentTarget.src=avatarFor(peer.displayName)}}/>}{peer?.displayName || '会话'}</span>
             )
           }
           right={
             variant === 'group' ? undefined : (
-              <button className="iconbtn" aria-label="更多">
+              <button className="iconbtn" aria-label="私信设置" disabled={!peer} onClick={()=>setBlockConfirm(v=>!v)}>
                 <IconMore size={20} />
               </button>
             )
@@ -795,6 +871,11 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
       }
       scroll
     >
+      {blockConfirm && <div className="dm__notice" role="alert"><p>{blockedByMe?'解除拉黑后可重新互发私信。':'拉黑后双方不能发送新私信，历史消息仍保留。'}</p><button disabled={blockBusy} onClick={()=>void toggleBlock()}>{blockedByMe?'确认解除拉黑':'确认拉黑'}</button><button onClick={()=>setBlockConfirm(false)}>取消</button></div>}
+      {blockedByMe && <p className="dm__notice">已拉黑该用户，可通过私信设置解除。</p>}
+      {pendingMedia && <div className="dm__notice"><span>附件尚未确认发送</span><button disabled={!!busy} onClick={()=>void retryMedia()}>重试发送附件</button><button disabled={!!busy} onClick={()=>setPendingMedia(null)}>取消</button></div>}
+      {olderCursor && <button className="dm__history" disabled={olderBusy} onClick={()=>void syncMessages('older')}>{olderBusy?'加载中…':'加载更早消息'}</button>}
+      {newNotice && <button className="dm__history" onClick={()=>{const body=scrollBody();if(body)body.scrollTop=body.scrollHeight;setNewNotice(false)}}>有新消息，查看最新</button>}
       {state === 'loading' && <p className="chat__state">加载中…</p>}
       {/*
         M5 WO#8：id 不可用时不显示「网络错误」—— 那不是网络问题，**一个请求都没发**。
@@ -820,7 +901,7 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
       )}
       {state === 'ready' && messages.length === 0 && <p className="chat__state">还没有消息</p>}
       {state === 'ready' && (
-        <div className="chat">
+        <div className="chat" ref={listRef}>
           {messages.map((m) => {
             /*
               自己发的消息靠右、对方的靠左。
@@ -831,6 +912,9 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
               ⚠ `meId` 为 null（未登录 / 读不到会话）时 `mine` 恒为 false → 降级成 `--peer`（原行为）。
               绝不能写成 `meId === null || ...` 之类把所有人都当成「我」。
             */
+            const member=meta?.members.find(user=>user.id===m.senderId)
+            const senderAvatar=member?.avatarMediaId!==undefined?member.avatarMediaId:m.senderAvatarMediaId
+            const senderName=member?.displayName??m.sender??'同学'
             const mine = meId !== null && m.senderId === meId
             return (
               <div
@@ -838,6 +922,7 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
                 className={`chat__row ${mine ? 'chat__row--me' : 'chat__row--peer'}`}
                 data-message-id={m.id}
               >
+                <img className="dm__avatar" src={senderAvatar?mediaUrl(senderAvatar):avatarFor(senderName)} alt="" onError={e=>{e.currentTarget.src=avatarFor(senderName)}}/>
                 <div className={`bubble ${mine ? 'bubble--me' : 'bubble--peer'}`}>
                   {m.revoked ? (
                     // 撤回：只显示一句说明。服务端也把 media 清空了，
@@ -989,4 +1074,9 @@ export function ChatScreen({ id, variant = 'direct' }: { id: string; variant?: '
       )}
     </Screen>
   )
+}
+
+
+export function ChatScreen({id,variant='direct'}:{id:string;variant?:'direct'|'group'}) {
+  return <ChatSession key={id+':'+(getSession()?.user.id ?? 'guest')} id={id} variant={variant}/>
 }

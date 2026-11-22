@@ -1,3 +1,5 @@
+import directMessagesSql from './migrations/046_direct_messages.sql'
+import inboxSql from './migrations/045_inbox.sql'
 import postCommentPolicySql from './migrations/044_post_comment_policy.sql'
 import { createHash } from 'node:crypto'
 import pg from 'pg'
@@ -201,6 +203,8 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '043_user_feedback', sql: userFeedbackSql },
   { version: '044_post_comment_policy', sql: postCommentPolicySql },
   { version: '044_release_1_4_2', sql: release142Sql },
+  { version: '045_inbox', sql: inboxSql },
+  { version: '046_direct_messages', sql: directMessagesSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

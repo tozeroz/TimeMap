@@ -8,7 +8,7 @@ if (Test-Path -LiteralPath $record) {
   $savedJobs = Get-Content -LiteralPath $record -Raw | ConvertFrom-Json
   foreach ($entry in $savedJobs) {
     $existing = Get-Process -Id $entry.processId -ErrorAction SilentlyContinue
-    if ($existing -and $existing.StartTime.ToUniversalTime().Ticks -eq ([datetime]$entry.startedAt).ToUniversalTime().Ticks) {
+    if ($existing -and $existing.StartTime -and $existing.ProcessName -eq $entry.name -and $existing.StartTime.ToUniversalTime().Ticks -eq ([datetime]$entry.startedAt).ToUniversalTime().Ticks) {
       throw 'A remote preview process is already running. Use tools/stop-remote-preview.ps1 before restarting.'
     }
   }
@@ -68,7 +68,7 @@ try {
 } catch {
   foreach ($entry in $jobs) {
     $running = Get-Process -Id $entry.processId -ErrorAction SilentlyContinue
-    if ($running -and $running.StartTime.ToUniversalTime().Ticks -eq ([datetime]$entry.startedAt).ToUniversalTime().Ticks) { Stop-Process -Id $running.Id }
+    if ($running -and $running.StartTime -and $running.ProcessName -eq $entry.name -and $running.StartTime.ToUniversalTime().Ticks -eq ([datetime]$entry.startedAt).ToUniversalTime().Ticks) { Stop-Process -Id $running.Id }
   }
   throw
 }

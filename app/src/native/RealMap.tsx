@@ -97,7 +97,8 @@ export function RealMap({
     mapRef?.({
       provider: 'raster',
       flyTo: (lat, lng, zoom = 16) => {
-        map.flyTo([lat, lng], zoom, { duration: 0.6 })
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) map.setView([lat,lng],zoom,{animate:false})
+        else map.flyTo([lat, lng], zoom, { duration: 0.6 })
       },
       zoomIn: () => map.zoomIn(),
       getCenter: () => {
@@ -162,6 +163,10 @@ export function RealMap({
     sync()
 
     return () => {
+      // Stop view observers before Leaflet removes its panes or finishes a pending animation.
+      map.off('move zoom moveend zoomend', sync)
+      if (exactFix) { map.off('moveend', exactFix); exactFix = null }
+      map.stop()
       mapObjRef.current = null
       hereLayerRef.current = null
       mapRef?.(null)

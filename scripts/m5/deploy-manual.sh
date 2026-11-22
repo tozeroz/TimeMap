@@ -42,7 +42,7 @@ if ! curl -sf -m 2 http://127.0.0.1:3001/api/ready >/dev/null 2>&1; then
   exit 1
 fi
 echo "== 3) 核对产物里的 CORS =="
-grep -c 'GET,POST,PATCH,DELETE,OPTIONS' /srv/campus/server/dist/index.mjs || true
+grep -c 'GET,POST,PUT,PATCH,DELETE,OPTIONS' /srv/campus/server/dist/index.mjs || true
 echo "== 4) 预检核对（DELETE）=="
 curl -s -i -X OPTIONS http://127.0.0.1/api/posts/x/like \
   -H 'Origin: https://localhost' -H 'Access-Control-Request-Method: DELETE' \

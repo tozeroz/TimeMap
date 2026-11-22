@@ -4,7 +4,7 @@ import {
   failText,
   likePost,
   listPlaces,
-  listPosts,
+  listPostPage,
   listSchoolCampuses,
   listSchools,
   readSnapshot,
@@ -502,18 +502,26 @@ export function CampusScreen() {
    *   既无网络也无快照 → 显示「网络错误 + 刷新」（原版在这点上的行为就是这个）
    */
   const [feed, setFeed] = useState<FeedPost[]>(() =>
-    parsePlaceIds(route.query.placeId).length === 0
+    restored && feedBrowse.campusFeed ? feedBrowse.campusFeed : parsePlaceIds(route.query.placeId).length === 0
       ? (readSnapshot<FeedPost[]>('feed')?.value ?? [])
       : [],
   )
   const [phase, setPhase] = useState<'loading' | 'ready' | 'offline' | 'error'>(() =>
-    parsePlaceIds(route.query.placeId).length === 0 && readSnapshot<FeedPost[]>('feed')
+    restored && feedBrowse.campusFeed ? 'ready' : parsePlaceIds(route.query.placeId).length === 0 && readSnapshot<FeedPost[]>('feed')
       ? 'offline'
       : 'loading',
   )
   /** 失败原因的人类可读文案（§12：不得把 `TypeError: Failed to fetch` 这类技术串直接给用户） */
   const [errText, setErrText] = useState('')
   const requestVersion = useRef(0)
+  const [nextCursor, setNextCursor] = useState<string | null>(() => restored ? feedBrowse.campusNextCursor ?? null : null)
+  const [moreError, setMoreError] = useState('')
+  const [loadingMore, setLoadingMore] = useState(false)
+  const feedRef = useRef(feed)
+  feedRef.current = feed
+  const restoredOnce = useRef(Boolean(restored && feedBrowse.campusFeed))
+  const moreLock = useRef(false)
+  const moreSentinel = useRef<HTMLDivElement>(null)
   const likeLocks = useRef(new Set<string>())
   /* 2026-11-06：曝光上报的观察容器（见 data/impressions.ts） */
   const squareRef = useRef<HTMLDivElement>(null)
@@ -553,10 +561,13 @@ export function CampusScreen() {
     const version = ++requestVersion.current
     const sequence = likeSequence.current
     setPhase('loading')
-    const result = await listPosts({ sort, placeIds })
+    setNextCursor(null)
+    setMoreError('')
+    const result = await listPostPage({ sort, placeIds })
     if (version !== requestVersion.current) return
     if (result.ok) {
-      const postsFromServer = result.value.map(toFeedPost).map(post => {
+      setNextCursor(result.value.nextCursor ?? null)
+      const postsFromServer = result.value.items.map(toFeedPost).map(post => {
         const update = likeUpdates.current.get(post.id)
         return update && update.sequence > sequence ? { ...post, likes: update.likes, liked: update.liked } : post
       })
@@ -577,9 +588,46 @@ export function CampusScreen() {
   }, [sort, placeIds, isDefaultView])
 
   useEffect(() => {
-    void loadFeed()
+    if (restoredOnce.current) {
+      restoredOnce.current = false
+      setServerPosts((feedBrowse.campusFeed ?? []).filter(post => !isLocalPostId(post.id)))
+    }
+    else void loadFeed()
     return () => { requestVersion.current++ }
   }, [loadFeed])
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || moreLock.current || phase !== 'ready') return
+    moreLock.current = true
+    setLoadingMore(true)
+    setMoreError('')
+    const version = requestVersion.current
+    try {
+      const result = await listPostPage({ sort, placeIds }, nextCursor)
+      if (version !== requestVersion.current) return
+      if (!result.ok) { setMoreError('更多回忆加载失败，请重试'); return }
+      const added = result.value.items.map(toFeedPost)
+      const previous = feedRef.current
+      const seen = new Set(previous.map(post => post.id))
+      const merged = [...previous, ...added.filter(post => !seen.has(post.id))]
+      if (isDefaultView) {
+        const serverOnly = merged.filter(post => !isLocalPostId(post.id))
+        setServerPosts(serverOnly); writeFeedSnapshot(serverOnly)
+      }
+      setFeed(merged)
+      setNextCursor(result.value.nextCursor ?? null)
+    } finally { moreLock.current = false; setLoadingMore(false) }
+  }, [nextCursor, sort, placeIds, phase, isDefaultView])
+  useEffect(() => {
+    if (!nextCursor || moreError || loadingMore || phase !== 'ready') return
+    const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) void loadMore() }, { rootMargin: '400px' })
+    if (moreSentinel.current) observer.observe(moreSentinel.current)
+    return () => observer.disconnect()
+  }, [nextCursor, moreError, loadingMore, phase, loadMore])
+  useEffect(() => {
+    feedBrowse.campusNextCursor = nextCursor
+    if (phase === 'ready') feedBrowse.campusFeed = feed
+  }, [feed, nextCursor, isDefaultView, phase])
 
   /** 候选地标（筛选面板用）。失败不影响主列表，只在面板里显示"地标列表加载失败" */
   useEffect(() => {
@@ -773,6 +821,9 @@ export function CampusScreen() {
 
       </div>
 
+      <div ref={moreSentinel} role="status" style={{ textAlign: 'center', padding: 16 }}>
+        {loadingMore ? '正在加载更多回忆…' : moreError ? <button onClick={() => void loadMore()}>{moreError}</button> : nextCursor ? <button onClick={() => void loadMore()}>加载更多回忆</button> : phase === 'ready' && feed.length > 0 ? '已看完全部回忆' : ''}
+      </div>
       {pickerOpen && <CampusPickerPanel onClose={() => setPickerOpen(false)} />}
       {filterOpen && (
         <PlaceFilterPanel

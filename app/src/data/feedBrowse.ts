@@ -1,11 +1,14 @@
+import type { FeedPost } from './types'
 import { useEffect } from 'react'
 import { buildHash, navigate } from '../router'
 
 /** A frozen source order, scoped to the currently opened browsing session. */
-export const feedBrowse: { ids: string[]; drafts: Record<string, string>; images: Record<string, number>; source: string; switched: boolean; token: string; scroll: number; placeFirst?: boolean; campus?: { sort: 'hot' | 'latest'; placeIds: string[] } } = {
+export const feedBrowse: { ids: string[]; drafts: Record<string, string>; images: Record<string, number>; source: string; switched: boolean; token: string; scroll: number; placeFirst?: boolean; campusNextCursor?: string | null; campusFeed?: FeedPost[]; more?: { cursor: string | null; sort: 'hot' | 'latest'; placeIds: string[] }; campus?: { sort: 'hot' | 'latest'; placeIds: string[] } } = {
   ids: [], drafts: {}, images: {}, source: '', switched: false, token: '', scroll: 0,
 }
 export function openFeed(id: string, ids: string[], placeFirst = false) {
+  feedBrowse.more = !placeFirst && window.location.hash.startsWith('#/campus') && feedBrowse.campus
+    ? { ...feedBrowse.campus, placeIds: [...feedBrowse.campus.placeIds], cursor: feedBrowse.campusNextCursor ?? null } : undefined
   feedBrowse.placeFirst = placeFirst
   feedBrowse.ids = [...new Set(placeFirst ? [id, ...ids] : ids)]
   feedBrowse.drafts = {}

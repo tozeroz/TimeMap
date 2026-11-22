@@ -7,9 +7,11 @@
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
+    "test:cors": "npm run build && node tests/cors.test.mjs",
     "test:shutdown": "node tests/run-shutdown-race.mjs",
     "test:profile": "node --experimental-strip-types tests/profile.test.ts",
     "test:feed-avatar": "node tests/run-feed-avatar.mjs",
+    "test:direct": "node tests/run-direct-messages.mjs",
     "test:anonymous": "node tests/run-comment-anonymous.mjs",
     "test:cutout": "node --experimental-strip-types tests/cutout-control.test.ts",
     "dev": "node --experimental-strip-types src/index.ts"

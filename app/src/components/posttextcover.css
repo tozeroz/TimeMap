@@ -1,0 +1,16 @@
+.square-card__paper { position: relative; padding: 30px 16px 34px; background-color: var(--square-paper); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23867b65' opacity='.09' filter='url(%23n)' d='M0 0h180v180H0z'/%3E%3C/svg%3E"); border-radius: 2px 4px 3px 2px; box-shadow: 0 3px 5px #272b2520; transform: rotate(1.2deg); }
+.square-card--paper-1 .square-card__paper { transform: rotate(-1.2deg); }
+.square-card--paper-2 .square-card__paper { transform: rotate(.6deg); }
+.square-card__paper::before { content: ''; position: absolute; top: -6px; right: 14%; width: 40px; height: 17px; background-color: color-mix(in srgb, var(--square-tape) 38%, transparent); background-image: repeating-linear-gradient(0deg, transparent 0 5px, #ffffff55 5px 6px), repeating-linear-gradient(90deg, transparent 0 5px, #ffffff55 5px 6px); transform: rotate(13deg); }
+.square-card__paper p { margin: 0; font-size: 14px; line-height: 1.85; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.square-card--short .square-card__paper p { font-family: 'KaiTi', 'STKaiti', 'Kaiti SC', cursive; font-size: 19px; letter-spacing: .5px; }
+.square-card__paper svg { position: absolute; bottom: 8px; left: 10%; width: 82%; height: 25px; color: color-mix(in srgb, var(--square-tape) 85%, white); }
+
+.post-text-cover { --square-paper:#ffe1c9;--square-tape:#e5a493;--cover-angle:1.2deg;color:#092752; }
+.post-text-cover--1 { --square-paper:#e5e9ce;--square-tape:#acb78e;--cover-angle:-1.2deg; }
+.post-text-cover--2 { --square-paper:#f7edc9;--square-tape:#d3bc89;--cover-angle:.6deg; }
+.post-text-cover--short .square-card__paper p { font-family:'KaiTi','STKaiti','Kaiti SC',cursive;font-size:19px;letter-spacing:.5px; }
+.post-text-cover--compact { position:relative;overflow:hidden;background:var(--square-paper); }
+.post-text-cover--compact .square-card__paper { position:absolute;left:50%;top:50%;width:180px;height:180px;transform:translate(-50%,-50%) scale(.5) rotate(var(--cover-angle));transform-origin:center; }
+.md-cardOpen>.post-text-cover { position:absolute;left:10px;top:10px;bottom:10px;width:96px;height:calc(100% - 20px);min-height:84px;border-radius:10px; }
+@media(max-width:370px){.md-cardOpen>.post-text-cover{width:78px}.post-text-cover--compact .square-card__paper{transform:translate(-50%,-50%) scale(.42) rotate(var(--cover-angle))}}

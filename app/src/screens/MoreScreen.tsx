@@ -18,7 +18,7 @@ const ENTRIES: Array<{ label: string; desc: string; to: string }> = [
   { label: '校园圈', desc: '同校动态列表', to: 'feedlist' },
   { label: '今日打卡', desc: '记录今天的小事', to: 'daily' },
   { label: '留言板', desc: '仅双方可见', to: 'board' },
-  { label: '聊天', desc: '私聊与群聊', to: 'message' },
+  { label: '消息', desc: '互动通知、应用公告与私信', to: 'message' },
   { label: '地点搜索', desc: '给动态添加地点', to: 'poi' },
   { label: '扫码', desc: '扫描校园卡 / 群邀请', to: 'scanner' },
   { label: '校园公告', desc: '通知与规范', to: 'announce' },

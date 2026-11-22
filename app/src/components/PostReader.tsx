@@ -97,7 +97,7 @@ export function PostReader(p: Props) {
   const openComments = (focus: boolean) => { setFocusInput(focus); setSheet('comments') }
   const changeImage = (next: number) => { if (next >= 0 && next < images.length) { setIndex(next); feedBrowse.images[post.id] = next } }
   const step = (direction: number) => {
-    if (sourceIndex < 0 || !feedBrowse.ids[sourceIndex + direction]) { setHint(direction > 0 ? '已经到底啦' : '已经是第一条了'); return }
+    if (sourceIndex < 0 || (!feedBrowse.ids[sourceIndex + direction] && !(direction > 0 && feedBrowse.more?.cursor))) { setHint(direction > 0 ? '已经到底啦' : '已经是第一条了'); return }
     feedBrowse.switched = true
     p.onStep(direction)
   }

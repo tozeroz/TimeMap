@@ -41,6 +41,7 @@ import { AdminDialog, AdminIcon } from '../components/AdminPrimitives'
 import { SubmissionCover } from './MyActivitySubmissions'
 import './admin.css'
 import { AdminProjectsPanel } from './AdminProjectsPanel'
+import { AdminAnnouncementsPanel } from './AdminAnnouncementsPanel'
 
 /**
  * 管理端（F07 / US-08；需求 3.1 的「举报处理管理端」）。
@@ -63,9 +64,10 @@ import { AdminProjectsPanel } from './AdminProjectsPanel'
  *     各列表，而不是只改本地那一行
  *   · 操作记录包含管理员、对象、时间、动作
  */
-type PanelKey = 'reports' | 'feedback' | 'submissions' | 'posts' | 'activities' | 'projects' | 'places' | 'audit'
+type PanelKey = 'reports' | 'feedback' | 'submissions' | 'posts' | 'activities' | 'projects' | 'places' | 'audit' | 'announcements'
 
 const PANELS: { key: PanelKey; label: string }[] = [
+  { key: 'announcements', label: '应用公告' },
   { key: 'reports', label: '举报处理' },
   { key: 'submissions', label: '投稿审核' },
   { key: 'feedback', label: '用户反馈' },
@@ -77,13 +79,14 @@ const PANELS: { key: PanelKey; label: string }[] = [
 ]
 
 export function AdminScreen() {
+  const [confirmExit, setConfirmExit] = useState(false)
   const [panel, setPanel] = useState<PanelKey>(() => { const key = new URLSearchParams(window.location.hash.split('?')[1]).get('panel'); return PANELS.some(p => p.key === key) ? key as PanelKey : 'reports' })
   const admin = isAdmin()
 
   const header = (
     <TopBar
       left={
-        <button className="iconbtn" onClick={() => goBack('me')} aria-label="返回">
+        <button className="iconbtn" onClick={() => admin ? setConfirmExit(true) : goBack('me')} aria-label="返回">
           <IconBack size={22} />
         </button>
       }
@@ -123,6 +126,7 @@ export function AdminScreen() {
       </nav>
 
       {panel === 'reports' && <ReportsPanel />}
+      {panel === 'announcements' && <AdminAnnouncementsPanel />}
       {panel === 'submissions' && <SubmissionsPanel />}
       {panel === 'feedback' && <FeedbackPanel />}
       {panel === 'posts' && <PostsPanel />}
@@ -130,6 +134,13 @@ export function AdminScreen() {
       {panel === 'projects' && <AdminProjectsPanel />}
       {panel === 'places' && <PlacesPanel />}
       {panel === 'audit' && <AuditPanel />}
+      {confirmExit && <AdminDialog title="确认退出管理中心？" onClose={() => setConfirmExit(false)}>
+        <p className="adm__modalDesc">是否确认退出管理中心？</p>
+        <div className="adm__modalActions">
+          <button className="adm__btn" onClick={() => setConfirmExit(false)}>取消</button>
+          <button className="adm__btn adm__btn--primary" onClick={() => { setConfirmExit(false); goBack('me') }}>确认退出</button>
+        </div>
+      </AdminDialog>}
     </Screen>
   )
 }

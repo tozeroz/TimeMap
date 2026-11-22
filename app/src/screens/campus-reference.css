@@ -43,13 +43,6 @@
 .square-card--sticker .square-card__media { background: transparent; border-radius: 0; overflow: visible; }
 .square-card--sticker .square-card__media img { object-fit: contain; filter: drop-shadow(0 3px 2px #15294320); }
 .square-card__text { margin: 7px 2px 0; font-size: 13px; line-height: 1.6; font-weight: 500; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.square-card__paper { position: relative; padding: 30px 16px 34px; background-color: var(--square-paper); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23867b65' opacity='.09' filter='url(%23n)' d='M0 0h180v180H0z'/%3E%3C/svg%3E"); border-radius: 2px 4px 3px 2px; box-shadow: 0 3px 5px #272b2520; transform: rotate(1.2deg); }
-.square-card--paper-1 .square-card__paper { transform: rotate(-1.2deg); }
-.square-card--paper-2 .square-card__paper { transform: rotate(.6deg); }
-.square-card__paper::before { content: ''; position: absolute; top: -6px; right: 14%; width: 40px; height: 17px; background-color: color-mix(in srgb, var(--square-tape) 38%, transparent); background-image: repeating-linear-gradient(0deg, transparent 0 5px, #ffffff55 5px 6px), repeating-linear-gradient(90deg, transparent 0 5px, #ffffff55 5px 6px); transform: rotate(13deg); }
-.square-card__paper p { margin: 0; font-size: 14px; line-height: 1.85; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
-.square-card--short .square-card__paper p { font-family: 'KaiTi', 'STKaiti', 'Kaiti SC', cursive; font-size: 19px; letter-spacing: .5px; }
-.square-card__paper svg { position: absolute; bottom: 8px; left: 10%; width: 82%; height: 25px; color: color-mix(in srgb, var(--square-tape) 85%, white); }
 .square-card__info { display: flex; align-items: center; justify-content: space-between; min-height: 44px; margin: 1px 2px 0; gap: 4px; }
 .square-card__location { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 0; font-size: 12px; line-height: 1.5; }
 .square-card__location > svg { flex: none; }

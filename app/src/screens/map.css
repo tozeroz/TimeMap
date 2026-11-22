@@ -1,7 +1,7 @@
 .map__head {
   position: relative;
   padding: 6px var(--pad-page) 10px;
-  background: var(--c-surface);
+  background: var(--c-bg);
   z-index: 4;
 }
 
@@ -40,7 +40,7 @@
    =========================================================================== */
 .map-page {
   /* 暖白纸面与墨蓝线条（均由 tokens.css 的 --c-bg / --c-text 派生） */
-  --map-sheet: #fffcf7;
+  --map-sheet: var(--c-bg);
   --map-ink-line: rgba(25, 45, 66, 0.26);
   --map-ink-strong: rgba(25, 45, 66, 0.78);
 }

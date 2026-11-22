@@ -292,8 +292,8 @@ export function PlaceDetailSheet({
               {expanded && thumb && <ThumbImg src={thumb} />}
             </div>
             <button className="ps__introLink" data-sheet-intro onClick={() => onNavigate('place-intro', { id: place.id })}>地点背景与校园时光 <span aria-hidden="true">→</span></button>
-            <PlaceActivitiesSection place={place} onOpenActivity={aid => onNavigate('activity', { id: aid, placeId: place.id })} onOpenAll={() => onNavigate('activities', { placeId: place.id })} />
             <PlaceFeedSection place={place} sort={d.sort} setSort={d.setSort} filter={d.filter} setFilter={d.setFilter} allEmpty={d.allEmpty} feedPhase={d.feedPhase} onRetryFeed={d.retryFeed} showFilter={expanded} layout="split" onOpenPost={(pid, browse) => onNavigate('feed', { id: pid, browse })} onOpenAll={() => onNavigate('campus', { placeId: place.id })} />
+            <PlaceActivitiesSection place={place} onOpenActivity={aid => onNavigate('activity', { id: aid, placeId: place.id })} onOpenAll={() => onNavigate('activities', { placeId: place.id })} />
           </>}
           <div className="ps__bodyPad" />
         </div>

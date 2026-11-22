@@ -3,6 +3,8 @@ import type { FeedPost } from '../data/types'
 import { openFeed } from '../data/feedBrowse'
 import { navigate } from '../router'
 import { IconEye, IconHeart, IconImage, IconLocation } from './icons'
+import {PostTextCover} from './PostTextCover'
+import {textCoverVariant} from '../data/textCover'
 
 /** Shared author label and type-specific surfaces for the campus scrapbook. */
 export function CampusPostCard({ post, pending, local, onLike, onRemove, onRepublish, browseIds }: {
@@ -17,7 +19,7 @@ export function CampusPostCard({ post, pending, local, onLike, onRemove, onRepub
   const [broken, setBroken] = useState(false)
   const image = post.images[0]
   const sticker = post.imageMode === 'sticker'
-  const paperVariant = Array.from(post.id).reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 0) % 3
+  const paperVariant = textCoverVariant(post.id)
   return <article className={`square-card ${image ? 'square-card--image' : 'square-card--text'} ${sticker ? 'square-card--sticker' : ''} square-card--paper-${paperVariant} ${post.text.length <= 45 ? 'square-card--short' : ''}`} data-feed-id={post.id}>
     {/*
       匿名帖（2026-11-05）没有可去的主页，所以**不渲染按钮**（而不是渲染一个点了没反应的按钮）：
@@ -37,7 +39,7 @@ export function CampusPostCard({ post, pending, local, onLike, onRemove, onRepub
     <a className="square-card__open" onClick={e => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) { e.preventDefault(); openFeed(post.id, browseIds ?? [post.id]) } }} href={`#/feed?id=${encodeURIComponent(post.id)}`} aria-label={`查看帖子：${post.text || '校园照片'}`}>
       {image ? <div className="square-card__media" style={{ aspectRatio: post.ratio || (sticker ? '4 / 5' : '1 / 1') }}>
         {broken ? <span className="square-card__unavailable"><IconImage size={28} />图片暂时无法显示</span> : <img src={image} alt={post.text ? '' : '校园照片'} loading="lazy" onError={() => setBroken(true)} />}
-      </div> : <div className="square-card__paper"><p>{post.text || '一段校园回忆'}</p><svg viewBox="0 0 140 35" fill="none" aria-hidden="true"><path d="M3 23q22 18 46 0m8 3q18-25 39-12" stroke="currentColor" strokeWidth="1"/><path d="m109 26 19-22-4 15-15 7 2-14 17-8m-19 22-6 6" stroke="#ed6536" strokeWidth="1.5"/></svg></div>}
+      </div> : <PostTextCover id={post.id} text={post.text}/>}
       {image && post.text && <h2 className="square-card__text">{post.text}</h2>}
     </a>
     <div className="square-card__info">
