@@ -9,6 +9,7 @@ import projectContentEnrichmentSql from './migrations/042_project_content_enrich
 import commentAnonymousSql from './migrations/042_comment_anonymous.sql'
 import userFeedbackSql from './migrations/043_user_feedback.sql'
 import release142Sql from './migrations/044_release_1_4_2.sql'
+import placeGinkgoPositionSql from './migrations/045_place_ginkgo_position.sql'
 import initSql from './migrations/001_init.sql'
 import identitySql from './migrations/002_identity.sql'
 import dataModelSql from './migrations/003_data_model_v01.sql'
@@ -207,6 +208,8 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '045_inbox', sql: inboxSql },
   { version: '046_direct_messages', sql: directMessagesSql },
   { version: '047_map_curation', sql: mapCurationSql },
+  // 银杏大道定位修正。
+  { version: '045_place_ginkgo_position', sql: placeGinkgoPositionSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */
