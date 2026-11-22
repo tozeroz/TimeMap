@@ -63,6 +63,40 @@ export function registerDirectMessageRoutes(ctx: TimemapCtx) {
     app.log.error({ err: error }, 'direct messaging failed')
     reply.code(500); return { error: 'db_error' }
   }
+  app.post('/api/threads/:id/messages/:messageId/revoke', async (req, reply) => {
+    try {
+      const me = await user(req)
+      const { id, messageId } = req.params as { id: string; messageId: string }
+      if (!UUID.test(id) || !UUID.test(messageId)) throw new MessagingError(400, 'invalid_message')
+      // Preserve the row, sequence and media references. Existing media authorization
+      // excludes deleted messages, and retries must retain their original identity.
+      const result = await db.pool.query(`update messages m set deleted_at=coalesce(m.deleted_at,now())
+        where m.id=$1 and m.thread_id=$2 and m.sender_id=$3
+        and exists(select 1 from thread_members where thread_id=m.thread_id and user_id=$3)
+        returning m.id,m.thread_seq::text,m.deleted_at`, [messageId, id, me.userId])
+      if (!result.rowCount) throw new MessagingError(404, 'not_found')
+      reply.header('Cache-Control', 'no-store')
+      return { id: result.rows[0].id, threadSeq: result.rows[0].thread_seq, revoked: true }
+    } catch (error) { return failure(reply, error) }
+  })
+  // Reconcile already displayed history: an afterSeq query alone cannot see
+  // a revocation because revoking never allocates a new message sequence.
+  app.post('/api/threads/:id/messages/revocations', async (req, reply) => {
+    try {
+      const me = await user(req), id = (req.params as { id: string }).id
+      const input = (req.body ?? {}) as Record<string, unknown>
+      const ids = input.messageIds
+      if (!UUID.test(id) || !Array.isArray(ids) || ids.length > 200 ||
+          ids.some(value => typeof value !== 'string' || !UUID.test(value)) ||
+          Object.keys(input).some(key => key !== 'messageIds')) throw new MessagingError(400, 'invalid_messages')
+      if (!(await db.pool.query('select 1 from thread_members where thread_id=$1 and user_id=$2', [id, me.userId])).rowCount) {
+        throw new MessagingError(404, 'not_found')
+      }
+      const result = await db.pool.query('select id from messages where thread_id=$1 and id=any($2::uuid[]) and deleted_at is not null', [id, ids])
+      reply.header('Cache-Control', 'no-store')
+      return { revokedIds: result.rows.map(row => row.id) }
+    } catch (error) { return failure(reply, error) }
+  })
   app.post('/api/threads/direct', async (req, reply) => {
     let client: PoolClient | undefined
     try {

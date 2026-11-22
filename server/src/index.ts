@@ -3100,7 +3100,7 @@ export function buildServer(deps: ServerDeps) {
           // 而媒体授权也已经因为 deleted_at 变成不可读（服务端强制执行，不是靠前端隐藏）
           revoked: row.deleted_at !== null,
           // M5 WO#9B：与 `mentions`（逐人）**并列**的独立字段，语义不混同
-          mentionsAll: row.mentions_all === true,
+          mentionsAll: row.deleted_at === null && row.mentions_all === true,
           media: row.deleted_at !== null ? [] : (row.media ?? []),
         })),
       }

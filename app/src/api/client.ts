@@ -309,6 +309,12 @@ export function getMessagePage(id: string, cursor?: { beforeSeq?: string; afterS
   const params = new URLSearchParams({ paginate:'1',...cursor })
   return request<{threadId:string;items:ApiMessage[];hasMore:boolean;olderCursor:string|null;newerCursor:string|null}>(`/api/threads/${encodeURIComponent(id)}/messages?${params}`)
 }
+export function revokeThreadMessage(threadId: string, messageId: string) {
+  return request<{id:string;threadSeq:string;revoked:true}>(`/api/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/revoke`,{method:'POST'})
+}
+export function getMessageRevocations(threadId: string, messageIds: string[]) {
+  return request<{revokedIds:string[]}>(`/api/threads/${encodeURIComponent(threadId)}/messages/revocations`,{method:'POST',body:{messageIds}})
+}
 
 export async function getThreadMessages(
   threadId: string,

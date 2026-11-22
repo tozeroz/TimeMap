@@ -125,12 +125,51 @@ try {
   await pool.query("insert into media(id,owner_user_id,scope,mime,duration_ms) values($1,$2,'private','audio/webm',1500)",[voiceMedia,c.id])
   const voice=await call(c,'POST',`/api/threads/${id}/messages`,{body:'[语音]',kind:'voice',mediaId:voiceMedia,clientRequestId:voiceRequest},201)
   assert.equal((await call(c,'POST',`/api/threads/${id}/messages`,{body:'[语音]',kind:'voice',mediaId:voiceMedia,clientRequestId:voiceRequest})).id,voice.id)
+  // Use the actual media authorization predicates: revoked attachments must not
+  // remain readable to either member, even when their media ID is known.
+  const scopeSql=readFileSync('src/migrations/006_media_scope.sql','utf8')
+  for(const name of ['can_read_message','can_read_media']) {
+    const definition=scopeSql.match(new RegExp('CREATE OR REPLACE FUNCTION '+name+'[\\s\\S]*?\\$\\$;'))?.[0]
+    assert(definition);await pool.query(definition)
+  }
+  await pool.query("alter table media add column storage_key text default 'test-file'")
+  assert.equal((await pool.query('select can_read_media($1,$2) as allowed',[a.id,media])).rows[0].allowed,true)
+  await call(a,'POST',`/api/threads/${id}/messages/${image.id}/revoke`,undefined,404)
+  await call(b,'POST',`/api/threads/${id}/messages/${image.id}/revoke`,undefined,404)
+  await call(c,'POST',`/api/threads/${legacy}/messages/${image.id}/revoke`,undefined,404)
+  assert.equal((await app.inject({method:'POST',url:`/api/threads/${id}/messages/${image.id}/revoke`})).statusCode,401)
+  await call(c,'POST',`/api/threads/${id}/messages/invalid/revoke`,undefined,400)
+  const seqBefore=(await pool.query('select next_message_seq::text from message_threads where id=$1',[id])).rows[0].next_message_seq
+  const revoked=await call(c,'POST',`/api/threads/${id}/messages/${image.id}/revoke`)
+  assert.equal(revoked.revoked,true)
+  const deletedAt=(await pool.query('select deleted_at from messages where id=$1',[image.id])).rows[0].deleted_at
+  await call(c,'POST',`/api/threads/${id}/messages/${image.id}/revoke`)
+  assert.deepEqual((await pool.query('select deleted_at from messages where id=$1',[image.id])).rows[0].deleted_at,deletedAt)
+  assert.equal((await pool.query('select next_message_seq::text from message_threads where id=$1',[id])).rows[0].next_message_seq,seqBefore)
+  for(const person of [a,c]) {
+    await call(person,'GET',`/api/media/${media}`,undefined,404)
+    const item=(await call(person,'GET',`/api/threads/${id}/messages?paginate=1`)).items.find((m:any)=>m.id===image.id)
+    assert.equal(item.revoked,true);assert.equal(item.body,'');assert.deepEqual(item.media,[])
+    assert.deepEqual((await call(person,'POST',`/api/threads/${id}/messages/revocations`,{messageIds:[image.id,voice.id]})).revokedIds,[image.id])
+  }
+  await call(b,'POST',`/api/threads/${id}/messages/revocations`,{messageIds:[image.id]},404)
+  await call(a,'POST',`/api/threads/${id}/messages/revocations`,{messageIds:['bad']},400)
+  await call(a,'POST',`/api/threads/${id}/messages/revocations`,{messageIds:Array(201).fill(image.id)},400)
+  await call(c,'POST',`/api/threads/${id}/messages/${voice.id}/revoke`)
+  await call(a,'GET',`/api/media/${voiceMedia}`,undefined,404)
+  assert.equal((await call(a,'GET','/api/threads')).items.find((t:any)=>t.id===id).lastMessage.body,'消息已撤回')
+  // An uncertain original send retried after revocation must not create a new message.
+  assert.equal((await call(c,'POST',`/api/threads/${id}/messages`,{body:'[语音]',kind:'voice',mediaId:voiceMedia,clientRequestId:voiceRequest})).id,voice.id)
   await call(b,'POST',`/api/threads/${legacy}/messages`,{body:'[语音]',kind:'voice',mediaId:voiceMedia},400)
   const group=randomUUID()
   await pool.query("insert into message_threads(id,kind,title) values($1,'group','群聊回归')",[group])
   await pool.query('insert into thread_members(id,thread_id,user_id) values($1,$2,$3),($4,$2,$5)',[randomUUID(),group,b.id,randomUUID(),c.id])
-  await call(b,'POST',`/api/threads/${group}/messages`,{body:'群聊消息',mentionsAll:true,clientRequestId:randomUUID()},201)
+  const groupMessage=await call(b,'POST',`/api/threads/${group}/messages`,{body:'群聊消息',mentionsAll:true,clientRequestId:randomUUID()},201)
   assert.equal((await call(c,'GET',`/api/threads/${group}/messages?paginate=1`)).items[0].mentionsAll,true)
+  assert.equal((await call(c,'GET','/api/threads?kind=group')).items[0].unreadCount,1)
+  await call(c,'POST',`/api/threads/${group}/messages/${groupMessage.id}/revoke`,undefined,404)
+  await call(b,'POST',`/api/threads/${group}/messages/${groupMessage.id}/revoke`)
+  assert.equal((await call(c,'GET','/api/threads?kind=group')).items[0].unreadCount,0)
   await call(b,'POST',`/api/threads/${legacy}/messages`,{body:'私聊不能@全体',mentionsAll:true},400)
   const tooMany=await Promise.all(people.slice(3).map(person=>app.inject({method:'POST',url:'/api/threads/direct',headers:c.headers,payload:{peerId:person.id}})))
   assert(tooMany.some(r=>r.statusCode===429))
@@ -149,7 +188,7 @@ try {
   }while(threadCursor)
   assert.equal(threadIds.size,61)
   assert.equal((await call(b,'GET','/api/threads?kind=group')).items.length,1)
-  console.log('PASS direct messages: legacy backfill, concurrent reuse, empty visibility, retries/conflicts, authorization, 154-message paging, reads, blocks, rate limits, media and membership guards')
+  console.log('PASS direct messages: legacy backfill, concurrent reuse, empty visibility, retries/conflicts, authorization, 154-message paging, reads, blocks, rate limits, media, membership guards and message revocation')
 } finally {
   await app.close();await pool.end();await setup.query(`drop schema ${schema} cascade`);await setup.end()
 }

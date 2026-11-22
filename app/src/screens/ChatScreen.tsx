@@ -4,6 +4,8 @@ import {
   fetchMediaBlobUrl,
   getThread,
   getMessagePage,
+  getMessageRevocations,
+  revokeThreadMessage,
   readThreadThrough,
   setUserBlocked,
   mediaUrl,
@@ -253,6 +255,26 @@ function ChatSession({ id, variant = 'direct' }: { id: string; variant?: 'direct
   const [blockedByMe, setBlockedByMe] = useState(false)
   const [blockConfirm, setBlockConfirm] = useState(false)
   const [blockBusy, setBlockBusy] = useState(false)
+  const [revokeTarget, setRevokeTarget] = useState<string|null>(null)
+  const [revokeBusy, setRevokeBusy] = useState(false)
+  const [revokeError, setRevokeError] = useState('')
+  const revokePanel = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if(!revokeTarget)return
+    const previous = document.activeElement as HTMLElement|null
+    const onKeyDown = (event: KeyboardEvent) => {
+      if(event.key==='Escape' && !revokeBusy){event.preventDefault();setRevokeTarget(null)}
+      if(event.key==='Tab') {
+        const buttons = revokePanel.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')
+        if(!buttons?.length){event.preventDefault();return}
+        const first=buttons[0],last=buttons[buttons.length-1]
+        if(event.shiftKey && document.activeElement===first){event.preventDefault();last.focus()}
+        else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first.focus()}
+      }
+    }
+    document.addEventListener('keydown',onKeyDown)
+    return ()=>{document.removeEventListener('keydown',onKeyDown);previous?.focus()}
+  },[revokeTarget,revokeBusy])
   const [olderCursor,setOlderCursor] = useState<string|null>(null)
   const [olderBusy,setOlderBusy] = useState(false)
   const [newNotice,setNewNotice] = useState(false)
@@ -395,7 +417,10 @@ function ChatSession({ id, variant = 'direct' }: { id: string; variant?: 'direct
         else if(mode==='initial'||atBottom)pendingScroll.current='bottom'
         else if(r.value.items.some(m=>!messagesRef.current.some(old=>old.id===m.id)))setNewNotice(true)
         const merged=new Map(messagesRef.current.map(m=>[m.id,m]))
-        for(const message of r.value.items)merged.set(message.id,message)
+        for(const message of r.value.items) {
+          // A stale fetch must never restore content already confirmed revoked.
+          if(!merged.get(message.id)?.revoked)merged.set(message.id,message)
+        }
         messagesRef.current=[...merged.values()].sort((a,b)=>a.threadSeq&&b.threadSeq?BigInt(a.threadSeq)<BigInt(b.threadSeq)?-1:BigInt(a.threadSeq)>BigInt(b.threadSeq)?1:0:Date.parse(a.createdAt)-Date.parse(b.createdAt)||a.id.localeCompare(b.id))
         setMessages(messagesRef.current);setState('ready');setErr('')
         if(mode==='older'||!cursor)setOlderCursor(r.value.hasMore?r.value.olderCursor:null)
@@ -407,12 +432,39 @@ function ChatSession({ id, variant = 'direct' }: { id: string; variant?: 'direct
     } finally {pageLock.current=false;setOlderBusy(false)}
   }
   const loadMessages = async () => { await syncMessages(messagesRef.current.length?'new':'initial') }
+  function markRevoked(ids: string[]) {
+    const revoked = new Set(ids)
+    if (!messagesRef.current.some(message => revoked.has(message.id) && !message.revoked)) return
+    messagesRef.current = messagesRef.current.map(message => revoked.has(message.id)
+      ? {...message, revoked:true, body:'', media:[], mentionsAll:false} : message)
+    setMessages(messagesRef.current)
+  }
+  async function syncRevocations() {
+    const ids = messagesRef.current.filter(message => !message.revoked).map(message => message.id)
+    for(let offset=0;offset<ids.length;offset+=200) {
+      const result = await getMessageRevocations(id,ids.slice(offset,offset+200))
+      if(!accountAlive())return false
+      if(!result.ok){setErr('撤回状态同步失败，正在重试');return false}
+      markRevoked(result.value.revokedIds)
+    }
+    return true
+  }
+  async function confirmRevoke() {
+    if(!revokeTarget || revokeBusy)return
+    setRevokeBusy(true);setRevokeError('')
+    try {
+      const result = await revokeThreadMessage(id,revokeTarget)
+      if(!accountAlive())return
+      if(result.ok){markRevoked([result.value.id]);setRevokeTarget(null)}
+      else setRevokeError(result.status===404?'消息不存在，或你无权撤回':'撤回失败，请重试')
+    } finally {if(accountAlive())setRevokeBusy(false)}
+  }
   useEffect(()=>{void loadMessages()},[id])
   useForegroundPoll(async()=>{
     if(!accountAlive())return false
     const result=await syncMessages('new')
     if(result)void loadMeta()
-    return result
+    return result && await syncRevocations()
   },3000,state==='ready')
   useEffect(()=>{
     const last=messages.at(-1)?.threadSeq
@@ -871,6 +923,15 @@ function ChatSession({ id, variant = 'direct' }: { id: string; variant?: 'direct
       }
       scroll
     >
+      {revokeTarget && <div className="chat__revoke-dialog" role="dialog" aria-modal="true" aria-labelledby="revoke-title">
+        <div className="chat__revoke-panel" ref={revokePanel}>
+          <h2 id="revoke-title">撤回这条消息？</h2>
+          <p>撤回后双方将显示“消息已撤回”。对方可能已经看过或保存了内容。</p>
+          {revokeError && <p role="alert">{revokeError}</p>}
+          <button autoFocus disabled={revokeBusy} onClick={()=>setRevokeTarget(null)}>取消</button>
+          <button disabled={revokeBusy} onClick={()=>void confirmRevoke()}>{revokeBusy?'正在撤回…':'确认撤回'}</button>
+        </div>
+      </div>}
       {blockConfirm && <div className="dm__notice" role="alert"><p>{blockedByMe?'解除拉黑后可重新互发私信。':'拉黑后双方不能发送新私信，历史消息仍保留。'}</p><button disabled={blockBusy} onClick={()=>void toggleBlock()}>{blockedByMe?'确认解除拉黑':'确认拉黑'}</button><button onClick={()=>setBlockConfirm(false)}>取消</button></div>}
       {blockedByMe && <p className="dm__notice">已拉黑该用户，可通过私信设置解除。</p>}
       {pendingMedia && <div className="dm__notice"><span>附件尚未确认发送</span><button disabled={!!busy} onClick={()=>void retryMedia()}>重试发送附件</button><button disabled={!!busy} onClick={()=>setPendingMedia(null)}>取消</button></div>}
@@ -949,6 +1010,7 @@ function ChatSession({ id, variant = 'direct' }: { id: string; variant?: 'direct
                     <span className="bubble__text">{m.body}</span>
                   )}
                   <span className="bubble__time">{relativeTime(m.createdAt)}</span>
+                  {mine && !m.revoked && <button className="bubble__revoke" disabled={revokeBusy} onClick={()=>{setRevokeError('');setRevokeTarget(m.id)}}>撤回</button>}
                 </div>
               </div>
             )

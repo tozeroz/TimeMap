@@ -513,3 +513,9 @@
 .dm__notice{padding:12px 16px;margin:0;background:#f5f1e7;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
 .dm__notice button,.dm__history{min-height:44px;padding:8px 14px;color:#445d42}
 .dm__history{display:block;margin:0 auto;text-align:center;font-size:13px}
+.bubble__revoke{display:block;min-height:44px;padding:8px 0;color:inherit;font-size:12px;text-decoration:underline}
+.chat__revoke-dialog{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.35)}
+.chat__revoke-panel{width:min(100%,360px);padding:20px;border-radius:16px;background:var(--c-surface,#fff);color:var(--c-text)}
+.chat__revoke-panel h2{margin:0 0 12px;font-size:18px}
+.chat__revoke-panel p{font-size:14px;line-height:1.6}
+.chat__revoke-panel button{min-height:44px;padding:10px 18px;color:var(--c-text)}

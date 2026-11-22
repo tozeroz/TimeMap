@@ -27,7 +27,7 @@ try {
     const peer={id:other,displayName:'另一位同学',avatarMediaId:'cccccccc-cccc-4ccc-8ccc-000000000001'}
     await page.addInitScript(({me})=>localStorage.setItem('campus.demo.session.v1',JSON.stringify({token:'test-dm-session-token',expiresAt:'2099-01-01',user:{id:me,displayName:'本人',handle:'me'}})),{me})
     const messages=Array.from({length:75},(_,i)=>({id:`dddddddd-dddd-4ddd-8ddd-${String(i+1).padStart(12,'0')}`,threadSeq:String(i+1),clientRequestId:null,senderId:other,sender:'另一位同学',senderAvatarMediaId:peer.avatarMediaId,body:`历史消息${i+1}`,kind:'text',media:[],revoked:false,createdAt:new Date().toISOString()}))
-    let blocked=false,first=true,postKeys=[],readPositions=[],polls=0
+    let blocked=false,first=true,postKeys=[],readPositions=[],polls=0,revokeFails=true
     await page.route('**/api/**',async route=>{
       const req=route.request(),url=new URL(req.url()),path=url.pathname
       let data={items:[]}
@@ -37,6 +37,12 @@ try {
       else if(path==='/api/threads/direct')data={id:thread,kind:'direct',peer}
       else if(path===`/api/threads/${thread}`)data={id:thread,kind:'direct',title:null,peerName:peer.displayName,peer,memberCount:2,members:[{id:me,displayName:'本人'},peer],blockedByMe:blocked,canMessage:!blocked}
       else if(path===`/api/threads/${thread}/read`){readPositions.push(req.postDataJSON().throughSeq);data={lastReadSeq:req.postDataJSON().throughSeq}}
+      else if(path===`/api/threads/${thread}/messages/revocations`)data={revokedIds:messages.filter(m=>m.revoked&&req.postDataJSON().messageIds.includes(m.id)).map(m=>m.id)}
+      else if(path.endsWith('/revoke')) {
+        if(revokeFails){revokeFails=false;await route.fulfill({status:503,json:{error:'not_ready'}});return}
+        const message=messages.find(m=>m.id===path.split('/').at(-2));assert(message&&message.senderId===me)
+        message.revoked=true;message.body='';message.media=[];data={id:message.id,threadSeq:message.threadSeq,revoked:true}
+      }
       else if(path===`/api/threads/${thread}/messages`) {
         if(req.method()==='POST') {
           const input=req.postDataJSON();postKeys.push(input.clientRequestId)
@@ -72,7 +78,22 @@ try {
     await page.locator(`[data-message-id="${messages[75].id}"]`).waitFor()
     assert.equal(postKeys[0],postKeys[1]);assert.equal(messages.length,76)
     assert.equal(await input.inputValue(),'')
-    messages.push({...messages[0],id:'ffffffff-ffff-4fff-8fff-000000000077',threadSeq:'77',body:'前台自动收到的新消息'})
+    const ownRow=page.locator(`[data-message-id="${messages[75].id}"]`)
+    assert.equal(await page.getByRole('button',{name:'撤回',exact:true}).count(),1,'Only own messages offer revoke')
+    await ownRow.getByRole('button',{name:'撤回',exact:true}).click()
+    await page.getByRole('dialog').getByRole('button',{name:'取消',exact:true}).click()
+    assert.equal(messages[75].revoked,false)
+    await ownRow.getByRole('button',{name:'撤回',exact:true}).click()
+    await page.getByRole('button',{name:'确认撤回',exact:true}).click()
+    await page.getByText('撤回失败，请重试',{exact:true}).waitFor()
+    await page.getByRole('button',{name:'确认撤回',exact:true}).click()
+    await ownRow.getByText('消息已撤回',{exact:true}).waitFor()
+    assert.equal(await ownRow.getByRole('button',{name:'撤回',exact:true}).count(),0)
+    // Revoke an old loaded message without any new sequence: incremental reads
+    // alone cannot discover this change.
+    messages[0].revoked=true;messages[0].body='';messages[0].media=[]
+    await page.locator(`[data-message-id="${messages[0].id}"]`).getByText('消息已撤回',{exact:true}).waitFor()
+    messages.push({...messages[0],id:'ffffffff-ffff-4fff-8fff-000000000077',threadSeq:'77',body:'前台自动收到的新消息',revoked:false})
     await page.getByText('前台自动收到的新消息',{exact:true}).waitFor()
     await page.getByRole('button',{name:'私信设置',exact:true}).click()
     await page.getByRole('button',{name:'确认拉黑',exact:true}).click()
@@ -92,5 +113,5 @@ try {
     assert.deepEqual(errors,[])
     await page.close()
   }
-  console.log('PASS direct messaging browser: namecard creation, 75-message history, uncertain send retry key/dedup, foreground sync, read positions, block/unblock, hidden polling; 320/390/1024px')
+  console.log('PASS direct messaging browser: namecard creation, 75-message history, uncertain send retry key/dedup, foreground sync, read positions, block/unblock, hidden polling, revoke cancel/retry and historical revocation sync; 320/390/1024px')
 } finally {await browser?.close();dev.kill()}
