@@ -3,6 +3,7 @@ import type { Db } from './db.ts'
 import { parseCategoryFilter } from './placeCategories.ts'
 import { publicAuthor } from './anonymous.ts'
 import { randomUUID } from 'node:crypto'
+import { registerMapDiscovery } from './mapDiscovery.ts'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 // Each enabled ancestor sees posts attached to itself or enabled descendants.
@@ -46,7 +47,7 @@ const POST_SELECT = `p.id, coalesce((select u.display_name from users u where u.
 const ORDER = `(q.created_at >= $2::timestamptz - interval '30 days') desc,
   q.like_count desc, q.created_at desc, q.id asc`
 
-interface PostRow {
+export interface PostRow {
   id: string; author_name: string; author_id: string | null; is_anonymous: boolean; body: string; place: string | null;
   place_id: string; created_at: Date | string; image_mode: string; place_lat: number | null;
   place_lng: number | null; like_count: number; comment_count: number; map_media_id: string | null; images: unknown;
@@ -71,6 +72,7 @@ function post(row: PostRow, meId: string | null) {
 
 export function registerMapRoutes(app: FastifyInstance, db: Db, options: { previewHierarchy?: boolean } = {}) {
   const TREE = placeTree(options.previewHierarchy)
+  registerMapDiscovery(app, db, TREE, POST_SELECT, post)
   const snapshots = new Map<string, { placeId: string; asOf: string; ids: string[]; expires: number; truncated: boolean }>()
   app.get('/api/map/places', async (req, reply) => {
     // 多选（逗号分隔或重复参数）按 OR；旧分类值映射到新分类（见 placeCategories.ts）

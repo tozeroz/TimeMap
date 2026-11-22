@@ -112,7 +112,7 @@ export default function App() {
         ⚠️ 审核 64 的纠正："不要为了测试方便永久保留一个原版不存在的产品页面" ⇒
           Gate 已迁到 FeedDetail 的**真实评论表面**（scripts/m5/gate-wo17-post-identity.mjs）。
       */}
-      {root === 'message' && <MessageScreen />}
+      {root === 'message' && <MessageScreen key={route.query.category || 'home'} category={route.query.category} />}
       {/*
         M5 WO#8：会话路由的 id 解析（**修掉一个真实缺陷**）。
 

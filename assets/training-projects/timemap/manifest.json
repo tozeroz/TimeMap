@@ -1,0 +1,24 @@
+{
+  "projectUrl": "https://github.com/tozeroz/TimeMap",
+  "projectId": "c1a55000-2026-4000-8000-000000000002",
+  "images": [
+    {
+      "role": "cover",
+      "file": "logo.png",
+      "sourceName": "logo出版.png",
+      "width": 1254,
+      "height": 1254,
+      "mediaId": "a5dcc449-ba4d-5822-aa89-34eb3d9eb60e",
+      "sha256": "f2ec6637cd8759cb3ec2b878c70b0ebff104d4b4334c7ab8f26b78d2fe28c5bf"
+    },
+    {
+      "role": "showcase",
+      "file": "poster.png",
+      "sourceName": "25f1f58507dc1aa1a4a9a93044d5a803.png",
+      "width": 1344,
+      "height": 1792,
+      "mediaId": "988845c6-963a-5d90-a5fe-f2fc9f75c444",
+      "sha256": "9c0886dce0c3ea3486a37fa96d08be4f4e368e9abcc73883d05d78c61fdd601d"
+    }
+  ]
+}

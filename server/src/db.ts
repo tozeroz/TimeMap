@@ -1,3 +1,6 @@
+import mapCurationSql from './migrations/047_map_curation.sql'
+import directMessagesSql from './migrations/046_direct_messages.sql'
+import inboxSql from './migrations/045_inbox.sql'
 import postCommentPolicySql from './migrations/044_post_comment_policy.sql'
 import { createHash } from 'node:crypto'
 import pg from 'pg'
@@ -202,9 +205,10 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '043_user_feedback', sql: userFeedbackSql },
   { version: '044_post_comment_policy', sql: postCommentPolicySql },
   { version: '044_release_1_4_2', sql: release142Sql },
-  // 045（2026-11-20）：银杏大道定位修正到芳华园与明湖的分界处。
-  //      只改 latitude/longitude，带旧值守卫（不动 address/简介，不改已应用的 031）；
-  //      中点估算过程与 238.5 米位移见迁移文件头部。
+  { version: '045_inbox', sql: inboxSql },
+  { version: '046_direct_messages', sql: directMessagesSql },
+  { version: '047_map_curation', sql: mapCurationSql },
+  // 银杏大道定位修正。
   { version: '045_place_ginkgo_position', sql: placeGinkgoPositionSql },
 ]
 

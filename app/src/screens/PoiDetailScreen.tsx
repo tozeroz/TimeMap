@@ -33,8 +33,8 @@ export function PoiDetailScreen({ id }: { id: string }) {
         <button className="pd__mapLink" onClick={() => navigate('map', { placeId: place.id })}>在地图中查看 <span aria-hidden="true">→</span></button>
       </section>
       <TimeMachine photos={place.photos} history={place.history} />
-      <PlaceActivitiesSection place={place} onOpenActivity={aid => navigate('activity', { id: aid, placeId: place.id })} onOpenAll={() => navigate('activities', { placeId: place.id })} />
       <PlaceFeedSection place={place} sort={d.sort} setSort={d.setSort} filter={d.filter} setFilter={d.setFilter} allEmpty={d.allEmpty} feedPhase={d.feedPhase} onRetryFeed={d.retryFeed} showFilter layout="columns" onOpenPost={(pid, browse) => navigate('feed', { id: pid, browse })} onOpenAll={() => navigate('campus', { placeId: place.id })} />
+      <PlaceActivitiesSection place={place} onOpenActivity={aid => navigate('activity', { id: aid, placeId: place.id })} onOpenAll={() => navigate('activities', { placeId: place.id })} />
     </article>
   </Screen>
 }

@@ -1,3 +1,4 @@
+import { registerDirectMessageRoutes, prepareMessage, messageFingerprint, MessagingError } from './directMessages.ts'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, rename, statfs, unlink, writeFile } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
@@ -28,6 +29,8 @@ import { parseCategoryFilter } from './placeCategories.ts'
 import { registerProfileRoutes } from './profileRoutes.ts'
 import { registerSubmissionRoutes } from './submissionsRoutes.ts'
 import { registerFeedbackRoutes } from './feedbackRoutes.ts'
+import { registerInboxRoutes } from './inboxRoutes.ts'
+import { registerCurationRoutes } from './curationRoutes.ts'
 import { registerProjectRoutes } from './projectRoutes.ts'
 import { publicAuthor } from './anonymous.ts'
 import { publicCommentIdentity, type CommentIdentitySource } from './commentIdentity.ts'
@@ -228,7 +231,8 @@ export function buildServer(deps: ServerDeps) {
             从部署产物提取已注册方法，逐一断言它们都在 allow-methods 里。
             它上线当天就抓到了这个 DELETE 缺失（我原本只修了 PATCH）。
       */
-      reply.header('access-control-allow-methods', 'GET,POST,PATCH,DELETE,OPTIONS')
+      // PUT is used by project edits and likes in the Android WebView.
+      reply.header('access-control-allow-methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
       reply.header('access-control-allow-headers', 'content-type,authorization')
       reply.header('access-control-max-age', '600')
     }
@@ -776,7 +780,7 @@ export function buildServer(deps: ServerDeps) {
       而此前路由清单里没有任何 /api/users/:id（只有 /api/auth/me 返回"自己"）。
 
     ## 边界（审核记录 53 明确冻结）
-      · **只返回两个字段**：`{ id, displayName }`
+      · **公开名片字段**：`{ id, displayName, avatarMediaId }`
         —— **不**顺手把 phone / campus / 学院 / 年级之类放进来（那些要么没有权威来源，
            要么属于不该对任意登录用户暴露的信息）。
       · 未知 id → **404 `not_found`**（与既有"不区分不存在与无权"的口径一致）
@@ -802,8 +806,8 @@ export function buildServer(deps: ServerDeps) {
     const sess = await resolveSession(req.headers.authorization)
     if (sess.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
     try {
-      const r = await db.pool.query<{ id: string; display_name: string }>(
-        'select id, display_name from users where id = $1',
+      const r = await db.pool.query<{ id: string; display_name: string; avatar_media_id: string | null }>(
+        'select id, display_name, avatar_media_id from users where id = $1',
         [id],
       )
       const row = r.rows[0]
@@ -811,8 +815,8 @@ export function buildServer(deps: ServerDeps) {
         reply.code(404)
         return { error: 'not_found' }
       }
-      // 只这两个字段（审核 53：当前阶段只允许这两个）
-      return { id: row.id, displayName: row.display_name }
+      // 公开名片只提供昵称及当前公开头像，不包含联系方式和院系等私有资料。
+      return { id: row.id, displayName: row.display_name, avatarMediaId: row.avatar_media_id }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
       reply.code(500)
@@ -964,7 +968,7 @@ export function buildServer(deps: ServerDeps) {
         空数组 = 不过滤（等价"全部地标"）。非法 id → 400 `bad_place_id`（显式拒绝，
         不做静默忽略：静默忽略会让调用方看见"全部帖子"却以为筛过了）。
     */
-    const query = req.query as { sort?: unknown; placeId?: unknown; placeIds?: unknown } | undefined
+    const query = req.query as { sort?: unknown; placeId?: unknown; placeIds?: unknown; paginate?: unknown; cursor?: unknown } | undefined
     const sortRaw = query?.sort
     let sort: 'latest' | 'hot' = 'latest'
     if (sortRaw !== undefined) {
@@ -1002,7 +1006,21 @@ export function buildServer(deps: ServerDeps) {
       池子按 created_at 倒序取（与「最新」同源），保证同样的库状态能复现同样的池子。
     */
     const orderBy = 'q.created_at desc, q.id desc'
-    const limitParam = sort === 'hot' ? hotPoolLimit() : LIST_LIMIT
+    const paginated = query?.paginate === '1'
+    let continuation: { time: string | null; id: string | null; exclude: string[] } | null = null
+    if (query?.cursor !== undefined) {
+      try {
+        if (!paginated || typeof query.cursor !== 'string' || query.cursor.length > 6000) throw new Error()
+        continuation = JSON.parse(Buffer.from(query.cursor, 'base64url').toString())
+        if (!continuation || !Array.isArray(continuation.exclude) || continuation.exclude.length > 50 ||
+            continuation.exclude.some(id => typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) ||
+            !(continuation.time === null && continuation.id === null ||
+              typeof continuation.time === 'string' && Number.isFinite(Date.parse(continuation.time)) &&
+              typeof continuation.id === 'string' && /^[0-9a-f-]{36}$/i.test(continuation.id))) throw new Error()
+      } catch { return reply.code(400).send({ error: 'invalid_cursor' }) }
+    }
+    const firstHot = sort === 'hot' && !continuation
+    const limitParam = firstHot ? hotPoolLimit() : LIST_LIMIT + (paginated ? 1 : 0)
 
     try {
       const r = await db.pool.query<
@@ -1020,10 +1038,11 @@ export function buildServer(deps: ServerDeps) {
           open_count: number
           view_impressions: string
           view_opens: string
+          cursor_time: string
         }
       >(
         `select * from (
-        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.allow_anonymous_comments, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.place_id,
+        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.allow_anonymous_comments, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.created_at::text as cursor_time, p.place_id,
                 -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
                 -- 为什么需要：地图页的标记按经纬度渲染（默认 provider=tencent 用
                 -- projectToContainer(LatLng)；RealMap 用 L.marker([lat,lng])），
@@ -1079,13 +1098,21 @@ export function buildServer(deps: ServerDeps) {
             and p.status = 'published'
             -- CAMP-003：空数组 = 不过滤（"全部地标"）
             and (cardinality($4::uuid[]) = 0 or p.place_id = any($4::uuid[]))
+            and ($5::timestamptz is null or (p.created_at,p.id) < ($5::timestamptz,$6::uuid))
+            and not (p.id = any($7::uuid[]))
         ) q
         order by ${orderBy}
         limit $1`,
-        [limitParam, meId, authorId, placeIds],
+        [limitParam, meId, authorId, placeIds, continuation?.time ?? null, continuation?.id ?? null, continuation?.exclude ?? []],
       )
-      const rows = sort === 'hot' ? await hotOrderRows(r.rows, LIST_LIMIT) : r.rows
+      const rows = firstHot ? await hotOrderRows(r.rows, LIST_LIMIT) : r.rows.slice(0, LIST_LIMIT)
+      const last = rows.at(-1)
+      const nextCursor = !paginated || !last || (!firstHot && r.rows.length <= LIST_LIMIT) ? null
+        : Buffer.from(JSON.stringify(firstHot
+          ? { time: null, id: null, exclude: rows.map(row => row.id) }
+          : { time: last.cursor_time, id: last.id, exclude: continuation?.exclude ?? [] })).toString('base64url')
       return {
+        ...(paginated ? { nextCursor } : {}),
         items: rows.map((row) => ({
           id: row.id,
           // 匿名帖（033）：对外统一「匿名同学」，作者本人仍拿到自己的 authorId
@@ -2497,10 +2524,15 @@ export function buildServer(deps: ServerDeps) {
     if (s.kind === 'none') return unauthorized(reply)
 
     let data
+    let buf: Buffer
     try {
       data = await (req as unknown as { file: (o?: unknown) => Promise<MultipartFile | undefined> }).file({
         limits: { fileSize: MEDIA_MAX_BYTES, files: 1 },
       })
+      if (!data) return reply.code(400).send({ error: 'no_file' })
+      // Fields after the file part become available only once its stream is
+      // consumed. Accept either multipart order, including older clients.
+      buf = await data.toBuffer()
     } catch (err) {
       // @fastify/multipart 在超限时抛错（fileSize limit）
       const code = (err as { code?: string }).code ?? ''
@@ -2570,7 +2602,6 @@ export function buildServer(deps: ServerDeps) {
       }
     }
 
-    const buf = await data.toBuffer()
     if (buf.length === 0) {
       reply.code(400)
       return { error: 'empty_file' }
@@ -2854,110 +2885,47 @@ export function buildServer(deps: ServerDeps) {
   // （exists thread_members ...），并在返回消息时按 deleted_at 标注是否撤回。
   // -------------------------------------------------------------------------
   app.get('/api/threads', async (req, reply) => {
-    const s = await resolveSession(req.headers.authorization)
-    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
-    if (s.kind === 'none') return unauthorized(reply)
+    const session = await resolveSession(req.headers.authorization)
+    if (session.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (session.kind === 'none') return unauthorized(reply)
+    const query = req.query as { cursor?: string; kind?: string }
+    if(query.kind!==undefined && !['direct','group'].includes(query.kind)) return reply.code(400).send({error:'invalid_thread_kind'})
+    let time: string | null = null, cursorId: string | null = null
+    if (query.cursor) {
+      try {
+        if (typeof query.cursor !== 'string' || query.cursor.length > 512) throw new Error()
+        const decoded = JSON.parse(Buffer.from(query.cursor, 'base64url').toString())
+        if (typeof decoded.time !== 'string' || !Number.isFinite(Date.parse(decoded.time)) || !/^[0-9a-f-]{36}$/i.test(decoded.id)) throw new Error()
+        time = decoded.time; cursorId = decoded.id
+      } catch { return reply.code(400).send({ error: 'invalid_cursor' }) }
+    }
     try {
-      const r = await db.pool.query<{
-        id: string
-        kind: string
-        title: string | null
-        member_count: string
-        last_body: string | null
-        last_kind: string | null
-        last_at: Date | null
-        peer_name: string | null
-        peer_id: string | null
-      }>(
-        `select t.id, t.kind, t.title,
-                (select count(*) from thread_members tm2 where tm2.thread_id = t.id)::text as member_count,
-                lm.body as last_body, lm.kind as last_kind, lm.created_at as last_at,
-                -- M5 WO#8：direct 会话的"对方昵称"。
-                -- 为什么需要它：会话列表要显示一行"跟谁在聊"，而 direct 会话的 t.title 是 NULL
-                -- （实测：ffffffff-…-001 的 title=NULL、成员 2 人）。没有它这一行就没名字可显示，
-                -- 列表会退化成"未命名会话"—— 那既不好用，也不符合原版（原版显示对方昵称）。
-                -- 取法：本会话里**除我以外**的第一个成员。
-                -- M5 WO#9A：**只对 kind='direct' 计算**。群聊里没有"对方"这个概念，
-                -- 群里返回 peerName 只是"某个别的成员"——那是**误导性字段**，将来一定会被误用
-                -- （例如把群聊行显示成某个成员的名字）。群聊行的显示名应取 t.title，
-                -- 因此这里用 case 在 SQL 层挡掉。
-                --
-                -- M5 WO#12：**同时**返回 peer_id（审核记录 53 批准）。
-                --   为什么不能只用 peerName 定位"我与 TA 的会话"：displayName 可能重名/改名，
-                --   拿名字当身份是错的。peer_id 回答的是"已有 direct 会话里，对方是谁"，
-                --   这是可机械验证的（== thread_members 中除我之外的另一成员 id）。
-                --   ⚠️ 两个字段**必须来自同一行**：因此用**同一 order by** 的两个子查询，
-                --      而不是"分别取第一个" ——那可能在极端情况下指向不同成员，造成
-                --      "名字与 id 不是同一个人"这种最难查的错误。
-                --   ⚠️ 它**不**回答"从没聊过的人点私信该怎样建会话" —— 那是另一个问题，
-                --      WO#12 对"零匹配会话"的处置是 hide/unavailable，不猜、不造。
-                case when t.kind = 'direct' then (
-                  select u.display_name
-                    from thread_members tm3
-                    join users u on u.id = tm3.user_id
-                   where tm3.thread_id = t.id and tm3.user_id <> $1
-                   order by u.display_name
-                   limit 1
-                ) else null end as peer_name,
-                case when t.kind = 'direct' then (
-                  select tm4.user_id
-                    from thread_members tm4
-                    join users u2 on u2.id = tm4.user_id
-                   where tm4.thread_id = t.id and tm4.user_id <> $1
-                   order by u2.display_name
-                   limit 1
-                ) else null end as peer_id
-           from message_threads t
-           join thread_members me on me.thread_id = t.id and me.user_id = $1
-           left join lateral (
-             select m.body, m.kind, m.created_at
-               from messages m
-              where m.thread_id = t.id and m.deleted_at is null
-              order by m.created_at desc, m.id desc
-              limit 1
-           ) lm on true
-          order by coalesce(lm.created_at, t.created_at) desc
-          limit 50`,
-        [s.user.userId],
-      )
-      return {
-        items: r.rows.map((row) => ({
-          id: row.id,
-          kind: row.kind,
-          title: row.title,
-          memberCount: Number.parseInt(row.member_count, 10),
-          // 列表行的显示名：group 用 title；direct 用对方昵称（见上面 SQL 的注释）
-          peerName: row.peer_name,
-          // M5 WO#12（审核 53 批准）：direct 会话里"对方是谁"的**权威身份**。
-          // 用途：他人主页的「私信」要跳到"我与 TA 的会话"，靠 peerName 匹配不可靠
-          // （重名/改名），必须按 id 匹配。群聊恒为 null（没有"对方"这个概念）。
-          peerId: row.peer_id,
-          lastMessage: row.last_body === null ? null : { body: row.last_body, kind: row.last_kind, createdAt: row.last_at?.toISOString() ?? null },
-        })),
-      }
-    } catch (err) {
-      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
-      reply.code(500)
-      return { error: 'db_error', message: (err as Error).message }
+      const result = await db.pool.query(`select t.id,t.kind,t.title,
+        (select count(*)::int from thread_members where thread_id=t.id) as member_count,
+        peer.id as peer_id,peer.display_name as peer_name,peer.avatar_media_id,
+        lm.body,lm.kind as last_kind,lm.deleted_at,lm.created_at,
+        coalesce(lm.created_at,t.created_at)::text as cursor_time,
+        (select count(*)::int from messages m where m.thread_id=t.id and m.sender_id<>$1 and m.deleted_at is null
+          and m.thread_seq>me.last_read_seq and m.created_at>greatest(me.joined_at,coalesce(ir.read_at,'epoch'::timestamptz))) as unread_count
+        from message_threads t join thread_members me on me.thread_id=t.id and me.user_id=$1
+        left join inbox_reads ir on ir.user_id=$1 and ir.scope='thread:'||t.id
+        left join lateral (select u.id,u.display_name,u.avatar_media_id from thread_members tm join users u on u.id=tm.user_id
+          where t.kind='direct' and tm.thread_id=t.id and tm.user_id<>$1 order by u.id limit 1) peer on true
+        left join lateral (select body,kind,created_at,deleted_at from messages where thread_id=t.id order by thread_seq desc limit 1) lm on true
+        where (t.kind<>'direct' or exists(select 1 from messages where thread_id=t.id)) and ($4::text is null or t.kind=$4)
+          and ($2::timestamptz is null or (coalesce(lm.created_at,t.created_at),t.id)<($2::timestamptz,$3::uuid))
+        order by coalesce(lm.created_at,t.created_at) desc,t.id desc limit 51`, [session.user.userId, time, cursorId, query.kind??null])
+      const rows = result.rows.slice(0,50), last = rows.at(-1)
+      return { items: rows.map(row => ({ id: row.id,kind: row.kind,title: row.title,memberCount: row.member_count,
+        peerId: row.peer_id,peerName: row.peer_name,peerAvatarMediaId: row.avatar_media_id,unreadCount: row.unread_count,
+        lastMessage: row.created_at ? { body: row.deleted_at ? '消息已撤回' : row.body,kind: row.deleted_at ? 'text' : row.last_kind,createdAt: row.created_at.toISOString() } : null })),
+        nextCursor: result.rows.length>50 && last ? Buffer.from(JSON.stringify({time:last.cursor_time,id:last.id})).toString('base64url') : null }
+    } catch (error) {
+      if (db.noteFailure(error) === 'transient') return dbUnavailable(reply,error)
+      reply.code(500); return {error:'db_error'}
     }
   })
 
-  /*
-    M5 WO#9A：**单个会话的元数据**。
-
-    为什么需要它：群聊页的顶部要显示**群名**，而群名是服务端数据。
-    可选做法只有两种：
-      (a) 从「消息」列表跳过来时把 title 塞进路由 query —— ❌ 那样群名就变成**客户端提供的数据**，
-          刷新/深链会丢，而且客户端可以随便改；一个"页面标题"不该是不可信输入。
-      (b) 页面自己按 id 取权威元数据 —— ✅ 本接口。
-    返回体与列表里的单项**同构**（同一批字段），避免出现两套会话表示。
-
-    访问控制与 `/api/threads/:id/messages` **完全一致**：
-      · id 形状不合法 → 404 not_found
-      · 不是成员 / 不存在 / 未登录 → **一律 404**（沿用既有"刻意不区分"的设计：
-        不让调用方从状态码区分"不存在"与"无权查看"）
-      · 未登录 → 401（这一条与 messages 接口一致：先判会话再判形状）
-  */
   app.get('/api/threads/:id', async (req, reply) => {
     const id = (req.params as { id?: string }).id ?? ''
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
@@ -3011,15 +2979,15 @@ export function buildServer(deps: ServerDeps) {
          这里按 display_name 排序**只是为了结果稳定**（同一份数据每次返回顺序一致，
          便于 Gate 做集合与配对比较），并在此显式声明它是**我方选择**而非原版规则。
       */
-      const members = await db.pool.query<{ id: string; display_name: string }>(
-        `select u.id, u.display_name
+      const members = await db.pool.query<{ id: string; display_name: string; avatar_media_id: string | null }>(
+        `select u.id, u.display_name, u.avatar_media_id
            from thread_members tm
            join users u on u.id = tm.user_id
           where tm.thread_id = $1
           order by u.display_name, u.id`,
         [id],
       )
-      const memberList = members.rows.map((m) => ({ id: m.id, displayName: m.display_name }))
+      const memberList = members.rows.map((m) => ({ id: m.id, displayName: m.display_name, avatarMediaId: m.avatar_media_id }))
       const memberCount = Number.parseInt(row.member_count, 10)
       // 一致性自检：两者由**不同查询**得到，若将来有人改了其中一处，这里能立刻暴露
       if (memberList.length !== memberCount) {
@@ -3031,12 +2999,16 @@ export function buildServer(deps: ServerDeps) {
         }
       }
 
+      const peer = row.kind === 'direct' ? memberList.find(m => m.id !== s.user.userId) ?? null : null
+      const block = peer ? (await db.pool.query(`select blocker_id from user_blocks where
+        (blocker_id=$1 and blocked_id=$2) or (blocker_id=$2 and blocked_id=$1)`, [s.user.userId,peer.id])).rows : []
       return {
         id: row.id,
         kind: row.kind,
         title: row.title,
         memberCount,
         peerName: row.peer_name,
+        peer, blockedByMe: block.some(b => b.blocker_id === s.user.userId), canMessage: block.length === 0,
         members: memberList,
       }
     } catch (err) {
@@ -3059,6 +3031,13 @@ export function buildServer(deps: ServerDeps) {
       reply.code(404)
       return { error: 'not_found' }
     }
+    const query = req.query as { paginate?: string; beforeSeq?: string; afterSeq?: string }
+    const paginated = query.paginate === '1'
+    if ((query.beforeSeq !== undefined && !/^\d{1,18}$/.test(query.beforeSeq)) ||
+        (query.afterSeq !== undefined && !/^\d{1,18}$/.test(query.afterSeq)) ||
+        query.beforeSeq && query.afterSeq || !paginated && (query.beforeSeq || query.afterSeq)) {
+      reply.code(400); return { error: 'invalid_message_cursor' }
+    }
     try {
       const member = await db.pool.query(
         'select 1 from thread_members where thread_id = $1 and user_id = $2',
@@ -3078,8 +3057,11 @@ export function buildServer(deps: ServerDeps) {
         deleted_at: Date | null
         mentions_all: boolean
         media: unknown
+        thread_seq: string
+        client_request_id: string | null
+        avatar_media_id: string | null
       }>(
-        `select m.id, m.sender_id, u.display_name as sender_name, m.body, m.kind, m.created_at, m.deleted_at,
+        `select m.id, m.thread_seq::text, m.client_request_id, u.avatar_media_id, m.sender_id, u.display_name as sender_name, m.body, m.kind, m.created_at, m.deleted_at,
                 -- M5 WO#9B：@所有人 是消息的**持久属性**（存在列上），读模型必须原样带出，
                 -- 否则"刷新后 @所有人 就消失了"——而它本该与消息同生共死。
                 m.mentions_all,
@@ -3100,24 +3082,30 @@ export function buildServer(deps: ServerDeps) {
            from messages m
            left join users u on u.id = m.sender_id
           where m.thread_id = $1
-          order by m.created_at asc, m.id asc
+            and ($3::bigint is null or m.thread_seq<$3::bigint)
+            and ($4::bigint is null or m.thread_seq>$4::bigint)
+          order by ${paginated ? `m.thread_seq ${query.afterSeq ? 'asc' : 'desc'}` : 'm.created_at asc, m.id asc'}
           limit $2`,
-        [id, LIST_LIMIT],
+        [id, paginated ? 51 : LIST_LIMIT, query.beforeSeq ?? null, query.afterSeq ?? null],
       )
+      const rows = r.rows.slice(0,50)
+      if (paginated && !query.afterSeq) rows.reverse()
       return {
         threadId: id,
-        items: r.rows.map((row) => ({
+        ...(paginated ? { hasMore: r.rows.length>50, olderCursor: rows[0]?.thread_seq ?? null, newerCursor: rows.at(-1)?.thread_seq ?? query.afterSeq ?? null } : {}),
+        items: rows.map((row) => ({
           id: row.id,
           senderId: row.sender_id,
+          threadSeq: row.thread_seq, clientRequestId: row.client_request_id, senderAvatarMediaId: row.avatar_media_id,
           sender: row.sender_name,
-          body: row.body,
+          body: row.deleted_at ? '' : row.body,
           kind: row.kind,
           createdAt: row.created_at.toISOString(),
           // 撤回：**保留 kind 与行**，只标记状态 —— 界面显示"消息已撤回"，
           // 而媒体授权也已经因为 deleted_at 变成不可读（服务端强制执行，不是靠前端隐藏）
           revoked: row.deleted_at !== null,
           // M5 WO#9B：与 `mentions`（逐人）**并列**的独立字段，语义不混同
-          mentionsAll: row.mentions_all === true,
+          mentionsAll: row.deleted_at === null && row.mentions_all === true,
           media: row.deleted_at !== null ? [] : (row.media ?? []),
         })),
       }
@@ -3162,8 +3150,15 @@ export function buildServer(deps: ServerDeps) {
       return { error: 'not_found' }
     }
     const body = req.body as
-      | { body?: unknown; kind?: unknown; mentions?: unknown; mediaId?: unknown; mediaIds?: unknown }
+      | { body?: unknown; kind?: unknown; mentions?: unknown; mediaId?: unknown; mediaIds?: unknown; clientRequestId?: unknown }
       | undefined
+    if (body && Object.keys(body).some(key=>!['body','kind','mentions','mediaId','mediaIds','mentionsAll','clientRequestId'].includes(key))) {
+      reply.code(400); return {error:'invalid_payload'}
+    }
+    const requestId = typeof body?.clientRequestId === 'string' ? body.clientRequestId.toLowerCase() : null
+    if (body?.clientRequestId !== undefined && (!requestId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId))) {
+      reply.code(400); return { error: 'invalid_client_request_id' }
+    }
     const text = typeof body?.body === 'string' ? body.body.trim() : ''
     const kind = typeof body?.kind === 'string' ? body.kind : 'text'
     if (!text || text.length > 2000) {
@@ -3272,8 +3267,9 @@ export function buildServer(deps: ServerDeps) {
     }
     const mentionsAll = mentionsAllRaw === true
 
-    const client = await db.pool.connect()
+    let client: PoolClient | undefined
     try {
+      client=await db.pool.connect()
       await client.query('begin')
       // 发送者必须是会话成员（否则连"这个会话存在"都不告诉他 → 404）
       const member = await client.query(
@@ -3284,6 +3280,12 @@ export function buildServer(deps: ServerDeps) {
         await client.query('rollback')
         reply.code(404)
         return { error: 'not_found' }
+      }
+      const fingerprint = messageFingerprint({ text,kind,mediaId,mentions:[...mentions].sort(),mentionsAll })
+      const previous = await prepareMessage(client,threadId,s.user.userId,requestId,fingerprint)
+      if (previous) {
+        await client.query('commit')
+        return {id:previous.id,threadSeq:previous.thread_seq,clientRequestId:requestId,createdAt:previous.created_at.toISOString(),kind,mentions,mentionsAll,mediaId}
       }
       /*
         ---- M5 WO#9B：@所有人 的两条语义检查（审核记录 49 冻结的**第 3、4 步**）--------
@@ -3406,9 +3408,9 @@ export function buildServer(deps: ServerDeps) {
            读端可能读到半成品；而且一旦 UPDATE 失败就留下语义残缺的消息。
            （这正是审核 48 要求的"服务端事务不变量"：任一失败 → 零消息 + 零 mention 变更。）
       */
-      await client.query(
-        'insert into messages (id, thread_id, sender_id, body, kind, mentions_all) values ($1, $2, $3, $4, $5, $6)',
-        [msgId, threadId, s.user.userId, text, kind, mentionsAll],
+      const inserted = await client.query<{thread_seq:string;created_at:Date}>(
+        'insert into messages (id, thread_id, sender_id, body, kind, mentions_all, client_request_id, request_fingerprint) values ($1, $2, $3, $4, $5, $6, $7, $8) returning thread_seq::text,created_at',
+        [msgId, threadId, s.user.userId, text, kind, mentionsAll, requestId, fingerprint],
       )
       for (const m of mentions) {
         await client.query(
@@ -3430,9 +3432,13 @@ export function buildServer(deps: ServerDeps) {
       reply.code(201)
       // M5 WO#9B：把 mentionsAll 一并回给调用方 —— 客户端要靠它确认"@所有人 确实生效了"，
       // 而不是自己以为生效（Gate：AT_ALL_SELECTION_STATE_MATCHES_PAYLOAD 正是校验这一点）。
-      return { id: msgId, kind, mentions, mentionsAll, mediaId }
+      return { id: msgId, threadSeq:inserted.rows[0]!.thread_seq,clientRequestId:requestId,createdAt:inserted.rows[0]!.created_at.toISOString(),kind, mentions, mentionsAll, mediaId }
     } catch (err) {
-      await client.query('rollback').catch(() => undefined)
+      await client?.query('rollback').catch(() => undefined)
+      if (err instanceof MessagingError) {
+        if (err.status===429) reply.header('Retry-After','60')
+        reply.code(err.status); return {error:err.error}
+      }
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
       // 23503 = foreign_key_violation。走到这里只可能是"校验通过之后那张 media 行没了"
       // —— 例如 TTL GC 在同一瞬间把它回收了（cleanup-entry.ts 的 unattached 清扫）。
@@ -3453,7 +3459,7 @@ export function buildServer(deps: ServerDeps) {
       reply.code(500)
       return { error: 'db_error', message: (err as Error).message }
     } finally {
-      client.release()
+      client?.release()
     }
   })
 
@@ -3600,6 +3606,9 @@ export function buildServer(deps: ServerDeps) {
   registerSubmissionRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   // 043：用户反馈（bug / 功能建议）。写=登录用户，读与管理=管理员。
   registerFeedbackRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
+  registerInboxRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
+  registerCurationRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
+  registerDirectMessageRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   registerProjectRoutes({ app, db, resolveSession, unauthorized, dbUnavailable })
   registerMapRoutes(app, db)
   registerTimemapRoutes({

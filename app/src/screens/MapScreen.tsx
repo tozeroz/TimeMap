@@ -1,3 +1,4 @@
+import { isMappablePlace, mapSearchPlaces } from '../data/mapSearch'
 import { openFeed } from '../data/feedBrowse'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Screen } from '../components/Shell'
@@ -59,6 +60,8 @@ import {
   type OpenDetent,
 } from './placeSheetModel'
 import './map.css'
+import { DiscoveryOverlay, useMapDiscovery, type MapDiscoveryFilter } from './MapDiscovery'
+import './mapdiscovery-lite.css'
 
 /** 地点抽屉状态（design.md §8.1）：placeId 只在 closing 结束时置空 */
 interface SheetState {
@@ -144,7 +147,7 @@ export function markersFromPlaces(
   const M_PER_DEG_LNG = 111_320 * Math.cos((center[0] * Math.PI) / 180)
   const PX_PER_M = 1
   return places
-    .filter((p) => typeof p.latitude === 'number' && typeof p.longitude === 'number')
+    .filter(isMappablePlace)
     .map((p) => {
       const lat = p.latitude as number
       const lng = p.longitude as number
@@ -547,6 +550,7 @@ export function MapScreen() {
   }, [])
 
   const [markers, setMarkers] = useState<MapMarker[]>([])
+  const [mapPlaces, setMapPlaces] = useState<ApiPlaceListItem[]>([])
   const [published, setPublished] = useState<ApiPost | null>(null)
   /*
     发布成功落地的新帖 id 在挂载时固定（design §11.1）：打开抽屉会把 newPostId 从地址里去掉，
@@ -583,8 +587,8 @@ export function MapScreen() {
     MAP-002 / MAP-003：地图内的「搜索地标」工具。
 
     ## 数据来源
-      `GET /api/places?q=`（服务端子串匹配 name/address），只返回**团队维护的预设地点**
-      ⇒ 天然满足 MAP-003「只允许搜索和选择预设地标」。
+      与地图标记共用当前加载的预设地点，跟随标签筛选；按当前地图范围搜索名称／地址。
+      没有有效坐标、停用、范围外的地点不出现在搜索面板。
     ## 选中之后
       MAP-003 要求"地图移动并放大到该地标，同时打开该地点底部面板"。
       地点底部面板（PLACE-001）的形态要等地标详情那边一起定（见
@@ -617,10 +621,12 @@ export function MapScreen() {
       if (!alive) return
       if (!pr.ok) {
         setMarkers([])
+        setMapPlaces([])
         setPostsFailed(false)
         setMarkerPhase('unavailable')
         return
       }
+      setMapPlaces(pr.value.filter(isMappablePlace))
       const posts = po.ok ? po.value : []
       setPostsFailed(!po.ok)
       const fresh = publishedPostId ? posts.find(p => p.id === publishedPostId) : undefined
@@ -797,29 +803,26 @@ export function MapScreen() {
     }
   }, [persistView])
 
-  // MAP-003：搜索走服务端（与地点列表同一纪律：不在客户端 filter）
+  // Map search uses the current map's loaded/category-filtered places, not an unrelated global list.
   useEffect(() => {
     if (!searchOpen) return
-    let alive = true
-    setSearchPhase('loading')
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        const r = await listPlaces(keyword || undefined)
-        if (!alive) return
-        if (!r.ok) {
-          setSearchResults([])
-          setSearchPhase('unavailable')
-          return
-        }
-        setSearchResults(r.value)
-        setSearchPhase('ready')
-      })()
-    }, 250)
-    return () => {
-      alive = false
-      window.clearTimeout(timer)
+    const update = () => {
+      if (markerPhase === 'unavailable' || offline) {
+        setSearchResults([]);setSearchPhase('unavailable');return
+      }
+      const handle=mapHandleRef.current
+      if (markerPhase !== 'ready' || !handle?.getSize()) {
+        setSearchResults([]);setSearchPhase('loading');return
+      }
+      const next=mapSearchPlaces(mapPlaces,handle,keyword)
+      setSearchResults(previous=>previous.length===next.length && previous.every((place,index)=>place===next[index])?previous:next)
+      setSearchPhase('ready')
     }
-  }, [searchOpen, keyword])
+    update()
+    // Provider-neutral: also responds to pan/zoom, resize and SDK fallback without rebuilding the map.
+    const timer=window.setInterval(update,250)
+    return ()=>window.clearInterval(timer)
+  }, [searchOpen, keyword, mapPlaces, markerPhase, offline])
 
   /* ==========================================================================
      地点抽屉（spec 2026-11-02；design.md §7–§11）
@@ -1472,9 +1475,18 @@ export function MapScreen() {
     return () => document.removeEventListener('keydown', onKey)
   }, [sheetActive, searchOpen, tipOpen, requestDetent, requestClose])
 
+  // This panel reads its own content. Its filters never replace or restyle the map's markers.
+  const keepMap = useCallback(() => undefined, [])
+  const discovery = useMapDiscovery({ fix, stage:stageRef, map:mapHandleRef, onData:keepMap, onError:keepMap,
+    persist:persistView, schoolId:school?.id, category:appliedKey, passiveMap:true,
+    storageKey:'timemap.map-discovery-lite.v1', onPlace:openOrSwitch })
+  const contentFilters:{key:MapDiscoveryFilter;label:string}[] = [
+    {key:'checkins',label:'拍照打卡'},{key:'stories',label:'校园故事'},{key:'recent',label:'最近更新'},
+  ]
+
   return (
     <Screen
-      className="map-page"
+      className="map-page map-discovery-lite"
       header={headerHidden ? undefined :
         <header className="map__head">
           <div className="map__titlewrap">
@@ -1530,6 +1542,10 @@ export function MapScreen() {
           <span>地标标签</span>
           <span className="map__tagsChevron"><IconChevronDown size={14} /></span>
         </button>
+        <nav className="map__contentFilters no-scrollbar" aria-label="地图内容分类">
+          {contentFilters.map(item=><button key={item.key} aria-pressed={discovery.filter===item.key}
+            onClick={()=>discovery.changeFilter(discovery.filter===item.key?'all':item.key)}>{item.label}</button>)}
+        </nav>
       </div>}
       {/*
         ⚠️ 这里**没有**「文字弹幕」开关（原来有一个，但它只是给根节点加 `.map--hide-text`
@@ -1761,15 +1777,16 @@ export function MapScreen() {
               data-map-search-state={searchPhase}
               data-map-search-count={String(searchResults.length)}
             >
-              {searchPhase === 'loading' && <p className="map__searchEmpty">搜索中…</p>}
+              <p className="map__searchEmpty" style={{paddingBottom:0}}>当前地图范围内的地标 · 可拖动地图调整范围</p>
+              {searchPhase === 'loading' && <p className="map__searchEmpty">地标加载中…</p>}
               {searchPhase === 'unavailable' && (
                 <p className="map__searchEmpty" data-map-search-empty="unavailable">
-                  地标读取失败，请重试
+                  {offline ? '当前离线底图不支持地标搜索' : '当前地图地标暂不可用'}{!forceOffline && <button type="button" onClick={()=>{setTileFailed(false);setMarkerReload(value=>value+1)}}>重新加载</button>}
                 </p>
               )}
               {searchPhase === 'ready' && searchResults.length === 0 && (
                 <p className="map__searchEmpty" data-map-search-empty="no-match">
-                  {keyword.trim() ? `没有找到「${keyword.trim()}」相关的地标` : '暂无已启用的地标'}
+                  {keyword.trim() ? `当前地图范围内没有找到「${keyword.trim()}」相关的地标` : '当前地图范围内暂无符合筛选的地标'}
                 </p>
               )}
               <ul className="map__searchList" data-map-search-results>
@@ -1853,6 +1870,9 @@ export function MapScreen() {
             </div>
           </div>
         </>}
+
+        <DiscoveryOverlay state={discovery} closable hidden={sheetOpen||searchOpen||tagsOpen||tipOpen}
+          onDetail={id=>openOrSwitch(id)}/>
 
         {tipOpen && (
           /*

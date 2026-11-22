@@ -1,4 +1,4 @@
-/** Administrative, idempotent import of the two user-provided FoodTime Neo images.
+/** Administrative, idempotent import of two user-provided project images.
  * Run the bundled CLI with DATABASE_URL/UPLOAD_ROOT and ARTWORK_EXPECT_DATABASE.
  * No login tokens, SMS, user creation or schema migrations are performed here.
  */
@@ -10,7 +10,10 @@ import pg from 'pg'
 import { probeImage } from './imageProbe.ts'
 import { acquireMediaMutationLock } from './mutationBarrier.ts'
 
-const projectUrl = 'https://github.com/FoodtimeNeo/FoodtimeNeo-Web'
+const projectUrl = process.env.ARTWORK_PROJECT_URL ?? 'https://github.com/FoodtimeNeo/FoodtimeNeo-Web'
+const namespace = process.env.ARTWORK_NAMESPACE ?? 'foodtime'
+const reason = process.env.ARTWORK_REASON ?? '按用户提供素材导入：碗形图标为列表封面，猫咪海报为详情展示图；保留其他项目资料和互动数据。'
+if (!/^[a-z0-9-]+$/.test(namespace)) throw new Error('Invalid artwork namespace')
 const [logoSource, posterSource, recordPath] = process.argv.slice(2)
 if (!logoSource || !posterSource || !recordPath || !process.env.DATABASE_URL || !process.env.UPLOAD_ROOT || !process.env.ARTWORK_EXPECT_DATABASE) throw new Error('Need logo, poster, metadata backup path and explicit database/upload settings')
 const database = new URL(process.env.DATABASE_URL)
@@ -24,7 +27,7 @@ const images = await Promise.all(([['logo', logoSource], ['poster', posterSource
   if (!probe.ok || bytes.length > 5 * 1024 * 1024) throw new Error(`Invalid ${role} image`)
   const sha = createHash('sha256').update(bytes).digest('hex')
   const ext = probe.mime === 'image/jpeg' ? 'jpg' : probe.mime === 'image/png' ? 'png' : 'webp'
-  return { role, source, bytes, probe, sha, id: uuid('foodtime-artwork:' + sha), requestId: uuid('foodtime-artwork-upload:' + sha), storageKey: `project-artwork/${sha}.${ext}` }
+  return { role, source, bytes, probe, sha, id: uuid(namespace + '-artwork:' + sha), requestId: uuid(namespace + '-artwork-upload:' + sha), storageKey: `project-artwork/${sha}.${ext}` }
 }))
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1, connectionTimeoutMillis: 8000 })
 const client = await pool.connect()
@@ -32,7 +35,7 @@ try {
   await client.query('begin')
   await acquireMediaMutationLock(client)
   const projects = await client.query('select * from training_projects where project_url=$1 for update', [projectUrl])
-  if (projects.rows.length !== 1) throw new Error('Expected exactly one FoodTime Neo project')
+  if (projects.rows.length !== 1) throw new Error('Expected exactly one project matching ARTWORK_PROJECT_URL')
   const project = projects.rows[0]
   const oldGallery = (await client.query('select media_id,position from training_project_images where project_id=$1 order by position', [project.id])).rows
   const admin = (await client.query("select id from users where role='admin' order by created_at,id limit 1")).rows[0]
@@ -62,7 +65,7 @@ try {
   }
   const changed = project.cover_image_id !== logo.id || addPoster
   if (project.cover_image_id !== logo.id) await client.query('update training_projects set cover_image_id=$2,updated_at=now() where id=$1', [project.id, logo.id])
-  if (changed) await client.query('insert into audit_log(id,actor_id,action,target_type,target_id,reason) values($1,$2,$3,$4,$5,$6)', [uuid('foodtime-artwork-audit:' + project.id + ':' + Date.now()), admin.id, 'project_artwork_import', 'project', project.id, '按用户提供素材导入：碗形图标为列表封面，猫咪海报为详情展示图；保留其他项目资料和互动数据。'])
+  if (changed) await client.query('insert into audit_log(id,actor_id,action,target_type,target_id,reason) values($1,$2,$3,$4,$5,$6)', [uuid(namespace + '-artwork-audit:' + project.id + ':' + Date.now()), admin.id, 'project_artwork_import', 'project', project.id, reason])
   await client.query('commit')
   console.log(JSON.stringify({ projectId: project.id, projectName: project.name, changed, coverImageId: logo.id, posterMediaId: poster.id, galleryCount: oldGallery.length + (addPoster ? 1 : 0), images: images.map(i => ({ role: i.role, id: i.id, storageKey: i.storageKey, mime: i.probe.mime, width: i.probe.width, height: i.probe.height, sha256: i.sha })) }))
 } catch (err) { await client.query('rollback').catch(() => {}); throw err }

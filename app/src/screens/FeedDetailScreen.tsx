@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   REPORT_REASONS,
   getPlaceFirstBrowse,
+  listPostPage,
+  toFeedPost,
   createComment,
   createReport,
   deleteMyComment,
@@ -32,6 +34,7 @@ export function FeedDetailScreen({ id }: { id: string }) {
   const [current, setCurrent] = useState(() => {
     const token = new URLSearchParams(window.location.hash.split('?')[1]).get('browse')
     if (!token || token !== feedBrowse.token) {
+      feedBrowse.more = undefined
       feedBrowse.placeFirst = false
       feedBrowse.ids = [id]; feedBrowse.drafts = {}; feedBrowse.images = {}; feedBrowse.switched = false
     }
@@ -67,14 +70,38 @@ export function FeedDetailScreen({ id }: { id: string }) {
     const timer = window.setTimeout(() => setShowWheelHint(false), 3200)
     return () => window.clearTimeout(timer)
   }, [showWheelHint])
-  const step = (direction: number) => {
+  const moreLock = useRef(false)
+  const loadMore = async () => {
+    const more = feedBrowse.more
+    if (!more?.cursor || moreLock.current) return
+    moreLock.current = true
+    const token = feedBrowse.token
+    setBrowseError('')
+    try {
+      const result = await listPostPage(more, more.cursor)
+      if (feedBrowse.token !== token) return
+      if (!result.ok) { setBrowseError('更多回忆加载失败'); return }
+      feedBrowse.ids = [...new Set([...feedBrowse.ids, ...result.value.items.map(post => post.id)])]
+      more.cursor = result.value.nextCursor ?? null
+      feedBrowse.campusNextCursor = more.cursor
+      const previous = feedBrowse.campusFeed ?? []
+      const seen = new Set(previous.map(post => post.id))
+      feedBrowse.campusFeed = [...previous, ...result.value.items.filter(post => !seen.has(post.id)).map(toFeedPost)]
+      refreshOrder(value => value + 1)
+    } finally { moreLock.current = false }
+  }
+  useEffect(() => {
+    if (feedBrowse.ids.indexOf(current) >= feedBrowse.ids.length - 3) void loadMore()
+  }, [current])
+  const step = async (direction: number) => {
+    if (direction > 0 && !feedBrowse.ids[feedBrowse.ids.indexOf(current) + 1]) await loadMore()
     const next = stepFeed(current, direction)
     if (next) { setShowWheelHint(false); feedBrowse.switched = true; setCurrent(next) }
   }
   usePostWheel(root, step)
   return <div className="reader-session" ref={root}>
     <FeedDetail key={current} id={current} onStep={step} />
-    {browseError && <p className="reader__wheelHint" style={{ pointerEvents: 'auto' }} role="status">{browseError} · <button onClick={() => setBrowseAttempt(value => value + 1)}>重试</button></p>}
+    {browseError && <p className="reader__wheelHint" style={{ pointerEvents: 'auto' }} role="status">{browseError} · <button onClick={() => { if (feedBrowse.more) void loadMore(); else setBrowseAttempt(value => value + 1) }}>重试</button></p>}
     {!browseError && showWheelHint && <p className="reader__wheelHint" role="status">滚动鼠标滚轮切换帖子</p>}
   </div>
 }

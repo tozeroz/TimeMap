@@ -28,6 +28,7 @@ try {
     const errors = [], userRequests = []
     page.on('pageerror', error => errors.push(error.message))
     const authors = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222']
+    const avatars = ['dddddddd-dddd-4ddd-8ddd-000000000001', 'dddddddd-dddd-4ddd-8ddd-000000000002']
     const posts = Array.from({ length: 4 }, (_, index) => ({
       id: `aaaaaaaa-aaaa-4aaa-8aaa-00000000000${index + 1}`,
       authorId: index < 2 ? authors[index] : index === 2 ? authors[0] : null,
@@ -37,13 +38,17 @@ try {
     }))
     await page.route('**/api/**', async route => {
       const url = new URL(route.request().url()), path = url.pathname
+      if (path.startsWith('/api/media/')) {
+        await route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="green"/></svg>' })
+        return
+      }
       let data = { items: [] }
       if (path === '/api/posts') data = { items: url.searchParams.has('authorId') ? posts.filter(post => post.authorId === url.searchParams.get('authorId') && !post.anonymous) : posts }
       else if (posts.some(post => path === `/api/posts/${post.id}`)) data = posts.find(post => path.endsWith(post.id))
       else if (path.startsWith('/api/users/')) {
         const id = path.split('/').at(-1)
         userRequests.push(id)
-        data = { id, displayName: `作者${authors.indexOf(id) + 1}` }
+        data = { id, displayName: `作者${authors.indexOf(id) + 1}`, avatarMediaId: avatars[authors.indexOf(id)] }
       }
       await route.fulfill({ json: data })
     })
@@ -59,6 +64,21 @@ try {
     await page.locator('[data-user-state="ready"]').waitFor()
     assert.equal(new URL(page.url().replace('#/', '')).searchParams.get('id'), authors[0])
     assert.equal(await page.locator('.up__name').textContent(), '作者1')
+    assert((await page.locator('[data-user-avatar]').getAttribute('src')).includes(avatars[0]))
+    avatars[0] = 'dddddddd-dddd-4ddd-8ddd-000000000003'
+    await page.getByRole('button', { name: '返回', exact: true }).click()
+    await page.locator('[data-reader-author]').waitFor()
+    await page.locator('[data-reader-author] img').click()
+    await page.locator('[data-user-state="ready"]').waitFor()
+    assert((await page.locator('[data-user-avatar]').getAttribute('src')).includes(avatars[0]))
+    avatars[0] = null
+    await page.getByRole('button', { name: '返回', exact: true }).click()
+    await page.locator('[data-reader-author]').waitFor()
+    await page.locator('[data-reader-author] img').click()
+    await page.locator('[data-user-state="ready"]').waitFor()
+    assert.equal(await page.locator('[data-user-avatar]').count(), 0)
+    assert.equal(await page.locator('[data-user-avatar-placeholder]').textContent(), '作')
+
     await page.getByRole('button', { name: '返回', exact: true }).click()
     await page.locator('[data-reader-author]').waitFor()
     await page.keyboard.press('ArrowDown')
@@ -81,7 +101,7 @@ try {
       await page.locator('.reader__identity').click()
       assert(page.url().includes('#/feed?'))
     }
-    assert.deepEqual(userRequests, [authors[0], authors[1], authors[1]])
+    assert.deepEqual(userRequests, [authors[0], authors[0], authors[0], authors[1], authors[1]])
     assert.deepEqual(errors, [])
     await page.close()
   }

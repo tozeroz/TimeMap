@@ -90,8 +90,11 @@ function probePng(b: Uint8Array): ImageProbe | ImageProbeError {
 function probeJpeg(b: Uint8Array): ImageProbe | ImageProbeError {
   if (b.length < 4) return err('JPEG 太短')
   if (!(b[0] === 0xff && b[1] === 0xd8)) return err('JPEG SOI 标记不匹配')
-  // 结尾必须是 FFD9（允许末尾有少量填充/垃圾？—— 严格些：必须在最后 2 字节）
-  if (!(b[b.length - 2] === 0xff && b[b.length - 1] === 0xd9)) {
+  // Some image exporters pad JPEGs after EOI. Permit only padding bytes,
+  // never arbitrary trailing content or an image missing its end marker.
+  let end = b.length
+  while (end > 2 && [0x00, 0xff, 0x09, 0x0a, 0x0d, 0x20].includes(b[end - 1]!)) end--
+  if (!(b[end - 2] === 0xff && b[end - 1] === 0xd9)) {
     return err('JPEG 缺少 EOI 结束标记（可能被截断）')
   }
   let o = 2

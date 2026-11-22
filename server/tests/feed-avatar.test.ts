@@ -57,6 +57,9 @@ try {
     } else {
       await pool.query('update users set display_name=null where id=$1', [owner])
     }
+    const card = await read('/api/users/' + owner)
+    assert.equal(card.avatarMediaId, avatar)
+    assert.deepEqual(Object.keys(card).sort(), ['avatarMediaId', 'displayName', 'id'])
     const list = (await read('/api/posts')).items as ApiPost[]
     const post = list.find(post => post.id === id)!
     const detail = await read('/api/posts/' + id)
@@ -97,6 +100,28 @@ try {
   assert.equal(commentAvatar({ author: '评论者', authorAvatarMediaId: null }), avatarFor('评论者'))
   assert.equal(commentAvatar({ author: '匿名同学 01', anonymous: true, authorAvatarMediaId: commentAvatarId }),
     commentAvatar({ author: '匿名同学 01', anonymous: true, authorAvatarMediaId: null }))
+  // More than two full pages: latest and hot must eventually expose every published post.
+  for (let i = 0; i < 126; i++) await pool.query(
+    `insert into posts(id,author_id,author_name,created_at,status) values($1,$2,'分页',now()-($3::text||' hours')::interval,$4)`,
+    [randomUUID(), owner, i + 1, i === 125 ? 'removed' : 'published'])
+  await pool.query("update posts set created_at='2026-01-01 12:00:00.123456+00' where author_name='分页'")
+  const expected = Number((await pool.query("select count(*)::int as n from posts where status='published'")).rows[0].n)
+  for (const sort of ['latest', 'hot']) {
+    const all: string[] = []
+    let cursor: string | null = null
+    let pages = 0
+    do {
+      const page = await read(`/api/posts?paginate=1&sort=${sort}${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`)
+      assert(page.items.length <= 50)
+      all.push(...page.items.map((post: any) => post.id))
+      cursor = page.nextCursor
+      assert(++pages < 10, 'Pagination must end')
+    } while (cursor)
+    assert.equal(all.length, expected, sort + ': all published posts must be reachable')
+    assert.equal(new Set(all).size, expected, sort + ': no duplicates between pages')
+    assert(pages >= 3)
+  }
+  assert.equal((await app.inject({ method: 'GET', url: '/api/posts?paginate=1&cursor=invalid' })).statusCode, 400)
   console.log('PASS post profiles: nickname PATCH, repeated renames, list/detail/favorites, avatar changes/removal, anonymous masking and legacy fallback')
 } finally {
   await app.close()

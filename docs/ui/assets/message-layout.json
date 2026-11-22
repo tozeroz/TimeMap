@@ -1,0 +1,44 @@
+{
+  ".topbar": {
+    "x": 0,
+    "y": 0,
+    "width": 390,
+    "height": 48
+  },
+  ".inbox__tile": {
+    "x": 46,
+    "y": 64,
+    "width": 54,
+    "height": 54
+  },
+  ".inbox__announcement": {
+    "x": 12,
+    "y": 162.59375,
+    "width": 366,
+    "height": 70.796875
+  },
+  ".inbox__heading": {
+    "x": 16,
+    "y": 249.390625,
+    "width": 358,
+    "height": 29.390625
+  },
+  ".inbox__conversations": {
+    "x": 12,
+    "y": 280.78125,
+    "width": 366,
+    "height": 284
+  },
+  ".inbox__conversation": {
+    "x": 22,
+    "y": 280.78125,
+    "width": 346,
+    "height": 71
+  },
+  ".inbox__avatar": {
+    "x": 22,
+    "y": 290.28125,
+    "width": 52,
+    "height": 52
+  }
+}

@@ -14,6 +14,7 @@
 
 - [UI 设计规范](public/UI设计规范.md)
 - [实训项目入口首次提示](public/product/实训项目入口首次提示.md)
+- [首次注册用户引导流程（方案草稿）](public/product/首次注册用户引导流程.md)
 - [开发、Git 协作与服务器发布](public/development-and-deployment.md)
 - [完整本地测试环境](public/local-testing.md)
 - [需求分析与产品设计](public/BJTUTimeMap需求分析与产品设计文档.md)

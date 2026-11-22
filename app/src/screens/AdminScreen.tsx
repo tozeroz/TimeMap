@@ -6,7 +6,6 @@ import {
   adminListActivities,
   adminListAuditLog,
   adminListPlaces,
-  adminListPosts,
   adminListReports,
   adminListFeedback,
   adminSetFeedbackStatus,
@@ -14,7 +13,6 @@ import {
   adminListActivitySubmissions,
   adminReviewActivitySubmission,
   adminResolveReport,
-  adminTakedownPost,
   adminUpdateActivity,
   adminUpdatePlace,
   mediaUrl,
@@ -24,7 +22,6 @@ import {
   type ApiActivity,
   type ApiAdminPlace,
   type PlaceCategory,
-  type ApiAdminPost,
   type AdminActivitySubmission,
   type SubmissionStatus,
   type ApiAuditEntry,
@@ -41,6 +38,8 @@ import { AdminDialog, AdminIcon } from '../components/AdminPrimitives'
 import { SubmissionCover } from './MyActivitySubmissions'
 import './admin.css'
 import { AdminProjectsPanel } from './AdminProjectsPanel'
+import { AdminAnnouncementsPanel } from './AdminAnnouncementsPanel'
+import { AdminStoriesPanel, AdminCheckinsPanel } from './AdminCuration'
 
 /**
  * 管理端（F07 / US-08；需求 3.1 的「举报处理管理端」）。
@@ -63,9 +62,10 @@ import { AdminProjectsPanel } from './AdminProjectsPanel'
  *     各列表，而不是只改本地那一行
  *   · 操作记录包含管理员、对象、时间、动作
  */
-type PanelKey = 'reports' | 'feedback' | 'submissions' | 'posts' | 'activities' | 'projects' | 'places' | 'audit'
+type PanelKey = 'reports' | 'feedback' | 'submissions' | 'posts' | 'activities' | 'projects' | 'places' | 'audit' | 'announcements'
 
 const PANELS: { key: PanelKey; label: string }[] = [
+  { key: 'announcements', label: '应用公告' },
   { key: 'reports', label: '举报处理' },
   { key: 'submissions', label: '投稿审核' },
   { key: 'feedback', label: '用户反馈' },
@@ -77,13 +77,14 @@ const PANELS: { key: PanelKey; label: string }[] = [
 ]
 
 export function AdminScreen() {
+  const [confirmExit, setConfirmExit] = useState(false)
   const [panel, setPanel] = useState<PanelKey>(() => { const key = new URLSearchParams(window.location.hash.split('?')[1]).get('panel'); return PANELS.some(p => p.key === key) ? key as PanelKey : 'reports' })
   const admin = isAdmin()
 
   const header = (
     <TopBar
       left={
-        <button className="iconbtn" onClick={() => goBack('me')} aria-label="返回">
+        <button className="iconbtn" onClick={() => admin ? setConfirmExit(true) : goBack('me')} aria-label="返回">
           <IconBack size={22} />
         </button>
       }
@@ -123,13 +124,21 @@ export function AdminScreen() {
       </nav>
 
       {panel === 'reports' && <ReportsPanel />}
+      {panel === 'announcements' && <AdminAnnouncementsPanel />}
       {panel === 'submissions' && <SubmissionsPanel />}
       {panel === 'feedback' && <FeedbackPanel />}
-      {panel === 'posts' && <PostsPanel />}
+      {panel === 'posts' && <AdminStoriesPanel />}
       {panel === 'activities' && <ActivitiesPanel />}
       {panel === 'projects' && <AdminProjectsPanel />}
       {panel === 'places' && <PlacesPanel />}
       {panel === 'audit' && <AuditPanel />}
+      {confirmExit && <AdminDialog title="确认退出管理中心？" onClose={() => setConfirmExit(false)}>
+        <p className="adm__modalDesc">是否确认退出管理中心？</p>
+        <div className="adm__modalActions">
+          <button className="adm__btn" onClick={() => setConfirmExit(false)}>取消</button>
+          <button className="adm__btn adm__btn--primary" onClick={() => { setConfirmExit(false); goBack('me') }}>确认退出</button>
+        </div>
+      </AdminDialog>}
     </Screen>
   )
 }
@@ -356,111 +365,6 @@ function reasonLabel(code: string): string {
 
 // ---------------------------------------------------------------------------
 // 内容管理
-// ---------------------------------------------------------------------------
-
-function PostsPanel() {
-  const { data, phase, err, reload } = useLoader<ApiAdminPost[]>(() => adminListPosts())
-  const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState('')
-  const [takedown, setTakedown] = useState<{ id: string; reason: string } | null>(null)
-
-  async function submit() {
-    if (!takedown) return
-    const reason = takedown.reason.trim()
-    if (!reason) {
-      setNotice('下架必须记录原因')
-      return
-    }
-    setBusy(true)
-    setNotice('')
-    try {
-      const r = await adminTakedownPost(takedown.id, reason)
-      if (!r.ok) {
-        setNotice(`下架失败：${failText(r)}`)
-        return
-      }
-      setTakedown(null)
-      await reload()
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <section className="adm__pane">
-      <PaneState
-        phase={phase}
-        err={err}
-        onRetry={() => void reload()}
-        empty={phase === 'ready' && (data ?? []).length === 0 ? '还没有帖子' : undefined}
-      />
-      {phase === 'ready' && (data ?? []).length > 0 && (
-        <ul className="adm__list" data-admin-posts={String((data ?? []).length)}>
-          {(data ?? []).map((p) => (
-            <li key={p.id} className="adm__card" data-admin-post={p.id} data-post-status={p.status}>
-              <div className="adm__cardHead">
-                <span className="adm__tag">{p.author}</span>
-                {/* 匿名帖（2026-11-05）：管理端仍显示真实作者，但标明「用户侧显示为匿名」 */}
-                {p.anonymous && <span className="adm__tag" data-admin-anon>匿名发布</span>}
-                <span className={`adm__tag ${p.status === 'removed' ? 'adm__tag--danger' : ''}`}>
-                  {p.status === 'removed' ? '已下架' : '公开'}
-                </span>
-                <span className="adm__time">{relativeTime(p.createdAt)}</span>
-              </div>
-              <p className="adm__cardBody">{p.body}</p>
-              <p className="adm__cardMeta">地点：{p.place ?? '（无）'}</p>
-              {p.removedReason && <p className="adm__cardResult">下架原因：{p.removedReason}</p>}
-              {p.status === 'published' && (
-                <div className="adm__actions">
-                  <button
-                    className="adm__btn adm__btn--danger"
-                    data-admin-takedown={p.id}
-                    onClick={() => {
-                      setNotice('')
-                      setTakedown({ id: p.id, reason: '' })
-                    }}
-                  >
-                    下架
-                  </button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {takedown && (
-        <div className="adm__modalWrap" data-admin-takedown-modal>
-          <div className="adm__modal">
-            <h3 className="adm__modalTitle">下架帖子</h3>
-            <p className="adm__modalDesc">下架后该帖同步退出所有公开面。原因会写入操作记录。</p>
-            <textarea
-              className="adm__textarea"
-              data-admin-takedown-reason
-              placeholder="请填写下架原因（必填）"
-              value={takedown.reason}
-              onChange={(e) => setTakedown({ ...takedown, reason: e.target.value })}
-              autoFocus
-            />
-            {notice && <p className="adm__err">{notice}</p>}
-            <div className="adm__modalActions">
-              <button className="adm__btn" onClick={() => setTakedown(null)} disabled={busy}>
-                取消
-              </button>
-              <button className="adm__btn adm__btn--primary" data-admin-takedown-submit onClick={() => void submit()} disabled={busy}>
-                {busy ? '提交中…' : '确认下架'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {!takedown && notice && <p className="adm__err">{notice}</p>}
-    </section>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// 活动管理
 // ---------------------------------------------------------------------------
 
 function ActivitiesPanel() {
@@ -785,6 +689,7 @@ function ActivitiesPanel() {
 // ---------------------------------------------------------------------------
 
 function PlacesPanel() {
+  const [manageCheckins, setManageCheckins] = useState(false)
   const { data, phase, err, reload } = useLoader<ApiAdminPlace[]>(() => adminListPlaces())
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
@@ -832,6 +737,9 @@ function PlacesPanel() {
 
   return (
     <section className="adm__pane">
+      <div className="adm__row"><button className="adm__btn" aria-pressed={!manageCheckins} onClick={()=>setManageCheckins(false)}>地点资料</button><button className="adm__btn" aria-pressed={manageCheckins} onClick={()=>setManageCheckins(true)}>拍照打卡维护</button></div>
+      {manageCheckins && <AdminCheckinsPanel/>}
+      <div hidden={manageCheckins}>
       <div className="adm__row">
         <button className="adm__btn adm__btn--primary" data-admin-new-place onClick={() => setForm({ name: '', category: '校园地标', description: '' })}>
           新建地点
@@ -914,6 +822,7 @@ function PlacesPanel() {
         </div>
       )}
       {!form && notice && <p className="adm__err">{notice}</p>}
+      </div>
     </section>
   )
 }

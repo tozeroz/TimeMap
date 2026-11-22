@@ -236,11 +236,16 @@ export interface ApiThread {
    * "从没聊过的人点私信该怎样建会话" —— 后者 WO#12 的处置是 hide/unavailable，不猜不造。
    */
   peerId: string | null
+  peerAvatarMediaId?: string | null
+  unreadCount?: number
   lastMessage: ApiThreadLastMessage | null
 }
 
 export interface ApiMessage {
   id: string
+  threadSeq?: string
+  clientRequestId?: string | null
+  senderAvatarMediaId?: string | null
   senderId: string | null
   sender: string | null
   body: string
@@ -277,15 +282,38 @@ export interface ApiThreadDetail {
   title: string | null
   memberCount: number
   peerName: string | null
-  members: Array<{ id: string; displayName: string }>
+  peer?: ApiUserIdentity | null
+  blockedByMe?: boolean
+  canMessage?: boolean
+  members: Array<{ id: string; displayName: string; avatarMediaId?: string | null }>
 }
 
 export async function getThread(threadId: string): Promise<ApiResult<ApiThreadDetail>> {
   return request<ApiThreadDetail>(`/api/threads/${encodeURIComponent(threadId)}`)
 }
 
-export async function getThreads(): Promise<ApiResult<{ items: ApiThread[] }>> {
-  return request<{ items: ApiThread[] }>('/api/threads')
+export async function getThreads(cursor?: string, kind?: 'direct'): Promise<ApiResult<{ items: ApiThread[]; nextCursor?: string | null }>> {
+  return request<{ items: ApiThread[]; nextCursor?: string | null }>(`/api/threads${cursor||kind?`?${new URLSearchParams({...(cursor?{cursor}:{}),...(kind?{kind}:{})})}`:''}`)
+}
+
+export function openDirectThread(peerId: string) {
+  return request<{id:string;kind:'direct';peer:ApiUserIdentity}>('/api/threads/direct',{method:'POST',body:{peerId}})
+}
+export function setUserBlocked(userId: string, blocked: boolean) {
+  return request<{blocked:boolean}>(`/api/users/${encodeURIComponent(userId)}/block`,{method:blocked?'POST':'DELETE'})
+}
+export function readThreadThrough(id: string, throughSeq: string) {
+  return request<{lastReadSeq:string;unreadCount:number}>(`/api/threads/${encodeURIComponent(id)}/read`,{method:'POST',body:{throughSeq}})
+}
+export function getMessagePage(id: string, cursor?: { beforeSeq?: string; afterSeq?: string }) {
+  const params = new URLSearchParams({ paginate:'1',...cursor })
+  return request<{threadId:string;items:ApiMessage[];hasMore:boolean;olderCursor:string|null;newerCursor:string|null}>(`/api/threads/${encodeURIComponent(id)}/messages?${params}`)
+}
+export function revokeThreadMessage(threadId: string, messageId: string) {
+  return request<{id:string;threadSeq:string;revoked:true}>(`/api/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/revoke`,{method:'POST'})
+}
+export function getMessageRevocations(threadId: string, messageIds: string[]) {
+  return request<{revokedIds:string[]}>(`/api/threads/${encodeURIComponent(threadId)}/messages/revocations`,{method:'POST',body:{messageIds}})
 }
 
 export async function getThreadMessages(
@@ -414,6 +442,9 @@ export async function uploadMedia(
 /** 发送接口的回显（客户端据此确认消息真的挂上了媒体） */
 export interface ApiSentMessage {
   id: string
+  threadSeq?: string
+  clientRequestId?: string | null
+  createdAt?: string
   kind: string
   mediaId: string | null
 }
@@ -430,6 +461,7 @@ export interface ApiSentMessage {
 export async function postThreadMessage(
   threadId: string,
   input: {
+    clientRequestId?: string
     body: string
     kind?: 'text' | 'image' | 'voice'
     mediaId?: string
@@ -449,7 +481,7 @@ export async function postThreadMessage(
   return request<ApiSentMessage>(`/api/threads/${encodeURIComponent(threadId)}/messages`, {
     method: 'POST',
     // 传对象，序列化只在 request() 里做一次（双重编码那个坑）
-    body: input,
+    body: { ...input, clientRequestId: input.clientRequestId ?? crypto.randomUUID() },
   })
 }
 
@@ -466,11 +498,13 @@ export const IMAGE_MESSAGE_BODY = '[图片]'
 export async function postThreadImageMessage(
   threadId: string,
   mediaId: string,
+  clientRequestId?: string,
 ): Promise<ApiResult<ApiSentMessage>> {
   return postThreadMessage(threadId, {
     body: IMAGE_MESSAGE_BODY,
     kind: 'image',
     mediaId,
+    clientRequestId,
   })
 }
 
@@ -493,11 +527,13 @@ export const VOICE_MESSAGE_BODY = '[语音]'
 export async function postThreadVoiceMessage(
   threadId: string,
   mediaId: string,
+  clientRequestId?: string,
 ): Promise<ApiResult<ApiSentMessage>> {
   return postThreadMessage(threadId, {
     body: VOICE_MESSAGE_BODY,
     kind: 'voice',
     mediaId,
+    clientRequestId,
   })
 }
 
@@ -520,8 +556,9 @@ export async function postThreadTextMessage(
   threadId: string,
   body: string,
   mentionsAll = false,
+  clientRequestId?: string,
 ): Promise<ApiResult<ApiSentMessage>> {
-  return postThreadMessage(threadId, { body, kind: 'text', mentionsAll })
+  return postThreadMessage(threadId, { body, kind: 'text', mentionsAll, clientRequestId })
 }
 
 // ===========================================================================
@@ -615,6 +652,9 @@ export function humanizeFailure(reason: string, status?: number): string {
   if (status === 429) return '操作太频繁，请稍后再试'
   if (status === 503) return '服务暂时不可用，请稍后重试'
   if (status !== undefined && status >= 500) return '服务器出了点问题，请稍后重试'
+  if (reason.includes('not_an_image')) return '图片格式无法识别或文件已损坏，请重新导出为 JPG、PNG 或 WebP 后上传'
+  if (reason.includes('empty_file')) return '图片文件为空，请重新选择图片'
+  if (reason.includes('missing_upload_request_id') || reason.includes('bad_multipart') || reason.includes('no_file')) return '上传信息不完整，请刷新页面后重新选择图片'
   // 4xx 里能给出的最具体信息来自服务端的机器码，映射不到就给通用提示
   if (reason.includes('bad_place') ) return '地点不存在，请刷新后重试'
   if (status === 400 || status === 422) return '请求未能完成，请检查填写内容后重试'
@@ -630,7 +670,7 @@ export function failText(r: { reason: string; human?: string; status?: number })
   return r.human ?? humanizeFailure(r.reason, r.status)
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   init?: { method?: string; body?: unknown },
 ): Promise<ApiResult<T>> {
@@ -722,10 +762,18 @@ export function listPosts(
   )
 }
 
+/** Cursor pages for the square and its reader; legacy listPosts remains compatible. */
+export function listPostPage(opts: ListPostsOptions, cursor?: string) {
+  const qs = new URLSearchParams({ paginate: '1', sort: opts.sort ?? 'latest' })
+  if (opts.placeIds?.length) qs.set('placeIds', opts.placeIds.join(','))
+  if (cursor) qs.set('cursor', cursor)
+  return request<{ items: ApiPost[]; nextCursor?: string | null }>(`/api/posts?${qs}`)
+}
+
 /**
  * 按 id 查用户的最小权威资料（M5 WO#12 新增，审核记录 53 批准）。
  *
- * 契约：成功只返回 `{ id, displayName }` 两个字段 —— 服务端**刻意**不返回
+ * 契约：成功返回 `{ id, displayName, avatarMediaId }` 公开名片字段 —— 服务端**刻意**不返回
  * phone / campus / 学院 / 年级 等（那些要么没有权威来源，要么不该对任意登录用户暴露）。
  * 未知 id 或形状非法 → 服务端 404。
  *
@@ -735,6 +783,7 @@ export function listPosts(
 export interface ApiUserIdentity {
   id: string
   displayName: string
+  avatarMediaId?: string | null
 }
 
 export function getUser(id: string): Promise<ApiResult<ApiUserIdentity>> {
