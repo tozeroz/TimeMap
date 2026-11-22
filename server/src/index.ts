@@ -2523,10 +2523,15 @@ export function buildServer(deps: ServerDeps) {
     if (s.kind === 'none') return unauthorized(reply)
 
     let data
+    let buf: Buffer
     try {
       data = await (req as unknown as { file: (o?: unknown) => Promise<MultipartFile | undefined> }).file({
         limits: { fileSize: MEDIA_MAX_BYTES, files: 1 },
       })
+      if (!data) return reply.code(400).send({ error: 'no_file' })
+      // Fields after the file part become available only once its stream is
+      // consumed. Accept either multipart order, including older clients.
+      buf = await data.toBuffer()
     } catch (err) {
       // @fastify/multipart 在超限时抛错（fileSize limit）
       const code = (err as { code?: string }).code ?? ''
@@ -2596,7 +2601,6 @@ export function buildServer(deps: ServerDeps) {
       }
     }
 
-    const buf = await data.toBuffer()
     if (buf.length === 0) {
       reply.code(400)
       return { error: 'empty_file' }

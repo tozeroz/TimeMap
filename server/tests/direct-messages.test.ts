@@ -140,9 +140,15 @@ try {
   assert.equal((await app.inject({method:'POST',url:`/api/threads/${id}/messages/${image.id}/revoke`})).statusCode,401)
   await call(c,'POST',`/api/threads/${id}/messages/invalid/revoke`,undefined,400)
   const seqBefore=(await pool.query('select next_message_seq::text from message_threads where id=$1',[id])).rows[0].next_message_seq
+  await pool.query("update messages set created_at=statement_timestamp()-interval '5 minutes' where id=$1",[image.id])
+  const expired=await call(c,'POST',`/api/threads/${id}/messages/${image.id}/revoke`,undefined,403)
+  assert.equal(expired.error,'message_revoke_expired')
+  assert.equal((await pool.query('select deleted_at from messages where id=$1',[image.id])).rows[0].deleted_at,null)
+  await pool.query("update messages set created_at=statement_timestamp()-interval '4 minutes 59 seconds' where id=$1",[image.id])
   const revoked=await call(c,'POST',`/api/threads/${id}/messages/${image.id}/revoke`)
   assert.equal(revoked.revoked,true)
   const deletedAt=(await pool.query('select deleted_at from messages where id=$1',[image.id])).rows[0].deleted_at
+  await pool.query("update messages set created_at=statement_timestamp()-interval '6 minutes' where id=$1",[image.id])
   await call(c,'POST',`/api/threads/${id}/messages/${image.id}/revoke`)
   assert.deepEqual((await pool.query('select deleted_at from messages where id=$1',[image.id])).rows[0].deleted_at,deletedAt)
   assert.equal((await pool.query('select next_message_seq::text from message_threads where id=$1',[id])).rows[0].next_message_seq,seqBefore)

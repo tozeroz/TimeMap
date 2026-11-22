@@ -73,8 +73,13 @@ export function registerDirectMessageRoutes(ctx: TimemapCtx) {
       const result = await db.pool.query(`update messages m set deleted_at=coalesce(m.deleted_at,now())
         where m.id=$1 and m.thread_id=$2 and m.sender_id=$3
         and exists(select 1 from thread_members where thread_id=m.thread_id and user_id=$3)
+        and (m.deleted_at is not null or statement_timestamp()<m.created_at+interval '5 minutes')
         returning m.id,m.thread_seq::text,m.deleted_at`, [messageId, id, me.userId])
-      if (!result.rowCount) throw new MessagingError(404, 'not_found')
+      if (!result.rowCount) {
+        const ownMessage = await db.pool.query(`select 1 from messages m where m.id=$1 and m.thread_id=$2 and m.sender_id=$3
+          and exists(select 1 from thread_members where thread_id=m.thread_id and user_id=$3)`, [messageId, id, me.userId])
+        throw new MessagingError(ownMessage.rowCount ? 403 : 404, ownMessage.rowCount ? 'message_revoke_expired' : 'not_found')
+      }
       reply.header('Cache-Control', 'no-store')
       return { id: result.rows[0].id, threadSeq: result.rows[0].thread_seq, revoked: true }
     } catch (error) { return failure(reply, error) }

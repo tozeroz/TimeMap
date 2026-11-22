@@ -4,6 +4,12 @@ import { AdminDialog } from '../components/AdminPrimitives'
 import { ProjectCover } from './TrainingProjectsScreen'
 
 const blank: TrainingProjectFields = { name: '', summary: '', groupName: null, memberCount: null, projectUrl: null, experienceUrl: null, coverImageId: null, position: 0, published: false, description: null, category: null, features: [], experienceNotes: null, showcaseImageIds: [] }
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+function imageFileError(file: File) {
+  if (!file.size) return '图片文件为空，请重新选择图片'
+  if (file.size > MAX_IMAGE_BYTES) return '图片不能超过 5 MB，请压缩后重试'
+  return ''
+}
 
 export function AdminProjectsPanel() {
   const [items, setItems] = useState<TrainingProject[]>([]), [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -32,6 +38,8 @@ export function AdminProjectsPanel() {
   }
   async function upload(file?: File) {
     if (!file || locked.current) return
+    const error = imageFileError(file)
+    if (error) { setFormError(`封面上传失败：${error}`); return }
     locked.current = true; setUploading(true); setFormError('')
     try {
       const r = await uploadMedia(file, 'activity')
@@ -57,6 +65,8 @@ export function AdminProjectsPanel() {
     const failed: string[] = []
     try {
       for (const file of files) {
+        const error = imageFileError(file)
+        if (error) { failed.push(`${file.name}：${error}`); continue }
         const result = await uploadMedia(file, 'activity')
         if (!alive.current) return
         if (result.ok) setForm(previous => previous ? { ...previous, showcaseImageIds: [...(previous.showcaseImageIds ?? []), result.value.id] } : previous)
@@ -95,11 +105,11 @@ export function AdminProjectsPanel() {
           <label className="adm__label">项目链接<input className="adm__input" type="url" maxLength={2048} placeholder="GitHub 或项目介绍网址" value={form.projectUrl ?? ''} onChange={e => setForm({ ...form, projectUrl: e.target.value || null })} /></label>
           <label className="adm__label">体验网址<input className="adm__input" type="url" maxLength={2048} placeholder="可选，仅填写能直接体验的网址" value={form.experienceUrl ?? ''} onChange={e => setForm({ ...form, experienceUrl: e.target.value || null })} /></label>
           <label className="adm__label">列表封面<input className="adm__input" type="file" accept="image/jpeg,image/png,image/webp" onChange={e => { void upload(e.target.files?.[0]); e.target.value = '' }} /></label>
-          <p className="adm__modalDesc">列表封面用于方形 Logo，完整显示；与下方详情展示图分别保存。</p>
+          <p className="adm__modalDesc">支持 JPG、PNG、WebP，单张不超过 5 MB。列表封面用于方形 Logo，完整显示；与下方详情展示图分别保存。</p>
           {form.coverImageId && <img className="admin-projects__preview" src={mediaUrl(form.coverImageId)} alt="项目封面预览" />}
           {form.coverImageId && <button type="button" className="adm__btn" onClick={() => setForm({ ...form, coverImageId: null })}>移除列表封面</button>}
           <label className="adm__label">详情展示图<input className="adm__input" type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={e => { void uploadGallery(Array.from(e.target.files ?? [])); e.target.value = '' }} /></label>
-          <p className="adm__modalDesc">最多 8 张，支持横版截图与竖版海报。未上传时详情不显示图库。</p>
+          <p className="adm__modalDesc">最多 8 张，单张不超过 5 MB，支持横版截图与竖版海报。未上传时详情不显示图库。</p>
           <ol className="admin-projects__gallery">{(form.showcaseImageIds ?? []).map((mediaId, index) => <li key={mediaId}><img src={mediaUrl(mediaId)} alt={`详情展示图 ${index + 1}`} /><div><button type="button" className="adm__btn" aria-label={`上移第${index + 1}张展示图`} disabled={index === 0} onClick={() => moveImage(index, -1)}>上移</button><button type="button" className="adm__btn" aria-label={`下移第${index + 1}张展示图`} disabled={index === (form.showcaseImageIds?.length ?? 0) - 1} onClick={() => moveImage(index, 1)}>下移</button><button type="button" className="adm__btn" aria-label={`移除第${index + 1}张展示图`} onClick={() => setForm({ ...form, showcaseImageIds: form.showcaseImageIds?.filter(id => id !== mediaId) })}>移除</button></div></li>)}</ol>
           <label className="adm__label">展示顺序（数字越小越靠前）<input className="adm__input" type="number" required min={0} max={10000} step={1} value={form.position} onChange={e => setForm({ ...form, position: e.target.valueAsNumber })} /></label>
           <label className="adm__label">展示状态<select aria-label="展示状态" className="adm__input" value={form.published ? 'published' : 'draft'} onChange={e => setForm({ ...form, published: e.target.value === 'published' })}><option value="draft">未上架</option><option value="published">已上架</option></select></label>

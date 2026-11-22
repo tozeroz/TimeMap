@@ -652,6 +652,9 @@ export function humanizeFailure(reason: string, status?: number): string {
   if (status === 429) return '操作太频繁，请稍后再试'
   if (status === 503) return '服务暂时不可用，请稍后重试'
   if (status !== undefined && status >= 500) return '服务器出了点问题，请稍后重试'
+  if (reason.includes('not_an_image')) return '图片格式无法识别或文件已损坏，请重新导出为 JPG、PNG 或 WebP 后上传'
+  if (reason.includes('empty_file')) return '图片文件为空，请重新选择图片'
+  if (reason.includes('missing_upload_request_id') || reason.includes('bad_multipart') || reason.includes('no_file')) return '上传信息不完整，请刷新页面后重新选择图片'
   // 4xx 里能给出的最具体信息来自服务端的机器码，映射不到就给通用提示
   if (reason.includes('bad_place') ) return '地点不存在，请刷新后重试'
   if (status === 400 || status === 422) return '请求未能完成，请检查填写内容后重试'

@@ -27,6 +27,7 @@ try {
     const peer={id:other,displayName:'另一位同学',avatarMediaId:'cccccccc-cccc-4ccc-8ccc-000000000001'}
     await page.addInitScript(({me})=>localStorage.setItem('campus.demo.session.v1',JSON.stringify({token:'test-dm-session-token',expiresAt:'2099-01-01',user:{id:me,displayName:'本人',handle:'me'}})),{me})
     const messages=Array.from({length:75},(_,i)=>({id:`dddddddd-dddd-4ddd-8ddd-${String(i+1).padStart(12,'0')}`,threadSeq:String(i+1),clientRequestId:null,senderId:other,sender:'另一位同学',senderAvatarMediaId:peer.avatarMediaId,body:`历史消息${i+1}`,kind:'text',media:[],revoked:false,createdAt:new Date().toISOString()}))
+    messages[1].senderId=me;messages[1].createdAt=new Date(Date.now()-6*60*1000).toISOString()
     let blocked=false,first=true,postKeys=[],readPositions=[],polls=0,revokeFails=true
     await page.route('**/api/**',async route=>{
       const req=route.request(),url=new URL(req.url()),path=url.pathname
@@ -69,6 +70,7 @@ try {
     await page.getByRole('button',{name:'加载更早消息',exact:true}).click()
     await page.locator(`[data-message-id="${messages[0].id}"]`).waitFor()
     assert.equal(await page.locator('[data-message-id]').count(),75)
+    assert.equal(await page.locator(`[data-message-id="${messages[1].id}"]`).getByRole('button',{name:'撤回',exact:true}).count(),0,'Expired own messages cannot be revoked')
     const input=page.getByRole('textbox',{name:'消息输入框'})
     await input.fill('可靠发送测试')
     await page.getByRole('button',{name:'发送',exact:true}).click()

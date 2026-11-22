@@ -258,6 +258,22 @@ function ChatSession({ id, variant = 'direct' }: { id: string; variant?: 'direct
   const [revokeTarget, setRevokeTarget] = useState<string|null>(null)
   const [revokeBusy, setRevokeBusy] = useState(false)
   const [revokeError, setRevokeError] = useState('')
+  const [revokeNow, setRevokeNow] = useState(Date.now)
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>|undefined
+    const update = () => {
+      clearTimeout(timer)
+      const now=Date.now()
+      setRevokeNow(now)
+      const deadlines=messages.filter(message=>message.senderId===meId&&!message.revoked)
+        .map(message=>Date.parse(message.createdAt)+5*60*1000).filter(deadline=>deadline>now)
+      if(deadlines.length)timer=setTimeout(update,Math.min(...deadlines)-now+1)
+    }
+    update()
+    window.addEventListener('focus',update)
+    document.addEventListener('visibilitychange',update)
+    return ()=>{clearTimeout(timer);window.removeEventListener('focus',update);document.removeEventListener('visibilitychange',update)}
+  },[messages,meId])
   const revokePanel = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if(!revokeTarget)return
@@ -456,7 +472,7 @@ function ChatSession({ id, variant = 'direct' }: { id: string; variant?: 'direct
       const result = await revokeThreadMessage(id,revokeTarget)
       if(!accountAlive())return
       if(result.ok){markRevoked([result.value.id]);setRevokeTarget(null)}
-      else setRevokeError(result.status===404?'消息不存在，或你无权撤回':'撤回失败，请重试')
+      else setRevokeError(result.reason.includes('message_revoke_expired')?'消息发送已满 5 分钟，无法撤回':result.status===404?'消息不存在，或你无权撤回':'撤回失败，请重试')
     } finally {if(accountAlive())setRevokeBusy(false)}
   }
   useEffect(()=>{void loadMessages()},[id])
@@ -926,7 +942,7 @@ function ChatSession({ id, variant = 'direct' }: { id: string; variant?: 'direct
       {revokeTarget && <div className="chat__revoke-dialog" role="dialog" aria-modal="true" aria-labelledby="revoke-title">
         <div className="chat__revoke-panel" ref={revokePanel}>
           <h2 id="revoke-title">撤回这条消息？</h2>
-          <p>撤回后双方将显示“消息已撤回”。对方可能已经看过或保存了内容。</p>
+          <p>仅可撤回发送后 5 分钟内的消息。撤回后双方将显示“消息已撤回”。对方可能已经看过或保存了内容。</p>
           {revokeError && <p role="alert">{revokeError}</p>}
           <button autoFocus disabled={revokeBusy} onClick={()=>setRevokeTarget(null)}>取消</button>
           <button disabled={revokeBusy} onClick={()=>void confirmRevoke()}>{revokeBusy?'正在撤回…':'确认撤回'}</button>
@@ -1010,7 +1026,7 @@ function ChatSession({ id, variant = 'direct' }: { id: string; variant?: 'direct
                     <span className="bubble__text">{m.body}</span>
                   )}
                   <span className="bubble__time">{relativeTime(m.createdAt)}</span>
-                  {mine && !m.revoked && <button className="bubble__revoke" disabled={revokeBusy} onClick={()=>{setRevokeError('');setRevokeTarget(m.id)}}>撤回</button>}
+                  {mine && !m.revoked && Date.parse(m.createdAt)+5*60*1000>revokeNow && <button className="bubble__revoke" disabled={revokeBusy} onClick={()=>{setRevokeError('');setRevokeTarget(m.id)}}>撤回</button>}
                 </div>
               </div>
             )
