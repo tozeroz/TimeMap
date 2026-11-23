@@ -44,6 +44,7 @@ import {
   VerifyScreen,
 } from './screens/DrawerPages'
 import { FeedbackScreen } from './screens/FeedbackScreen'
+import { GuideHost } from './guide/GuideHost'
 import './styles/pages.css'
 
 /**
@@ -261,6 +262,12 @@ export default function App() {
       {tab && !(tab === 'map' && sheetOpen) && <TabBar active={tab} />}
       {root === 'activities' && route.query.mode !== 'projects' && <button className="app__publish app__publish--campus" aria-label="提交活动" onClick={() => navigate('activity-submit')}>＋</button>}
       {tab && root !== 'map' && root !== 'activities' && root !== 'me' && <button className={`app__publish ${root === 'campus' ? 'app__publish--campus' : ''}`} aria-label="发布" onClick={() => navigate('publish')}>＋</button>}
+      {/*
+        ⭐ 首次注册用户引导（2026-11-24）：挂在 Shell 里而不是某个页面里 ——
+        引导要跨「我的 → 编辑资料 → 地图 → 发帖 → 活动 → 实训项目」多个路由持续存在，
+        放进任何单个 screen 都会在跳转时被卸载。它自己按需返回 null（未登录/已完成时不渲染任何东西）。
+      */}
+      <GuideHost />
     </Shell>
   )
 }

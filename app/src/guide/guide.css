@@ -1,0 +1,145 @@
+/**
+ * 首次注册用户引导的样式。
+ *
+ * 硬性要求（方案 §5.2）：
+ *  · 遮罩不盖住高亮区域 —— 高亮区域由四块 `guide__panel` 挖出来，中间是真的"洞"。
+ *  · 提示卡自适应目标位置：目标在上半屏时卡片放下面，反之放上面；
+ *    所有定位都在 JS 里算，这里只负责外观，避免和页面布局互相干扰。
+ *  · 层级必须高于**所有**可能的页面内浮层：底栏(40)、发布"＋"(60)、地图控件(500/600)、
+ *    地点抽屉(600)、地图发现卡/搜索面板(700)，以及腾讯 GL SDK 注入的 1000 层。
+ *    2026-11-24 实测：取 90 时地图发现卡 `md-card`（z 700）会压住提示卡，点「下一步」被它拦截。
+ *    ⇒ 取 1100；遇到必须阻断用户的地图授权模态时，GuideHost 自己让位（见 blockedByModal），
+ *      所以这里不需要为"系统级弹窗"留位置。
+ */
+
+.guide {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  pointer-events: none;
+}
+
+.guide__mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 26, 44, 0.66);
+  pointer-events: auto;
+}
+
+.guide__panel {
+  position: fixed;
+  pointer-events: auto;
+  /* 点遮罩只是提示"请点高亮区域"，不关闭引导 */
+}
+
+.guide__ring {
+  position: fixed;
+  border: 2px solid var(--c-primary, #c44b22);
+  border-radius: 14px;
+  box-shadow: 0 0 0 3px rgba(196, 75, 34, 0.22), 0 10px 26px rgba(8, 26, 44, 0.28);
+  pointer-events: none;
+  transition: top 120ms ease, left 120ms ease, width 120ms ease, height 120ms ease;
+}
+
+.guide__card {
+  position: fixed;
+  pointer-events: auto;
+  box-sizing: border-box;
+  max-width: min(340px, calc(100vw - 24px));
+  padding: 16px 18px 14px;
+  border-radius: var(--r-lg, 16px);
+  background: var(--c-surface, #fff);
+  color: var(--c-text, #192d42);
+  box-shadow: 0 18px 44px rgba(8, 26, 44, 0.28);
+  /* 测量前先藏起来，避免闪一下错位置 */
+  opacity: 0;
+}
+
+.guide__card.is-measured {
+  opacity: 1;
+  transition: opacity 140ms ease;
+}
+
+.guide__title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.guide__body {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--c-text-2, #4a5f75);
+}
+
+.guide__missing {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--c-warn, #b46a00);
+}
+
+.guide__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.guide__primary,
+.guide__ghost {
+  appearance: none;
+  border: 0;
+  border-radius: var(--r-button, 12px);
+  font: inherit;
+  cursor: pointer;
+  padding: 9px 14px;
+  /* 触控目标下限：测试在真机 DPR 下量到 43.6px，比 44px 无障碍基线矮 0.4px，
+     这里直接钉到 44px（也顺手让中文双行文案不挤）。 */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.guide__primary {
+  background: var(--c-primary, #c44b22);
+  color: #fff;
+  font-weight: 600;
+}
+
+.guide__primary:disabled {
+  opacity: 0.5;
+}
+
+.guide__ghost {
+  background: rgba(25, 45, 66, 0.06);
+  color: var(--c-text-2, #4a5f75);
+}
+
+.guide__ghost:disabled {
+  opacity: 0.45;
+}
+
+.guide__foot {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: var(--c-text-3, #7a8a99);
+}
+
+.guide__resume {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 76px);
+  transform: translateX(-50%);
+  pointer-events: auto;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font: inherit;
+  font-size: 13px;
+  color: #fff;
+  background: var(--c-primary, #c44b22);
+  box-shadow: 0 12px 28px rgba(8, 26, 44, 0.32);
+}
