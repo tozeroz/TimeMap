@@ -51,14 +51,23 @@ export function MessageScreen({ category }: { category?: string }) {
   const token=useRef(getSession()?.token)
   const [opened, setOpened] = useState<string | null>(null)
   const loadedPages=useRef(1)
-  const loading=useRef(false)
+  /** 已经为哪个 scope 自动标记过已读（防止每次轮询重复打接口） */
+  const autoRead=useRef('')
   const mounted = useRef(false), generation = useRef(0)
+  /**
+   * 拉取消息中心。
+   *
+   * ⚠️ 这里**不能**用「有请求在途就直接返回」的并发守卫：
+   *    · StrictMode 下挂载会执行两次，第二次会被守卫挡掉，而第一次的结果又因为
+   *      generation 变化被丢弃 ⇒ 页面永远停在「加载中…」，红点和按钮都不更新（实测复现）。
+   *    · 轮询与「标记已读」后的刷新也会互相吞掉。
+   * 现在的规则：每次调用都推进 generation，**只有最新那次的结果会被采用**，
+   * 过期结果直接丢弃——不需要额外的 loading 标志位。
+   */
   const load = useCallback(async (quiet=false) => {
-    if(loading.current)return true
-    loading.current=true
-    try {
     const current = ++generation.current
     if(!quiet)setPhase('loading')
+    try {
     const [notifications, firstPage] = await Promise.all([getInbox(), getThreads(undefined,'direct')])
     let conversations=firstPage
     if(firstPage.ok && quiet){
@@ -84,7 +93,7 @@ export function MessageScreen({ category }: { category?: string }) {
     if(!quiet)loadedPages.current=1
     setPhase('ready')
     return true
-    } finally {loading.current=false}
+    } finally { /* 无共享标志位需要复位 */ }
   }, [])
   useEffect(() => {
     mounted.current = true; void load()
@@ -92,8 +101,7 @@ export function MessageScreen({ category }: { category?: string }) {
   }, [load])
   useForegroundPoll(()=>load(true),10000,phase==='ready')
   async function moreThreads() {
-    if(!threadCursor||moreBusy||loading.current)return
-    loading.current=true
+    if(!threadCursor||moreBusy)return
     setMoreBusy(true);setNotice('')
     try {
       const result=await getThreads(threadCursor,'direct')
@@ -101,24 +109,79 @@ export function MessageScreen({ category }: { category?: string }) {
       if(!result.ok){setNotice('更多会话加载失败，请重试');return}
       const merged=[...threadsRef.current,...result.value.items.filter(t=>t.kind==='direct'&&!threadsRef.current.some(old=>old.id===t.id))]
       threadsRef.current=merged;setThreads(merged);setThreadCursor(result.value.nextCursor??null);loadedPages.current++
-    } finally {loading.current=false;if(mounted.current)setMoreBusy(false)}
+    } finally {if(mounted.current)setMoreBusy(false)}
   }
-  async function read(scope: string) {
+  /**
+   * 本地先把某个 scope 的未读清掉。
+   *
+   * 为什么不只依赖随后那次重新拉取：红点必须**立刻**消失，否则用户会以为没生效
+   * （尤其轮询刚好处在在途状态时）。本地清一个是乐观更新，服务端那次拉取只做对齐。
+   */
+  function clearLocal(scope: string) {
+    setInbox(prev => {
+      if (!prev) return prev
+      const hit = (cat: string) => scope === 'all' || scope === cat
+      return {
+        ...prev,
+        counts: {
+          likes: hit('likes') ? 0 : prev.counts.likes,
+          favorites: hit('favorites') ? 0 : prev.counts.favorites,
+          comments: hit('comments') ? 0 : prev.counts.comments,
+        },
+        items: hit('likes') || hit('favorites') || hit('comments')
+          ? prev.items.map(i => (hit(i.category) ? { ...i, unread: false } : i))
+          : prev.items,
+        announcements: hit('announcements') ? prev.announcements.map(a => ({ ...a, unread: false })) : prev.announcements,
+        threads: scope === 'all' ? prev.threads.map(t => ({ ...t, unreadCount: 0 })) : prev.threads,
+      }
+    })
+  }
+  /**
+   * 标记已读。
+   * silent = 自动触发（进入某个分类时），不弹「已标记为已读」的提示，避免每次进页面都闪一条。
+   */
+  async function markRead(scope: string, opts?: { silent?: boolean }) {
     if (!inbox || busy) return
-    setBusy(true); setNotice('')
+    setBusy(true); if (!opts?.silent) setNotice('')
     const result = await markInboxRead(scope, inbox.through)
-    if (mounted.current) {
-      setBusy(false)
-      if (result.ok) { setNotice('已标记为已读'); await load() }
-      else setNotice('标记已读失败，请重试')
+    if (!mounted.current) return
+    setBusy(false)
+    if (!result.ok) {
+      if (!opts?.silent) setNotice('标记已读失败，请重试')
+      return
     }
+    // 先本地清（红点立刻消失），再静默与服务端对齐
+    clearLocal(scope)
+    if (!opts?.silent) setNotice('已标记为已读')
+    void load(true)
   }
+  /**
+   * 进入某个分类 / 公告页时**自动**标记该分类已读。
+   *
+   * 依据：「读完消息中心，红点应该消失」。之前只能靠右上角那个没有文字的 ✓ 按钮，
+   * 用户读完页面红点仍然挂着。现在进入即视为已读（与主流消息中心一致），
+   * 根页面仍然保留「全部标记已读」用于批量清理。
+   * 同一个 scope 在一次进入里只自动标记一次，避免轮询反复打接口。
+   */
+  useEffect(() => {
+    if (phase !== 'ready' || !inbox) return
+    const scope = announcements ? 'announcements' : active?.key
+    if (!scope) return
+    const unread = announcements
+      ? (inbox.announcements.some(a => a.unread) ? 1 : 0)
+      : (inbox.counts[scope as InboxCategory] ?? 0)
+    if (unread <= 0) return
+    if (autoRead.current === scope) return
+    autoRead.current = scope
+    void markRead(scope, { silent: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, inbox, announcements, active?.key])
   const latest = inbox?.announcements[0], detail = inbox?.announcements.find(a => a.id === opened)
   const title = active?.label || (announcements ? '应用公告' : '消息')
   return <Screen className="inbox" header={<TopBar
     left={<button className="inbox__control" aria-label={category ? '返回消息' : '关闭'} onClick={() => category ? navigate('message') : goBack('campus')}>{category ? <IconBack size={24}/> : <IconClose size={24}/>}</button>}
     center={title}
-    right={<button className="inbox__control" aria-label={category ? '标记本类已读' : '全部标记已读'} title="标记已读" disabled={!inbox || busy || phase !== 'ready'} onClick={() => void read(category || 'all')}><InboxIcon name="read"/></button>}
+    right={<button className="inbox__control" aria-label={category ? '标记本类已读' : '全部标记已读'} title="标记已读" disabled={!inbox || busy || phase !== 'ready'} onClick={() => void markRead(category || 'all')}><InboxIcon name="read"/></button>}
   />}>
     {!category && <>
       <nav className="inbox__shortcuts" aria-label="互动消息">{categories.map(c => <button className="inbox__shortcut" key={c.key} onClick={() => navigate('message', { category: c.key })}>
