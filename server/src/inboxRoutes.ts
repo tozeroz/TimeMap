@@ -10,6 +10,17 @@ with events as (
   from likes l join posts p on p.id=l.post_id join users u on u.id=l.user_id
   where p.author_id=$1 and l.user_id<>$1 and p.status='published'
   union all
+  -- 048：评论点赞。与「赞了你的帖子」同属 likes 分类（一个入口、一个未读计数），
+  -- 靠 action 文案区分。post_id 用来点击后跳到那条帖子，thread_id 恒空。
+  -- 只认 published：评论软删（status='removed'）后不再通知，帖子下架同理。
+  select 'comment-like:'||cl.id, 'likes', u.display_name, u.avatar_media_id, p.id, null::uuid,
+    '赞了你的评论', left(c.body,160), cl.created_at
+  from comment_likes cl
+  join comments c on c.id=cl.comment_id
+  join posts p on p.id=c.post_id
+  join users u on u.id=cl.user_id
+  where c.author_id=$1 and cl.user_id<>$1 and c.status='published' and p.status='published'
+  union all
   select 'favorite:'||f.id, 'favorites', u.display_name, u.avatar_media_id, p.id, null::uuid,
     '收藏了你的帖子', left(p.body,160), f.created_at
   from favorites f join posts p on p.id=f.post_id join users u on u.id=f.user_id

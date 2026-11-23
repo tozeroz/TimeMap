@@ -10,10 +10,13 @@ import {
   deleteMyPost,
   favoritePost,
   likePost,
+  likeComment,
   unfavoritePost,
   unlikePost,
+  unlikeComment,
   humanizeFailure,
   reportPostOpen,
+  type ApiComment,
   type ApiCommentNode,
   type ApiPostDetail,
   failText,
@@ -110,6 +113,14 @@ function FeedDetail({ id, onStep }: { id: string; onStep: (direction: number) =>
   const [post, setPost] = useState<ApiPostDetail | null>(null)
   const [comments, setComments] = useState<ApiCommentNode[]>([])
   const [total, setTotal] = useState(0)
+  /**
+   * 048：正在提交点赞的那条评论 id。
+   *
+   * 为什么不复用 `busy`：`busy` 会把发评论输入框、帖子点赞、收藏一起禁用 ——
+   * 点一下评论的小红心就把「发送」按钮锁住，观感上像是整个面板卡了。
+   * 按评论 id 记，只锁这一条。
+   */
+  const [commentLikeBusy, setCommentLikeBusy] = useState<string | null>(null)
   const [state, setState] = useState<
     'loading' | 'ready' | 'offline' | 'gone' | 'not_found' | 'error' | 'local'
   >('loading')
@@ -302,6 +313,52 @@ function FeedDetail({ id, onStep }: { id: string; onStep: (direction: number) =>
       setNotice('')
     } finally {
       setBusy(false)
+    }
+  }
+
+  /**
+   * 048：评论点赞/取消。与 toggleLike 同一套原则：
+   *   · 先乐观更新做即时反馈，**再用服务端权威计数校正**；
+   *   · 失败**必须回滚**（写操作绝不本地假成功，M1 冻结原则）。
+   * 评论可能是顶层也可能是回复，所以用 patchComment 同时覆盖两层。
+   */
+  function patchComment(commentId: string, update: (c: ApiComment) => ApiComment) {
+    setComments(items => items.map(root => root.id === commentId
+      ? { ...update(root), replies: root.replies } as ApiCommentNode
+      : { ...root, replies: root.replies.map(c => (c.id === commentId ? update(c) : c)) }))
+  }
+
+  async function toggleCommentLike(commentId: string) {
+    if (commentLikeBusy) return
+    if (!isLoggedIn()) {
+      setNotice('请先登录后再点赞')
+      navigate('loginselect')
+      return
+    }
+    const target = comments.flatMap(c => [c, ...c.replies]).find(c => c.id === commentId)
+    if (!target) return
+    const liked = Boolean(target.likedByMe)
+    const flip = (c: ApiComment) => (c.id === commentId
+      ? { ...c, likedByMe: !liked, likeCount: Math.max(0, (c.likeCount ?? 0) + (liked ? -1 : 1)) }
+      : c)
+    setNotice('')
+    setCommentLikeBusy(commentId)
+    patchComment(commentId, flip)
+    try {
+      const r = liked ? await unlikeComment(commentId) : await likeComment(commentId)
+      if (!r.ok) {
+        patchComment(commentId, flip)
+        setNotice(r.status === 503 ? '服务暂不可用，请稍后再试' : `操作失败：${failText(r)}`)
+        return
+      }
+      patchComment(commentId, c => (c.id === commentId
+        ? { ...c, likedByMe: r.value.likedByMe, likeCount: r.value.likeCount }
+        : c))
+    } catch {
+      patchComment(commentId, flip)
+      setNotice('操作失败，请稍后重试')
+    } finally {
+      setCommentLikeBusy(null)
     }
   }
 
@@ -566,6 +623,7 @@ function FeedDetail({ id, onStep }: { id: string; onStep: (direction: number) =>
       draft={draft} onDraft={setDraft} notice={notice} offline={fromSnapshot}
       onLike={() => void toggleLike()} onFavorite={() => void toggleFavorite()}
       onSend={submitComment} onDeleteComment={cid => void removeComment(cid)}
+      onLikeComment={cid => void toggleCommentLike(cid)} commentLikeBusy={commentLikeBusy}
       onMore={() => isAuthor ? setConfirmDelete(true) : setReportOpen(true)}
       onShare={() => void sharePost()} />
 

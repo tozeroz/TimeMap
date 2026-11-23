@@ -1,4 +1,5 @@
 import mapCurationSql from './migrations/047_map_curation.sql'
+import commentLikesSql from './migrations/048_comment_likes.sql'
 import directMessagesSql from './migrations/046_direct_messages.sql'
 import inboxSql from './migrations/045_inbox.sql'
 import postCommentPolicySql from './migrations/044_post_comment_policy.sql'
@@ -210,6 +211,9 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   { version: '047_map_curation', sql: mapCurationSql },
   // 银杏大道定位修正。
   { version: '045_place_ginkgo_position', sql: placeGinkgoPositionSql },
+  // 048：评论点赞（与 likes 同型但独立成表，见该文件头部说明）。
+  //      必须排在 045_place_ginkgo_position 之后：MIGRATIONS 的数组顺序就是应用顺序。
+  { version: '048_comment_likes', sql: commentLikesSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

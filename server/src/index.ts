@@ -1441,6 +1441,8 @@ export function buildServer(deps: ServerDeps) {
     depth: number
     body: string
     created_at: Date
+    like_count: number
+    liked_by_me: boolean
   }
 
   /** 取某帖的评论树：顶层评论 + 各自的全部后代（递归 CTE 一次查完，避免 N+1） */
@@ -1471,14 +1473,18 @@ export function buildServer(deps: ServerDeps) {
               -- 匿名帖（033）：帖子作者在该帖下发的评论也要遮罩，
               -- 否则「匿名发帖 + 自己评论一句」就把自己认出来了（等于没匿名）。
               po.is_anonymous as post_anonymous,
-              po.author_id as post_author_id
+              po.author_id as post_author_id,
+              -- 048：评论点赞计数与「我赞过没」。未登录时 $2 为 null →
+              -- exists 恒 false，与帖子 likeStateFor 同型，不额外发查询。
+              (select count(*) from comment_likes cl where cl.comment_id = c.id)::int as like_count,
+              exists(select 1 from comment_likes cl2 where cl2.comment_id = c.id and cl2.user_id = $2::uuid) as liked_by_me
          from tree t
          join comments c on c.id = t.id
          join posts po on po.id = c.post_id
          left join users u on u.id = c.author_id
          left join post_anonymous_identities ai on ai.post_id = c.post_id and ai.user_id = c.author_id
         order by t.root_id, t.depth, c.created_at, c.id`,
-      [postId],
+      [postId, meId],
     )
 
     const publicNames = new Map(r.rows.map(row => [row.id, publicCommentIdentity(row, meId).author]))
@@ -1490,6 +1496,8 @@ export function buildServer(deps: ServerDeps) {
         body: row.body,
         ...publicCommentIdentity(row, meId),
         createdAt: row.created_at.toISOString(),
+        likeCount: row.like_count,
+        likedByMe: row.liked_by_me,
       }
       if (row.depth === 0) {
         const node = { ...base, parentId: null, replyTo: null, replies: [] as unknown[] }
@@ -1844,6 +1852,8 @@ export function buildServer(deps: ServerDeps) {
           is_anonymous: anonymous, post_anonymous: post.is_anonymous,
           post_author_id: post.author_id, anonymous_number: number }, s.user.userId),
         createdAt: row.created_at.toISOString(), parentId: parentId || null, replyTo,
+        // 048：新评论必然是 0 赞、自己没赞过 —— 明确给出，免得前端要区分「字段缺失」与「0」。
+        likeCount: 0, likedByMe: false,
       }
     } catch (err) {
       await client?.query('rollback').catch(() => {})
@@ -1935,6 +1945,100 @@ export function buildServer(deps: ServerDeps) {
         s.user.userId,
       ])
       const st = await likeStateFor(id, s.user.userId)
+      return { liked: false, ...st }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  // -------------------------------------------------------------------------
+  // 评论点赞（048）
+  //
+  // 与帖子点赞**同型**（幂等、服务端为准回传计数），差别只在对象与准入：
+  //   · 评论是**软删除**（timemap.ts 里 status='removed'），所以必须校验
+  //     comment.status='published'；否则「删掉的评论还能被赞」会变成一条
+  //     指向空气的互动，并且会污染 inbox 里对方收到的通知。
+  //   · 所属帖子也必须 published：下架帖下面的评论不该继续产生互动（F07 同理）。
+  // 不做「不能赞自己」的拦截：帖子点赞也没有这条，评论再单独加一条会让两条
+  // 规则不一致；自赞只是**不发通知**（见 inboxRoutes.ts 的 l.user_id<>$1）。
+  // -------------------------------------------------------------------------
+
+  /** 评论点赞计数 + 我是否赞过（未登录时 likedByMe 恒 false，不额外发查询） */
+  async function commentLikeStateFor(
+    commentId: string,
+    userId: string | null,
+  ): Promise<{ likeCount: number; likedByMe: boolean }> {
+    const r = await db.pool.query<{ n: string; mine: string }>(
+      `select count(*)::text as n,
+              coalesce(bool_or(cl.user_id = $2::uuid), false)::text as mine
+         from comment_likes cl
+        where cl.comment_id = $1`,
+      [commentId, userId],
+    )
+    const row = r.rows[0]
+    return {
+      likeCount: Number.parseInt(row?.n ?? '0', 10),
+      likedByMe: row?.mine === 'true',
+    }
+  }
+
+  /** 可点赞的评论：自身 published 且所属帖子 published */
+  async function likeableComment(commentId: string): Promise<boolean> {
+    const r = await db.pool.query(
+      `select 1 from comments c join posts p on p.id = c.post_id
+        where c.id = $1 and c.status = 'published' and p.status = 'published'`,
+      [commentId],
+    )
+    return Boolean(r.rowCount)
+  }
+
+  /** 给评论点赞（幂等：重复点赞不报错、不重复计数） */
+  app.post('/api/comments/:id/like', async (req, reply) => {
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') return unauthorized(reply)
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    try {
+      if (!(await likeableComment(id))) {
+        reply.code(404)
+        return { error: 'not_found' }
+      }
+      await db.pool.query(
+        `insert into comment_likes (id, comment_id, user_id) values ($1, $2, $3)
+         on conflict (user_id, comment_id) do nothing`,
+        [randomUUID(), id, s.user.userId],
+      )
+      const st = await commentLikeStateFor(id, s.user.userId)
+      return { liked: true, ...st }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  /** 取消评论点赞（同样幂等：没点过也不报错；已删除的评论也允许收回自己的赞） */
+  app.delete('/api/comments/:id/like', async (req, reply) => {
+    const s = await resolveSession(req.headers.authorization)
+    if (s.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+    if (s.kind === 'none') return unauthorized(reply)
+    const id = (req.params as { id?: string }).id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    try {
+      await db.pool.query('delete from comment_likes where comment_id = $1 and user_id = $2', [
+        id,
+        s.user.userId,
+      ])
+      const st = await commentLikeStateFor(id, s.user.userId)
       return { liked: false, ...st }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)

@@ -25,6 +25,11 @@ try {
     create table comments(id uuid primary key, post_id uuid references posts(id), author_id uuid references users(id),
       parent_id uuid references comments(id), body text, created_at timestamptz default now(), status text default 'published',
       removed_reason text, removed_by uuid, removed_at timestamptz);
+    -- 048：评论点赞。读模型（loadComments）会带上 likeCount/likedByMe，夹具必须同步建表；
+    -- 否则整个评论列表接口都会 500（这条测试正好卡在「匿名评论读得到」上）。
+    create table comment_likes(id uuid primary key, comment_id uuid references comments(id) on delete cascade,
+      user_id uuid references users(id) on delete cascade, created_at timestamptz default now(),
+      unique(user_id, comment_id));
   `)
   const migration = readFileSync('src/migrations/042_comment_anonymous.sql', 'utf8')
   await pool.query(migration)
