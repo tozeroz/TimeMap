@@ -18,6 +18,8 @@ interface Props {
   draft: string; onDraft: (value: string) => void; notice: string; offline: boolean
   onLike: () => void; onFavorite: () => void; onSend: (parentId?: string, anonymous?: boolean) => Promise<boolean>
   onDeleteComment: (id: string) => void; onMore: () => void; onShare: () => void
+  /** 048：评论点赞。commentLikeBusy 是正在提交的那条评论 id（只锁这一条）。 */
+  onLikeComment: (id: string) => void; commentLikeBusy: string | null
   onStep: (direction: number) => void
 }
 
@@ -198,7 +200,7 @@ export function PostReader(p: Props) {
         <div className="reader__comments" ref={list}>
           {!p.comments.length && <p className="reader__empty">还没有评论，来留下第一条校园记忆吧</p>}
           {p.comments.flatMap(c => [c, ...c.replies]).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).map(c => <article className="reader__comment" key={c.id} data-comment-id={c.id}>
-            <img src={commentAvatar(c)} alt=""/><div><h3>{c.author}{c.isPostAuthor && <span className="reader__authorBadge">楼主</span>}</h3>{c.replyTo && <p className="reader__replyTo">回复 {c.replyTo}</p>}<p>{c.body}</p><div className="reader__commentMeta"><time>{relativeTime(c.createdAt)}</time><button type="button" disabled={p.busy} onClick={() => { setReplyTarget({ id: c.id, author: c.author }); input.current?.focus() }}>回复</button>{(c.isMine ?? Boolean(c.authorId && c.authorId === me?.id)) && <button disabled={p.busy} data-comment-delete={c.id} onClick={() => setDeleteId(c.id)}>删除</button>}</div></div>
+            <img src={commentAvatar(c)} alt=""/><div><h3>{c.author}{c.isPostAuthor && <span className="reader__authorBadge">楼主</span>}</h3>{c.replyTo && <p className="reader__replyTo">回复 {c.replyTo}</p>}<p>{c.body}</p><div className="reader__commentMeta"><time>{relativeTime(c.createdAt)}</time><button type="button" disabled={p.busy} onClick={() => { setReplyTarget({ id: c.id, author: c.author }); input.current?.focus() }}>回复</button>{(c.isMine ?? Boolean(c.authorId && c.authorId === me?.id)) && <button disabled={p.busy} data-comment-delete={c.id} onClick={() => setDeleteId(c.id)}>删除</button>}<button type="button" className={`reader__commentLike ${c.likedByMe ? 'is-liked' : ''}`} data-comment-like={c.id} data-liked={c.likedByMe ? '1' : '0'} data-like-count={c.likeCount ?? 0} aria-label={c.likedByMe ? '取消点赞这条评论' : '点赞这条评论'} aria-pressed={Boolean(c.likedByMe)} disabled={p.commentLikeBusy === c.id} onClick={() => p.onLikeComment(c.id)}><IconHeart size={15} filled={Boolean(c.likedByMe)} />{/* 与帖子点赞同一条展示规则：0 赞时只留图标，不渲染计数 */}{(c.likeCount ?? 0) > 0 && <span>{c.likeCount}</span>}</button></div></div>
           </article>)}
         </div>
         {deleteId && <div className="reader__deleteConfirm" role="alert"><span>删除这条评论？</span><button onClick={() => setDeleteId(null)}>取消</button><button disabled={p.busy} onClick={() => { p.onDeleteComment(deleteId); setDeleteId(null) }}>删除</button></div>}

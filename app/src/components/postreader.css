@@ -40,3 +40,10 @@
 .reader__anonymous>button,.reader__replyTarget>button{flex:none;min-height:44px;padding:0 10px;color:var(--green);border:1px solid var(--line);border-radius:12px}
 .reader__anonymous>button[aria-checked="true"]{background:#e4e8d8;border-color:var(--green)}
 .reader__replyTarget>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 048：评论点赞。`.reader__commentMeta button` 已经把点区定到 44×44，这里**不缩点区**
+   （无障碍底线），只做三件事：收掉左右内距让 15px 图标居中、把计数改成等宽数字、
+   用 margin-left:auto 把小红心推到行尾，避免和「回复/删除」挤在一起被误点。 */
+.reader__commentMeta .reader__commentLike{min-width:44px;min-height:44px;gap:4px;padding:0;color:var(--muted);font-variant-numeric:tabular-nums;margin-left:auto}
+.reader__commentMeta .reader__commentLike.is-liked{color:var(--orange)}
+.reader__commentMeta .reader__commentLike>span{font-size:12px}
+.reader__commentMeta .reader__commentLike:disabled{opacity:.5}

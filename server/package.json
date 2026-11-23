@@ -14,6 +14,10 @@
     "test:feed-avatar": "node tests/run-feed-avatar.mjs",
     "test:direct": "node tests/run-direct-messages.mjs",
     "test:anonymous": "node tests/run-comment-anonymous.mjs",
+    "test:comment-likes": "node tests/run-comment-likes.mjs",
+    "test:inbox": "node --experimental-strip-types tests/inbox.test.ts",
+    "test:curation": "node --experimental-strip-types tests/curation.test.ts",
+    "test:activities": "node --experimental-strip-types tests/activities.test.ts",
     "test:cutout": "node --experimental-strip-types tests/cutout-control.test.ts",
     "dev": "node --experimental-strip-types src/index.ts"
   },

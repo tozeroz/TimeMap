@@ -1630,6 +1630,9 @@ export interface ApiComment {
   parentId: string | null
   /** 回复的目标昵称（来自 parent_id 指向的那条评论的作者）；顶层评论为 null */
   replyTo: string | null
+  /** 048：评论点赞。计数一律来自服务端，前端不得自己加减（与帖子 likeCount 同型） */
+  likeCount?: number
+  likedByMe?: boolean
 }
 
 export interface ApiCommentNode extends ApiComment {
@@ -1817,6 +1820,23 @@ export async function likePost(postId: string): Promise<ApiResult<LikeState>> {
 /** 取消点赞（同样幂等） */
 export async function unlikePost(postId: string): Promise<ApiResult<LikeState>> {
   return request<LikeState>(`/api/posts/${encodeURIComponent(postId)}/like`, { method: 'DELETE' })
+}
+
+/**
+ * 评论点赞（048）：与帖子点赞**同一套语义与返回结构**（幂等、计数以服务端为准）。
+ * 分开写而不是复用 likePost，是因为帖子/评论是两条独立的产品规则：
+ * 将来任一侧要加限额或审计时，不该牵动另一侧。
+ */
+export async function likeComment(commentId: string): Promise<ApiResult<LikeState>> {
+  return request<LikeState>(`/api/comments/${encodeURIComponent(commentId)}/like`, {
+    method: 'POST',
+    body: {},
+  })
+}
+
+/** 取消评论点赞（同样幂等） */
+export async function unlikeComment(commentId: string): Promise<ApiResult<LikeState>> {
+  return request<LikeState>(`/api/comments/${encodeURIComponent(commentId)}/like`, { method: 'DELETE' })
 }
 
 // ===========================================================================
