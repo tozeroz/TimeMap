@@ -49,6 +49,28 @@ export const GUIDE_RESTART_EVENT = 'timemap:guide-restart'
  * `visibility:hidden`（见 `realmaps.css` 的 `.rm--hidden`），盒子尺寸照旧，
  * 框会画在一个空位置上 —— 现场复现过「框里没有地点名，点下去打开别的地点」。
  */
+/**
+ * 当前是否有一个「贴底打开」的抽屉/弹层（地点详情、筛选、发布确认…）。
+ * 第三轮实测：点开地点抽屉后，引导卡落在 (25,367,340,185) 正好压住抽屉的 ×，
+ * 手指点下去命中卡片、抽屉关不掉。这里不依赖"高亮目标在不在抽屉里"——
+ * 只要屏幕底部有抽屉浮层，就把它的矩形交给卡片做避让。
+ */
+function findBottomSheet(): DOMRect | null {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLElement>('[role="dialog"], .ps, .pd, .mp, .pub__sheet, .me__sheet, .sheet'),
+  )
+  for (const el of candidates) {
+    if (!isVisiblyPresent(el)) continue
+    const rect = el.getBoundingClientRect()
+    if (rect.width < vw * 0.55 || rect.height < 100 || rect.height > vh * 0.86) continue
+    if (rect.bottom < vh - 8) continue
+    return rect
+  }
+  return null
+}
+
 function isVisiblyPresent(el: Element): boolean {
   if (!el.isConnected) return false
   const style = window.getComputedStyle(el)
@@ -83,6 +105,7 @@ export function GuideHost() {
   const [step, setStep] = useState(0)
   const [hintIndex, setHintIndex] = useState(0)
   const [rect, setRect] = useState<DOMRect | null>(null)
+  const [sheetRect, setSheetRect] = useState<DOMRect | null>(null)
   const [targetMissing, setTargetMissing] = useState(false)
   /**
    * 误触暗区时的提示语。首轮实测（体验报告 P1-2）：原来把「误触」实现成 busy=true 并
@@ -369,6 +392,15 @@ export function GuideHost() {
       // 下沿最多补到 44（一个标签/按钮的高度）。原为 72，实测框高 84 而标签只有 18，下沿空一大截。
       const bottom = Math.min(vh - pad, Math.max(next.bottom, top + 44))
       setRect(new DOMRect(next.left, top, next.width, bottom - top))
+      /*
+        第三轮现场演示（live3 第 30/31/33 张）：地点抽屉的「×」在 (338,442,44,44)，
+        引导卡落在 (25,367,340,185) 正好把按钮中心盖住 —— 手指点下去命中卡片，
+        抽屉关不掉，用户被困在这一步。locator.click 能过只是因为它在点击前把页面
+        滚了一下、卡片跟着挪开了（367 与 504 两种位置），这不是真的可用。
+        所以：目标若在底部抽屉/弹层里，把整个弹层也当成要避开的区域，卡片优先放到
+        弹层上沿之外。
+      */
+      setSheetRect(findBottomSheet())
       setTargetMissing(false)
     }
 
@@ -506,6 +538,7 @@ export function GuideHost() {
       {view === 'hint' && hint && (
         <Card
           anchor={rect}
+          avoidSheet={sheetRect}
           placement={hint.placement}
           title={hint.title}
           body={hint.body}
@@ -525,11 +558,10 @@ export function GuideHost() {
             稍后再说
           </button>
           {/* 目标没出现时的"可以先跳过"必须是真能点的：只写一句提示、没有按钮，等于把用户困住 */}
-          {targetMissing && (
-            <button className="guide__ghost" data-guide-action="skip" onClick={() => finish('skipped')}>
-              跳过引导
-            </button>
-          )}
+          {/* 永久跳过必须随时可点：原来只有「稍后再说」（其实是暂停），用户找不到"不再显示" */}
+          <button className="guide__ghost guide__ghost--quiet" data-guide-action="skip" onClick={() => finish('skipped')}>
+            跳过引导
+          </button>
         </Card>
       )}
 
@@ -587,13 +619,14 @@ function Card(props: {
   foot?: string
   children: React.ReactNode
   anchor?: DOMRect | null
+  avoidSheet?: DOMRect | null
   placement?: 'top' | 'bottom'
   centered?: boolean
   missingTarget?: boolean
 }) {
-  const { title, body, foot, children, anchor, placement = 'bottom', centered, missingTarget } = props
+  const { title, body, foot, children, anchor, avoidSheet, placement = 'bottom', centered, missingTarget } = props
   const cardRef = useRef<HTMLDivElement>(null)
-  const [style, setStyle] = useState<React.CSSProperties>({})
+  const [style, setStyle] = useState<React.CSSProperties>({ visibility: 'hidden' })
   const [measured, setMeasured] = useState(false)
 
   useEffect(() => {
@@ -602,7 +635,7 @@ function Card(props: {
     const height = node.offsetHeight
     const width = Math.min(node.offsetWidth, window.innerWidth - 24)
     if (centered || !anchor) {
-      setStyle({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width })
+      setStyle({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width, visibility: 'visible' })
       setMeasured(true)
       return
     }
@@ -613,13 +646,20 @@ function Card(props: {
     const left = Math.min(Math.max(margin, anchor.left + anchor.width / 2 - width / 2), vw - width - margin)
     const clampTop = (t: number) => Math.min(Math.max(margin, t), vh - height - margin)
     /** 卡片与高亮框的重叠面积（含 8px 安全边） */
-    const overlapOf = (top: number) => {
-      const pad = 8
-      const r = { left, right: left + width, top, bottom: top + height }
-      const a = { left: anchor.left - pad, right: anchor.right + pad, top: anchor.top - pad, bottom: anchor.bottom + pad }
+    const areaOf = (
+      r: { left: number; right: number; top: number; bottom: number },
+      a: { left: number; right: number; top: number; bottom: number },
+    ) => {
       const w = Math.min(r.right, a.right) - Math.max(r.left, a.left)
       const h = Math.min(r.bottom, a.bottom) - Math.max(r.top, a.top)
       return w > 0 && h > 0 ? w * h : 0
+    }
+    const overlapOf = (top: number) => {
+      const pad = 8
+      const r = { left, right: left + width, top, bottom: top + height }
+      const ring = { left: anchor.left - pad, right: anchor.right + pad, top: anchor.top - pad, bottom: anchor.bottom + pad }
+      const sheetArea = avoidSheet ? areaOf(r, avoidSheet) : 0
+      return areaOf(r, ring) + sheetArea
     }
     /*
       第三轮实测（live3 第 13 张）：活动页那条提示的卡片被放在页面顶部，而高亮框也在顶部，
@@ -627,20 +667,29 @@ function Card(props: {
       原先只按「下方空间够不够」决定上下，没考虑卡片会不会压住高亮框本身。
       这里改成：先按提示倾向排上方/下方，哪个完全不压框就用哪个；都压就取压得少的。
     */
+    /*
+      候选位置（按提示倾向排序）：框上方 / 框下方 / 抽屉上沿之上 / 页面顶部。
+      打分 = 卡片与「高亮框 ∪ 底部弹层」的重叠面积，取最小的那个；完全不重叠就立刻停。
+      第 4 个候选是为了兜住「弹层自己占了大半屏、上面又没空间」的情况 —— 至少别压按钮。
+    */
+    const candidates: number[] = []
     const sides: Array<'top' | 'bottom'> = placement === 'top' ? ['top', 'bottom'] : ['bottom', 'top']
-    let top = clampTop(sides[0] === 'top' ? anchor.top - height - gap : anchor.bottom + gap)
-    let least = overlapOf(top)
-    if (least > 0) {
-      for (const side of sides.slice(1)) {
-        const candidate = clampTop(side === 'top' ? anchor.top - height - gap : anchor.bottom + gap)
-        const overlap = overlapOf(candidate)
-        if (overlap < least) { least = overlap; top = candidate }
-        if (overlap === 0) break
-      }
+    for (const side of sides) {
+      candidates.push(clampTop(side === 'top' ? anchor.top - height - gap : anchor.bottom + gap))
     }
-    setStyle({ left, top, width })
+    if (avoidSheet) candidates.push(clampTop(avoidSheet.top - height - gap))
+    candidates.push(margin)
+
+    let top = candidates[0]
+    let least = Number.POSITIVE_INFINITY
+    for (const candidate of candidates) {
+      const overlap = overlapOf(candidate)
+      if (overlap < least) { least = overlap; top = candidate }
+      if (overlap === 0) break
+    }
+    setStyle({ left, top, width, visibility: 'visible' })
     setMeasured(true)
-  }, [anchor, centered, placement, title, body])
+  }, [anchor, avoidSheet, centered, placement, title, body])
 
   return (
     <div

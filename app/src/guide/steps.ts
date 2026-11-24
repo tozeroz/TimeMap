@@ -146,7 +146,7 @@ export const GUIDE_STEPS: GuideStep[] = [
         placement: 'bottom',
       },
       {
-        targets: ['[data-project-id]', '.projects__results'],
+        targets: ['.projects__like', '[data-project-id]', '.projects__results'],
         route: { path: 'activities', query: { mode: 'projects' } },
         title: '看到喜欢的项目，点个赞',
         body: '项目页里还能按人气查看大家都在点赞的作品。',

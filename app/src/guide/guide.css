@@ -146,3 +146,6 @@
   background: var(--c-primary, #c44b22);
   box-shadow: 0 12px 28px rgba(8, 26, 44, 0.32);
 }
+
+/* 永久跳过：比「稍后再说」更轻的文字按钮，避免四个按钮一样重 */
+.guide__ghost--quiet { color: var(--c-text-3, #8a8f99) !important; background: transparent !important; border-color: transparent !important; text-decoration: underline; }
