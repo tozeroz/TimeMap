@@ -250,7 +250,12 @@ export function TencentMap({
         unproject: (x, y) => {
           if (!map) return null
           if (typeof map.unprojectFromContainer === 'function') {
-            const c = map.unprojectFromContainer({ x, y })
+            // 腾讯 SDK 只认 TMap.Point 实例：传裸 {x,y} 会刷「point 参数应该是 Point 类型」，
+            // 而把 TMap.Point 当普通函数调用会拿到 undefined，SDK 内部再 set .x 就直接抛
+            // 「Cannot set properties of undefined (setting 'x')」——所以这里必须 new。
+            const PointCtor = (T as unknown as { Point?: new (px: number, py: number) => unknown }).Point
+            if (typeof PointCtor !== 'function') return null
+            const c = map.unprojectFromContainer(new PointCtor(x, y) as Parameters<typeof map.unprojectFromContainer>[0])
             return c ? { lat: c.getLat(), lng: c.getLng() } : null
           }
           const c = map.getCenter()

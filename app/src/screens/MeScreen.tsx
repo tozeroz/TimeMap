@@ -2,7 +2,7 @@ import { useFeedSourceRestore } from '../data/feedBrowse'
 import { openFeed } from '../data/feedBrowse'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { failText, getMyIdentity, listMyFavorites, listPosts, logout, mediaUrl, type ApiPost } from '../api/client'
-import type { SessionUser } from '../api/session'
+import { getSession, type SessionUser } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { Drawer } from '../components/Drawer'
 import { IconChatBubble, IconEdit, IconHeart, IconImage, IconLocation, IconMenu } from '../components/icons'
@@ -40,6 +40,13 @@ export function MeScreen({ requestedTab = '' }: { requestedTab?: string }) {
   const positions = useRef<Record<Tab, number>>({ posts: 0, favorites: 0, submissions: 0 })
 
   useEffect(() => {
+    // 未登录时不打 /api/auth/me：那会稳定拿到 401，浏览器会把它记成一条 console error
+    // （体验报告 ②：游客进「我的」会在控制台留 2 条 401）。这里直接进入「请登录」态。
+    if (!getSession()) {
+      setIdentity(null)
+      setPhase('unauth')
+      return
+    }
     let alive = true
     const epoch = ++identityEpoch.current
     void getMyIdentity().then(result => {

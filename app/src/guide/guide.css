@@ -28,7 +28,10 @@
 
 .guide__panel {
   position: fixed;
-  pointer-events: auto;
+  /* 提示态不该挡住页面本身：只让里层的提示卡接收点击。
+     实测回归：这里是 auto 时，第 3 步打开的地点抽屉里「关闭」按钮被整块透明层吃掉，
+     真实用户会「点关闭没反应」。遮罩态由 .guide__mask 单独铺（welcome/end/resume 才需要）。 */
+  pointer-events: none;
   /* 点遮罩只是提示"请点高亮区域"，不关闭引导 */
 }
 

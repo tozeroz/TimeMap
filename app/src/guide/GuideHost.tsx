@@ -29,16 +29,51 @@ import './guide.css'
 
 type View = 'none' | 'resume' | 'welcome' | 'hint' | 'paused' | 'end'
 
+/** 欢迎卡文案的唯一来源：steps.ts 第 1 步的 hint（宿主里不再写第二份） */
+const WELCOME = GUIDE_STEPS[0]?.hints[0] ?? {
+  title: '欢迎来到 TimeMap',
+  body: '这是北交大的校园记忆地图。花一分钟认一下主要功能，你也可以随时跳过。',
+  primary: '开始认识 TimeMap',
+}
+
 const MASK_COLOR = 'rgba(8, 26, 44, 0.66)'
 const HOLE_PADDING = 6
 const TARGET_TIMEOUT_MS = 6000
 
 export const GUIDE_RESTART_EVENT = 'timemap:guide-restart'
 
+/**
+ * 这个元素"用户真的看得见吗"。
+ *
+ * 不能只看 `getBoundingClientRect()`：地图标记按缩放分级隐藏时用的是
+ * `visibility:hidden`（见 `realmaps.css` 的 `.rm--hidden`），盒子尺寸照旧，
+ * 框会画在一个空位置上 —— 现场复现过「框里没有地点名，点下去打开别的地点」。
+ */
+function isVisiblyPresent(el: Element): boolean {
+  if (!el.isConnected) return false
+  const style = window.getComputedStyle(el)
+  if (style.visibility === 'hidden' || style.display === 'none') return false
+  if (Number(style.opacity) === 0) return false
+  const rect = el.getBoundingClientRect()
+  if (rect.width < 4 || rect.height < 4) return false
+  let node: Element | null = el
+  while (node) {
+    if (node instanceof Element) {
+      const s = window.getComputedStyle(node)
+      if (s.visibility === 'hidden' || s.display === 'none') return false
+    }
+    node = node.parentElement
+  }
+  return true
+}
+
 /** 「我的」里「重看新手引导」调用：清掉存档并重新从欢迎卡开始 */
 export function restartGuide(): void {
   const userId = getSession()?.user?.id
   if (userId) clearGuide(userId)
+  // 回归修复（体验报告 ④）：之前在 #/me 里点「重看」，欢迎卡会直接盖在「我的」页上。
+  // 引导的第 1 步讲的是地图，所以先把用户送回地图，再弹欢迎卡。
+  navigate('map')
   window.dispatchEvent(new CustomEvent(GUIDE_RESTART_EVENT))
 }
 
@@ -240,22 +275,46 @@ export function GuideHost() {
     let element: HTMLElement | null = null
     let matchedSelector = ''
     let lastFoundAt = Date.now()
+    let hiddenSince = 0
 
     /* 找到就记住"是哪个选择器命中的"，之后每次都要回头验证它 —— 页面换版后同一元素
        可能只是丢了属性（例如 data-me-entry 被移除），节点还在但不是我们要指的东西。 */
     const locate = (): boolean => {
+      /*
+        地图标记按缩放级别分级显示：首屏只亮 4 个，其余 26 个带 `.rm--hidden`
+        （visibility:hidden + pointer-events:none）—— 它们**仍然占着布局盒**，所以
+        `querySelector('.rm__label')` 常常命中一个看不见的标记，高亮框就套在空处、
+        点下去还落到旁边另一个地点（现场实测：框住"北京交通大学"，点开"天佑会堂"）。
+        这里优先挑真正看得见的那个；所有候选都不可见时再退回第一个，让下面的
+        可见性检查去走"目标缺失"的降级路径。
+      */
+      let fallback: HTMLElement | null = null
+      let fallbackSelector = ''
       for (const selector of hint.targets) {
+        let candidates: HTMLElement[] = []
         try {
-          const next = document.querySelector<HTMLElement>(selector)
-          if (next) {
-            element = next
+          candidates = Array.from(document.querySelectorAll<HTMLElement>(selector))
+        } catch {
+          continue /* 忽略非法选择器 */
+        }
+        for (const candidate of candidates) {
+          if (isVisiblyPresent(candidate)) {
+            element = candidate
             matchedSelector = selector
             lastFoundAt = Date.now()
             return true
           }
-        } catch {
-          /* 忽略非法选择器 */
+          if (!fallback) {
+            fallback = candidate
+            fallbackSelector = selector
+          }
         }
+      }
+      if (fallback) {
+        element = fallback
+        matchedSelector = fallbackSelector
+        lastFoundAt = Date.now()
+        return true
       }
       element = null
       matchedSelector = ''
@@ -290,15 +349,25 @@ export function GuideHost() {
         element!.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior })
       }
       const next = element!.getBoundingClientRect()
-      const hidden = next.width === 0 && next.height === 0
+      /*
+        尺寸为 0 或者被 `visibility:hidden` 藏起来（地图分级显示的未激活标记就是这种），
+        都算"这次没出现"。但别立刻报缺失 —— 标记是异步渲染的，先给一小段宽限，
+        免得用户刚进地图就看到"入口没出现"。
+      */
+      const hidden = (next.width === 0 && next.height === 0) || !isVisiblyPresent(element!)
       if (hidden) {
+        /* 丢掉这个看不见的目标，下一次轮询重新挑一个可见的（例如换个更靠前的标记） */
+        element = null
+        if (!hiddenSince) hiddenSince = Date.now()
         setRect(null)
-        setTargetMissing(true)
+        if (Date.now() - hiddenSince > 2500) setTargetMissing(true)
         return
       }
+      hiddenSince = 0
       const pad = 12
       const top = Math.max(pad, Math.min(next.top, vh - 140))
-      const bottom = Math.min(vh - pad, Math.max(next.bottom, top + 72))
+      // 下沿最多补到 44（一个标签/按钮的高度）。原为 72，实测框高 84 而标签只有 18，下沿空一大截。
+      const bottom = Math.min(vh - pad, Math.max(next.bottom, top + 44))
       setRect(new DOMRect(next.left, top, next.width, bottom - top))
       setTargetMissing(false)
     }
@@ -419,12 +488,14 @@ export function GuideHost() {
       {view === 'welcome' && (
         <Card
           centered
-          title="欢迎来到 TimeMap"
-          body="这是北交大的校园记忆地图。一分钟看完主要功能，随时可以跳过。"
+          // 回归修复（体验报告 ⑤）：欢迎卡文案原来在本文件写死，与 steps.ts 的配置
+          // 各说一套（"一分钟看完" vs "花一分钟认一下"）。统一从配置读，避免两处漂移。
+          title={WELCOME.title}
+          body={WELCOME.body}
           foot={`${guideStepLabel(0)} · 共 ${GUIDE_HINT_TOTAL} 个提示`}
         >
           <button className="guide__primary" data-guide-action="start" onClick={startFromWelcome}>
-            开始认识 TimeMap
+            {WELCOME.primary}
           </button>
           <button className="guide__ghost" data-guide-action="skip" onClick={() => finish('skipped')}>
             暂时跳过
@@ -536,10 +607,37 @@ function Card(props: {
       return
     }
     const margin = 12
-    const spaceBelow = window.innerHeight - anchor.bottom
-    const wantTop = placement === 'top' || spaceBelow < height + margin * 2
-    const top = wantTop ? Math.max(margin, anchor.top - height - margin) : Math.min(window.innerHeight - height - margin, anchor.bottom + margin)
-    const left = Math.min(Math.max(margin, anchor.left + anchor.width / 2 - width / 2), window.innerWidth - width - margin)
+    const gap = 10
+    const vh = window.innerHeight
+    const vw = window.innerWidth
+    const left = Math.min(Math.max(margin, anchor.left + anchor.width / 2 - width / 2), vw - width - margin)
+    const clampTop = (t: number) => Math.min(Math.max(margin, t), vh - height - margin)
+    /** 卡片与高亮框的重叠面积（含 8px 安全边） */
+    const overlapOf = (top: number) => {
+      const pad = 8
+      const r = { left, right: left + width, top, bottom: top + height }
+      const a = { left: anchor.left - pad, right: anchor.right + pad, top: anchor.top - pad, bottom: anchor.bottom + pad }
+      const w = Math.min(r.right, a.right) - Math.max(r.left, a.left)
+      const h = Math.min(r.bottom, a.bottom) - Math.max(r.top, a.top)
+      return w > 0 && h > 0 ? w * h : 0
+    }
+    /*
+      第三轮实测（live3 第 13 张）：活动页那条提示的卡片被放在页面顶部，而高亮框也在顶部，
+      结果卡片把要点的「校园活动/实训项目」标题整块盖住（overlap ratioOfRing = 1）。
+      原先只按「下方空间够不够」决定上下，没考虑卡片会不会压住高亮框本身。
+      这里改成：先按提示倾向排上方/下方，哪个完全不压框就用哪个；都压就取压得少的。
+    */
+    const sides: Array<'top' | 'bottom'> = placement === 'top' ? ['top', 'bottom'] : ['bottom', 'top']
+    let top = clampTop(sides[0] === 'top' ? anchor.top - height - gap : anchor.bottom + gap)
+    let least = overlapOf(top)
+    if (least > 0) {
+      for (const side of sides.slice(1)) {
+        const candidate = clampTop(side === 'top' ? anchor.top - height - gap : anchor.bottom + gap)
+        const overlap = overlapOf(candidate)
+        if (overlap < least) { least = overlap; top = candidate }
+        if (overlap === 0) break
+      }
+    }
     setStyle({ left, top, width })
     setMeasured(true)
   }, [anchor, centered, placement, title, body])
