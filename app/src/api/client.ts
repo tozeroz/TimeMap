@@ -1408,18 +1408,28 @@ export async function requestLoginCode(phone: string): Promise<ApiResult<Request
   return { ok: true, value: { ok: true, ...r.value } }
 }
 
+/** 登录结果：`isNewUser` 只在**本次登录创建了新账号**时为 true（首次注册引导的触发依据） */
+export interface VerifyLoginResult {
+  user: SessionUser
+  isNewUser: boolean
+}
+
 /** 校验验证码并签发会话；成功后把会话写进本地 */
 export async function verifyLoginCode(
   phone: string,
   code: string,
-): Promise<ApiResult<SessionUser>> {
-  const r = await request<{ token: string; expiresAt: string; user: SessionUser }>(
+): Promise<ApiResult<VerifyLoginResult>> {
+  const r = await request<{ token: string; expiresAt: string; user: SessionUser; isNewUser?: boolean }>(
     '/api/auth/verify-code',
     { method: 'POST', body: { phone, code } },
   )
   if (!r.ok) return r
   setSession({ token: r.value.token, expiresAt: r.value.expiresAt, user: r.value.user })
-  return { ok: true, value: r.value.user }
+  /*
+    isNewUser 缺省按 false 处理：服务端没这个字段（旧版本/未升级）时**宁可不弹引导**，
+    也不要把一个老账号当成新用户弹一遍 —— 引导是可重看的，误弹一次却是骚扰。
+  */
+  return { ok: true, value: { user: r.value.user, isNewUser: r.value.isNewUser === true } }
 }
 
 /**

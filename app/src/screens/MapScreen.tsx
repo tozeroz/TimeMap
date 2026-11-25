@@ -40,6 +40,8 @@ import {
   type GeoStatus,
 } from '../native/geo'
 import { buildHash, navigate, useRoute } from '../router'
+import { getSession } from '../api/session'
+import { guideInProgress } from '../guide/progress'
 import type { ApiPlaceDetail } from '../api/client'
 import {
   clearSheetSnapshot,
@@ -1198,6 +1200,12 @@ export function MapScreen() {
       const granted = await hasLocationPermission()
       if (cancelled) return
       if (!granted || forceAsk) {
+        /*
+          新手引导进行中时不自动弹定位授权：引导遇到这个模态会整块让位，
+          新用户刚注册就被"引导消失 + 定位弹窗"夹在中间，比不弹更困惑。
+          引导结束后、或用户主动点定位按钮时再问。
+        */
+        if (guideInProgress(getSession()?.user?.id)) return
         // 抽屉开着时不自动弹（会被抽屉盖住），关闭后补弹一次
         if (sheetRef.current.placeId) tipPendingRef.current = true
         else setTipOpen(true)

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { adminLogin, requestLoginCode, verifyLoginCode } from '../api/client'
+import { adminLogin, requestLoginCode, verifyLoginCode, type VerifyLoginResult } from '../api/client'
 import { Screen, TopBar } from '../components/Shell'
 import { IconBack } from '../components/icons'
 import { goBack, navigate } from '../router'
+import { markNewAccount } from '../guide/progress'
 import './login.css'
 
 type LegalDocument = 'agreement' | 'privacy' | 'minors'
@@ -136,6 +137,14 @@ export function LoginScreen() {
         return
       }
       if (mode === 'admin') { setPassword(''); navigate('admin'); return }
+      /*
+        首次注册用户引导（2026-11-24）：只有**服务端说刚建号**（isNewUser）才标记待引导。
+        标记完直接把新用户送到地图 —— 方案 §2 要求「无回跳目标时先进入地图，再展示欢迎卡」，
+        而老用户仍按原来的习惯落到「帖子」页（不动既有行为）。
+      */
+      const verified = result.value as VerifyLoginResult
+      const brandNew = verified.isNewUser === true
+      if (brandNew) markNewAccount(verified.user.id)
       let returnRoute: string | null = null
       try { returnRoute = sessionStorage.getItem('timemap.login.return'); sessionStorage.removeItem('timemap.login.return') } catch { /* Storage may be unavailable; normal login still succeeds. */ }
       if (returnRoute) {
@@ -151,7 +160,7 @@ export function LoginScreen() {
           }
         } catch { /* Ignore malformed return metadata. */ }
       }
-      navigate('campus')
+      navigate(brandNew ? 'map' : 'campus')
     } catch { if (alive.current) setError('登录失败，请检查网络后重试') }
     finally { finish() }
   }
@@ -174,8 +183,8 @@ export function LoginScreen() {
         {sent && mode === 'otp' && <div className="login-reference__extra"><div className="login-reference__codeLabel"><label className="login-reference__label" htmlFor="login-code">验证码</label><button type="button" disabled={busy} onClick={() => { setSent(false); setCode(''); setDevHint(''); clearError(); phoneInput.current?.focus() }}>修改手机号</button></div><div className={`login-reference__field ${errorField === 'code' ? 'has-error' : ''}`}><input id="login-code" ref={codeInput} inputMode="numeric" autoComplete="one-time-code" placeholder="请输入验证码" value={code} onChange={event => { setCode(event.target.value.replace(/\D/g, '').slice(0, 6)); clearError() }} disabled={busy} aria-invalid={errorField === 'code'} aria-describedby={errorField === 'code' ? 'login-error' : undefined} /><button type="button" className="login-reference__resend" disabled={busy || cooldown > 0} onClick={() => void requestCode()}>{cooldown > 0 ? `${cooldown}s 后重试` : '重新获取'}</button></div></div>}
         {error && <p className="login-reference__error" id="login-error" role="alert">{error}</p>}
         {devHint && mode === 'otp' && <p className="login-reference__hint" data-login-hint role="status">{devHint}</p>}
-        <button className="login-reference__submit" data-login-submit type="submit" disabled={busy || (mode === 'otp' && !sent && cooldown > 0)}>{busy ? (mode === 'otp' && !sent ? '发送中…' : '登录中…') : mode === 'admin' || sent ? '登录' : cooldown > 0 ? `${cooldown}s 后重新获取` : '获取验证码'}</button>
         <div className="login-reference__agreement"><label className="login-reference__check"><input ref={agreementInput} type="checkbox" checked={agreed} disabled={busy} onChange={event => { setAgreed(event.target.checked); clearError() }} aria-label="同意用户协议与隐私政策" aria-invalid={errorField === 'agreement'} aria-describedby={errorField === 'agreement' ? 'login-error' : undefined} /><span aria-hidden="true" /></label><p>我已阅读并同意 <button type="button" onClick={() => setLegal('agreement')}>用户协议</button> 与 <button type="button" onClick={() => setLegal('privacy')}>隐私政策</button></p></div>
+        <button className="login-reference__submit" data-login-submit type="submit" disabled={busy || (mode === 'otp' && !sent && cooldown > 0)}>{busy ? (mode === 'otp' && !sent ? '发送中…' : '登录中…') : mode === 'admin' || sent ? '登录' : cooldown > 0 ? `${cooldown}s 后重新获取` : '获取验证码'}</button>
       </form>
     </div>
     {legal && <LegalDialog key={legal} document={legal} onClose={() => setLegal(null)} onReadMinors={() => setLegal('minors')} />}

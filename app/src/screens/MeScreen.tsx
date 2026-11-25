@@ -2,11 +2,12 @@ import { useFeedSourceRestore } from '../data/feedBrowse'
 import { openFeed } from '../data/feedBrowse'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { failText, getMyIdentity, listMyFavorites, listPosts, logout, mediaUrl, type ApiPost } from '../api/client'
-import type { SessionUser } from '../api/session'
+import { getSession, type SessionUser } from '../api/session'
 import { Screen, TopBar } from '../components/Shell'
 import { Drawer } from '../components/Drawer'
 import { IconChatBubble, IconEdit, IconHeart, IconImage, IconLocation, IconMenu } from '../components/icons'
 import { navigate } from '../router'
+import { restartGuide } from '../guide/GuideHost'
 import { clearLocalCaches } from '../data/store'
 import './me.css'
 import { MyActivitySubmissions } from './MyActivitySubmissions'
@@ -39,6 +40,13 @@ export function MeScreen({ requestedTab = '' }: { requestedTab?: string }) {
   const positions = useRef<Record<Tab, number>>({ posts: 0, favorites: 0, submissions: 0 })
 
   useEffect(() => {
+    // 未登录时不打 /api/auth/me：那会稳定拿到 401，浏览器会把它记成一条 console error
+    // （体验报告 ②：游客进「我的」会在控制台留 2 条 401）。这里直接进入「请登录」态。
+    if (!getSession()) {
+      setIdentity(null)
+      setPhase('unauth')
+      return
+    }
     let alive = true
     const epoch = ++identityEpoch.current
     void getMyIdentity().then(result => {
@@ -126,6 +134,8 @@ export function MeScreen({ requestedTab = '' }: { requestedTab?: string }) {
     // 用户反馈（043）：把"当前所在页面"一起带过去，管理员复现 bug 时最需要这个信息
     { label: '意见反馈', action: () => navigate('feedback', { from: window.location.hash }) },
     { label: '清除本机缓存', action: () => { setCacheMsg(''); cacheDialog.current?.showModal() } },
+    // 首次注册引导是一次性的，但录制视频/换设备调试都需要能重看一遍（方案 §5.4）
+    { label: '重看新手引导', action: () => { setDrawerOpen(false); restartGuide() } },
     ...(identity?.role === 'admin' ? [{ label: '管理端', action: () => navigate('admin') }] : []),
     { label: loggingOut ? '正在退出…' : identity ? '退出登录' : '登录 TimeMap', action: () => {
       if (!identity) { navigate('loginselect'); return }

@@ -581,6 +581,15 @@ export function buildServer(deps: ServerDeps) {
 
     // 登录即注册（原版是"手机号验证码登录"，没有单独的注册页）
     let user: UserRow & { role: string } | undefined
+    /*
+      首次注册用户引导（2026-11-24）需要一个**权威**的"这是刚建的账号"信号。
+      为什么不让前端猜（判断昵称是不是「校园用户XXXX」、或 createdAt 是否刚刚）：
+        · 昵称可以改，猜错就会给老用户弹一遍引导；
+        · 客户端时钟不可信。
+      ⇒ 只有真正走到 insert 分支时 isNewUser 才是 true，其余一律 false；
+        本字段上线前就存在的老账号永远是 false —— 天然不会被弹。
+    */
+    let isNewUser = false
     try {
       const r = await db.pool.query<UserRow & { role: string }>(
         'select id, handle, display_name, role from users where phone_e164 = $1',
@@ -598,6 +607,7 @@ export function buildServer(deps: ServerDeps) {
           [id, placeholder, placeholder, phone],
         )
         user = r2.rows[0]!
+        isNewUser = true
       }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
@@ -623,6 +633,11 @@ export function buildServer(deps: ServerDeps) {
     return {
       token,
       expiresAt: expiresAt.toISOString(),
+      /*
+        isNewUser：本次登录是否**刚创建**了这个账号（引导的唯一触发依据，见上方注释）。
+        老账号/管理员密码登录路径都不会带这个字段为 true。
+      */
+      isNewUser,
       user: { id: user.id, handle: user.handle, displayName: user.display_name, phone, role: user.role },
     }
   })
