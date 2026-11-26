@@ -116,7 +116,7 @@ export function MessageScreen({ category }: { category?: string }) {
   const latest = inbox?.announcements[0], detail = inbox?.announcements.find(a => a.id === opened)
   const title = active?.label || (announcements ? '应用公告' : '消息')
   return <Screen className="inbox" header={<TopBar
-    left={<button className="inbox__control" aria-label={category ? '返回消息' : '关闭'} onClick={() => category ? navigate('message') : goBack('campus')}>{category ? <IconBack size={24}/> : <IconClose size={24}/>}</button>}
+    left={<button className="inbox__control" aria-label={category ? '返回消息' : '关闭'} onClick={() => category ? goBack('message') : goBack('campus')}>{category ? <IconBack size={24}/> : <IconClose size={24}/>}</button>}
     center={title}
     right={<button className="inbox__control" aria-label={category ? '标记本类已读' : '全部标记已读'} title="标记已读" disabled={!inbox || busy || phase !== 'ready'} onClick={() => void read(category || 'all')}><InboxIcon name="read"/></button>}
   />}>

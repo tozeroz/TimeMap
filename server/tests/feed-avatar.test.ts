@@ -42,10 +42,32 @@ try {
     [randomUUID(), owner, createHash('sha256').update(token).digest('hex')])
   await pool.query(`insert into posts(id,author_id,author_name,is_anonymous) values($1,$2,'tozero',false),($3,$2,'tozero',true)`, [id, owner, anonymousId])
   await pool.query('insert into favorites(post_id,user_id) values($1,$2),($3,$2)', [id, owner, anonymousId])
-  const read = async (path: string) => {
-    const response = await app.inject({ method: 'GET', url: path })
+  const read = async (path: string, requestHeaders: Record<string, string> = {}) => {
+    const response = await app.inject({ method: 'GET', url: path, headers: requestHeaders })
     assert.equal(response.statusCode, 200, response.body)
     return response.json()
+  }
+  // Filtering by a real author must never reveal their anonymous posts to visitors.
+  const visitor = randomUUID(), anonymousOnlyOwner = randomUUID(), anonymousOnlyPost = randomUUID()
+  const visitorToken = randomUUID() + randomUUID()
+  const visitorHeaders = { authorization: 'Bearer ' + visitorToken }
+  await pool.query("insert into users(id,display_name) values($1,'访客'),($2,'仅匿名用户')", [visitor, anonymousOnlyOwner])
+  await pool.query("insert into sessions(id,user_id,token_hash,expires_at) values($1,$2,$3,now()+interval '1 day')",
+    [randomUUID(), visitor, createHash('sha256').update(visitorToken).digest('hex')])
+  await pool.query("insert into posts(id,author_id,author_name,is_anonymous) values($1,$2,'仅匿名用户',true)",
+    [anonymousOnlyPost, anonymousOnlyOwner])
+  for (const sort of ['latest', 'hot']) {
+    for (const pagination of ['', '&paginate=1']) {
+      const path = `/api/posts?authorId=${owner}&sort=${sort}${pagination}`
+      for (const viewer of [{}, visitorHeaders]) {
+        const profile = await read(path, viewer)
+        assert.deepEqual(profile.items.map((post: ApiPost) => post.id), [id])
+        assert.equal((await read(`/api/posts?authorId=${anonymousOnlyOwner}&sort=${sort}${pagination}`, viewer)).items.length, 0)
+      }
+      const own = await read(path, headers)
+      assert.deepEqual(new Set(own.items.map((post: ApiPost) => post.id)), new Set([id, anonymousId]),
+        'My posts must still include my anonymous posts')
+    }
   }
   // Existing posts must follow profile changes without rewriting the posts.
   for (const [avatar, name] of [[null, 'tozero'], [randomUUID(), '新昵称'], [randomUUID(), '再次改名'], [null, null]] as const) {

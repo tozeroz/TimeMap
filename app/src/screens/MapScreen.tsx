@@ -1490,7 +1490,7 @@ export function MapScreen() {
       header={headerHidden ? undefined :
         <header className="map__head">
           <div className="map__titlewrap">
-            <h1 className="map__title">BJTU TimeMap</h1>
+            <h1 className="map__title"><span className="map__brandPrefix">BJTU</span>{' '}<span>TimeMap</span></h1>
             <button
               className="map__region"
               data-region-phase={schoolPhase}

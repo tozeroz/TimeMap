@@ -45,7 +45,7 @@ function PlaceCard({ posts, place, fix, onPlace, onPost, curated }: {
       behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }
   return <article className="md-locationCard" data-discovery-place={placeId || undefined}>
-    <header><h3>{name}</h3><span className="md-locationKind">{curated?'拍照打卡地':'校园地点'}</span></header>
+    <header><h3>{name}</h3>{!curated&&<span className="md-locationKind">校园地点</span>}</header>
     {(distance || place?.address) && <p className="md-locationAddress"><IconLocation size={15}/>{[distance, place?.address].filter(Boolean).join(' · ')}</p>}
     <div className="md-locationTrack" ref={track} aria-label={`${name}的校园记录`} tabIndex={0}
       onTouchStart={event => event.stopPropagation()} onTouchMove={event => event.stopPropagation()}

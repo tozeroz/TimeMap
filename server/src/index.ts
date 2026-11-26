@@ -1094,6 +1094,8 @@ export function buildServer(deps: ServerDeps) {
            -- ⭐ WO#15：地点坐标来自 places（left join，缺地点时两列为 null）
            left join places pl on pl.id = p.place_id
           where ($3::uuid is null or p.author_id = $3::uuid)
+            -- 按作者查询不能关联他人的匿名帖；本人「我的发布」仍可查看自己的匿名帖。
+            and ($3::uuid is null or p.is_anonymous = false or p.author_id = $2::uuid)
             -- F07/US-08：下架/删除的帖子同步退出所有公开面
             and p.status = 'published'
             -- CAMP-003：空数组 = 不过滤（"全部地标"）
