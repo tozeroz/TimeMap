@@ -144,7 +144,7 @@ try {
     assert(pages >= 3)
   }
   assert.equal((await app.inject({ method: 'GET', url: '/api/posts?paginate=1&cursor=invalid' })).statusCode, 400)
-  console.log('PASS post profiles: nickname PATCH, repeated renames, list/detail/favorites, avatar changes/removal, anonymous masking and legacy fallback')
+  console.log('PASS post profiles: author-filter anonymous privacy for guests/other users, owner access, latest/hot/pagination, nickname PATCH, list/detail/favorites, avatars and legacy fallback')
 } finally {
   await app.close()
   await pool.end()
