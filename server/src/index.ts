@@ -23,7 +23,7 @@ import { createSmsSender, type SmsSender } from './sms.ts'
 import { fakeVerify, verifyPassword } from './password.ts'
 import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts'
 import { registerCutoutRoutes } from './cutout.ts'
-import { moderateText, isNewAuthor, recordModerationResult } from './moderation.ts'
+import { isNewAuthor, queueModeration, recordModerationResult, scanRules } from './moderation.ts'
 import { registerTimemapRoutes } from './timemap.ts'
 import { registerMapRoutes } from './mapRoutes.ts'
 import { parseCategoryFilter } from './placeCategories.ts'
@@ -1272,22 +1272,33 @@ export function buildServer(deps: ServerDeps) {
     }
 
     /*
-      内容审核（A 档，2026-11-27）：
-      ① 规则/模型判 block ⇒ 422 直接拒绝，**不落库**（违规内容不留 id，也不会出现"先公开、后下架"的窗口）；
-      ② 判 review ⇒ 落库但 status='pending_review'，只有作者自己能看见，管理员在「待审核」里处置；
+      内容审核（A 档，2026-11-27；同日改为异步）：
+      ① **硬规则同步拦截** ⇒ 422，不落库（0 毫秒，明显违规没有"先公开"的窗口）；
+      ② 请求路径**不再等模型**（实测同步会让每次发帖多等 2.0–2.7 秒）；
+         模型判定在落库之后由 queueModeration 后台执行，按结论**收紧**：
+           block ⇒ 待审置 rejected / 已公开置 removed；review ⇒ 已公开降级为 pending_review；
+           allow ⇒ 不改状态（先审后发的帖子仍等人工通过）。
       ③ 先审后发的触发条件：新用户前 3 条、匿名帖、含图帖 —— 校园场景里这三类最容易出事；
-         其余内容走"先发后审"（立刻公开，但举报/巡查仍可下架）。
+         其余内容先公开、后审（举报/巡查仍可下架）。
       机审超时或未配置时按 review 处理（fail-closed），宁慢勿漏。
-    */
-    const moderation = await moderateText(db.pool, body, { targetType: 'post', authorId: session.userId })
-    if (moderation.decision === 'block') {
+     */
+    const ruleHit = scanRules(body)
+    if (ruleHit) {
       // 被拦的内容不落库，但结论必须留痕（否则同一个违规文本无从追查）
-      await recordModerationResult(db.pool, 'post', null, session.userId, moderation)
+      await recordModerationResult(db.pool, 'post', null, session.userId, {
+        decision: 'block',
+        action: 'rejected',
+        categories: ruleHit.categories,
+        reason: ruleHit.reason,
+        source: 'rule',
+        model: null,
+        latencyMs: 0,
+        cached: false,
+      })
       reply.code(422)
-      return { error: 'content_blocked', reason: moderation.reason, categories: moderation.categories }
+      return { error: 'content_blocked', reason: ruleHit.reason, categories: ruleHit.categories }
     }
     const preReview =
-      moderation.decision === 'review' ||
       anonymous ||
       mediaIds.length > 0 ||
       (await isNewAuthor(db.pool, session.userId))
@@ -1385,7 +1396,7 @@ export function buildServer(deps: ServerDeps) {
            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
            returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous, allow_anonymous_comments, status,
              (select u.avatar_media_id from users u where u.id = posts.author_id) as author_avatar_media_id`,
-          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode, anonymous, anonymous || allowAnonymousComments, postStatus, moderation.decision === 'review' ? moderation.reason : null],
+          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode, anonymous, anonymous || allowAnonymousComments, postStatus, null],
         )
 
         /* 挂媒体：position 按传入顺序递增（0..n-1），与 GET 的口径一致 */
@@ -1402,8 +1413,13 @@ export function buildServer(deps: ServerDeps) {
 
         await client.query('commit')
         inserted = true
-        /* 拿到真实 id 之后补记审核结论（moderateText 阶段还没有 id） */
-        await recordModerationResult(db.pool, 'post', id, session.userId, moderation)
+        /* 落库之后把模型判定丢到后台（不阻塞响应）；判定结果只收紧状态，见 queueModeration 注释 */
+        queueModeration(db.pool, body, {
+          targetType: 'post',
+          targetId: id,
+          authorId: session.userId,
+          wasPreReview: preReview,
+        })
 
         const row = r.rows[0]!
         row.map_media_id = typeof mapMediaId === 'string' ? mapMediaId : null
@@ -1450,11 +1466,11 @@ export function buildServer(deps: ServerDeps) {
           mapMediaId: row.map_media_id ?? null,
           status: (row as unknown as { status?: string }).status ?? postStatus,
           moderation: {
-            decision: moderation.decision,
-            source: moderation.source,
-            reason: moderation.reason,
-            categories: moderation.categories,
-            latencyMs: moderation.latencyMs,
+            decision: 'pending',
+            source: 'async',
+            reason: preReview ? '机审进行中；通过人工审核后公开' : '机审进行中；如判定违规将自动撤回',
+            categories: [],
+            latencyMs: 0,
           },
             place: row.place,
           createdAt: row.created_at.toISOString(),
@@ -1876,15 +1892,24 @@ export function buildServer(deps: ServerDeps) {
       return { error: 'invalid_payload', details: ['parentId 不是合法 id'] }
     }
 
-    /* 内容审核（A 档）：评论同样过机审；block 直接拒绝，review 进人审队列（默认对他人不可见）。 */
-    const commentModeration = await moderateText(db.pool, body, { targetType: 'comment', authorId: s.user.userId })
-    if (commentModeration.decision === 'block') {
-      await recordModerationResult(db.pool, 'comment', null, s.user.userId, commentModeration)
+    /* 内容审核（A 档）：评论同样过机审 —— 规则同步拦截，模型异步判定（理由同发帖）。 */
+    const commentRuleHit = scanRules(body)
+    if (commentRuleHit) {
+      await recordModerationResult(db.pool, 'comment', null, s.user.userId, {
+        decision: 'block',
+        action: 'rejected',
+        categories: commentRuleHit.categories,
+        reason: commentRuleHit.reason,
+        source: 'rule',
+        model: null,
+        latencyMs: 0,
+        cached: false,
+      })
       reply.code(422)
-      return { error: 'content_blocked', reason: commentModeration.reason, categories: commentModeration.categories }
+      return { error: 'content_blocked', reason: commentRuleHit.reason, categories: commentRuleHit.categories }
     }
     /*
-      评论的先审口径与帖子对齐：机审 review，或「新用户前 3 条评论」。
+      评论的先审口径与帖子对齐：新用户前 3 条评论先审。
       校园帖的杀伤力往往在评论区（引流、辱骂），只审帖子不审评论等于没审。
     */
     let newCommenter = false
@@ -1897,7 +1922,7 @@ export function buildServer(deps: ServerDeps) {
     } catch {
       newCommenter = true
     }
-    const commentStatus = commentModeration.decision === 'review' || newCommenter ? 'pending_review' : 'published'
+    const commentStatus = newCommenter ? 'pending_review' : 'published'
 
     let client: PoolClient | undefined
     try {
@@ -1948,20 +1973,24 @@ export function buildServer(deps: ServerDeps) {
         `insert into comments (id, post_id, author_id, parent_id, body, is_anonymous, status, review_note)
          values ($1, $2, $3, $4, $5, $6, $7, $8) returning id, created_at,
            (select avatar_media_id from users where id=$3) as author_avatar_media_id`,
-        [randomUUID(), id, s.user.userId, parentId || null, body, anonymous, commentStatus,
-         commentModeration.decision === 'review' ? commentModeration.reason : null])
+        [randomUUID(), id, s.user.userId, parentId || null, body, anonymous, commentStatus, null])
       await client.query('commit')
       const row = cr.rows[0]!
-      await recordModerationResult(db.pool, 'comment', row.id, s.user.userId, commentModeration)
+      queueModeration(db.pool, body, {
+        targetType: 'comment',
+        targetId: row.id,
+        authorId: s.user.userId,
+        wasPreReview: commentStatus === 'pending_review',
+      })
       reply.code(commentStatus === 'pending_review' ? 202 : 201)
       return {
         id: row.id, body,
         status: commentStatus,
         moderation: {
-          decision: commentModeration.decision,
-          source: commentModeration.source,
-          reason: commentModeration.reason,
-          categories: commentModeration.categories,
+          decision: 'pending',
+          source: 'async',
+          reason: commentStatus === 'pending_review' ? '机审进行中；通过人工审核后公开' : '机审进行中；如判定违规将自动撤回',
+          categories: [],
         },
         ...publicCommentIdentity({ post_id: id, author_id: s.user.userId, author_name: s.user.displayName,
           author_avatar_media_id: row.author_avatar_media_id,

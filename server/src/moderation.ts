@@ -38,7 +38,7 @@ interface Queryable {
 const PROMPT_VERSION = 'v1'
 const DEFAULT_MODEL = 'deepseek-v4.1-flash'
 const DEFAULT_BASE = 'https://opencode.ai/zen/go/v1'
-const DEFAULT_TIMEOUT_MS = 7000
+const DEFAULT_TIMEOUT_MS = 12000
 
 /** 硬规则：命中即拦截。正则只覆盖"语义上没有歧义"的违规，其余交给模型。 */
 const RULES: Array<{ re: RegExp; category: string }> = [
@@ -133,7 +133,15 @@ function parseModelJson(text: string): { decision: ModerationDecision; categorie
   return { decision, categories: cleanCategories(rec.categories), reason }
 }
 
-async function callModel(text: string): Promise<{ decision: ModerationDecision; categories: string[]; reason: string } | null> {
+/**
+ * 调模型判定。
+ *
+ * 为什么带一次重试：实测 30 条语料里出现过 1 次超时（7s 上限），而超时会被
+ * fail-closed 成 review —— 结果是"正常内容也被丢进人工队列"，人工成本白白上涨。
+ * 单次重试能把这类抖动挡掉，又不会把故障时的响应时间拖太长（12s × 2 ≈ 24s 上限）。
+ * 仍然**只重试网络/超时类失败**：模型明确返回 block/allow 时绝不重试（避免同一文本两次结论不同）。
+ */
+async function callModelOnce(text: string): Promise<{ decision: ModerationDecision; categories: string[]; reason: string } | null> {
   const base = env('MODERATION_BASE') || DEFAULT_BASE
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), Number(env('MODERATION_TIMEOUT_MS') || DEFAULT_TIMEOUT_MS))
@@ -149,7 +157,13 @@ async function callModel(text: string): Promise<{ decision: ModerationDecision; 
       body: JSON.stringify({
         model: moderationModel(),
         temperature: 0,
-        max_tokens: 220,
+        /*
+          200 太小：这个模型会先输出 reasoning_content 再给正文，
+          实测有 1/38 的样本把 220 token 全用在思考上（finish_reason=length，content 为空），
+          解析拿不到 decision 就按 fail-closed 转人工 —— 正常内容也被丢进队列。
+          800 足够容纳思考 + 一行 JSON，代价只是极端情况下多花几十毫秒。
+        */
+        max_tokens: 800,
         messages: [
           { role: 'system', content: POLICY },
           { role: 'user', content: `待审核内容：\n${text.slice(0, 1200)}` },
@@ -166,6 +180,13 @@ async function callModel(text: string): Promise<{ decision: ModerationDecision; 
   } finally {
     clearTimeout(timer)
   }
+}
+
+async function callModel(text: string): Promise<{ decision: ModerationDecision; categories: string[]; reason: string } | null> {
+  const first = await callModelOnce(text)
+  if (first) return first
+  await new Promise((r) => setTimeout(r, 400))
+  return callModelOnce(text)
 }
 
 async function recordDecision(
@@ -350,3 +371,74 @@ export async function isNewAuthor(pool: Queryable, authorId: string, threshold =
 }
 
 export const MODERATION_PROMPT_VERSION = PROMPT_VERSION
+
+/**
+ * 同步硬规则扫描（0 毫秒级）。
+ *
+ * 为什么单独抽出来：发布/评论接口需要在**落库之前**立刻拒绝明显违规（422），
+ * 这一步绝不能等模型。规则命中的结论照样留痕，由调用方补记。
+ */
+export function scanRules(rawText: string): { categories: string[]; reason: string } | null {
+  const text = normalizeText(rawText)
+  if (!text) return null
+  for (const rule of RULES) {
+    if (rule.re.test(text)) return { categories: [rule.category], reason: `命中硬规则：${rule.category}` }
+  }
+  return null
+}
+
+/**
+ * 异步判定（不阻塞用户请求）。
+ *
+ * 设计取舍（2026-11-27 复盘后改的）：
+ * - 之前的实现把模型调用放在请求路径上同步 await，实测**每次发帖多等 2.0–2.7 秒**，
+ *   与"审核不阻塞请求"的约定相反，也被用户感知为"发布很卡"。
+ * - 现在：请求路径只做「规则同步拦截 + 状态落库」，模型判定在后台跑；
+ *   后台判定**只收紧、不放宽**：
+ *     · block  → 待审的置 rejected，已公开的置 removed（秒级窗口，靠举报/巡查兜底）；
+ *     · review → 已公开的降级为 pending_review 转人工；待审的保持待审；
+ *     · allow  → 不动状态（先审后发的帖子仍等人工通过 —— 这是 A 档的口径）。
+ * - 失败（超时/未配置 key）按 review 处理，与同步版本一致（fail-closed）。
+ */
+export function queueModeration(
+  pool: Queryable,
+  rawText: string,
+  target: { targetType: 'post' | 'comment'; targetId: string; authorId: string | null; wasPreReview: boolean },
+): void {
+  void (async () => {
+    let verdict: ModerationResult
+    try {
+      verdict = await moderateText(pool, rawText, {
+        targetType: target.targetType,
+        targetId: target.targetId,
+        authorId: target.authorId,
+      })
+    } catch (e) {
+      console.warn('[moderation] 异步判定异常（保留原状态）', e instanceof Error ? e.message : e)
+      return
+    }
+    const table = target.targetType === 'post' ? 'posts' : 'comments'
+    try {
+      if (verdict.decision === 'block') {
+        if (target.wasPreReview) {
+          await pool.query(
+            `update ${table} set status = 'rejected', review_note = $2 where id = $1 and status = 'pending_review'`,
+            [target.targetId, verdict.reason || '机审拦截'],
+          )
+        } else {
+          await pool.query(
+            `update ${table} set status = 'removed', review_note = $2 where id = $1 and status = 'published'`,
+            [target.targetId, verdict.reason || '机审拦截'],
+          )
+        }
+      } else if (verdict.decision === 'review' && !target.wasPreReview) {
+        await pool.query(
+          `update ${table} set status = 'pending_review', review_note = $2 where id = $1 and status = 'published'`,
+          [target.targetId, verdict.reason || '机审转人工'],
+        )
+      }
+    } catch (e) {
+      console.warn('[moderation] 异步处置失败（保留原状态）', e instanceof Error ? e.message : e)
+    }
+  })()
+}

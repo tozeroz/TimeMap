@@ -1612,9 +1612,21 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
         [id, nextStatus, action === 'reject' ? reason || '审核未通过' : reason],
       )
       if (!r.rows[0]) {
+        /*
+          幂等：A 档改成异步机审之后，机审可能抢先一步把「待审」判成 rejected，
+          管理员再点「驳回」就不该报 404 —— 人机结论一致时直接告知"已经是这个状态"。
+          反过来（机审已驳回，管理员点通过）仍然拒绝：那需要人工复核后走申诉，
+          不能靠一次点击把机器判定的违规放出来。
+        */
+        const cur = await client.query<{ status: string }>(`select status from ${table} where id = $1`, [id])
+        const status = cur.rows[0]?.status
+        if (status === nextStatus) {
+          await client.query('commit')
+          return { id, type, status: nextStatus, alreadyApplied: true }
+        }
         await client.query('rollback')
         reply.code(404)
-        return { error: 'not_found_or_not_pending' }
+        return { error: 'not_found_or_not_pending', status: status ?? null }
       }
       await audit(client, g.user.userId, `review_${action}`, type, id, reason || null)
       await client.query('commit')
