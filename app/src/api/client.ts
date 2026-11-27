@@ -1660,6 +1660,8 @@ export interface ApiCommentNode extends ApiComment {
 
 export interface ApiPostDetail {
   imageMode?: 'photo' | 'sticker'
+  /** 迁移 050：待审帖（作者可预览、他人 404）；其余同 /api/posts */
+  status?: 'published' | 'pending_review' | 'rejected' | 'removed'
   id: string
   author: string
   authorId: string | null

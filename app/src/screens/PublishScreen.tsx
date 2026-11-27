@@ -320,7 +320,7 @@ export function PublishScreen() {
             <Button variant="text" onClick={() => {
               setPendingReview(false)
               setText('')
-              setOriginal(null)
+              setOriginal('')
               setPlaceId('')
               setImageText(defaultImageText())
               setTextEditorOpen(false)
