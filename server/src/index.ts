@@ -1419,6 +1419,8 @@ export function buildServer(deps: ServerDeps) {
           targetId: id,
           authorId: session.userId,
           wasPreReview: preReview,
+          /* 图片审核（v2）：把帖子关联的图片一并交给后台判定；读盘在后台线程里做，不占请求 */
+          mediaIds: allMediaIds,
         })
 
         const row = r.rows[0]!

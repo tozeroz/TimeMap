@@ -107,7 +107,7 @@ export function PostCard({
    */
   const pendingChip = post.status === 'pending_review' ? (
     <span className="pcard__pending" data-feed-pending>
-      待审核
+      审核中 · 仅自己可见
     </span>
   ) : null
 

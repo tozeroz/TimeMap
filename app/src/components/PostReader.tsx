@@ -146,7 +146,7 @@ export function PostReader(p: Props) {
     */}
     {post.status === 'pending_review' && (
       <p className="reader__pending" data-reader-pending="1" role="status">
-        这条内容正在审核，暂时只有你自己能看到。
+        审核中，只有你自己能看到这条内容；通过后会出现在校园广场。
       </p>
     )}
     <div className="reader__base">

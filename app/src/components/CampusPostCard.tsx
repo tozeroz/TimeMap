@@ -26,7 +26,7 @@ export function CampusPostCard({ post, pending, local, onLike, onRemove, onRepub
       待审核（迁移 050）：内容已提交但**别人看不到**。
       必须明示，否则作者会以为发失败了并重复发布。
     */}
-    {awaitingReview && <span className="square-card__pending" data-feed-pending="1">待审核</span>}
+    {awaitingReview && <span className="square-card__pending" data-feed-pending="1">审核中 · 仅自己可见</span>}
     {/*
       匿名帖（2026-11-05）没有可去的主页，所以**不渲染按钮**（而不是渲染一个点了没反应的按钮）：
       `aria-disabled` 的按钮对读屏用户是"不可用"，对点得动的用户是"骗我点了一下"。

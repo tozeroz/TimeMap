@@ -15,6 +15,8 @@
  * 需要通过环境变量提供 key；未配置时审核降级为「全部进入人审」而不是放行。
  */
 import { createHash, randomUUID } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 export type ModerationDecision = 'allow' | 'review' | 'block'
 export type ModerationAction = 'published' | 'pending_review' | 'rejected'
@@ -238,6 +240,198 @@ export async function recordModerationResult(
   await recordDecision(pool, targetType, targetId, authorId, result)
 }
 
+
+/**
+ * 图片审核（v2，2026-11-27 加）：
+ *
+ * 为什么复用同一个模型：`deepseek-v4.1-flash` 的同名端点原生接收
+ * `image_url`（input 模态含 image/jpeg|png|webp），单价与文本同档（$0.15/M input），
+ * 单独再接一个视觉模型会多一套 key、一套超时、一套缓存 —— 不划算。
+ *
+ * 缓存键用图片内容的 sha256（media 表本来就有这一列）：同一张图被转帖/重复上传时
+ * 不需要再花一次钱；缓存只存 allow/block 这种确定结论，review 不缓存（拿不准就每次问）。
+ */
+const VISION_POLICY = `你是北京交通大学校园社区（TimeMap）的图片审核员，判断这张用户上传的图片能否公开展示。
+重点检查：色情或裸露；血腥暴力；赌博、诈骗、收款二维码或站外引流联系方式；代考代写、论文代写等作弊广告；他人隐私信息（学号、身份证、成绩单、手机号、家庭住址）；违禁品（枪支、管制刀具、毒品）；与校园生活无关的纯商业广告。
+只输出一行 JSON：{"decision":"allow|review|block","categories":["违规类别"],"reason":"不超过 60 字"}
+明显违规给 block；拿不准给 review；正常校园生活照片给 allow。`
+
+export const VISION_PROMPT_VERSION = 'img-v1'
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const MAX_IMAGES_PER_TARGET = 4
+
+export interface ImageInput {
+  sha256: string
+  mime: string
+  dataUrl: string
+}
+
+function imageCacheKey(sha256: string): string {
+  return `img:${VISION_PROMPT_VERSION}:${sha256}`
+}
+
+async function callVisionOnce(image: ImageInput): Promise<{ decision: ModerationDecision; categories: string[]; reason: string } | null> {
+  const base = env('MODERATION_BASE') || DEFAULT_BASE
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), Number(env('MODERATION_TIMEOUT_MS') || DEFAULT_TIMEOUT_MS))
+  try {
+    const res = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${apiKey()}`,
+        'x-opencode-session': env('MODERATION_SESSION') || randomUUID(),
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: moderationModel(),
+        temperature: 0,
+        max_tokens: 800,
+        messages: [
+          { role: 'system', content: VISION_POLICY },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: '请审核这张图片。' },
+              { type: 'image_url', image_url: { url: image.dataUrl } },
+            ],
+          },
+        ],
+      }),
+      signal: controller.signal,
+    })
+    if (!res.ok) return null
+    const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
+    const content = json.choices?.[0]?.message?.content
+    return typeof content === 'string' ? parseModelJson(content) : null
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** 单张图片审核：规则无法覆盖（图里没有文字），直接走模型 + 内容缓存。 */
+export async function moderateImage(pool: Queryable, image: ImageInput): Promise<ModerationResult> {
+  const started = Date.now()
+  const model = moderationModel()
+  const key = imageCacheKey(image.sha256)
+
+  if (!apiKey()) {
+    // 没配 key 与文本同口径：fail-closed 转人工
+    return { decision: 'review', action: 'pending_review', categories: [], reason: '图片审核未配置密钥', source: 'failclosed', model: null, latencyMs: 0, cached: false }
+  }
+
+  try {
+    const c = await pool.query(
+      'update moderation_cache set hits = hits + 1, last_hit_at = now() where text_hash = $1 returning decision, categories, reason',
+      [key],
+    )
+    const row = c.rows[0]
+    if (row) {
+      const decision = toDecision(row.decision) ?? 'review'
+      return {
+        decision,
+        action: actionOf(decision),
+        categories: cleanCategories(row.categories),
+        reason: (row.reason as string | null) ?? '',
+        source: 'cache',
+        model,
+        latencyMs: Date.now() - started,
+        cached: true,
+      }
+    }
+  } catch {
+    /* 缓存不可用就继续问模型 */
+  }
+
+  const parsed = (await callVisionOnce(image)) ?? (await callVisionOnce(image))
+  const result: ModerationResult = parsed
+    ? {
+        decision: parsed.decision,
+        action: actionOf(parsed.decision),
+        categories: parsed.categories,
+        reason: parsed.reason,
+        source: 'llm',
+        model,
+        latencyMs: Date.now() - started,
+        cached: false,
+      }
+    : {
+        decision: 'review',
+        action: 'pending_review',
+        categories: [],
+        reason: '图片审核超时或不可用',
+        source: 'failclosed',
+        model,
+        latencyMs: Date.now() - started,
+        cached: false,
+      }
+
+  // 只缓存确定结论：review 说明拿不准，下次仍需重新判断
+  if (result.decision !== 'review') {
+    try {
+      await pool.query(
+        `insert into moderation_cache (text_hash, decision, categories, reason, model, prompt_version)
+         values ($1,$2,$3::jsonb,$4,$5,$6)
+         on conflict (text_hash) do update set decision = excluded.decision, categories = excluded.categories,
+           reason = excluded.reason, model = excluded.model, prompt_version = excluded.prompt_version,
+           last_hit_at = now()`,
+        [key, result.decision, JSON.stringify(result.categories), result.reason, model, PROMPT_VERSION],
+      )
+    } catch {
+      /* 缓存写失败不影响本次结论 */
+    }
+  }
+  return result
+}
+
+/**
+ * 把帖子的图片读成 data URL 供模型审核。
+ *
+ * 为什么在服务端读盘：媒体存在 `UPLOAD_ROOT/<scope>/<storage_key>`，
+ * 只有服务端能直接读到；让模型去拉公网 URL 在本地开发环境根本拉不到。
+ * 超过 5MB 或非图片直接跳过（视频/音频暂不做），GIF 跳过（模型输入模态不含 gif）。
+ */
+export async function loadImageInputs(pool: Queryable, mediaIds: string[]): Promise<ImageInput[]> {
+  if (mediaIds.length === 0) return []
+  const root = env('UPLOAD_ROOT') || '/srv/campus/uploads'
+  const out: ImageInput[] = []
+  try {
+    const r = await pool.query(
+      `select scope, storage_key, mime, bytes, sha256 from media where id = any($1::uuid[]) limit ${MAX_IMAGES_PER_TARGET}`,
+      [mediaIds],
+    )
+    for (const row of r.rows) {
+      const mime = String(row.mime ?? '')
+      if (!mime.startsWith('image/') || mime === 'image/gif') continue
+      if (Number(row.bytes ?? 0) > MAX_IMAGE_BYTES) continue
+      try {
+        const buf = await readFile(join(root, String(row.scope ?? 'public'), String(row.storage_key ?? '')))
+        if (buf.length === 0 || buf.length > MAX_IMAGE_BYTES) continue
+        const sha = String(row.sha256 ?? '') || createHash('sha256').update(buf).digest('hex')
+        out.push({ sha256: sha, mime, dataUrl: `data:${mime};base64,${buf.toString('base64')}` })
+      } catch {
+        /* 单张图读不到就跳过，不影响文字审核 */
+      }
+    }
+  } catch {
+    /* 读媒体元数据失败：返回空数组，按纯文本审核处理 */
+  }
+  return out
+}
+
+/** 文本结论 + 图片结论合成：block 优先，其次 review，都正常才是 allow。 */
+export function combineVerdicts(text: ModerationResult, images: ModerationResult[]): ModerationResult {
+  const blocked = images.find((v) => v.decision === 'block')
+  if (blocked) return { ...blocked, reason: `图片违规：${blocked.reason || blocked.categories.join('/')}` }
+  const reviewed = images.find((v) => v.decision === 'review')
+  if (reviewed && text.decision === 'allow') return { ...reviewed, reason: `图片待复核：${reviewed.reason || '拿不准'}` }
+  if (blocked === undefined && reviewed === undefined && text.decision === 'allow' && images.length > 0) {
+    return { ...text, reason: text.reason || '图文审核通过' }
+  }
+  return text
+}
+
 /** 主入口：对一段文本做审核，返回结论与最终处置。 */
 export async function moderateText(
   pool: Queryable,
@@ -403,7 +597,7 @@ export function scanRules(rawText: string): { categories: string[]; reason: stri
 export function queueModeration(
   pool: Queryable,
   rawText: string,
-  target: { targetType: 'post' | 'comment'; targetId: string; authorId: string | null; wasPreReview: boolean },
+  target: { targetType: 'post' | 'comment'; targetId: string; authorId: string | null; wasPreReview: boolean; mediaIds?: string[] },
 ): void {
   void (async () => {
     let verdict: ModerationResult
@@ -416,6 +610,18 @@ export function queueModeration(
     } catch (e) {
       console.warn('[moderation] 异步判定异常（保留原状态）', e instanceof Error ? e.message : e)
       return
+    }
+    /* 图片审核（v2）：和文本一起决定处置；图片违规优先（图比字更容易出事） */
+    if (target.mediaIds && target.mediaIds.length > 0) {
+      try {
+        const images = await loadImageInputs(pool, target.mediaIds)
+        if (images.length > 0) {
+          const verdicts = await Promise.all(images.map((img) => moderateImage(pool, img)))
+          verdict = combineVerdicts(verdict, verdicts)
+        }
+      } catch (e) {
+        console.warn('[moderation] 图片审核异常（按文本结论处理）', e instanceof Error ? e.message : e)
+      }
     }
     const table = target.targetType === 'post' ? 'posts' : 'comments'
     try {
@@ -439,6 +645,57 @@ export function queueModeration(
       }
     } catch (e) {
       console.warn('[moderation] 异步处置失败（保留原状态）', e instanceof Error ? e.message : e)
+    }
+  })()
+}
+
+/**
+ * 举报联动（2026-11-27 加）：
+ *
+ * 原来是"举报只进管理员列表、内容照常公开"。现在被举报的目标**立即重新机审**：
+ *   · block  ⇒ 直接下架（status=removed），管理员在举报处理里能看到"已被机审下架"；
+ *   · 其余    ⇒ 降级为 pending_review 进人工队列 —— 举报本身就是人工信号，
+ *              让管理员在同一处看到内容和举报理由，不用两边对照。
+ *
+ * 权衡：恶意举报会把正常内容暂时从公开列表拿下来（可见性损失），
+ * 但校园场景里"被举报还继续公开"的合规风险更大；管理员一键通过即可恢复。
+ */
+export function queueReportRecheck(pool: Queryable, targetType: 'post' | 'comment', targetId: string): void {
+  void (async () => {
+    try {
+      const table = targetType === 'post' ? 'posts' : 'comments'
+      const t = await pool.query(`select id, author_id, body, status from ${table} where id = $1`, [targetId])
+      const row = t.rows[0]
+      if (!row || row.status !== 'published') return
+      let verdict = await moderateText(pool, String(row.body ?? ''), {
+        targetType,
+        targetId,
+        authorId: (row.author_id as string | null) ?? null,
+      })
+      if (targetType === 'post') {
+        const media = await pool.query('select media_id from post_media where post_id = $1 order by position', [targetId])
+        const mediaIds = media.rows.map((r) => String(r.media_id))
+        if (mediaIds.length > 0) {
+          const images = await loadImageInputs(pool, mediaIds)
+          if (images.length > 0) {
+            const verdicts = await Promise.all(images.map((img) => moderateImage(pool, img)))
+            verdict = combineVerdicts(verdict, verdicts)
+          }
+        }
+      }
+      if (verdict.decision === 'block') {
+        await pool.query(
+          `update ${table} set status = 'removed', review_note = $2 where id = $1 and status = 'published'`,
+          [targetId, `被举报后机审拦截：${verdict.reason || verdict.categories.join('/')}`],
+        )
+      } else {
+        await pool.query(
+          `update ${table} set status = 'pending_review', review_note = $2 where id = $1 and status = 'published'`,
+          [targetId, `被举报，待人工复核（机审：${verdict.decision}）`],
+        )
+      }
+    } catch (e) {
+      console.warn('[moderation] 举报复核失败（内容保持原状态）', e instanceof Error ? e.message : e)
     }
   })()
 }

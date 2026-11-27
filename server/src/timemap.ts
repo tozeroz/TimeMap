@@ -24,6 +24,7 @@ import type { FastifyInstance } from 'fastify'
 import type { Db } from './db'
 import { isPlaceCategory, PLACE_CATEGORY_HINT } from './placeCategories.ts'
 import { publicAuthor } from './anonymous.ts'
+import { queueReportRecheck } from './moderation.ts'
 
 export interface TimemapSessionUser {
   sessionId: string
@@ -355,6 +356,8 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
          values ($1,$2,$3,$4,$5,$6)`,
         [id, targetType, targetId, g.user.userId, reasonCode, reasonText || null],
       )
+      /* 举报联动：立即后台复核被举报内容（block 直接下架，其余转人工） */
+      queueReportRecheck(db.pool, targetType, targetId)
       reply.code(201)
       return { id, status: 'pending' }
     } catch (err) {

@@ -283,7 +283,7 @@ export function PublishScreen() {
       */
       if (r.value.status === 'pending_review') {
         setPendingReview(true)
-        setNotice('内容已提交审核，管理员通过后会出现在校园广场。')
+        setNotice('内容已提交审核，通过后会出现在校园广场。')
         // 提示在页面顶部；用户此刻很可能停在正文/图片区，不滚回去就看不到
         requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
         return
@@ -291,6 +291,47 @@ export function PublishScreen() {
       navigate('map', { placeId, newPostId: r.value.id })
     } catch (e) { setErr(`发布失败：${(e as Error).message}。内容已保留，可重试。`) }
     finally { submitting.current = false; setPublishing(false) }
+  }
+
+  /*
+    审核 68 / 视觉走查 #1：提交后**必须换成一个明确的成功态**。
+    改前：提示条 1.03:1（几乎看不见）+ 编辑器原样留着 + 灰掉的「发布」没有说明
+    ⇒ 用户会以为没发出去，反复发布同一条内容。
+    改后：整页替换为成功卡片（绿），说清「只有你自己能看」「多久」「去哪看」，
+    并给「查看我的发布 / 再发一条」两个出口。
+  */
+  if (pendingReview) {
+    return (
+      <Screen className="pub pub--done" header={
+        <TopBar variant="plain"
+          left={<button className="iconbtn pub__close" aria-label="关闭" onClick={() => navigate('myposts')}><IconClose size={24} /></button>}
+          center={<span className="pub__topTitle">已提交审核</span>}
+        />
+      }>
+        <div className="pub__done" data-pub-done>
+          <span className="pub__doneMark" aria-hidden="true">✓</span>
+          <h1 className="pub__doneTitle">内容已提交，正在审核</h1>
+          <p className="pub__doneText">
+            审核通过后会出现在校园广场，一般几分钟内完成。
+            <strong>审核期间只有你自己能在「我的发布」里看到这条内容</strong>，别人看不到。
+          </p>
+          <div className="pub__doneActions">
+            <Button onClick={() => navigate('myposts')} data-pub-done-myposts>查看我的发布</Button>
+            <Button variant="text" onClick={() => {
+              setPendingReview(false)
+              setText('')
+              setOriginal(null)
+              setPlaceId('')
+              setImageText(defaultImageText())
+              setTextEditorOpen(false)
+              setAnonymous(false)
+              dirty.current = false
+              navigate('publish')
+            }}>再发一条</Button>
+          </div>
+        </div>
+      </Screen>
+    )
   }
 
   return <Screen className={`pub ${original ? 'pub--has-image' : 'pub--empty'}`} header={<TopBar variant="plain"

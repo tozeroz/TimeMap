@@ -238,6 +238,8 @@ function ReviewPanel() {
   async function act(item: ReviewQueueItem, action: 'approve' | 'reject') {
     let reason = ''
     if (action === 'reject') {
+      // 驳回是不可逆的否决，必须二次确认（视觉走查 #2：改前通过/驳回长得一模一样）
+      if (!window.confirm('驳回后这条内容不会公开，作者会看到你填写的理由。确定驳回？')) return
       // 驳回理由会写进 review_note 给作者看，所以不提供"空理由驳回"
       const input = window.prompt('驳回理由（作者会看到）', '含不适宜内容')
       if (input === null) return
@@ -261,8 +263,8 @@ function ReviewPanel() {
   return (
     <section className="adm__pane">
       <div className="adm__row">
-        <button className="adm__chip is-active" onClick={() => void load()}>
-          刷新待审核（{items.length}）
+        <button className="adm__chip is-active" onClick={() => void load()} data-review-refresh>
+          待审核内容（{items.length}）· 点此刷新
         </button>
       </div>
       {notice && <p className="adm__notice">{notice}</p>}
@@ -284,12 +286,12 @@ function ReviewPanel() {
               </span>
             </div>
             <p className="adm__cardBody" style={{ whiteSpace: 'pre-wrap' }}>{it.body}</p>
-            {it.reviewNote && <p className="adm__cardMeta">机审建议：{it.reviewNote}</p>}
-            <div className="adm__row">
-              <button className="adm__action" disabled={busy === it.id} onClick={() => void act(it, 'approve')}>
-                通过
+            <p className="adm__cardMeta">{it.reviewNote ? `机审建议：${it.reviewNote}` : '进队列原因：新用户 / 匿名 / 含图 / 被举报'}</p>
+            <div className="adm__row adm__reviewActions">
+              <button className="adm__action adm__reviewApprove" disabled={busy === it.id} data-review-approve onClick={() => void act(it, 'approve')}>
+                通过并公开
               </button>
-              <button className="adm__action adm__action--danger" disabled={busy === it.id} onClick={() => void act(it, 'reject')}>
+              <button className="adm__action adm__reviewReject" disabled={busy === it.id} data-review-reject onClick={() => void act(it, 'reject')}>
                 驳回
               </button>
             </div>
