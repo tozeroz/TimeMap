@@ -23,6 +23,7 @@ import { createSmsSender, type SmsSender } from './sms.ts'
 import { fakeVerify, verifyPassword } from './password.ts'
 import { acquireMediaMutationLock, isBarrierTimeout } from './mutationBarrier.ts'
 import { registerCutoutRoutes } from './cutout.ts'
+import { isNewAuthor, queueModeration, recordModerationResult, scanRules } from './moderation.ts'
 import { registerTimemapRoutes } from './timemap.ts'
 import { registerMapRoutes } from './mapRoutes.ts'
 import { parseCategoryFilter } from './placeCategories.ts'
@@ -117,6 +118,8 @@ const POST_MEDIA_MAX = 1
 const READINESS_EXEMPT = new Set(['/api/health', '/api/ready'])
 
 interface PostRow {
+  /** 迁移 050：内容审核状态（published / pending_review / rejected / removed） */
+  status?: 'published' | 'pending_review' | 'rejected' | 'removed'
   map_media_id?: string | null
   image_mode: 'photo' | 'sticker'
   id: string
@@ -1057,7 +1060,7 @@ export function buildServer(deps: ServerDeps) {
         }
       >(
         `select * from (
-        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.allow_anonymous_comments, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.created_at::text as cursor_time, p.place_id,
+        select (select pm.media_id from post_media pm where pm.post_id = p.id and pm.purpose = 'map') as map_media_id, p.image_mode, p.is_anonymous, p.allow_anonymous_comments, p.open_count, p.id, coalesce((select u.display_name from users u where u.id = p.author_id), p.author_name) as author_name, p.author_id, (select u.avatar_media_id from users u where u.id = p.author_id) as author_avatar_media_id, p.body, p.place, p.created_at, p.status, p.created_at::text as cursor_time, p.place_id,
                 -- ⭐ M5 WO#15（审核 57 批准）：地点的**经纬度**。
                 -- 为什么需要：地图页的标记按经纬度渲染（默认 provider=tencent 用
                 -- projectToContainer(LatLng)；RealMap 用 L.marker([lat,lng])），
@@ -1109,8 +1112,13 @@ export function buildServer(deps: ServerDeps) {
            -- ⭐ WO#15：地点坐标来自 places（left join，缺地点时两列为 null）
            left join places pl on pl.id = p.place_id
           where ($3::uuid is null or p.author_id = $3::uuid)
-            -- F07/US-08：下架/删除的帖子同步退出所有公开面
-            and p.status = 'published'
+            -- F07/US-08：下架/删除的帖子同步退出所有公开面；
+            -- 迁移 050：作者查自己的帖子（?authorId=自己）时，**待审核**的也要能看到
+            -- （否则「我的发布」里刚提交的内容凭空消失，用户会重复发布）
+            and (
+              p.status = 'published'
+              or (p.status = 'pending_review' and $3::uuid is not null and $3::uuid = $2::uuid)
+            )
             -- CAMP-003：空数组 = 不过滤（"全部地标"）
             and (cardinality($4::uuid[]) = 0 or p.place_id = any($4::uuid[]))
             and ($5::timestamptz is null or (p.created_at,p.id) < ($5::timestamptz,$6::uuid))
@@ -1145,6 +1153,8 @@ export function buildServer(deps: ServerDeps) {
           placeLat: row.place_lat === null ? null : Number(row.place_lat),
           placeLng: row.place_lng === null ? null : Number(row.place_lng),
           createdAt: row.created_at.toISOString(),
+          /* 迁移 050：作者在「我的发布」里需要区分「已公开 / 待审核」 */
+          status: row.status ?? 'published',
           // M3 Slice 2：列表卡片需要显示计数与"我点过没"
           likeCount: Number.parseInt(row.like_count ?? '0', 10),
           commentCount: Number.parseInt(row.comment_count ?? '0', 10),
@@ -1261,6 +1271,39 @@ export function buildServer(deps: ServerDeps) {
       return { error: 'invalid_payload', details: errors }
     }
 
+    /*
+      内容审核（A 档，2026-11-27；同日改为异步）：
+      ① **硬规则同步拦截** ⇒ 422，不落库（0 毫秒，明显违规没有"先公开"的窗口）；
+      ② 请求路径**不再等模型**（实测同步会让每次发帖多等 2.0–2.7 秒）；
+         模型判定在落库之后由 queueModeration 后台执行，按结论**收紧**：
+           block ⇒ 待审置 rejected / 已公开置 removed；review ⇒ 已公开降级为 pending_review；
+           allow ⇒ 不改状态（先审后发的帖子仍等人工通过）。
+      ③ 先审后发的触发条件：新用户前 3 条、匿名帖、含图帖 —— 校园场景里这三类最容易出事；
+         其余内容先公开、后审（举报/巡查仍可下架）。
+      机审超时或未配置时按 review 处理（fail-closed），宁慢勿漏。
+     */
+    const ruleHit = scanRules(body)
+    if (ruleHit) {
+      // 被拦的内容不落库，但结论必须留痕（否则同一个违规文本无从追查）
+      await recordModerationResult(db.pool, 'post', null, session.userId, {
+        decision: 'block',
+        action: 'rejected',
+        categories: ruleHit.categories,
+        reason: ruleHit.reason,
+        source: 'rule',
+        model: null,
+        latencyMs: 0,
+        cached: false,
+      })
+      reply.code(422)
+      return { error: 'content_blocked', reason: ruleHit.reason, categories: ruleHit.categories }
+    }
+    const preReview =
+      anonymous ||
+      mediaIds.length > 0 ||
+      (await isNewAuthor(db.pool, session.userId))
+    const postStatus = preReview ? 'pending_review' : 'published'
+
     const id = randomUUID()
     const placeId = placeIdRaw
     const clientRequestId = clientRequestIdRaw || null
@@ -1349,11 +1392,11 @@ export function buildServer(deps: ServerDeps) {
         // F04：place_id 必填（上面已校验启用）；place 为地点名快照；client_request_id 幂等键
         // 匿名（033）：is_anonymous 只影响**读模型**，真实 author_id 照常落库（审核需要）
         const r = await client.query<PostRow>(
-          `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id, image_mode, is_anonymous, allow_anonymous_comments)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-           returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous, allow_anonymous_comments,
+          `insert into posts (id, author_name, author_id, body, place, place_id, client_request_id, image_mode, is_anonymous, allow_anonymous_comments, status, review_note)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           returning image_mode, id, author_name, author_id, body, place, created_at, is_anonymous, allow_anonymous_comments, status,
              (select u.avatar_media_id from users u where u.id = posts.author_id) as author_avatar_media_id`,
-          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode, anonymous, anonymous || allowAnonymousComments],
+          [id, session.displayName.slice(0, DISPLAY_MAX), session.userId, body, placeName, placeId, clientRequestId, imageMode, anonymous, anonymous || allowAnonymousComments, postStatus, null],
         )
 
         /* 挂媒体：position 按传入顺序递增（0..n-1），与 GET 的口径一致 */
@@ -1370,6 +1413,15 @@ export function buildServer(deps: ServerDeps) {
 
         await client.query('commit')
         inserted = true
+        /* 落库之后把模型判定丢到后台（不阻塞响应）；判定结果只收紧状态，见 queueModeration 注释 */
+        queueModeration(db.pool, body, {
+          targetType: 'post',
+          targetId: id,
+          authorId: session.userId,
+          wasPreReview: preReview,
+          /* 图片审核（v2）：把帖子关联的图片一并交给后台判定；读盘在后台线程里做，不占请求 */
+          mediaIds: allMediaIds,
+        })
 
         const row = r.rows[0]!
         row.map_media_id = typeof mapMediaId === 'string' ? mapMediaId : null
@@ -1414,6 +1466,14 @@ export function buildServer(deps: ServerDeps) {
           body: row.body,
           imageMode: row.image_mode,
           mapMediaId: row.map_media_id ?? null,
+          status: (row as unknown as { status?: string }).status ?? postStatus,
+          moderation: {
+            decision: 'pending',
+            source: 'async',
+            reason: preReview ? '机审进行中；通过人工审核后公开' : '机审进行中；如判定违规将自动撤回',
+            categories: [],
+            latencyMs: 0,
+          },
             place: row.place,
           createdAt: row.created_at.toISOString(),
           /* ⭐ 审核 68 P0：按 mime 分流（images 里**不得**出现 audio） */
@@ -1586,7 +1646,18 @@ export function buildServer(deps: ServerDeps) {
         详情页据此显示"内容不存在或已下架"状态页（**不**返回正文——下架内容必须
         同步退出所有公开面，包括详情）。
       */
-      if (post.status !== 'published') {
+      const isAuthorHere = meId != null && post.author_id === meId
+      if (post.status === 'pending_review') {
+        /*
+          待审内容：作者本人可以预览（并被告知"待审核"），其他人一律 404。
+          为什么不是 410：410 等于告诉对方"这条内容存在但被拿掉了"，
+          在待审场景里会泄露"你朋友刚发了什么"的存在性。
+        */
+        if (!isAuthorHere) {
+          reply.code(404)
+          return { error: 'not_found' }
+        }
+      } else if (post.status !== 'published') {
         reply.code(410)
         return { error: 'gone', reason: '内容不存在或已下架' }
       }
@@ -1638,6 +1709,8 @@ export function buildServer(deps: ServerDeps) {
         // 匿名帖（033）：与列表同一套遮罩（作者本人仍拿到 authorId）
         ...publicAuthor(post, meId),
         authorAvatarMediaId: post.is_anonymous ? null : (post.author_avatar_media_id ?? null),
+        /* 迁移 050：作者预览自己的待审帖时，前端要知道"这是待审核而不是已公开" */
+        status: post.status ?? 'published',
         body: post.body,
         imageMode: post.image_mode,
         mapMediaId: post.map_media_id ?? null,
@@ -1753,14 +1826,28 @@ export function buildServer(deps: ServerDeps) {
       return { error: 'invalid_id' }
     }
     try {
-      const exists = await db.pool.query("select 1 from posts where id = $1 and status = 'published'", [id])
-      if (!exists.rowCount) {
+      /*
+        内容审核（050）：待审帖的**作者本人**也要能打开详情页。
+        详情接口已经按「作者可预览 pending_review」放开，但评论列表这里如果只认
+        published，前端 `resolvePostAndComments` 就会因为评论 404 把整页判成
+        「网络错误」—— 作者刚发完帖点进去看到的是网络错误，比看不到更糟。
+        所以这里与详情接口保持同一口径：published 对所有人可见；pending_review
+        仅作者可见；其余一律 404（不泄露存在性）。
+      */
+      const session = await resolveSession(req.headers.authorization)
+      if (session.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
+      const meId = session.kind === 'ok' ? session.user.userId : null
+      const exists = await db.pool.query<{ status: string; author_id: string }>(
+        'select status, author_id from posts where id = $1',
+        [id],
+      )
+      const row = exists.rows[0]
+      const visible = !!row && (row.status === 'published' || (row.status === 'pending_review' && row.author_id === meId))
+      if (!visible) {
         reply.code(404)
         return { error: 'not_found' }
       }
-      const session = await resolveSession(req.headers.authorization)
-      if (session.kind === 'db_down') return dbUnavailable(reply, new Error('session lookup failed'))
-      const { items, total } = await loadComments(id, session.kind === 'ok' ? session.user.userId : null)
+      const { items, total } = await loadComments(id, meId)
       return { items, total }
     } catch (err) {
       if (db.noteFailure(err) === 'transient') return dbUnavailable(reply, err)
@@ -1806,6 +1893,38 @@ export function buildServer(deps: ServerDeps) {
       reply.code(400)
       return { error: 'invalid_payload', details: ['parentId 不是合法 id'] }
     }
+
+    /* 内容审核（A 档）：评论同样过机审 —— 规则同步拦截，模型异步判定（理由同发帖）。 */
+    const commentRuleHit = scanRules(body)
+    if (commentRuleHit) {
+      await recordModerationResult(db.pool, 'comment', null, s.user.userId, {
+        decision: 'block',
+        action: 'rejected',
+        categories: commentRuleHit.categories,
+        reason: commentRuleHit.reason,
+        source: 'rule',
+        model: null,
+        latencyMs: 0,
+        cached: false,
+      })
+      reply.code(422)
+      return { error: 'content_blocked', reason: commentRuleHit.reason, categories: commentRuleHit.categories }
+    }
+    /*
+      评论的先审口径与帖子对齐：新用户前 3 条评论先审。
+      校园帖的杀伤力往往在评论区（引流、辱骂），只审帖子不审评论等于没审。
+    */
+    let newCommenter = false
+    try {
+      const cc = await db.pool.query<{ n: number }>(
+        "select count(*)::int as n from comments where author_id = $1 and status in ('published','pending_review')",
+        [s.user.userId],
+      )
+      newCommenter = Number(cc.rows[0]?.n ?? 0) < 3
+    } catch {
+      newCommenter = true
+    }
+    const commentStatus = newCommenter ? 'pending_review' : 'published'
 
     let client: PoolClient | undefined
     try {
@@ -1853,15 +1972,28 @@ export function buildServer(deps: ServerDeps) {
         number = alias.rows[0]!.number
       }
       const cr = await client.query<{ id: string; created_at: Date; author_avatar_media_id: string | null }>(
-        `insert into comments (id, post_id, author_id, parent_id, body, is_anonymous)
-         values ($1, $2, $3, $4, $5, $6) returning id, created_at,
+        `insert into comments (id, post_id, author_id, parent_id, body, is_anonymous, status, review_note)
+         values ($1, $2, $3, $4, $5, $6, $7, $8) returning id, created_at,
            (select avatar_media_id from users where id=$3) as author_avatar_media_id`,
-        [randomUUID(), id, s.user.userId, parentId || null, body, anonymous])
+        [randomUUID(), id, s.user.userId, parentId || null, body, anonymous, commentStatus, null])
       await client.query('commit')
       const row = cr.rows[0]!
-      reply.code(201)
+      queueModeration(db.pool, body, {
+        targetType: 'comment',
+        targetId: row.id,
+        authorId: s.user.userId,
+        wasPreReview: commentStatus === 'pending_review',
+      })
+      reply.code(commentStatus === 'pending_review' ? 202 : 201)
       return {
         id: row.id, body,
+        status: commentStatus,
+        moderation: {
+          decision: 'pending',
+          source: 'async',
+          reason: commentStatus === 'pending_review' ? '机审进行中；通过人工审核后公开' : '机审进行中；如判定违规将自动撤回',
+          categories: [],
+        },
         ...publicCommentIdentity({ post_id: id, author_id: s.user.userId, author_name: s.user.displayName,
           author_avatar_media_id: row.author_avatar_media_id,
           is_anonymous: anonymous, post_anonymous: post.is_anonymous,

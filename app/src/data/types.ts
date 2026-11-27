@@ -43,6 +43,11 @@ export interface FeedPost {
    * 且**不允许**提供作者主页跳转（跳过去就等于点名）。
    */
   anonymous?: boolean
+  /**
+   * 迁移 050（内容审核）：作者自己的帖子可能是 `pending_review`。
+   * 卡片/详情必须据此显示「待审核」，不能让作者以为已经公开。
+   */
+  status?: 'published' | 'pending_review' | 'rejected' | 'removed'
 }
 
 export interface Comment {

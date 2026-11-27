@@ -508,3 +508,27 @@
   color: #c0392b;
   border-color: rgba(192, 57, 43, 0.3);
 }
+
+/* 内容审核（050）：作者自己看得到、别人看不到的待审帖标记。
+   与「仅本机」并列，视觉上用琥珀色，避免和错误红混淆。 */
+.pcard__pending {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(245, 166, 35, 0.94);
+  color: #3a2a00;
+  font-size: 10.5px;
+  line-height: 1.5;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* 纯文字卡里没有图片容器可锚定，改成随内容流排在顶部 */
+.pcard--text .pcard__pending {
+  position: static;
+  align-self: flex-start;
+  margin-bottom: 6px;
+}

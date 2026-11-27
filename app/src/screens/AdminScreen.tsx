@@ -7,6 +7,9 @@ import {
   adminListAuditLog,
   adminListPlaces,
   adminListReports,
+  adminListReviewQueue,
+  adminReviewContent,
+  type ReviewQueueItem,
   adminListFeedback,
   adminSetFeedbackStatus,
   adminGetActivitySubmission,
@@ -62,10 +65,11 @@ import { AdminStoriesPanel, AdminCheckinsPanel } from './AdminCuration'
  *     各列表，而不是只改本地那一行
  *   · 操作记录包含管理员、对象、时间、动作
  */
-type PanelKey = 'reports' | 'feedback' | 'submissions' | 'posts' | 'activities' | 'projects' | 'places' | 'audit' | 'announcements'
+type PanelKey = 'review' | 'reports' | 'feedback' | 'submissions' | 'posts' | 'activities' | 'projects' | 'places' | 'audit' | 'announcements'
 
 const PANELS: { key: PanelKey; label: string }[] = [
   { key: 'announcements', label: '应用公告' },
+  { key: 'review', label: '内容审核' },
   { key: 'reports', label: '举报处理' },
   { key: 'submissions', label: '投稿审核' },
   { key: 'feedback', label: '用户反馈' },
@@ -123,6 +127,7 @@ export function AdminScreen() {
         ))}
       </nav>
 
+      {panel === 'review' && <ReviewPanel />}
       {panel === 'reports' && <ReportsPanel />}
       {panel === 'announcements' && <AdminAnnouncementsPanel />}
       {panel === 'submissions' && <SubmissionsPanel />}
@@ -197,6 +202,105 @@ function PaneState({
 // ---------------------------------------------------------------------------
 // 举报处理
 // ---------------------------------------------------------------------------
+
+/**
+ * 内容审核（迁移 050 的配套界面）
+ *
+ * 产品规则：被判 review 的内容停在 pending_review，**任何人都看不到**，
+ * 只有这里点「通过」才会出现在校园广场。所以按钮必须诚实：
+ * 通过 = 真的公开；驳回 = 真的不公开，且理由会写进 review_note 给作者看。
+ */
+function ReviewPanel() {
+  const [items, setItems] = useState<ReviewQueueItem[]>([])
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState('')
+  const [notice, setNotice] = useState('')
+
+  const load = useCallback(async () => {
+    setPhase('loading')
+    const r = await adminListReviewQueue()
+    if (r.ok) {
+      setItems([...r.value.posts, ...r.value.comments])
+      setPhase('ready')
+      setErr('')
+    } else {
+      setItems([])
+      setErr(failText(r))
+      setPhase('error')
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function act(item: ReviewQueueItem, action: 'approve' | 'reject') {
+    let reason = ''
+    if (action === 'reject') {
+      // 驳回是不可逆的否决，必须二次确认（视觉走查 #2：改前通过/驳回长得一模一样）
+      if (!window.confirm('驳回后这条内容不会公开，作者会看到你填写的理由。确定驳回？')) return
+      // 驳回理由会写进 review_note 给作者看，所以不提供"空理由驳回"
+      const input = window.prompt('驳回理由（作者会看到）', '含不适宜内容')
+      if (input === null) return
+      reason = input.trim() || '审核未通过'
+    }
+    setBusy(item.id)
+    setNotice('')
+    try {
+      const r = await adminReviewContent(item.type, item.id, action, reason || undefined)
+      if (!r.ok) {
+        setNotice(`操作失败：${failText(r)}`)
+        return
+      }
+      await load()
+      setNotice(action === 'approve' ? '已通过，内容已公开' : '已驳回，内容不会公开')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <section className="adm__pane">
+      <div className="adm__row">
+        <button className="adm__chip is-active" onClick={() => void load()} data-review-refresh>
+          待审核内容（{items.length}）· 点此刷新
+        </button>
+      </div>
+      {notice && <p className="adm__notice">{notice}</p>}
+      {phase === 'error' && (
+        <p className="adm__state adm__state--error">
+          {err}
+          <button className="adm__link" onClick={() => void load()}>重试</button>
+        </p>
+      )}
+      {phase === 'loading' && <p className="adm__state">加载中…</p>}
+      {phase === 'ready' && items.length === 0 && <p className="adm__state">没有待审核内容</p>}
+      <ul className="adm__list">
+        {items.map((it) => (
+          <li key={`${it.type}-${it.id}`} className="adm__card" data-review-id={it.id}>
+            <div className="adm__cardHead">
+              <span className="adm__cardTitle">{it.type === 'post' ? '帖子' : '评论'}</span>
+              <span className="adm__cardMeta">
+                {it.anonymous ? '匿名' : it.author ?? '未知'} · {relativeTime(it.createdAt)}
+              </span>
+            </div>
+            <p className="adm__cardBody" style={{ whiteSpace: 'pre-wrap' }}>{it.body}</p>
+            <p className="adm__cardMeta">{it.reviewNote ? `机审建议：${it.reviewNote}` : '进队列原因：新用户 / 匿名 / 含图 / 被举报'}</p>
+            <div className="adm__row adm__reviewActions">
+              <button className="adm__action adm__reviewApprove" disabled={busy === it.id} data-review-approve onClick={() => void act(it, 'approve')}>
+                通过并公开
+              </button>
+              <button className="adm__action adm__reviewReject" disabled={busy === it.id} data-review-reject onClick={() => void act(it, 'reject')}>
+                驳回
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
 
 function ReportsPanel() {
   const [status, setStatus] = useState<'pending' | 'resolved'>('pending')

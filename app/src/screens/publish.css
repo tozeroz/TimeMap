@@ -169,3 +169,62 @@
 }
 @keyframes pub-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pub-sheet-in { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* 内容审核（050）：待审提示条 —— 放在页面顶部，用琥珀色底避免与错误红混淆 */
+.pub__notice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff6e5;
+  border: 1px solid #f3c46a;
+  color: #7a4b00;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* 审核 68 / 视觉走查 #1：提交成功态。
+   绿色而不是琥珀色 —— 琥珀在本产品里是「警告/待处理」（pub__notice），
+   用同色表达"成功"会让人以为还需要处理。 */
+.pub--done { background: #f7fbf7; }
+
+.pub__done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 56px var(--pad-page) 32px;
+  text-align: center;
+}
+
+.pub__doneMark {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #e6f4e8;
+  color: #2f7a3d;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.pub__doneTitle { margin: 4px 0 0; font-size: 20px; color: var(--c-text); }
+
+.pub__doneText {
+  margin: 0;
+  max-width: 300px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--c-text-2);
+}
+
+.pub__doneText strong { color: #2f7a3d; }
+
+.pub__doneActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 280px;
+  margin-top: 10px;
+}

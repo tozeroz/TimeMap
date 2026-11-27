@@ -98,6 +98,12 @@ export interface ApiPost {
    */
   allowAnonymousComments?: boolean
   anonymous?: boolean
+  /**
+   * 内容的公开状态（迁移 050，2026-11-27）。
+   * `pending_review` = 已过机审、等管理员人工审核，**对其他人不可见**；
+   * 发布接口此时也会返回这个值 —— 前端必须据此提示"待审核"，不能假装发布成功。
+   */
+  status?: 'published' | 'pending_review' | 'rejected' | 'removed'
   body: string
   place: string | null
   /**
@@ -1598,6 +1604,7 @@ export function toFeedPost(p: ApiPost): FeedPost {
     id: p.id,
     author,
     anonymous,
+    status: p.status,
     text: p.body,
     // M4：帖子的真实图片。**这里此前是硬编码 `images: []`**，
     // 所以列表卡片从来没显示过图（后端当时也没返回）。现在统一走 mediaUrl(id)：
@@ -1636,6 +1643,8 @@ export interface ApiComment {
   anonymous?: boolean
   isMine?: boolean
   isPostAuthor?: boolean
+  /** 迁移 050：评论同样可能停在待审核（对他人不可见） */
+  status?: 'published' | 'pending_review' | 'rejected' | 'removed'
   createdAt: string
   parentId: string | null
   /** 回复的目标昵称（来自 parent_id 指向的那条评论的作者）；顶层评论为 null */
@@ -2298,4 +2307,37 @@ export function adminSetFeedbackStatus(id: string, status: FeedbackStatus, note?
     method: 'POST',
     body: { status, ...(note ? { note } : {}) },
   })
+}
+
+/** 待审核内容（/api/admin/review-queue 的一条） */
+export interface ReviewQueueItem {
+  type: 'post' | 'comment'
+  id: string
+  /** 评论才有：所属帖子 */
+  postId?: string
+  body: string
+  place?: string | null
+  author: string | null
+  anonymous: boolean
+  /** 机审给出的理由（疑似违规时非空） */
+  reviewNote: string | null
+  createdAt: string
+}
+
+export interface ReviewQueue {
+  posts: ReviewQueueItem[]
+  comments: ReviewQueueItem[]
+}
+
+export function adminListReviewQueue(): Promise<ApiResult<ReviewQueue>> {
+  return request<ReviewQueue>('/api/admin/review-queue')
+}
+
+export function adminReviewContent(
+  type: 'post' | 'comment',
+  id: string,
+  action: 'approve' | 'reject',
+  reason?: string,
+): Promise<ApiResult<{ id: string; type: string; status: string }>> {
+  return request(`/api/admin/review/${type}/${id}`, { method: 'POST', body: { action, reason } })
 }

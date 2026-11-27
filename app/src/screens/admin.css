@@ -484,3 +484,37 @@
   font-size: var(--f-meta);
   cursor: pointer;
 }
+
+/* 视觉走查 #2：通过 / 驳回必须一眼可分。
+   通过 = 主色实心（正向、无风险）；驳回 = 危险色描边（不可逆，需要二次确认）。 */
+.adm__reviewActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.adm__reviewActions .adm__action {
+  min-height: 44px;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 12px;
+}
+
+.adm__reviewApprove {
+  border: 1px solid var(--c-primary);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+}
+
+.adm__reviewReject {
+  border: 1px solid #c0392b;
+  background: #fff;
+  color: #c0392b;
+}
+
+.adm__reviewApprove:disabled,
+.adm__reviewReject:disabled {
+  opacity: 0.55;
+}
