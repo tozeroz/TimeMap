@@ -58,19 +58,22 @@ smoke() {
   ASSET=$(ls "$WEB"/assets/*.js  2>/dev/null | head -1 | xargs -r basename)
   CSS=$(ls   "$WEB"/assets/*.css 2>/dev/null | head -1 | xargs -r basename)
   p() { printf '  %-32s %s\n' "$1" "$2"; }
-  code() { curl -s -o /dev/null -m 10 -w '%{http_code}' "$1"; }
+  # 2026-11-27 起 80 端口统一 301 到 https（安全加固），冒烟必须走 https。
+  # 本机回环访问 IP 站点证书主机名不匹配，故 -k；公网真实证书链由 ps1 第 6 步校验。
+  local BASE='https://127.0.0.1'
+  code() { curl -s -k -o /dev/null -m 10 -w '%{http_code}' "$1"; }
 
   # ⭐ 关键：**必须查 /assets 下的真实 JS**。只查首页会漏掉"权限导致白屏"——
   #    那种情况下 / 与 /index.html 仍是 200，只有 assets 是 403。
-  r=$(code http://127.0.0.1/);                    p "首页 /" "$r";              [ "$r" = 200 ] || fail=1
-  r=$(code "http://127.0.0.1/assets/$ASSET");     p "JS  /assets/$ASSET" "$r";  [ "$r" = 200 ] || fail=1
-  r=$(code "http://127.0.0.1/assets/$CSS");       p "CSS /assets/$CSS" "$r";    [ "$r" = 200 ] || fail=1
-  r=$(code http://127.0.0.1/favicon.svg);         p "图标 /favicon.svg" "$r";   [ "$r" = 200 ] || fail=1
-  r=$(code http://127.0.0.1/timemap-logo.png);    p "Logo /timemap-logo.png" "$r"; [ "$r" = 200 ] || fail=1
-  r=$(code http://127.0.0.1/api/health);          p "API /api/health" "$r";     [ "$r" = 200 ] || fail=1
-  r=$(code http://127.0.0.1/nope/should-404);     p "未知路径应 404" "$r";       [ "$r" = 404 ] || fail=1
-  r=$(code http://127.0.0.1/.env);                p "点文件应 404" "$r";        [ "$r" = 404 ] || fail=1
-  r=$(code http://127.0.0.1/.well-known/acme-challenge/x); p "ACME 目录仍可达" "$r"
+  r=$(code "$BASE"/);                    p "首页 /" "$r";              [ "$r" = 200 ] || fail=1
+  r=$(code "$BASE/assets/$ASSET");     p "JS  /assets/$ASSET" "$r";  [ "$r" = 200 ] || fail=1
+  r=$(code "$BASE/assets/$CSS");       p "CSS /assets/$CSS" "$r";    [ "$r" = 200 ] || fail=1
+  r=$(code "$BASE"/favicon.svg);         p "图标 /favicon.svg" "$r";   [ "$r" = 200 ] || fail=1
+  r=$(code "$BASE"/timemap-logo.png);    p "Logo /timemap-logo.png" "$r"; [ "$r" = 200 ] || fail=1
+  r=$(code "$BASE"/api/health);          p "API /api/health" "$r";     [ "$r" = 200 ] || fail=1
+  r=$(code "$BASE"/nope/should-404);     p "未知路径应 404" "$r";       [ "$r" = 404 ] || fail=1
+  r=$(code "$BASE"/.env);                p "点文件应 404" "$r";        [ "$r" = 404 ] || fail=1
+  r=$(code "$BASE"/.well-known/acme-challenge/x); p "ACME 目录仍可达" "$r"
 
   echo
   echo "  --- 挂载点检查（⚠️ 这一条是补上来的，见下）---"
@@ -80,7 +83,7 @@ smoke() {
   #   但页面上什么都没有（React createRoot 拿到 null，报 React error #299）。
   #   ⇒ "HTTP 200 + 标题对" **证明不了应用能挂载**。
   #     所以这里显式断言挂载点与模块脚本都在。
-  HTML=$(curl -s -m 10 http://127.0.0.1/)
+  HTML=$(curl -s -k -m 10 "$BASE"/)
   if printf '%s' "$HTML" | grep -q 'id="root"'; then
     p "HTML 含 <div id=\"root\">" "yes"
   else
