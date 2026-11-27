@@ -1,6 +1,7 @@
 import mapCurationSql from './migrations/047_map_curation.sql'
 import commentLikesSql from './migrations/048_comment_likes.sql'
 import release144Sql from './migrations/049_release_1_4_4.sql'
+import contentModerationSql from './migrations/050_content_moderation.sql'
 import directMessagesSql from './migrations/046_direct_messages.sql'
 import inboxSql from './migrations/045_inbox.sql'
 import postCommentPolicySql from './migrations/044_post_comment_policy.sql'
@@ -216,6 +217,8 @@ export const MIGRATIONS: ReadonlyArray<{ version: string; sql: string }> = [
   //      必须排在 045_place_ginkgo_position 之后：MIGRATIONS 的数组顺序就是应用顺序。
   { version: '048_comment_likes', sql: commentLikesSql },
   { version: '049_release_1_4_4', sql: release144Sql },
+  // 内容审核（A 档）：posts/comments 增加 pending_review，并新建机审结论与缓存表
+  { version: '050_content_moderation', sql: contentModerationSql },
 ]
 
 /** 每个迁移内容的 SHA-256：用于检测「已应用的迁移文件被改动」（审核记录 08 第 3 点） */

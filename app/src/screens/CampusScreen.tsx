@@ -98,6 +98,19 @@ export function PostCard({
     </span>
   ) : null
 
+  /**
+   * 内容审核（050）：待审帖只给作者自己看，必须在卡片上标明「待审核」。
+   *
+   * 为什么放在这里而不是 components/CampusPostCard.tsx：本组件（CampusScreen 导出）
+   * 才是「校园广场 / 我的发布 / 他人主页」用的卡片 —— 只改另一份会让用户以为
+   * 帖子没发出去，从而反复重复发布（审核 68 里已经踩过同类坑）。
+   */
+  const pendingChip = post.status === 'pending_review' ? (
+    <span className="pcard__pending" data-feed-pending>
+      待审核
+    </span>
+  ) : null
+
   const localActions = local ? (
     <div className="pcard__localActions" data-feed-local-actions>
       <button
@@ -153,6 +166,7 @@ export function PostCard({
           )}
           <div className="pcard__mediaWrap">
             {localChip}
+            {pendingChip}
             <img
               className="pcard__cover"
               src={post.images[0]}
@@ -182,6 +196,7 @@ export function PostCard({
       ) : (
         <div className="pcard__body">
           {localChip}
+          {pendingChip}
           <p className="pcard__text">{post.text}</p>
           {post.topic && <span className="pcard__topic">{post.topic}</span>}
           <div className="pcard__foot">

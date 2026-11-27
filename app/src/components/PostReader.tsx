@@ -140,6 +140,15 @@ export function PostReader(p: Props) {
   useEffect(() => { if (!p.draft && list.current) list.current.scrollTop = 0 }, [p.draft])
 
   return <div className="reader" data-feed-id={post.id}>
+    {/*
+      待审核（迁移 050）：作者自己能点进来预览，但**别人看不到**这条。
+      不说明的话，作者会以为已经公开、还会去问朋友"你看到我发的了吗"。
+    */}
+    {post.status === 'pending_review' && (
+      <p className="reader__pending" data-reader-pending="1" role="status">
+        这条内容正在审核，暂时只有你自己能看到。
+      </p>
+    )}
     <div className="reader__base">
       <header className="reader__header">
         <button onClick={() => goBack('campus')} aria-label="返回"><IconBack size={26} /></button>

@@ -1508,4 +1508,124 @@ export function registerTimemapRoutes(ctx: TimemapCtx): void {
       return { error: 'db_error', message: (err as Error).message }
     }
   })
+
+  // ---------------------------------------------------------------------------
+  // 内容审核（A 档，2026-11-27）：待审核队列 + 通过/驳回
+  //
+  // 背景：发帖入口已改成「机审 + 先审后发（新用户前 3 条 / 匿名 / 含图）」，
+  // 被判 review 的内容落库为 status='pending_review'，对其他人不可见。
+  // 这个队列就是把这些内容放出来或驳回的唯一出口 —— 没有它，先审后发等于黑洞。
+  // ---------------------------------------------------------------------------
+
+  app.get('/api/admin/review-queue', async (req, reply) => {
+    const g = await requireAdmin(req)
+    if (!g.ok) return fail(reply, g)
+    try {
+      const posts = await db.pool.query<{
+        id: string
+        body: string
+        place: string | null
+        review_note: string | null
+        is_anonymous: boolean
+        created_at: Date
+        author: string | null
+      }>(
+        `select p.id, p.body, p.place, p.review_note, p.is_anonymous, p.created_at,
+                u.display_name as author
+           from posts p left join users u on u.id = p.author_id
+          where p.status = 'pending_review'
+          order by p.created_at desc limit 100`,
+      )
+      const comments = await db.pool.query<{
+        id: string
+        post_id: string
+        body: string
+        review_note: string | null
+        is_anonymous: boolean
+        created_at: Date
+        author: string | null
+      }>(
+        `select c.id, c.post_id, c.body, c.review_note, c.is_anonymous, c.created_at,
+                u.display_name as author
+           from comments c left join users u on u.id = c.author_id
+          where c.status = 'pending_review'
+          order by c.created_at desc limit 100`,
+      )
+      return {
+        posts: posts.rows.map((r) => ({
+          type: 'post' as const,
+          id: r.id,
+          body: r.body,
+          place: r.place,
+          author: r.author,
+          anonymous: r.is_anonymous === true,
+          reviewNote: r.review_note,
+          createdAt: r.created_at.toISOString(),
+        })),
+        comments: comments.rows.map((r) => ({
+          type: 'comment' as const,
+          id: r.id,
+          postId: r.post_id,
+          body: r.body,
+          author: r.author,
+          anonymous: r.is_anonymous === true,
+          reviewNote: r.review_note,
+          createdAt: r.created_at.toISOString(),
+        })),
+      }
+    } catch (err) {
+      if (db.noteFailure(err) === 'transient') return ctx.dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    }
+  })
+
+  app.post('/api/admin/review/:type/:id', async (req, reply) => {
+    const g = await requireAdmin(req)
+    if (!g.ok) return fail(reply, g)
+    const type = (req.params as { type?: string }).type ?? ''
+    const id = (req.params as { id?: string }).id ?? ''
+    if (type !== 'post' && type !== 'comment') {
+      reply.code(400)
+      return { error: 'invalid_type', details: ['type 只能是 post 或 comment'] }
+    }
+    if (!UUID_RE.test(id)) {
+      reply.code(400)
+      return { error: 'invalid_id' }
+    }
+    const payload = (req.body ?? {}) as Record<string, unknown>
+    const action = payload.action
+    if (action !== 'approve' && action !== 'reject') {
+      reply.code(400)
+      return { error: 'invalid_payload', details: ['action 只能是 approve 或 reject'] }
+    }
+    const reason = typeof payload.reason === 'string' ? payload.reason.trim().slice(0, 200) : ''
+    const nextStatus = action === 'approve' ? 'published' : 'rejected'
+    const table = type === 'post' ? 'posts' : 'comments'
+    const client = await db.pool.connect()
+    try {
+      await client.query('begin')
+      const r = await client.query<{ id: string; author_id: string | null }>(
+        `update ${table} set status = $2, review_note = coalesce(nullif($3, ''), review_note)
+          where id = $1 and status = 'pending_review'
+          returning id, author_id`,
+        [id, nextStatus, action === 'reject' ? reason || '审核未通过' : reason],
+      )
+      if (!r.rows[0]) {
+        await client.query('rollback')
+        reply.code(404)
+        return { error: 'not_found_or_not_pending' }
+      }
+      await audit(client, g.user.userId, `review_${action}`, type, id, reason || null)
+      await client.query('commit')
+      return { id, type, status: nextStatus }
+    } catch (err) {
+      await client.query('rollback').catch(() => undefined)
+      if (db.noteFailure(err) === 'transient') return ctx.dbUnavailable(reply, err)
+      reply.code(500)
+      return { error: 'db_error', message: (err as Error).message }
+    } finally {
+      client.release()
+    }
+  })
 }

@@ -169,3 +169,15 @@
 }
 @keyframes pub-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pub-sheet-in { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* 内容审核（050）：待审提示条 —— 放在页面顶部，用琥珀色底避免与错误红混淆 */
+.pub__notice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff6e5;
+  border: 1px solid #f3c46a;
+  color: #7a4b00;
+  font-size: 13px;
+  line-height: 1.5;
+}

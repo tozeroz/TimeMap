@@ -57,6 +57,8 @@ export function PublishScreen() {
   const [pendingSubmission, setPendingSubmission] = useState<PublishDraft['pendingSubmission']>()
   const [err, setErr] = useState('')
   const [notice, setNotice] = useState('')
+  /** 已提交待审核：此时再点发布没有意义（内容已落库，等管理员处理） */
+  const [pendingReview, setPendingReview] = useState(false)
   const [sheet, setSheet] = useState<'image' | 'exit' | 'drafts' | 'image-options' | null>('drafts')
   const [drafts, setDrafts] = useState<PublishDraft[]>([])
   const [draftReady, setDraftReady] = useState(false)
@@ -89,6 +91,7 @@ export function PublishScreen() {
   const canPublish = Boolean(text.trim() || original) && count <= 500 && places.some(p => p.id === placeId)
     && !publishing && !processing && !rendering && !busy && !sheet && !selectingSubject && (!rawSticker || (adopted && Boolean(sticker)))
     && imageTextCount <= 50 && (!hasImageText || Boolean(readyTextImage))
+    && !pendingReview
 
   useEffect(() => {
     let alive = true
@@ -273,6 +276,18 @@ export function PublishScreen() {
       }
       dirty.current = false
       await deleteDraft(draftId.current).catch(() => undefined)
+      /*
+        ⚠️ 服务端可能把帖子挂成 pending_review（新用户前几条 / 匿名 / 含图 → 先审后发）。
+        这时帖子对其他人**不可见**，跳去地图会让人以为"发出去了但没人看得到"。
+        所以停在当前页、明说是待审核，让人知道下一步是等管理员。
+      */
+      if (r.value.status === 'pending_review') {
+        setPendingReview(true)
+        setNotice('内容已提交审核，管理员通过后会出现在校园广场。')
+        // 提示在页面顶部；用户此刻很可能停在正文/图片区，不滚回去就看不到
+        requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
+        return
+      }
       navigate('map', { placeId, newPostId: r.value.id })
     } catch (e) { setErr(`发布失败：${(e as Error).message}。内容已保留，可重试。`) }
     finally { submitting.current = false; setPublishing(false) }
@@ -283,6 +298,13 @@ export function PublishScreen() {
     center={<span className="pub__topTitle">写一段回忆</span>}
     right={<div className="pub__publishTarget"><Button size="compact" className="pub__publish" disabled={!canPublish} loading={publishing} data-publishing={publishing ? '1' : '0'} onClick={() => void publish()}>发布</Button></div>} />}>
     <div className="pub__body">
+      {/*
+        内容审核（050）：待审提示必须**立刻可见**。
+        之前的写法把它挂在图片区之后，实测 430×932 的机型上落在 y≈966，
+        也就是屏幕外 —— 用户点了发布什么都没看到，会以为失败并重复发布。
+        这里改到页面最上方（hero 之前），并保留 body 末尾那处（长页面滚到底时也能看到）。
+      */}
+      {notice && <p className="pub__hint pub__notice" role="status">{notice}</p>}
       <div className="pub__hero"><h1>把这一刻，<br />留在校园里。</h1><span aria-hidden="true" /></div>
       <section className="pub__location" data-pub-place-field>
         <div className={`pub__place ${selectedPlace ? 'pub__place--selected' : ''}`}>
